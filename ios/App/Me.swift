@@ -958,7 +958,7 @@ final class MeCtl {
   // (a tab's own first page — big title, 🔍 / your photo, no ‹: Content plans for Social, an Office Admin's Overview and Team)
   static let tabRoots: Set<String> = ["plansTab", "overviewTab", "teamTab", "claimsTab", "expensesTab", "reviewsTab"]
   // (Claims: Need approval · All; Expenses: Subscriptions · Office expenses — Haris 2026-11-04)
-  private var clSeg = 0, exSeg = 0, rvSeg = 0, rvFocusN = 0
+  private var clSeg = 0, exSeg = 0, rvSeg = 0, rvFocusN = 0, rvQ = ""
   private var clFocus: String?   // (a claim opened from the Inbox or a notification: shown and pulsing on the Claims tab)
   func focusClaim(_ id: String?) {
     guard let id = id, !id.isEmpty else { return }
@@ -1832,13 +1832,12 @@ final class MeCtl {
     KeyboardShield.attach(h)
     // (Team members, Expenses, Reviews: a swipe across the middle switches the two lists, as the task page's Details ·
     //  Comments — Haris 2026-11-04; the edge is left to the swipe back)
-    if ["expenses", "reviews"].contains(kind) {   // (Team members: Apple's scope bar in Apple's navigation, no swipe of ours)
+    if kind == "expenses" {   // (Team members, Reviews: Apple's own controls in Apple's navigation, no swipe of ours)
       SegSwipe.attach(h) { [weak self, weak h] dir in
         guard let self = self, let h = h, let s = self.screenOf(h) else { return }
         let to = dir < 0 ? 1 : 0
         switch s.kind {
         case "expenses": guard self.exSeg != to else { return }; self.exSeg = to
-        case "reviews": guard self.rvSeg != to else { return }; self.rvSeg = to
         default: return
         }
         UISelectionFeedbackGenerator().selectionChanged()
@@ -2051,6 +2050,23 @@ final class MeCtl {
     return o
   }
   func selfOpenMember(_ id: String) { open("member", id) }
+  // the CD's Reviews, as the phone shows them (the no-website self-test — Haris 2026-11-10)
+  func selfReviews() -> [String: Any] {
+    guard let s = stack.last else { return ["open": false] }
+    let m = model["reviews"] as? [String: Any]
+    var o: [String: Any] = ["kind": s.kind, "tab": tab, "apple": apple, "waiting": (m?["waiting"] as? [Any])?.count ?? -1, "reviewed": (m?["reviewed"] as? [Any])?.count ?? -1, "skeletons": rvSkeletons.count, "rows": s.h.meKeys.count]
+    if let e = s.h.assetsParts["wait"] as? AppleEmpty, e.superview != nil { o["loading"] = e.loading }
+    o["seg"] = s.h.assetsParts["seg"]?.superview != nil
+    if let x = ((m?["waiting"] as? [[String: Any]]) ?? []).first, let menu = rvItem(x, decided: false).menu?() {
+      o["menu"] = menu.children.flatMap { ($0 as? UIMenu)?.children ?? [$0] }.compactMap { ($0 as? UIAction)?.title }
+    }
+    if let vc = pageVCs[ObjectIdentifier(s.h)] { o["tools"] = (vc.toolbarItems ?? []).compactMap { $0.title } }
+    return o
+  }
+  func selfOpenReview() -> String? {
+    guard let id = (((model["reviews"] as? [String: Any])?["waiting"] as? [[String: Any]])?.first?["id"] as? String) else { return nil }
+    open("review", id); return id
+  }
   // Content plans, as the phone shows them (the no-website self-test — Haris 2026-11-10): the list, and a client's month
   func selfOpenPlan() -> String? {
     guard let r = ((model["plans"] as? [String: Any])?["rows"] as? [[String: Any]])?.first, let pid = r["pid"] as? String else { return nil }
@@ -2091,7 +2107,12 @@ final class MeCtl {
     if s.kind == "me" { mm["title"] = apple ? "Settings" : "Me"; mm["date"] = "E11 Console App" }   // (in Apple's navigation: "Settings" — Haris 2026-11-08; the tab stays "Me")
     if s.h.assets == "overviewTab" { mm["title"] = "Overview"; mm["date"] = Date().formatted(.dateTime.weekday(.wide).month(.wide).day()) }
     if s.h.assets == "claimsTab" { mm["title"] = "Claims"; mm["date"] = "Reimbursements" }
-    if s.h.assets == "reviewsTab" { let n = ((model["reviews"] as? [String: Any])?["waiting"] as? [Any])?.count ?? 0; mm["title"] = "Reviews"; mm["date"] = model["reviews"] == nil ? "" : n == 0 ? "Nothing waiting" : n == 1 ? "1 request waiting" : "\(n) requests waiting" }
+    if s.h.assets == "reviewsTab" {
+      // (the requests and the skeletons waiting for you — one decided here already gone)
+      let w = ((model["reviews"] as? [String: Any])?["waiting"] as? [[String: Any]]) ?? []
+      let n = w.filter { !rvGone.contains($0["id"] as? String ?? "") }.count + rvSkeletons.count
+      mm["title"] = "Reviews"; mm["date"] = model["reviews"] == nil ? "" : n == 0 ? "Nothing waiting" : n == 1 ? "1 request waiting" : "\(n) requests waiting"
+    }
     if s.h.assets == "expensesTab" { mm["title"] = "Expenses"; mm["date"] = exSeg == 0 ? "Subscriptions" : "Office expenses" }
     if s.h.assets == "teamTab" { mm["title"] = "Team members"; mm["date"] = team.isEmpty ? "" : "\(team["active"] as? Int ?? 0) active · \(team["pastN"] as? Int ?? 0) past" }
     if s.h.assets == "plansTab" || s.h.assets == "plansPage" { mm["title"] = "Content plans"; mm["date"] = plansLine }   // (the line under the big title, as the other tabs have — Haris 2026-11-03)
@@ -2351,45 +2372,110 @@ final class MeCtl {
     if main.tabKeys.contains(key) { main.selectTab(key); return }
     if key == "clients" { coverWait = Date(); send(["ev": "nav", "to": "clients"]) }
   }
-  // ---------- the CD's Reviews (Haris 2026-11-04) ----------
+  // ---------- the CD's Reviews — fully Apple (Haris 2026-11-10, the approved mock-up "Review Requests — fully Apple":
+  //  A2 · B1 · C1 · D2 · E2 · F2 · G2) ----------
+  // Its tab: Apple's big title "Reviews" and its line, Apple's search, your photo (MeTabVC); Waiting · Reviewed as Apple's
+  // segmented control at the top of the list, scrolling away with it (E2); the skeletons sent to you their own group
+  // "Content plans" on top of Waiting, opening the skeleton (A2); every request Apple's list cell — the sender's picture,
+  // the task, the client and who sent what when, ours only the Round / result words; touch and hold: Apple's menu with
+  // Approve · Request Amendments… · Open Task (C1).
   private func reviewsBlocks(_ h: HomeView, _ out: inout [UIView]) {
     guard let m = model["reviews"] as? [String: Any] else { let n = part(h, "wait") { AppleEmpty() }; n.setLoading(); out.append(n); return }
-    let wait = (m["waiting"] as? [[String: Any]]) ?? [], done = (m["reviewed"] as? [[String: Any]]) ?? []
-    // (an Inbox update about a request: Waiting or Reviewed, scrolled to it, and it pulses — Haris 2026-11-04)
-    var focus: String? = nil
+    let wait = ((m["waiting"] as? [[String: Any]]) ?? []).filter { !rvGone.contains($0["id"] as? String ?? "") }
+    let done = (m["reviewed"] as? [[String: Any]]) ?? []
+    let skels = rvSkeletons
+    if let vc = MeTabVC.byKey["reviews"], h.assets == "reviewsTab" {
+      vc.onSearch = { [weak self, weak h] q in guard let self = self, let h = h, self.rvQ != q else { return }; self.rvQ = q; self.blocks(h) }
+    }
+    // (an Inbox update about a request, or a notification: that request opened — Waiting or Reviewed under it)
     if let f = m["focus"] as? [String: Any], let n = f["n"] as? Int, n != rvFocusN, let fid = f["id"] as? String {
-      rvFocusN = n; focus = fid
+      rvFocusN = n
       rvSeg = done.contains(where: { ($0["id"] as? String) == fid }) ? 1 : 0
+      DispatchQueue.main.async { [weak self] in guard let self = self else { return }; if self.stack.count > 1 { self.backToRoot() }; DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { self.open("review", fid) } }
+    }
+    let q = rvQ.trimmingCharacters(in: .whitespaces)
+    if !q.isEmpty {
+      // (search: by task, client or person — typos forgiven, the words marked; Waiting and Reviewed both)
+      let text = { (x: [String: Any]) in "\(x["task"] ?? "") \(x["client"] ?? "") \(x["who"] ?? "")" }
+      let fw = Find.filter(wait, q, text: text), fd = Find.filter(done, q, text: text)
+      if fw.items.isEmpty && fd.items.isEmpty { let e = part(h, "none") { AppleEmpty() }; e.set("magnifyingglass", "No Results", "Check the spelling or try a new search."); out.append(e); return }
+      if !fw.items.isEmpty { out.append(head(h, "rqw", "Waiting · \(fw.items.count)")); let g = group(h, "rqw", fw.items.map { rvItem($0, decided: false) }); Find.mark([g], fw.marks); out.append(g) }
+      if !fd.items.isEmpty { out.append(head(h, "rqd", "Reviewed · \(fd.items.count)")); let g = group(h, "rqd", fd.items.map { rvItem($0, decided: true) }); Find.mark([g], fd.marks); out.append(g) }
+      return
     }
     let seg = part(h, "seg") { SegBlock() }
-    seg.set("Waiting · \(wait.count)", "Reviewed · \(done.count)", rvSeg)
-    seg.onPick = { [weak self, weak h] i in guard let self = self, let h = h else { return }; self.rvSeg = i; UIView.performWithoutAnimation { self.blocks(h); h.setNeedsLayout(); h.layoutIfNeeded() } }
-    // (Waiting · Reviewed stuck under the bar once it reaches it — the standard)
-    let pin = part(h, "pin") { PinStack() }
-    pin.set([seg])
-    if h.pinHead !== pin { h.pinHead = pin }
-    let rows = rvSeg == 0 ? wait : done
-    if rows.isEmpty { out.append(foot(h, "rv0", rvSeg == 0 ? "All caught up — new requests appear here, and you get a notification." : "Decisions from the last 15 days appear here.", centered: true)); return }
-    if rvSeg == 1 { out.append(foot(h, "rvsub", "Last 15 days")) }
-    let list = part(h, rvSeg == 0 ? "rvw" : "rvd") { ReviewList() }
-    list.set(rows, look: h.look, decided: rvSeg == 1)
-    list.onOpen = { [weak self] id in self?.open("review", id) }
-    out.append(list)
-    if let fid = focus {
-      if stack.count > 1, stack.first?.h === h { DispatchQueue.main.async { [weak self] in self?.backToRoot() } }   // (a request open on top: back to the list first)
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak h, weak list] in guard let h = h, let list = list, let row = list.row(fid) else { return }; h.scrollToShow(row); list.pulse(fid) }
+    seg.set("Waiting · \(wait.count + skels.count)", "Reviewed · \(done.count)", rvSeg)
+    seg.onPick = { [weak self, weak h] i in guard let self = self, let h = h, self.rvSeg != i else { return }; self.rvSeg = i; self.blocks(h) }
+    out.append(seg)
+    if rvSeg == 0 {
+      if wait.isEmpty && skels.isEmpty { let e = part(h, "none0") { AppleEmpty() }; e.set("checkmark.circle", "All Caught Up", "New requests appear here, and you get a notification."); out.append(e); return }
+      if !skels.isEmpty {
+        out.append(head(h, "rvp", "Content plans · \(skels.count)"))
+        out.append(group(h, "rvp", skels.map { r in
+          let pid = r["pid"] as? String ?? "", month = r["month"] as? String ?? ""
+          var it = SetItem(key: "p." + (r["id"] as? String ?? ""), title: r["title"] as? String ?? "", sub: r["sub"] as? String ?? "", tap: { [weak self] in self?.open("plan", "\(pid)|\(month)") })
+          it.person = (photo: nil, ini: r["ini"] as? String ?? "", rgb: NativeSheetVC.color(r["rgb"]) ?? .systemGray)
+          return it
+        }))
+      }
+      if !wait.isEmpty {
+        out.append(head(h, "rvw", skels.isEmpty ? "" : "Files for review · \(wait.count)"))
+        out.append(group(h, "rvw", wait.map { rvItem($0, decided: false) }))
+        out.append(foot(h, "rvwf", "Oldest first."))
+      }
+    } else {
+      if done.isEmpty { let e = part(h, "none1") { AppleEmpty() }; e.set("clock", "Nothing Reviewed Yet", "Decisions from the last 15 days appear here."); out.append(e); return }
+      out.append(head(h, "rvd", "Last 15 days"))
+      out.append(group(h, "rvd", done.map { rvItem($0, decided: true) }))
+      out.append(foot(h, "rvdf", "Newest first — each leaves this list 15 days after it was decided."))
     }
+  }
+  // the skeletons waiting for you, every month (the engine's plansForMe)
+  private var rvSkeletons: [[String: Any]] { ((AppData.shared.meModel("plans", "plansForMe") ?? [:])["rows"] as? [[String: Any]]) ?? [] }
+  // a request as Apple's list cell
+  private func rvItem(_ x: [String: Any], decided: Bool) -> SetItem {
+    let id = x["id"] as? String ?? "", tid = x["tid"] as? String ?? ""
+    let client = x["client"] as? String ?? "", carried = x["carried"] as? Int ?? 0, round = x["round"] as? Int ?? 1
+    var lines = [[client, x["sub"] as? String ?? ""].filter { !$0.isEmpty }.joined(separator: " · ")]
+    if !decided, carried > 0 { lines.append("\(carried) already approved") }
+    var it = SetItem(key: "r." + id, title: x["task"] as? String ?? "", sub: lines.joined(separator: "\n"), tap: { [weak self] in self?.open("review", id) })
+    it.person = (photo: x["photo"] as? String, ini: x["ini"] as? String ?? "", rgb: NativeSheetVC.color(x["rgb"]) ?? .systemGray)
+    if decided, let r = x["res"] as? [String: Any] { it.pills = [(r["t"] as? String ?? "", (r["k"] as? String) == "ok" ? .systemGreen : .systemOrange)] }
+    else if round > 1 { it.pills = [("Round \(round)", .systemOrange)] }
+    // (touch and hold a waiting one: Apple's menu — Approve · Request Amendments… · Open Task; a reviewed one: Open Task)
+    it.menu = { [weak self] in
+      var acts: [UIMenuElement] = []
+      if !decided {
+        acts.append(UIMenu(options: .displayInline, children: [
+          UIAction(title: "Approve", image: UIImage(systemName: "checkmark")) { _ in self?.rvApprove(x) },
+          UIAction(title: "Request Amendments…", image: UIImage(systemName: "pencil")) { _ in self?.rvAmend(x) }
+        ]))
+      }
+      acts.append(UIAction(title: "Open Task", image: UIImage(systemName: "checklist")) { _ in self?.send(["ev": "rvTask", "tid": tid]) })
+      return UIMenu(children: acts)
+    }
+    return it
   }
   private func reviewItem(_ id: String) -> ([String: Any], Bool, Int, Int)? {
     guard let m = model["reviews"] as? [String: Any] else { return nil }
-    let wait = (m["waiting"] as? [[String: Any]]) ?? [], done = (m["reviewed"] as? [[String: Any]]) ?? []
+    let wait = ((m["waiting"] as? [[String: Any]]) ?? []).filter { !rvGone.contains($0["id"] as? String ?? "") }, done = (m["reviewed"] as? [[String: Any]]) ?? []
     if let i = wait.firstIndex(where: { ($0["id"] as? String) == id }) { return (wait[i], false, i + 1, wait.count) }
     if let x = done.first(where: { ($0["id"] as? String) == id }) { return (x, true, 0, 0) }
     return nil
   }
+  // A request: Apple's push, ‹ · "Review request · 1 of 3" and the task; the sender and the files large and swipeable on
+  // the page, as now (D2 — a tap opens Quick Look); your note last round, the brief, Open Task as Apple's cells;
+  // Request Amendments · Approve on Apple's toolbar (B1); no download on the iPhone (G2).
   private func reviewBlocks(_ h: HomeView, _ id: String, _ out: inout [UIView]) {
+    let vc = pageVCs[ObjectIdentifier(h)]
     guard let it = reviewItem(id) else {
       h.drawAssetsBar(name: "Review request", sub: "", logo: nil, rgb: nil, ini: nil, showLogo: false)
+      vc?.setTools("", nil)
+      // (gone while it's open — withdrawn, or the task closed elsewhere: the page goes back with a toast, as every page)
+      if model["reviews"] != nil, !rvGone.contains(id), apple, let vc = vc, vc.appeared, AppData.shared.ready, vc.navigationController?.topViewController === vc {
+        vc.navigationController?.popViewController(animated: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in self?.top?.toast(["t": "This request isn’t waiting any more"]) }
+      }
       let w = part(h, "wait") { AppleEmpty() }; if model["reviews"] == nil { w.setLoading() } else { w.set("checkmark.circle", "Not Waiting", "This request isn’t waiting any more.") }; out.append(w); return
     }
     let (x, decided, n, of) = it
@@ -2400,55 +2486,63 @@ final class MeCtl {
     hero.onFile = { [weak self] fid in self?.send(["ev": "rvFile", "id": id, "fid": fid]) }
     out.append(hero)
     if decided, let r = x["res"] as? [String: Any] {
-      out.append(foot(h, "rvres", (r["long"] as? String ?? "") + " · " + (x["sub"] as? String ?? "").components(separatedBy: " · ").last!, centered: true))
-      if let note = x["note"] as? String, !note.isEmpty { let v = part(h, "rvnote") { ReviewNote() }; v.set("Your note", note, look: h.look); out.append(v) }
+      var res = SetItem(key: "res", title: r["long"] as? String ?? "", sub: "Decided " + ((x["sub"] as? String ?? "").components(separatedBy: " · ").last ?? ""), chevron: false)
+      res.bold = true
+      out.append(head(h, "rvres", "")); out.append(group(h, "rvres", [res]))
+      if let note = x["note"] as? String, !note.isEmpty { out.append(head(h, "rvnote", "Your note")); out.append(group(h, "rvnote", [SetItem(key: "note", title: note, chevron: false)])) }
     }
-    if !decided, let last = x["last"] as? String, !last.isEmpty { let v = part(h, "rvlast") { ReviewNote() }; v.set("Your note last round", last, look: h.look); out.append(v) }
-    if let b = x["brief"] as? String, !b.isEmpty { let v = part(h, "rvbrief") { ReviewNote() }; v.set("Brief", b, look: h.look); out.append(v) }
-    out.append(group(h, "rvtask", [SetItem(key: "task", title: "Open task", sub: "", sym: "checklist", col: .systemBlue, tap: { [weak self] in self?.send(["ev": "rvTask", "tid": tid]) })]))
-    guard !decided else { return }
-    let acts = part(h, "acts") { ReviewActs() }
-    acts.onApprove = { [weak self, weak h] in
-      guard let self = self else { return }
-      self.request(["ev": "rvApprove", "id": id]) { [weak h] r in
-        if (r["ok"] as? Bool) == true { UINotificationFeedbackGenerator().notificationOccurred(.success); h?.toast(["t": "Approved — \(x["first"] as? String ?? "") told"]); self.afterDecision(r["next"] as? String) }
-        else { h?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]) }
-      }
+    if !decided, let last = x["last"] as? String, !last.isEmpty { out.append(head(h, "rvlast", "Your note last round")); out.append(group(h, "rvlast", [SetItem(key: "last", title: last, chevron: false)])) }
+    if let b = x["brief"] as? String, !b.isEmpty { out.append(head(h, "rvbrief", "Brief")); out.append(group(h, "rvbrief", [SetItem(key: "brief", title: b, chevron: false)])) }
+    out.append(head(h, "rvtask", ""))
+    out.append(group(h, "rvtask", [SetItem(key: "task", title: "Open Task", sub: "", sym: "checklist", col: .systemBlue, tap: { [weak self] in self?.send(["ev": "rvTask", "tid": tid]) })]))
+    if decided { out.append(foot(h, "rvleave", "Leaves Reviewed 15 days after it was decided.")) }
+    guard !decided else { vc?.setTools("", nil); return }
+    // (Request Amendments · Approve on Apple's toolbar — Approve Apple's prominent button)
+    vc?.setTools("rv|\(id)") { [weak self] in
+      let amend = UIBarButtonItem(title: "Request Amendments", primaryAction: UIAction { _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.rvAmend(x) })
+      amend.tintColor = .systemOrange
+      let ok = UIBarButtonItem(title: "Approve", primaryAction: UIAction { _ in self?.rvApprove(x) })
+      if #available(iOS 26.0, *) { ok.style = .prominent; ok.tintColor = .systemGreen } else { ok.style = .done; ok.tintColor = .systemGreen }
+      return [amend, .flexibleSpace(), ok]
     }
-    acts.onAmend = { [weak self, weak h] in
-      guard let self = self else { return }
-      let vc = AmendSheetVC(files: (x["files"] as? [[String: Any]]) ?? [], first: x["first"] as? String ?? "")
-      vc.onFile = { [weak self] fid in self?.send(["ev": "rvFile", "id": id, "fid": fid]) }
-      vc.onSend = { [weak self, weak h] need, note, done in
-        var ev: [String: Any] = ["ev": "rvAmend", "id": id, "note": note]
-        if let n = need { ev["need"] = n }
-        self?.request(ev) { r in
-          if (r["ok"] as? Bool) == true {
-            done(nil)
-            let okN = ((x["files"] as? [Any])?.count ?? 0) - (need?.count ?? ((x["files"] as? [Any])?.count ?? 0))
-            h?.toast(["t": okN > 0 ? "\(okN) approved · \(need?.count ?? 0) sent back" : "Sent back to \(x["first"] as? String ?? "")"])
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { self?.afterDecision(r["next"] as? String) }
-          } else { done(r["error"] as? String ?? "That didn’t work — try again") }
-        }
-      }
-      self.main.topMost().present(vc.inNav(), animated: true)
-    }
-    out.append(acts)
   }
-  // decided: on to the next request waiting (it slides in), or back to the list when there's none
-  private func afterDecision(_ next: String?) {
-    guard let s = stack.last, s.kind == "review" else { return }
-    if let n = next, !n.isEmpty, n != s.id {
-      let W = main.view.bounds.width
-      let old = s.h
-      let ns = screen("review", n)
-      stack[stack.count - 1] = ns
-      draw(ns); ns.h.isHidden = false; ns.h.transform = CGAffineTransform(translationX: W, y: 0)
-      UIView.animate(withDuration: 0.42, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
-        ns.h.transform = .identity; old.transform = CGAffineTransform(translationX: -W * 0.3, y: 0); old.alpha = 0
-      } completion: { _ in old.removeFromSuperview(); self.main.updateCorner() }
-      main.edgePanOn(); main.updateCorner()
-    } else { pop() }
+  // the requests decided here, gone from Waiting at once — until the server's answer (a no brings it back with why)
+  private var rvGone: Set<String> = []
+  // after a decision: back to the list, the decided one fading out of Waiting (F2)
+  private func rvDecided(_ id: String) {
+    rvGone.insert(id)
+    if let s = stack.last, s.kind == "review", s.id == id, let vc = pageVCs[ObjectIdentifier(s.h)] { vc.navigationController?.popViewController(animated: true) }
+    if let root = stack.first, root.kind == "reviews" { draw(root) }
+  }
+  private func rvBack(_ id: String, _ why: String?) {
+    rvGone.remove(id)
+    if let root = stack.first, root.kind == "reviews" { draw(root) }
+    top?.toast(["t": why ?? "That didn’t work — try again"])
+  }
+  private func rvApprove(_ x: [String: Any]) {
+    let id = x["id"] as? String ?? "", first = x["first"] as? String ?? ""
+    UINotificationFeedbackGenerator().notificationOccurred(.success)
+    rvDecided(id)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in self?.top?.toast(["t": "Approved — \(first) told"]) }
+    request(["ev": "rvApprove", "id": id]) { [weak self] r in
+      if (r["ok"] as? Bool) == true { self?.rvGone.remove(id) } else { self?.rvBack(id, r["error"] as? String) }
+    }
+  }
+  private func rvAmend(_ x: [String: Any]) {
+    let id = x["id"] as? String ?? "", first = x["first"] as? String ?? "", files = (x["files"] as? [[String: Any]]) ?? []
+    let vc = AmendSheetVC(files: files, first: first)
+    vc.onFile = { [weak self] fid in self?.send(["ev": "rvFile", "id": id, "fid": fid]) }
+    vc.onSend = { [weak self] need, note, done in
+      var ev: [String: Any] = ["ev": "rvAmend", "id": id, "note": note]
+      if let n = need { ev["need"] = n }
+      // (at once: the sheet goes, the request leaves Waiting; the server's answer then)
+      done(nil)
+      let okN = files.count - (need?.count ?? files.count)
+      self?.rvDecided(id)
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { self?.top?.toast(["t": okN > 0 ? "\(okN) approved · \(need?.count ?? 0) sent back to \(first)" : "Sent back to \(first)"]) }
+      self?.request(ev) { r in if (r["ok"] as? Bool) == true { self?.rvGone.remove(id) } else { self?.rvBack(id, r["error"] as? String) } }
+    }
+    main.topMost().present(vc.inNav(), animated: true)
   }
   // ---------- an Office Admin's Claims (Haris 2026-11-04) ----------
   private func claimsBlocks(_ h: HomeView, _ out: inout [UIView]) {
@@ -2566,22 +2660,6 @@ final class MeCtl {
       h.showFound([g], hint: f.loose ? "Nothing matched exactly — close matches:" : nil)
       Find.mark([g], f.marks)
     }
-  }
-  // 🔍 on Reviews: the waiting and reviewed requests — by task, client or who sent it
-  private func reviewFind(_ h: HomeView, _ raw: String) {
-    let q = raw.trimmingCharacters(in: .whitespaces).lowercased()
-    guard !q.isEmpty else { h.showFound([], hint: "Search requests by task, client or person."); return }
-    let m = model["reviews"] as? [String: Any] ?? [:]
-    let text = { (x: [String: Any]) in "\(x["task"] ?? "") \(x["client"] ?? "") \(x["who"] ?? "")" }
-    let all = ((m["waiting"] as? [[String: Any]]) ?? []).map { ($0, true) } + ((m["reviewed"] as? [[String: Any]]) ?? []).map { ($0, false) }
-    let f = Find.filter(all, q) { text($0.0) }
-    let w = f.items.filter { $0.1 }.map { $0.0 }, d = f.items.filter { !$0.1 }.map { $0.0 }
-    if w.isEmpty && d.isEmpty { h.showFound([], hint: "No requests found."); return }
-    var out: [UIView] = []
-    if !w.isEmpty { let hd = SetHead(); hd.set("Waiting"); let l = ReviewList(); l.set(w, look: h.look, decided: false); l.onOpen = { [weak self] id in self?.open("review", id) }; out += [hd, l] }
-    if !d.isEmpty { let hd = SetHead(); hd.set("Reviewed"); let l = ReviewList(); l.set(d, look: h.look, decided: true); l.onOpen = { [weak self] id in self?.open("review", id) }; out += [hd, l] }
-    h.showFound(out, hint: f.loose ? "Nothing matched exactly — close matches:" : nil)
-    Find.mark(out, f.marks)
   }
   // 🔍 on Overview: every client's files (Client Assets' search), a tap previews it — Haris 2026-11-04
   private func overviewFind(_ h: HomeView, _ raw: String) {
@@ -3095,7 +3173,6 @@ final class MeCtl {
     case "me" where MeCtl.tabRoots.contains(h.assets ?? ""): main.selectTab("me")
     case "find" where h.assets == "overviewTab": overviewFind(h, ev["q"] as? String ?? "")
     case "find" where h.assets == "claimsTab" || h.assets == "expensesTab": listFind(h, ev["q"] as? String ?? "")
-    case "find" where h.assets == "reviewsTab": reviewFind(h, ev["q"] as? String ?? "")
     case "find" where h.assets == "plansPage" || h.assets == "me.plan" || h.assets == "plansTab": planFind(h, ev["q"] as? String ?? "")
     default: break
     }
@@ -3996,145 +4073,10 @@ final class MoneyFormVC: UIViewController {
   }
 }
 
-// ---------- the CD's Reviews (Haris 2026-11-04, the approved mockup): Waiting · Reviewed, a request, Request amendments.
-// Tap only — no swipes, no hold: she opens a request to decide. ----------
+// ---------- the CD's Reviews' pieces of ours (the mock-up "Review Requests — fully Apple", 2026-11-10): a request's files
+// as now, and Request Amendments' sheet ----------
 
-// the requests: one rounded group, a row each — the sender's photo, the task, the client, who sent what and when, the
-// files' pictures (waiting) or the result (reviewed), the Round tag. Rows kept by id, only what changed is drawn again.
-final class ReviewList: UIView, HomeBlock {
-  var onOpen: ((String) -> Void)?
-  private let box = UIView()
-  private var rows: [String: ReviewRow] = [:], order: [String] = [], seps: [UIView] = []
-  override init(frame: CGRect) { super.init(frame: frame); box.layer.cornerRadius = 16; box.layer.cornerCurve = .continuous; box.clipsToBounds = true; addSubview(box) }
-  required init?(coder: NSCoder) { fatalError() }
-  func set(_ items: [[String: Any]], look L: HomeLook, decided: Bool) {
-    box.backgroundColor = L.card
-    let ids = items.map { $0["id"] as? String ?? "" }
-    UIView.performWithoutAnimation {
-      for (id, r) in rows where !ids.contains(id) { r.removeFromSuperview(); rows[id] = nil }
-      for x in items {
-        let id = x["id"] as? String ?? ""
-        let r = rows[id] ?? { let r = ReviewRow(); box.addSubview(r); rows[id] = r; return r }()
-        r.onTap = { [weak self] in self?.onOpen?(id) }
-        r.set(x, look: L, decided: decided)
-      }
-      while seps.count < max(0, ids.count - 1) { let v = UIView(); box.addSubview(v); seps.append(v) }
-      for (i, v) in seps.enumerated() { v.isHidden = i >= ids.count - 1; v.backgroundColor = .separator }   // (iPhone's own line, as the app's other lists — Haris 2026-11-04)
-    }
-    order = ids
-    setNeedsLayout()
-  }
-  private func hOf(_ id: String, _ w: CGFloat) -> CGFloat { rows[id]?.height(w) ?? 64 }
-  func row(_ id: String) -> UIView? { rows[id] }
-  // the WhatsApp pulse on one row: a see-through grey over it, once
-  func pulse(_ id: String) {
-    guard let r = rows[id] else { return }
-    let band = UIView(frame: r.bounds); band.isUserInteractionEnabled = false; band.alpha = 0
-    band.backgroundColor = Look.c(UIColor.white.withAlphaComponent(0.13), UIColor.black.withAlphaComponent(0.08))
-    r.addSubview(band)
-    UIView.animate(withDuration: 0.2, delay: 0.35, options: [.curveEaseOut]) { band.alpha = 1 } completion: { _ in
-      UIView.animate(withDuration: 0.6, delay: 0.6, options: [.curveEaseInOut]) { band.alpha = 0 } completion: { _ in band.removeFromSuperview() }
-    }
-  }
-  func blockHeight(_ W: CGFloat) -> CGFloat { order.reduce(0) { $0 + hOf($1, W - 32) } + 8 }
-  override func layoutSubviews() {
-    super.layoutSubviews()
-    let w = bounds.width - 32
-    box.frame = CGRect(x: 16, y: 4, width: w, height: order.reduce(0) { $0 + hOf($1, w) })
-    var y: CGFloat = 0
-    for (i, id) in order.enumerated() {
-      guard let r = rows[id] else { continue }
-      let h = hOf(id, w)
-      r.bounds = CGRect(x: 0, y: 0, width: box.bounds.width, height: h); r.center = CGPoint(x: box.bounds.width / 2, y: y + h / 2)
-      y += h
-      let px = 1 / max(1, window?.screen.scale ?? UIScreen.main.scale)
-      if i < seps.count, !seps[i].isHidden { seps[i].frame = CGRect(x: 62, y: y - px / 2, width: box.bounds.width - 62, height: px); box.bringSubviewToFront(seps[i]) }
-    }
-  }
-}
-final class ReviewRow: UIView {
-  var onTap: (() -> Void)?
-  private let pic = UIImageView(), title = UILabel(), client = UILabel(), dot = UIView(), sub = UILabel(), rtag = PaddedLabel()
-  private var thumbs: [UIImageView] = []
-  private var sig = "", photoPath: String?, decided = false
-  override init(frame: CGRect) {
-    super.init(frame: frame)
-    pic.layer.cornerRadius = 18; pic.clipsToBounds = true; pic.contentMode = .scaleAspectFill
-    title.font = .systemFont(ofSize: 16, weight: .medium); title.numberOfLines = 2
-    client.font = .systemFont(ofSize: 13); client.textColor = .secondaryLabel
-    sub.font = .systemFont(ofSize: 13); sub.textColor = .secondaryLabel
-    dot.layer.cornerRadius = 4
-    rtag.font = .systemFont(ofSize: 11.5, weight: .semibold); rtag.layer.cornerRadius = 7; rtag.clipsToBounds = true; rtag.insets = UIEdgeInsets(top: 2, left: 7, bottom: 2, right: 7)
-    [pic, title, client, dot, sub, rtag].forEach { addSubview($0) }
-    addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
-    _ = PressShrink.add(to: self)
-    accessibilityTraits = .button; isAccessibilityElement = true
-  }
-  required init?(coder: NSCoder) { fatalError() }
-  @objc private func tapped() { UISelectionFeedbackGenerator().selectionChanged(); onTap?() }
-  func set(_ x: [String: Any], look L: HomeLook, decided d: Bool) {
-    decided = d
-    let files = (x["files"] as? [[String: Any]]) ?? []
-    let res = x["res"] as? [String: Any]
-    let s = "\(x["task"] ?? "")|\(x["client"] ?? "")|\(x["sub"] ?? "")|\(x["round"] ?? "")|\(x["carried"] ?? "")|\(res?["t"] ?? "")|\(files.map { "\($0["id"] ?? "")" })|\(x["photo"] ?? "")|\(L.key)|\(d)"
-    guard s != sig else { return }
-    sig = s
-    title.text = x["task"] as? String; client.text = x["client"] as? String; sub.text = x["sub"] as? String
-    dot.backgroundColor = NativeSheetVC.color(x["crgb"]) ?? .systemGray
-    let round = x["round"] as? Int ?? 1, carried = x["carried"] as? Int ?? 0
-    if let r = res {
-      let k = r["k"] as? String ?? ""
-      let c: UIColor = k == "ok" ? .systemGreen : k == "mix" ? .systemPurple : .systemOrange
-      rtag.text = r["t"] as? String; rtag.textColor = c; rtag.backgroundColor = c.withAlphaComponent(0.15)
-    } else {
-      rtag.text = "Round \(round)" + (carried > 0 ? " · \(carried) ✓" : ""); rtag.textColor = .systemBlue; rtag.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.14)
-    }
-    let ini = x["ini"] as? String ?? "", rgb = NativeSheetVC.color(x["rgb"]) ?? .systemGray
-    let ph = x["photo"] as? String
-    if ph != photoPath || pic.image == nil {
-      photoPath = ph; pic.image = roundPic(nil, initials: ini, color: rgb, size: 36)
-      if let p = ph { FeedLoader.shared.image(p) { [weak self] i in guard let self = self, self.photoPath == p, let i = i else { return }; self.pic.image = roundPic(i, initials: nil, color: nil, size: 36) } }
-    }
-    // (waiting: up to 4 of the files' pictures)
-    let show = d ? [] : Array(files.prefix(4))
-    while thumbs.count < show.count { let v = UIImageView(); v.layer.cornerRadius = 8; v.layer.cornerCurve = .continuous; v.clipsToBounds = true; v.contentMode = .scaleAspectFill; addSubview(v); thumbs.append(v) }
-    for (i, v) in thumbs.enumerated() {
-      v.isHidden = i >= show.count
-      guard i < show.count else { continue }
-      let f = show[i]; v.backgroundColor = UIColor.tertiarySystemFill; v.image = nil
-      if let p = f["pic"] as? String { FeedLoader.shared.image(p) { [weak v] img in v?.image = img } }
-    }
-    accessibilityLabel = "\(x["task"] ?? ""), \(x["client"] ?? ""), \(x["sub"] ?? ""), \(rtag.text ?? "")"
-    setNeedsLayout()
-  }
-  override func layoutSubviews() {
-    super.layoutSubviews()
-    let W = bounds.width
-    let tw = ceil(rtag.sizeThatFits(CGSize(width: 160, height: 20)).width)
-    rtag.frame = CGRect(x: W - 14 - tw, y: 13, width: tw, height: 18)
-    pic.frame = CGRect(x: 14, y: 12, width: 36, height: 36)
-    let x: CGFloat = 62, w = W - x - tw - 26
-    let th = min(40, ceil(title.sizeThatFits(CGSize(width: w, height: 60)).height))
-    title.frame = CGRect(x: x, y: 11, width: w, height: th)
-    dot.frame = CGRect(x: x, y: title.frame.maxY + 7, width: 8, height: 8)
-    client.frame = CGRect(x: x + 13, y: title.frame.maxY + 2, width: W - x - 27, height: 17)
-    sub.frame = CGRect(x: x, y: client.frame.maxY + 1, width: W - x - 14, height: 17)
-    var y = sub.frame.maxY
-    if thumbs.contains(where: { !$0.isHidden }) {
-      for (i, v) in thumbs.enumerated() where !v.isHidden { v.frame = CGRect(x: x + CGFloat(i) * 50, y: y + 8, width: 44, height: 44) }
-      y += 52
-    }
-  }
-  // (its height for a width: the title's lines, the client, who sent what, the pictures)
-  func height(_ W: CGFloat) -> CGFloat {
-    let tw = ceil(rtag.sizeThatFits(CGSize(width: 160, height: 20)).width)
-    let th = min(40, ceil(title.sizeThatFits(CGSize(width: W - 62 - tw - 26, height: 60)).height))
-    return max(64, 11 + th + 2 + 17 + 1 + 17 + (thumbs.contains(where: { !$0.isHidden }) ? 52 : 0) + 12)
-  }
-}
-
-// a request's top: who sent it (photo, "Yousef sent 3 files", the client, the Round tag), the files large — swiped
-// sideways, a tap opens it in the preview (videos play there) — and the strip of all of them under it (✓ = approved)
+// the sender and the files, large and swipeable (the mock-up's D2 — a tap opens Quick Look; the strip under them)
 final class ReviewHero: UIView, HomeBlock, UIScrollViewDelegate {
   var onFile: ((String) -> Void)?
   private let pic = UIImageView(), who = UILabel(), meta = UILabel(), dot = UIView(), rtag = PaddedLabel()
@@ -4235,46 +4177,6 @@ final class ReviewHero: UIView, HomeBlock, UIScrollViewDelegate {
   private func paintChips() { for (i, v) in chips.enumerated() { UIView.animate(withDuration: 0.2) { v.alpha = i == self.page ? 1 : 0.6 }; v.viewWithTag(8)?.layer.borderWidth = i == page ? 2.5 : 0 } }
   @objc private func tappedChip(_ g: UITapGestureRecognizer) { guard let i = g.view?.tag, i < pages.count else { return }; page = i; UISelectionFeedbackGenerator().selectionChanged(); UIView.animate(withDuration: 0.3) { self.pager.contentOffset.x = CGFloat(i) * self.pager.bounds.width }; paintChips() }
   @objc private func tappedPage(_ g: UITapGestureRecognizer) { guard let v = g.view, let i = pages.firstIndex(of: v), i < files.count, let id = files[i]["id"] as? String else { return }; onFile?(id) }
-}
-
-// a card of words with a small caption (the brief; your note last round; the decision's note)
-final class ReviewNote: UIView, HomeBlock {
-  private let box = UIView(), cap = UILabel(), body = UILabel()
-  override init(frame: CGRect) {
-    super.init(frame: frame)
-    box.layer.cornerRadius = 14; box.layer.cornerCurve = .continuous
-    cap.font = .systemFont(ofSize: 12, weight: .semibold); cap.textColor = .secondaryLabel
-    body.font = .systemFont(ofSize: 15); body.numberOfLines = 0
-    addSubview(box); box.addSubview(cap); box.addSubview(body)
-  }
-  required init?(coder: NSCoder) { fatalError() }
-  func set(_ c: String, _ t: String, look L: HomeLook) { cap.text = c.uppercased(); if body.text != t { body.text = t; setNeedsLayout() }; box.backgroundColor = L.card }
-  func blockHeight(_ W: CGFloat) -> CGFloat { 12 + 12 + 18 + ceil(body.sizeThatFits(CGSize(width: W - 32 - 26, height: 600)).height) + 12 }
-  override func layoutSubviews() {
-    super.layoutSubviews()
-    box.frame = CGRect(x: 16, y: 12, width: bounds.width - 32, height: bounds.height - 12)
-    cap.frame = CGRect(x: 13, y: 11, width: box.bounds.width - 26, height: 15)
-    body.frame = CGRect(x: 13, y: 29, width: box.bounds.width - 26, height: box.bounds.height - 29 - 11)
-  }
-}
-
-// Request amendments (orange) and Approve (green), side by side
-final class ReviewActs: UIView, HomeBlock {
-  var onAmend: (() -> Void)?, onApprove: (() -> Void)?
-  private let a = UIButton(type: .system), b = UIButton(type: .system)
-  override init(frame: CGRect) {
-    super.init(frame: frame)
-    for (btn, t, c) in [(a, "Request amendments", UIColor.systemOrange), (b, "Approve", UIColor.systemGreen)] {
-      var cfg = UIButton.Configuration.filled(); cfg.cornerStyle = .capsule; cfg.baseBackgroundColor = c; cfg.baseForegroundColor = .white
-      var s = AttributedString(t); s.font = .systemFont(ofSize: 16, weight: .semibold); cfg.attributedTitle = s
-      cfg.titleLineBreakMode = .byTruncatingTail; btn.configuration = cfg; addSubview(btn)
-    }
-    a.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.onAmend?() }, for: .touchUpInside)
-    b.addAction(UIAction { [weak self] _ in self?.onApprove?() }, for: .touchUpInside)
-  }
-  required init?(coder: NSCoder) { fatalError() }
-  func blockHeight(_ W: CGFloat) -> CGFloat { 80 }
-  override func layoutSubviews() { super.layoutSubviews(); let W = bounds.width, w = (W - 32 - 10); a.frame = CGRect(x: 16, y: 16, width: w * 0.56, height: 52); b.frame = CGRect(x: 16 + w * 0.56 + 10, y: 16, width: w * 0.44, height: 52) }
 }
 
 // iPhone's own sheet: tick the files that need changes (each its own note), the rest are approved; a general note on

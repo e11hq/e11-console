@@ -167,6 +167,28 @@ extension Main {
         var o = self.meCtl.selfPlans(); o["barHidden"] = (AppleTabs.shared?.barHiddenNow ?? false)
         self.apple("plansTabBack", o)
       }),
+      // the CD's Reviews tab (Haris 2026-11-10, the mock-up "Review Requests — fully Apple"): its own Apple screen, Waiting ·
+      // Reviewed, a request held — Apple's menu; a request opened — Request Amendments · Approve on Apple's toolbar, the tab
+      // bar gone once it's there; back
+      ("aRv", { if self.tabKeys.contains("reviews") { self.selfTapTab("reviews") } }),
+      ("aRvWait", {}),
+      ("aRvRead", {
+        guard self.tabKeys.contains("reviews") else { return }
+        var o = self.meCtl.selfReviews(); o["shown"] = MeTabVC.byKey["reviews"]?.view.window != nil
+        self.apple("reviews", o); _ = self.meCtl.selfOpenReview()
+      }),
+      ("aRvReqWait", {}),
+      ("aRvReqRead", {
+        guard self.tabKeys.contains("reviews") else { return }
+        var o = self.meCtl.selfReviews(); o["barHidden"] = (AppleTabs.shared?.barHiddenNow ?? false)
+        self.apple("reviewReq", o); if o["kind"] as? String == "review" { AppleTabs.shared?.roleNavs["reviews"]?.popViewController(animated: true) }
+      }),
+      ("aRvBackWait", {}),
+      ("aRvBackRead", {
+        guard self.tabKeys.contains("reviews") else { return }
+        var o = self.meCtl.selfReviews(); o["barHidden"] = (AppleTabs.shared?.barHiddenNow ?? false)
+        self.apple("reviewsBack", o); self.tab(self.tabKeys.first ?? "today")
+      }),
       // (measurement, Haris 2026-11-10: a client's page sliding in from the Clients list — frame by frame, the search box
       //  and its glass in Apple's bar, and every touch of ours on the bar with its time)
       ("aBar", { self.tab("projects") }),

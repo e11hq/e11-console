@@ -46,6 +46,10 @@ try:
         r = api('/api/app/act', {'ev': 'cd', 'id': prod[0]['id'], 'choice': 'cd', 'op': 'cd1'})
         print('CD', prod[0]['email'], r.get('ok'), r.get('error', ''))
         roles.append(('Creative Director', prod[0]['email']))
+    if APPLE:   # (--apple: the sample's Creative Director too, for the Reviews tab — Haris 2026-11-10)
+        meta = (snap.get('data') or snap).get('meta') or {}
+        cdu = next((u for u in users if u.get('id') == meta.get('cdUserId') and u.get('email') != EMAIL), None)
+        if cdu: roles.append(('Creative Director', cdu['email']))
     for label, role in ((('Social', 'social'),) if APPLE else (('Account Manager', 'am'), ('Production', 'production'), ('Social', 'social'))):   # (--apple: Social too, for its own Plans tab)
         u = next((x for x in users if x.get('role') == role and x.get('email') not in [e for _, e in roles] + [EMAIL]), None)
         roles.append((label, u['email'] if u else add(f'walk-{role}@test.e11', f'Walk {label}', role)))
@@ -156,7 +160,16 @@ if APPLE:
     check(t0.get('shown') is True and t0.get('kind') == 'plans' and t0.get('barHidden') is False and not t0.get('loading'), f"Social's Plans tab: its own Apple screen, the list from the phone's copy {t0}")
     check(t0.get('rows', 0) == 0 or (t1.get('kind') == 'plan' and t1.get('barHidden') is True and not t1.get('loading')), f"Social's Plans tab: a skeleton opened — the tab bar gone once it's there {t1}")
     check(t0.get('rows', 0) == 0 or (t2.get('kind') == 'plans' and t2.get('barHidden') is False), f"Social's Plans tab: back — the tab bar there again, the list as it was {t2}")
-    for who in ('Super Admin', 'Social'):
+    cd = (out.get('Creative Director') or {}).get('apple') or {}
+    r0, r1, r2 = cd.get('reviews') or {}, cd.get('reviewReq') or {}, cd.get('reviewsBack') or {}
+    print('measure apple cd', json.dumps(cd))
+    if 'Creative Director' in out:
+        check(r0.get('shown') is True and r0.get('kind') == 'reviews' and r0.get('apple') is True and not r0.get('loading') and r0.get('waiting', -1) >= 0, f"the CD's Reviews tab: its own Apple screen, from the phone's copy {r0}")
+        check(r0.get('waiting', 0) == 0 or r0.get('menu') == ['Approve', 'Request Amendments…', 'Open Task'], f"the CD's Reviews: a request held — Apple's menu Approve · Request Amendments… · Open Task {r0.get('menu')}")
+        check(r0.get('waiting', 0) == 0 or (r1.get('kind') == 'review' and r1.get('tools') == ['Request Amendments', 'Approve'] and r1.get('barHidden') is True), f"the CD's Reviews: a request opened — Request Amendments · Approve on Apple's toolbar, the tab bar gone {r1}")
+        check(r0.get('waiting', 0) == 0 or (r2.get('kind') == 'reviews' and r2.get('barHidden') is False), f"the CD's Reviews: back — the tab bar there again {r2}")
+    for who in ('Super Admin', 'Social', 'Creative Director'):
+        if who not in out: continue
         check(not (out.get(who) or {}).get('stuck'), f"the app ran to the end as {who} (no crash, not stuck)")
     open(os.path.join(TMP, 'ios-apple.txt'), 'w').write('\n'.join(fails) + '\n')
     sys.exit(1 if fails else 0)

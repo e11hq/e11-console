@@ -13,8 +13,9 @@ import UIKit
    MeCtl keeps the pages' contents and actions, as before; only where they live and who draws them changed. */
 let APPLE_ME = APPLE_NAV
 // A role's own tab in its own Apple navigation, as Home (MeTabVC): Social's Plans (Haris 2026-11-10 18:13, the mock-up
-// "Content plans — fully Apple"), an Office Admin's Team (19:58, the mock-up "Team members — fully Apple")
-let APPLE_ROLE_TABS: [String] = APPLE_NAV ? ["plans", "team"] : []
+// "Content plans — fully Apple"), an Office Admin's Team (19:58, the mock-up "Team members — fully Apple"), the CD's Reviews
+// (21:20, the mock-up "Review Requests — fully Apple")
+let APPLE_ROLE_TABS: [String] = APPLE_NAV ? ["plans", "team", "reviews"] : []
 
 extension Main {
   // (Me in its own Apple navigation — for everyone with a Me tab)
@@ -89,6 +90,7 @@ final class MeVC: UIViewController, TabRoot {
 // (HomeView.applyMeList); a page pushed on it (MePageVC), the tab bar going once it has arrived, as a task.
 //  · Social's Plans (Haris 2026-11-10, the mock-up "Content plans — fully Apple"): "Content plans", clients and posts
 //  · an Office Admin's Team (Haris 2026-11-10, the mock-up "Team members — fully Apple"): "Team members", people
+//  · the CD's Reviews (Haris 2026-11-10, the mock-up "Review Requests — fully Apple"): "Reviews", requests and skeletons
 final class MeTabVC: UIViewController, TabRoot, UISearchResultsUpdating, UISearchControllerDelegate, UISearchBarDelegate {
   static var byKey: [String: MeTabVC] = [:]
   let key: String
@@ -104,7 +106,7 @@ final class MeTabVC: UIViewController, TabRoot, UISearchResultsUpdating, UISearc
   override func viewDidLoad() {
     super.viewDidLoad()
     navigationItem.backButtonDisplayMode = .minimal
-    navigationItem.title = key == "team" ? "Team members" : "Content plans"
+    navigationItem.title = ["team": "Team members", "reviews": "Reviews"][key] ?? "Content plans"
     let me = UIBarButtonItem(image: BarImage.me(nil, traitCollection), primaryAction: UIAction { _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); Main.shared.selectTab("me") })
     me.accessibilityLabel = "Me"
     BarImage.bare(me)
@@ -114,7 +116,7 @@ final class MeTabVC: UIViewController, TabRoot, UISearchResultsUpdating, UISearc
     let s = UISearchController(searchResultsController: nil)
     s.obscuresBackgroundDuringPresentation = false
     s.searchResultsUpdater = self; s.delegate = self
-    s.searchBar.placeholder = key == "team" ? "Search people" : "Search clients and posts"
+    s.searchBar.placeholder = ["team": "Search people", "reviews": "Search tasks, clients or people"][key] ?? "Search clients and posts"
     s.searchBar.autocorrectionType = .no
     search = s
     navigationItem.hidesSearchBarWhenScrolling = false

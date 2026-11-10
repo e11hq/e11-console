@@ -338,7 +338,9 @@ Apple's toolbar (B1); hold: Approve · Request Amendments… · Open Task (C1); 
 strip, as now (D2); no download on the iPhone (G2). **21:18: E2 · F2** — Waiting · Reviewed at the
 top of the list, scrolling away with it (as My Tasks' All · Done); after a decision, back to the list, the decided one
 fading out of Waiting. D2's files swipe left / right between that request's files; a tap opens Quick Look. **Mock-up APPROVED (Haris 21:20: "approved, make it
-locally, dont build it yet").**
+locally, dont build it yet").** Made locally (not built): the Reviews tab its own Apple screen (MeTabVC "reviews",
+APPLE_ROLE_TABS), the requests Apple's cells (Me.swift rvItem), the toolbar, back to the list after a decision; the skeletons
+from the engine's `plansForMe` (main, commit 5332db9 — needs the next server release, published together with the app).
 **Remind Haris when the Clients pages' page-by-page work starts (Haris 2026-11-09 21:12):** background uploads and downloads
 go in with them — plan in project doc `claude/ios-background-transfers-plan.md`.
 
