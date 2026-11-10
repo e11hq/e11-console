@@ -179,9 +179,11 @@ final class InboxPeekVC: UIViewController {
         wrap.addSubview(shape)
         shape.addSubview(prev); prev.frame = CGRect(x: -16, y: -6, width: W, height: full)
         if full > h {
-          let card = HomeLook(Main.shared.lookBoth).card.resolvedColor(with: traitCollection)
           let fade = CAGradientLayer()
-          fade.colors = [card.withAlphaComponent(0).cgColor, card.cgColor]
+          // (a layer's colours: set again when the phone's look changes — the light / dark rule's followLook)
+          let paint: (UITraitCollection) -> Void = { tc in let card = HomeLook(Main.shared.lookBoth).card.resolvedColor(with: tc); fade.colors = [card.withAlphaComponent(0).cgColor, card.cgColor] }
+          paint(traitCollection)
+          shape.followLook("fade", paint)
           fade.frame = CGRect(x: 0, y: max(0, shape.bounds.height - 44), width: shape.bounds.width, height: min(44, shape.bounds.height))
           shape.layer.addSublayer(fade)
         }
