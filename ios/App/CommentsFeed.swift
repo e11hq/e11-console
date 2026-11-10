@@ -450,7 +450,7 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     //  width, it opens at the latest)
     if bounds.width > 0 && laidW != bounds.width {
       laidW = bounds.width; scroll.reloadData()
-      if let id = pulseWaiting { pulseWaiting = nil; endOnLayout = false; scroll.layoutIfNeeded(); DispatchQueue.main.async { [weak self] in self?.pulse(id) } }
+      if let id = pulseWaiting { pulseWaiting = nil; endOnLayout = false; scroll.layoutIfNeeded(); let inbox = pulseFromInbox; pulseFromInbox = false; DispatchQueue.main.async { [weak self] in self?.pulse(id, fromInbox: inbox) } }
       else if endOnLayout { endOnLayout = false; toEnd(animated: false) }
     }
     placeJump()
@@ -492,18 +492,19 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
   }
 
   // ---------- the WhatsApp pulse: the whole row, a see-through grey, once ----------
-  private var pulseWaiting: String?
-  func pulse(_ id: String) {
+  private var pulseWaiting: String?, pulseFromInbox = false
+  // fromInbox: opened from the Inbox or a notification — a long comment's top comes to the middle of the screen
+  func pulse(_ id: String, fromInbox: Bool = false) {
     guard let c = cells[id] else { return }
     // (asked before the list knows its width — opened from a notification: shown once it does, instead of the latest —
     //  Haris 2026-11-10: "the notification from inbox is not scrolling to view")
-    if laidW == 0 || bounds.width == 0 { pulseWaiting = id; endOnLayout = false; return }
+    if laidW == 0 || bounds.width == 0 { pulseWaiting = id; pulseFromInbox = fromInbox; endOnLayout = false; return }
     layoutIfNeeded()
     guard let f = frameOf(id) else { return }
-    // (a comment taller than the room it has — a long one: its top brought in just under the bar, not its middle, which left
-    //  its start above the screen — Haris 2026-11-10 14:40; a short one as before, a little above the middle)
+    // (from the Inbox or a notification, a comment taller than the room it has: its top in the middle of the screen — its
+    //  middle there left its start above the screen: Haris 2026-11-10 14:42; everything else as before)
     let room = scroll.bounds.height - scroll.contentInset.top - scroll.contentInset.bottom
-    let want = f.height > room * 0.8 ? f.minY - scroll.contentInset.top - 12 : f.midY - scroll.bounds.height * 0.4
+    let want = fromInbox && f.height > room * 0.8 ? f.minY - scroll.contentInset.top - room / 2 : f.midY - scroll.bounds.height * 0.4
     let y = max(-scroll.contentInset.top, min(want, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height))
     // (Apple's own smooth scroll there — it jumped, Haris 2026-11-08; the card lights up as it arrives)
     let moves = abs(scroll.contentOffset.y - y) > 1

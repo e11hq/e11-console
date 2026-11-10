@@ -528,7 +528,7 @@ extension Main {
       let parts = focus.split(separator: "~", omittingEmptySubsequences: false).map(String.init)
       guard let self = self, let p = p, let f = f, parts.count > 1, !parts[1].isEmpty else { return }
       let cid = parts[1]
-      if f.has(cid) { f.pulse(cid) }
+      if f.has(cid) { f.pulse(cid, fromInbox: true) }
       else if let parent = (f.model?["parents"] as? [String: String])?[cid] { self.openThread(p, parent, pulse: cid) }
     }
   }
@@ -599,7 +599,7 @@ extension Main {
     p.commentsHost.addSubview(t)
     t.transform = CGAffineTransform(translationX: p.bounds.width, y: 0)
     composeIfMade?.replyTo = nil; composeIfMade?.switchTo(task: p.taskId, parent: cid)
-    t.load { [weak t] in if let id = pulse { t?.pulse(id) } }
+    t.load { [weak t] in if let id = pulse { t?.pulse(id, fromInbox: true) } }
     p.edgeScroll(t.scroll)
     UIView.animate(withDuration: 0.38, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0) { t.transform = .identity }
   }
@@ -631,7 +631,7 @@ extension Main {
       c.replyTo = nil; c.switchTo(task: p.taskId, parent: cid)
       UIView.performWithoutAnimation { placeCompose(c, above: t); c.transform = .identity; c.alpha = 1; c.isHidden = false }
     }
-    t.load { [weak t] in if let id = pulse { t?.pulse(id) } }
+    t.load { [weak t] in if let id = pulse { t?.pulse(id, fromInbox: true) } }
     let push = { [weak nav] in nav?.pushViewController(vc, animated: true) }
     // (opened while the task page itself is still coming in — from the Inbox: once it's there)
     if let tc = nav.transitionCoordinator { tc.animate(alongsideTransition: nil) { _ in push() } } else { push() }
