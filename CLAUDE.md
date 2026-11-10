@@ -299,6 +299,14 @@ and your photo, the clients in Apple's list, + Add client); a client's page, a c
 Apple's pushed pages (‹ · the name and its line · ••• as Apple's own menu, the tab bar staying, each block its own cell of
 Apple's list, Apple's own frost as Home (2026-11-09), Apple's search for a client's files, the folders row on top of a client's page
 as before).
+**iPhone Content plans — mock-up APPROVED (Haris 2026-11-10 18:13: "mockup are approved, dont build it yet"):** canvas
+"Content plans — fully Apple". Social's own tab "Plans" (a big-title tab as Home: big title "Content plans" and its line, Apple's
+search, your photo — no Talk, no "+ New task"); everyone else from Me › Content plans (pushed, the tab bar staying). The month
+tabs under the search (ours, as the Inbox's Mail buttons) — the only way to change month. Waiting for you first, its own group;
+status pills ours. A skeleton: status cell, occasions, posts by day; Send Back · Approve on Apple's toolbar (Approve dimmed
+while a post is marked); ••• Copy Link and **Trash Skeleton — only its maker (the SE) and the Social Manager, only before any
+task is made from it, 30 days in the Trash** (new: website and server too). A post: Apple's sheet, Ask for Changes · Looks
+Good; files in Quick Look, links in Safari. Ask for changes: Apple's sheet. Not started: Apple's empty state.
 **Remind Haris once every page is done page by page (Haris 2026-11-10 17:39):** (B) take out the leftover website code from
 the Apple pages (about 60 `pageReady` branches — dead on the phone, which runs without the website), moving the main
 self-test's checks into the no-website run (`walktest.py --apple`) page by page first; and the smoothness check — the
