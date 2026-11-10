@@ -3041,7 +3041,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("ibxMentions", pause(2000) + "return '{}'", { self.inboxIfMade?.selfInboxTab("mentions") }),
       ("ibxAll", pause(2000) + "return '{}'", { self.inboxIfMade?.selfInboxTab("all") }),
       // (a notification held: its categories and Apple's buttons registered — Reply on a comment's — Haris 2026-11-10)
-      ("notifCats", "return '{}'", { UNUserNotificationCenter.current().getNotificationCategories { c in let l = c.map { $0.identifier + ":" + $0.actions.map { $0.identifier }.joined(separator: ",") }.sorted(); DispatchQueue.main.async { self.selfResult["notifCats"] = l } } }),
+      ("notifCats", "return '{}'", { UNUserNotificationCenter.current().getNotificationCategories { c in let l = c.map { $0.identifier + ":" + $0.actions.map { $0.identifier }.joined(separator: ",") }.sorted(); DispatchQueue.main.async { self.selfResult["notifCategories"] = l } } }),
       // (each tab with its own Apple screen as Home, locked: a task opened from it and ‹ back — its "+ New task" there all
       //  the way through the slide back, as at rest; the Inbox's and My Tasks' were blanked by the old shared button's
       //  move and popped in after the slide, a Home fix that never reached them: Haris 2026-11-08)

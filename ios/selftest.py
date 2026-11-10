@@ -232,7 +232,7 @@ try:
     # (the Inbox fully Apple — Haris 2026-11-10: each row Apple's own cell; holding a task's update, Apple's peek of it from the
     #  phone's copy, with Apple's menu: Open Task · Mark as Read · Copy Text / Copy Link)
     check((ibs.get('cells') or 0) >= 1 and (ibs.get('cells') or 0) <= (ibs.get('rows') or 0), f"the Inbox's rows are Apple's own list cells {({k: ibs.get(k) for k in ('cells', 'rows')})}")
-    check(res.get('notifCats') == ['e11.comment:reply,read,open', 'e11.task:read,open'], f"a notification held: Reply · Mark as Read · Open Task on a comment's, Mark as Read · Open Task on a task's {res.get('notifCats')}")
+    check(res.get('notifCategories') == ['e11.comment:reply,read,open', 'e11.task:read,open'], f"a notification held: Reply · Mark as Read · Open Task on a comment's, Mark as Read · Open Task on a task's {res.get('notifCategories')}")
     _pk = ibs.get('peek') or {}
     check(not _pk or ((_pk.get('h') or 0) > 60 and _pk.get('menu') == 3), f"holding an update about a task: Apple's peek of it and its menu {_pk}")
     check(ib.get('apple') is True and ib.get('listOn') is True, f"the Inbox in Apple's navigation, its rows in Apple's list {ib}")
