@@ -61,6 +61,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
   //  iOS stops the app at launch)
   func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
     UNUserNotificationCenter.current().delegate = self
+    NotifActions.register()
     Dirham.setup()
     LoopProbe.report()   // (TestFlight, for a while: the task page's sizes before a stop — copied for Haris)
     return true
@@ -83,6 +84,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
   }
   // (also a tap on a notification that started the app: with scenes it comes here, not in the launch options)
   func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+    // (held: Reply and Mark as Read done without opening the app — NotifActions; Open Task and a tap open it)
+    if NotifActions.handle(response, done: completionHandler) { return }
     Main.shared.openPush(response.notification.request.content.userInfo)
     completionHandler()
   }
@@ -3037,6 +3040,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("ibxUnread", pause(2000) + "return '{}'", { self.inboxIfMade?.selfInboxTab("unread") }),
       ("ibxMentions", pause(2000) + "return '{}'", { self.inboxIfMade?.selfInboxTab("mentions") }),
       ("ibxAll", pause(2000) + "return '{}'", { self.inboxIfMade?.selfInboxTab("all") }),
+      // (a notification held: its categories and Apple's buttons registered — Reply on a comment's — Haris 2026-11-10)
+      ("notifCats", "return '{}'", { UNUserNotificationCenter.current().getNotificationCategories { c in let l = c.map { $0.identifier + ":" + $0.actions.map { $0.identifier }.joined(separator: ",") }.sorted(); DispatchQueue.main.async { self.selfResult["notifCats"] = l } } }),
       // (each tab with its own Apple screen as Home, locked: a task opened from it and ‹ back — its "+ New task" there all
       //  the way through the slide back, as at rest; the Inbox's and My Tasks' were blanked by the old shared button's
       //  move and popped in after the slide, a Home fix that never reached them: Haris 2026-11-08)

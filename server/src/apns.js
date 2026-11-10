@@ -121,12 +121,12 @@ export function createApns({ store, keyFile = '', keyId = '', teamId = '', topic
   // msg: { title, body, taskId, nid, tag, badge, kind, clientId, folderId, commentId, planId, view } (webpush.js notifMessage)
   function payloadOf(msg, pid) {
     const data = {};
-    for (const k of ['taskId', 'nid', 'kind', 'clientId', 'folderId', 'commentId', 'planId', 'view', 'groupId', 'msgId']) if (msg[k] != null) data[k] = msg[k];
+    for (const k of ['taskId', 'nid', 'kind', 'clientId', 'folderId', 'commentId', 'threadId', 'planId', 'view', 'groupId', 'msgId']) if (msg[k] != null) data[k] = msg[k];
     if (pid) data.pid = pid;
     // (mutable-content: the app's Notification Service Extension sees each one first — it confirms it arrived)
     return { aps: { alert: { title: String(msg.title || (kvPrefix === 'apns' ? 'E11 Console' : 'E11 Talk')), body: String(msg.body || '') }, sound: 'default', 'thread-id': String(msg.taskId || msg.tag || msg.kind || 'e11'),
       ...(Number.isInteger(msg.badge) ? { badge: msg.badge } : {}), ...(pid ? { 'mutable-content': 1 } : {}),
-      ...(msg.category ? { category: String(msg.category) } : {}) }, e11: data };   // (E11 Talk's: reply from the banner)
+      ...(msg.category ? { category: String(msg.category) } : {}) }, e11: data };   // (E11 Talk's and E11 Console's: reply from the banner)
   }
   async function push1(s, msg, pid, ttl, tries) {
     const r = await post(s.env, s.token, payloadOf(msg, s.ack ? pid : null), ttl);

@@ -25,6 +25,7 @@ targets:
     dependencies:
       - target: E11ConsoleWidget
       - target: E11ConsoleNotify
+      - target: E11ConsoleNotifyUI
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ae.e11.console.ios
@@ -130,6 +131,39 @@ targets:
         NSExtension:
           NSExtensionPointIdentifier: com.apple.usernotifications.service
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
+  # A notification held: Apple's expanded view with the app's preview of it, as the Inbox's peek (notifyui/ — Haris 2026-11-10)
+  E11ConsoleNotifyUI:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ../notifyui
+      - path: ../widget/WidgetShare.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ae.e11.console.ios.notifyui
+        PRODUCT_NAME: E11ConsoleNotifyUI
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: NotifyUI/E11ConsoleNotifyUI.entitlements
+        SKIP_INSTALL: YES
+    entitlements:
+      path: NotifyUI/E11ConsoleNotifyUI.entitlements
+      properties:
+        keychain-access-groups: [$(AppIdentifierPrefix)ae.e11.console.shared]
+    info:
+      path: NotifyUI/Info.plist
+      properties:
+        CFBundleDisplayName: E11 Console
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        E11KeychainGroup: $(AppIdentifierPrefix)ae.e11.console.shared
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.content-extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationViewController
+          NSExtensionAttributes:
+            UNNotificationExtensionCategory: [e11.comment, e11.task]
+            UNNotificationExtensionInitialContentSizeRatio: 0.5
+            UNNotificationExtensionDefaultContentHidden: true
   # The crawl (Haris 2026-11-05: "every single thing"): Apple's UI testing taps every control on every screen, as each role
   E11ConsoleUITests:
     type: bundle.ui-testing
