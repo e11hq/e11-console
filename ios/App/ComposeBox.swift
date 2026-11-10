@@ -19,15 +19,17 @@ final class UploadCenter {
   func end(_ id: UUID) { jobs[id] = nil; Main.shared.paintUploadHUD() }
   func cancelled(_ id: UUID) -> Bool { jobs[id]?.cancelled ?? true }
   private(set) var cancels = 0   // (how many times Cancel was tapped — a run of uploads stops when it changes)
-  func cancelAll() { cancels += 1; for k in jobs.keys { jobs[k]?.cancelled = true }; Main.shared.paintUploadHUD() }
+  func cancelAll() { cancels += 1; for k in jobs.keys { jobs[k]?.cancelled = true }; running.values.forEach { $0.cancel() }; Main.shared.paintUploadHUD() }
+  var running: [UUID: URLSessionTask] = [:]   // (each upload's piece on its way — Cancel stops it at once)
 }
 enum Uploader {
-  // a file on the phone → the server (2 MB at a time) → its path there. Cancel (the bar at the bottom): it stops before
-  // the next piece and says it didn't go (done(nil)), as a failed upload
+  // a file on the phone → the server (2 MB at a time) → its path there. Cancel (the bar at the bottom): the piece on its way
+  // stops and it says it didn't go (done(nil)), as a failed upload. Each piece sent by iPhone itself (Transfers — it goes on
+  // with the app in the background or the phone locked: Haris 2026-11-10)
   static func send(_ url: URL, name: String, task: String, dest: String? = nil, cookies: @escaping (@escaping (String) -> Void) -> Void, progress: @escaping (Double) -> Void, done: @escaping (String?) -> Void) {
     let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
     let job = UploadCenter.shared.begin(name, size)
-    let finish: (String?) -> Void = { p in UploadCenter.shared.end(job); done(p) }
+    let finish: (String?) -> Void = { p in UploadCenter.shared.running[job] = nil; UploadCenter.shared.end(job); done(p) }
     func piece(_ offset: Int64, _ path: String?) {
       if UploadCenter.shared.cancelled(job) { return finish(nil) }
       guard let fh = try? FileHandle(forReadingFrom: url) else { return finish(nil) }
@@ -39,20 +41,24 @@ enum Uploader {
       var qi = [URLQueryItem(name: dest == nil ? "taskId" : "dest", value: dest ?? task), URLQueryItem(name: "name", value: name), URLQueryItem(name: "offset", value: String(offset))]
       if let p = path { qi.append(URLQueryItem(name: "path", value: p)) }
       q.queryItems = qi
-      cookies { c in
-        var r = URLRequest(url: q.url!); r.httpMethod = "POST"; r.httpBody = data
+      cookies { c in DispatchQueue.main.async {   // (Transfers is kept on the main thread)
+        var r = URLRequest(url: q.url!); r.httpMethod = "POST"   // (its body: the piece, from a file — Transfers)
         r.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type"); if !c.isEmpty { r.setValue(c, forHTTPHeaderField: "Cookie") }
-        URLSession.shared.dataTask(with: r) { d, resp, _ in
+        // (as it goes: the bar and the file's ring move with the piece, not only once it's in)
+        let t = Transfers.shared.upload(r, body: data, sent: { n in
+          let at = offset + min(n, Int64(data.count))
+          UploadCenter.shared.step(job, at)
+          progress(size > 0 ? Double(at) / Double(size) : 1)
+        }) { resp, d in
           let j = d.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-          DispatchQueue.main.async {
-            guard ((resp as? HTTPURLResponse)?.statusCode ?? 0) == 200, let p = j?["path"] as? String else { return finish(nil) }
-            let next = offset + Int64(data.count)
-            UploadCenter.shared.step(job, next)
-            progress(size > 0 ? Double(next) / Double(size) : 1)
-            if next < size && !data.isEmpty { piece(next, p) } else { finish(p) }
-          }
-        }.resume()
-      }
+          guard resp?.statusCode == 200, let p = j?["path"] as? String else { return finish(nil) }
+          let next = offset + Int64(data.count)
+          UploadCenter.shared.step(job, next)
+          progress(size > 0 ? Double(next) / Double(size) : 1)
+          if next < size && !data.isEmpty { piece(next, p) } else { finish(p) }
+        }
+        UploadCenter.shared.running[job] = t
+      } }
     }
     piece(0, nil)
   }

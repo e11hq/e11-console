@@ -66,6 +66,12 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
     LoopProbe.report()   // (TestFlight, for a while: the task page's sizes before a stop — copied for Haris)
     return true
   }
+  // (iPhone woke the app for its uploads and downloads — Transfers: the next piece sent, what finished filed)
+  func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String, completionHandler: @escaping () -> Void) {
+    guard identifier == Transfers.id else { return completionHandler() }
+    Transfers.shared.wake = completionHandler
+    Transfers.shared.reconnect()
+  }
   func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
     let c = UISceneConfiguration(name: "Default", sessionRole: connectingSceneSession.role)
     c.delegateClass = SceneDelegate.self
@@ -134,7 +140,7 @@ final class WeakHandler: NSObject, WKScriptMessageHandler {
   func userContentController(_ c: WKUserContentController, didReceive m: WKScriptMessage) { target?.userContentController(c, didReceive: m) }
 }
 
-final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate, UIGestureRecognizerDelegate {
+final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate, UIGestureRecognizerDelegate {
   static let shared = Main()
   var web: WKWebView!
   // the tabs — what the app says about them goes straight to Apple's tab bar (AppleTabs.swift); no bar of the app's own
@@ -153,10 +159,6 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   var awayAt: Date?
   var started = false
   var statusStyle: UIStatusBarStyle = .default   // (the status bar in the phone's look, as iPhone sets it)
-  var downloads: [ObjectIdentifier: URL] = [:]
-  var downloadFrom: [ObjectIdentifier: String] = [:]      // what each download is fetching (one at a time per file)
-  var downloadWatch: [ObjectIdentifier: NSKeyValueObservation] = [:]
-  var downloadNames: [ObjectIdentifier: String] = [:]
   var hud: DownloadHUD?
   var upHud: DownloadHUD?   // (uploads: the same bar as the downloads, with Cancel — UploadCenter)
   var retrying = false
@@ -974,71 +976,49 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   /* ---------- downloads: saved, then the share sheet (Save to Files, Save Image, AirDrop…) ---------- */
   func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) { adopt(download) }
   func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) { adopt(download) }
+  // (the website's downloads: handed to iPhone itself instead — Transfers, so they go on with the app in the background or
+  //  the phone locked: Haris 2026-11-10 — the same bar with Cancel, then the Save / Share sheet)
   func adopt(_ d: WKDownload) {
-    let from = d.originalRequest?.url?.absoluteString ?? ""
-    if !from.isEmpty, downloadFrom.values.contains(from) {
-      d.cancel { _ in }
-      pageJS("window.toast && toast('Already downloading')")
-      return
+    d.cancel { _ in }
+    guard let req = d.originalRequest, let url = req.url, ["http", "https"].contains(url.scheme ?? "") else { pageJS("window.toast && toast('Download failed — try again')"); return }
+    let from = url.absoluteString
+    if dl.values.contains(where: { $0.from == from }) { pageJS("window.toast && toast('Already downloading')"); return }
+    PreviewLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) { [weak self] in
+      guard let self = self else { return }
+      var r = req
+      PreviewLoad.headers(url).forEach { r.setValue($1, forHTTPHeaderField: $0) }
+      let name = url.lastPathComponent.removingPercentEncoding ?? "file"
+      var me = 0
+      let t = Transfers.shared.download(r, name: name, progress: { [weak self] w, e in
+        self?.dl[me]?.done = w; self?.dl[me]?.total = e; self?.paintHUD()
+      }) { [weak self] file in
+        guard let self = self else { return }
+        let was = self.dl.removeValue(forKey: me)
+        self.paintHUD()
+        guard let file = file else { if was?.cancelled == false { self.pageJS("window.toast && toast('Download failed — try again')") }; return }
+        let sheet = UIActivityViewController(activityItems: [file], applicationActivities: nil)
+        sheet.popoverPresentationController?.sourceView = self.view
+        self.topMost().present(sheet, animated: true)
+      }
+      me = t.taskIdentifier
+      self.dl[me] = Dl(task: t, name: name, from: from)
+      self.paintHUD()
     }
-    let k = ObjectIdentifier(d)
-    downloadFrom[k] = from
-    downloadNames[k] = d.originalRequest?.url?.lastPathComponent.removingPercentEncoding ?? "file"
-    d.delegate = self
-    downloadWatch[k] = d.progress.observe(\.fractionCompleted, options: [.new]) { [weak self] p, _ in
-      DispatchQueue.main.async { self?.paintHUD() }
-    }
-    paintHUD()
   }
-  func endDownload(_ d: WKDownload) {
-    let k = ObjectIdentifier(d)
-    downloadFrom.removeValue(forKey: k); downloadNames.removeValue(forKey: k)
-    downloadWatch.removeValue(forKey: k)?.invalidate()
-    paintHUD()
-  }
-  var liveDownloads: [WKDownload] = []
+  struct Dl { let task: URLSessionDownloadTask; let name: String; let from: String; var done: Int64 = 0; var total: Int64 = -1; var cancelled = false }
+  var dl: [Int: Dl] = [:]
   func paintHUD() {
-    liveDownloads = liveDownloads.filter { downloadFrom[ObjectIdentifier($0)] != nil }
-    if downloadFrom.isEmpty { hud?.removeFromSuperview(); hud = nil; return }
+    if dl.isEmpty { hud?.removeFromSuperview(); hud = nil; return }
     if hud == nil { let h = DownloadHUD(); h.onCancel = { [weak self] in self?.cancelDownloads() }; view.addSubview(h); hud = h; view.setNeedsLayout(); view.layoutIfNeeded() }
-    var done: Int64 = 0, total: Int64 = 0, known = true
-    for d in liveDownloads where downloadFrom[ObjectIdentifier(d)] != nil {
-      done += d.progress.completedUnitCount
-      if d.progress.totalUnitCount > 0 { total += d.progress.totalUnitCount } else { known = false }
-    }
-    let n = downloadFrom.count
-    let name = n == 1 ? (downloadNames.values.first ?? "file") : "\(n) files"
+    let all = Array(dl.values)
+    let done = all.reduce(Int64(0)) { $0 + $1.done }, known = all.allSatisfy { $0.total > 0 }
+    let total = known ? all.reduce(Int64(0)) { $0 + $1.total } : 0
+    let name = all.count == 1 ? all[0].name : "\(all.count) files"
     let mb = { (b: Int64) in String(format: "%.1f MB", Double(b) / 1_048_576) }
-    let frac = known && total > 0 ? Float(done) / Float(total) : -1
-    hud?.show(title: "Downloading \(name)", detail: known && total > 0 ? "\(mb(done)) of \(mb(total))" : (done > 0 ? mb(done) : "Starting…"), progress: frac)
+    hud?.show(title: "Downloading \(name)", detail: known && total > 0 ? "\(mb(done)) of \(mb(total))" : (done > 0 ? mb(done) : "Starting…"), progress: known && total > 0 ? Float(done) / Float(total) : -1)
   }
   func cancelDownloads() {
-    for d in liveDownloads { d.cancel { _ in } }
-    for d in liveDownloads { endDownload(d) }
-    downloads.removeAll()
-  }
-  func download(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String, completionHandler: @escaping (URL?) -> Void) {
-    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("downloads-\(UUID().uuidString.prefix(8))", isDirectory: true)
-    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    let name = suggestedFilename.isEmpty ? "file" : suggestedFilename.replacingOccurrences(of: "/", with: "-")
-    let url = dir.appendingPathComponent(name)
-    downloads[ObjectIdentifier(download)] = url
-    if !liveDownloads.contains(where: { $0 === download }) { liveDownloads.append(download) }
-    paintHUD()
-    completionHandler(url)
-  }
-  func downloadDidFinish(_ download: WKDownload) {
-    endDownload(download)
-    guard let url = downloads.removeValue(forKey: ObjectIdentifier(download)) else { return }
-    let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-    sheet.popoverPresentationController?.sourceView = view
-    topMost().present(sheet, animated: true)
-  }
-  func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
-    let wasLive = downloadFrom[ObjectIdentifier(download)] != nil
-    downloads.removeValue(forKey: ObjectIdentifier(download))
-    endDownload(download)
-    if wasLive, (error as NSError).code != NSURLErrorCancelled { pageJS("window.toast && toast('Download failed — try again')") }
+    for k in dl.keys { dl[k]?.cancelled = true; dl[k]?.task.cancel() }
   }
 
   /* ---------- the native tab bar (the page's own tabs; tapping one taps the page's button) ---------- */

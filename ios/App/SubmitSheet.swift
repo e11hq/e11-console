@@ -69,22 +69,21 @@ final class SubmitSheetVC: UIViewController, UISheetPresentationControllerDelega
     if let p = items[i].path { qi.append(URLQueryItem(name: "path", value: p)) }
     q.queryItems = qi
     let total = max(1, items[i].size)
-    cookies { [weak self] c in
-      var r = URLRequest(url: q.url!); r.httpMethod = "POST"; r.httpBody = data
+    // (each piece sent by iPhone itself — Transfers: it goes on with the app in the background, Haris 2026-11-10)
+    cookies { [weak self] c in DispatchQueue.main.async {
+      var r = URLRequest(url: q.url!); r.httpMethod = "POST"
       r.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type"); if !c.isEmpty { r.setValue(c, forHTTPHeaderField: "Cookie") }
-      URLSession.shared.dataTask(with: r) { d, resp, _ in
+      Transfers.shared.upload(r, body: data, sent: { _ in }) { [weak self] resp, d in
         let j = d.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-        DispatchQueue.main.async {
-          guard let self = self, i < self.items.count else { return }
-          guard ((resp as? HTTPURLResponse)?.statusCode ?? 0) == 200, let path = j?["path"] as? String else { self.items[i].error = (j?["error"] as? String) ?? "Upload failed — try again"; self.paint(); return }
-          self.items[i].path = path
-          let next = offset + Int64(data.count)
-          self.items[i].progress = Double(next) / Double(total)
-          self.paint()
-          if next < self.items[i].size && !data.isEmpty { self.upload(i, offset: next) }
-        }
-      }.resume()
-    }
+        guard let self = self, i < self.items.count else { return }
+        guard resp?.statusCode == 200, let path = j?["path"] as? String else { self.items[i].error = (j?["error"] as? String) ?? "Upload failed — try again"; self.paint(); return }
+        self.items[i].path = path
+        let next = offset + Int64(data.count)
+        self.items[i].progress = Double(next) / Double(total)
+        self.paint()
+        if next < self.items[i].size && !data.isEmpty { self.upload(i, offset: next) }
+      }
+    } }
   }
   private var allUp: Bool { !items.isEmpty && items.allSatisfy { $0.path != nil && $0.error == nil && $0.progress >= 0.999 } }
   private func paint() {

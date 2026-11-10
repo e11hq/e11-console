@@ -823,36 +823,29 @@ extension Main {
       self.topMost().present(ac, animated: true)
     }
   }
-  // Download: fetched with its progress shown, then iPhone's own Save / Share sheet (Save Image, Save to Files…)
+  // Download: fetched with its progress shown, then iPhone's own Save / Share sheet (Save Image, Save to Files…) — fetched
+  // by iPhone itself (Transfers: it goes on with the app in the background or the phone locked, Haris 2026-11-10)
   func downloadFile(_ f: [String: Any], from vc: UIViewController, started: ((URLSessionDownloadTask) -> Void)? = nil, _ toast: @escaping (String) -> Void) {
     guard let path = f["url"] as? String, let url = URL(string: serverURL() + path.replacingOccurrences(of: "?view=1", with: "")) else { return toast("This file isn’t available") }
     PreviewLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) {
       var r = URLRequest(url: url); r.allHTTPHeaderFields = PreviewLoad.headers(url)
       let name = (f["name"] as? String ?? "File").replacingOccurrences(of: "/", with: "-")
-      var watch: NSKeyValueObservation?
-      let task = URLSession.shared.downloadTask(with: r) { [weak vc] tmp, resp, _ in
-        watch?.invalidate()
-        let ok = ((resp as? HTTPURLResponse)?.statusCode ?? 0) / 100 == 2
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("dl-\(UUID().uuidString)", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let dest = dir.appendingPathComponent(name)
-        let moved = ok && tmp.map { (try? FileManager.default.moveItem(at: $0, to: dest)) != nil } == true
-        DispatchQueue.main.async {
-          guard moved, let vc = vc else { return toast("Couldn’t download — try again") }
-          let item: Any = CommentCell.isPic(name) ? (UIImage(contentsOfFile: dest.path).map { $0 as Any } ?? dest) : dest
-          let share = UIActivityViewController(activityItems: [item], applicationActivities: nil)
-          share.popoverPresentationController?.sourceView = vc.view
-          vc.present(share, animated: true)
-        }
-      }
       var last = -1
-      watch = task.progress.observe(\.fractionCompleted) { pr, _ in
-        let n = Int(pr.fractionCompleted * 100)
-        if n / 10 != last / 10 { last = n; DispatchQueue.main.async { toast(n >= 100 ? "Downloaded" : "Downloading… \(n)%") } }
+      let task = Transfers.shared.download(r, name: name, progress: { w, e in
+        guard e > 0 else { return }
+        let n = Int(Double(w) / Double(e) * 100)
+        if n / 10 != last / 10 { last = n; toast(n >= 100 ? "Downloaded" : "Downloading… \(n)%") }
+      }) { [weak vc] dest in
+        guard let dest = dest else { return toast("Couldn’t download — try again") }
+        let item: Any = CommentCell.isPic(name) ? (UIImage(contentsOfFile: dest.path).map { $0 as Any } ?? dest) : dest
+        let share = UIActivityViewController(activityItems: [item], applicationActivities: nil)
+        // (shown once it's done — if the screen it came from has gone, over what's on top now)
+        let host = vc.flatMap { $0.view.window != nil ? $0 : nil } ?? self.topMost()
+        share.popoverPresentationController?.sourceView = host.view
+        host.present(share, animated: true)
       }
       toast("Downloading…")
       started?(task)   // (Client Assets' downloads: their ✕ stops it — Haris 2026-11-08)
-      task.resume()
     }
   }
 }
@@ -1187,7 +1180,8 @@ extension Main {
     let my = Main.searchSeq
     let cid = (page.model["assets"] as? [String: Any])?["id"] as? String
     DispatchQueue.global(qos: .userInteractive).async {
-      let m = AppData.shared.meModel("tasks", "search", [q])
+      // (only this client's tasks — the shared brain's `only`, 2026-11-10; an older copy without it: Home's, kept to this client's below)
+      let m = AppData.shared.meModel("tasks", "search", [q, pid])
       let mine = AppData.shared.screen("clients", ServerHome.clientsJSON("view=client&id=\(pid)&done=1")).model
       let files = (cid.flatMap { AppData.shared.meModel("assets", "assets", [$0]) }?["files"] as? [[String: Any]]) ?? []
       let ids = Set(((mine?["groups"] as? [[String: Any]]) ?? []).flatMap { ($0["cards"] as? [[String: Any]]) ?? [] }.compactMap { $0["id"] as? String })
