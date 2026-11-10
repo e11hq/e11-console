@@ -148,23 +148,52 @@ final class InboxPeekVC: UIViewController {
   }
   required init?(coder: NSCoder) { fatalError() }
   private let stack = UIStackView()
+  private var fitH: CGFloat = 0
   override func viewDidLoad() {
     super.viewDidLoad()
     view.backgroundColor = HomeLook(Main.shared.lookBoth).bg
+    view.clipsToBounds = true
     stack.axis = .vertical; stack.spacing = 0; stack.alignment = .fill
     view.addSubview(stack)
-    stack.addArrangedSubview(headBlock())
-    stack.addArrangedSubview(line())
-    if shown.isEmpty { stack.addArrangedSubview(factsBlock()) } else { commentsBlock().forEach { stack.addArrangedSubview($0) } }
     let W = UIScreen.main.bounds.width - 32
-    stack.frame = CGRect(x: 0, y: 0, width: W, height: 10)
-    let h = stack.systemLayoutSizeFitting(CGSize(width: W, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
-    // (no taller than about two thirds of the screen — Apple's menu needs its room under it)
-    preferredContentSize = CGSize(width: W, height: min(ceil(h), UIScreen.main.bounds.height * 0.62))
+    let maxH = UIScreen.main.bounds.height * 0.62   // (Apple's menu needs its room under it)
+    let head = headBlock()
+    stack.addArrangedSubview(head)
+    stack.addArrangedSubview(line())
+    if shown.isEmpty { stack.addArrangedSubview(factsBlock()) }
+    else {
+      // the notified comment always whole; the one before it only as much as fits (its start, faded) — none if there's no
+      // room (Haris 2026-11-10: a long one before it squeezed the notified one and the task's name away)
+      let headH = fitted(head, W) + 1
+      let focusH = CommentCell(shown[shown.count - 1], people: people, me: me, thread: false, root: false).height(for: W)
+      let room = maxH - headH - 16 - focusH
+      stack.addArrangedSubview(gap(8))
+      if shown.count > 1, room >= 70 {
+        let prev = CommentCell(shown[0], people: people, me: me, thread: false, root: false)
+        prev.isUserInteractionEnabled = false; prev.alpha = 0.6
+        let full = prev.height(for: W), h = min(full, room, 130)
+        let clip = UIView(); clip.clipsToBounds = true
+        clip.addSubview(prev); prev.frame = CGRect(x: 0, y: 0, width: W, height: full)
+        clip.heightAnchor.constraint(equalToConstant: h).isActive = true
+        stack.addArrangedSubview(clip)
+      }
+      let c = CommentCell(shown[shown.count - 1], people: people, me: me, thread: false, root: false)
+      c.isUserInteractionEnabled = false
+      c.heightAnchor.constraint(equalToConstant: focusH).isActive = true
+      stack.addArrangedSubview(c)
+      stack.addArrangedSubview(gap(8))
+    }
+    fitH = fitted(stack, W)
+    preferredContentSize = CGSize(width: W, height: min(fitH, maxH))
   }
+  private func fitted(_ v: UIView, _ W: CGFloat) -> CGFloat {
+    ceil(v.systemLayoutSizeFitting(CGSize(width: W, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height)
+  }
+  private func gap(_ h: CGFloat) -> UIView { let p = UIView(); p.heightAnchor.constraint(equalToConstant: h).isActive = true; return p }
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
-    stack.frame = CGRect(x: 0, y: 0, width: view.bounds.width, height: max(view.bounds.height, stack.frame.height))
+    // (its own height, never squeezed into the preview's: the task's name and the comment keep their room)
+    stack.frame = CGRect(x: 0, y: 0, width: view.bounds.width, height: max(fitH, view.bounds.height))
   }
   // the client, the task's name, its status (and due, priority) as chips
   private func headBlock() -> UIView {
@@ -179,6 +208,7 @@ final class InboxPeekVC: UIViewController {
     }
     let t = UILabel(); t.text = (task["title"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Untitled task"
     t.font = .systemFont(ofSize: 19, weight: .bold); t.numberOfLines = 2
+    t.setContentCompressionResistancePriority(.required, for: .vertical)
     v.addArrangedSubview(t)
     var chips: [UIView] = []
     if let s = task["status"] as? [String: Any], let name = s["name"] as? String, !name.isEmpty {
@@ -206,20 +236,6 @@ final class InboxPeekVC: UIViewController {
     let l = UIView(); l.backgroundColor = .separator
     l.heightAnchor.constraint(equalToConstant: 1 / max(1, UIScreen.main.scale)).isActive = true
     return l
-  }
-  // the comment in full, as the comments page draws it — the one before it faded, for its context
-  private func commentsBlock() -> [UIView] {
-    let W = UIScreen.main.bounds.width - 32
-    var out: [UIView] = []
-    for (i, it) in shown.enumerated() {
-      let c = CommentCell(it, people: people, me: me, thread: false, root: false)
-      c.isUserInteractionEnabled = false
-      c.alpha = i < shown.count - 1 ? 0.6 : 1
-      c.heightAnchor.constraint(equalToConstant: c.height(for: W)).isActive = true
-      out.append(c)
-    }
-    let pad = UIView(); pad.heightAnchor.constraint(equalToConstant: 8).isActive = true
-    return [pad] + out + [{ let p = UIView(); p.heightAnchor.constraint(equalToConstant: 8).isActive = true; return p }()]
   }
   // a change: the task's key facts as Apple's rows, then the start of its description
   private func factsBlock() -> UIView {
