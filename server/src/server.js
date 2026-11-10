@@ -67,9 +67,11 @@ export function createServer(cfg) {
   const talkNow = () => talk || (talk = createTalk({ dataDir, store, access, apns: talkApns, dbFile: cfg.talkDbFile, now: cfg.now || (() => Date.now()) }));
   { const webSend = webPush.sendTo;
     webPush.sendTo = async (userId, msg, opts) => {
-      // (the iPhone app: no expense claims — they're on the computer — and its badge counts without them; Haris, 2026-11-01)
-      const claim = /^claim/.test(String((msg && msg.kind) || ''));
-      let phoneMsg = msg && Number.isInteger(msg.badge) ? { ...msg, badge: store.list('notifications').filter((x) => x.to === userId && !x.read && !/^claim/.test(x.kind || '')).length } : msg;
+      // (the iPhone app: expense claims only as rules.js onPhone says — everyone's own claim approved / paid / added, the
+      //  team's submitted ones to an Office Admin with finance access — and its badge counts the same; Haris 2026-11-10)
+      const pu = store.get('users', String(userId));
+      const claim = !homeView.onPhone({ kind: (msg && msg.kind) || '' }, pu);
+      let phoneMsg = msg && Number.isInteger(msg.badge) ? { ...msg, badge: store.list('notifications').filter((x) => x.to === userId && !x.read && homeView.onPhone(x, pu)).length } : msg;
       // (held on the iPhone: Apple's expanded notification with the app's preview of it — a comment's with Reply, its thread
       //  passed along so the reply lands in it; anything about a task with Mark as Read and Open Task — Haris 2026-11-10)
       if (phoneMsg && phoneMsg.taskId && phoneMsg.nid && !phoneMsg.category) {

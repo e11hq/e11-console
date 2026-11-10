@@ -96,7 +96,7 @@ var E11AppView = (function () {
     const cdU = meta.cdUserId && users.find((x) => x.id === meta.cdUserId && x.active !== false);
     const cd = !!cdU && cdU.id === me;
     const finUser = u.role === 'finance_admin' || u.role === 'finance_viewer';
-    const unread = (data.notifications || []).filter((n) => n.to === me && !n.read && !/^claim/.test(n.kind || '')).length;
+    const unread = (data.notifications || []).filter((n) => n.to === me && !n.read && R.onPhone(n, u)).length;
     const T = (v, label, badge) => ({ v, label, badge: badge ? (badge > 99 ? '99+' : String(badge)) : '' });
     if (finOnly(data, me)) return { tabs: [T('today', 'Finance'), T('me', 'Me')], plans: false, photo: u.avatar ? fileUrl(u.avatar) : null };
     if (office) {
@@ -155,7 +155,7 @@ var E11AppView = (function () {
     if (a === 'read' || a === 'unread' || a === 'readAll' || a === 'unreadList' || a === 'readList') {
       // (readList: what opening an update marks read — E11AppMe.notifOpen's `read`, claims included as the website's
       //  openNotif marks them)
-      const mine = db.notifications.filter((n) => n.to === u.id && (a === 'readList' || !/^claim/.test(n.kind || '')));   // (claims: on the computer)
+      const mine = db.notifications.filter((n) => n.to === u.id && (a === 'readList' || R.onPhone(n, u)));   // (claims: as the phone has them — rules.js onPhone)
       const changes = [];
       const set = (n, v) => { if (!!n.read !== v) { const base = JSON.parse(JSON.stringify(n)); n.read = v; changes.push({ kind: 'notifications', id: n.id, base, data: n }); } };
       if (a === 'readAll') mine.forEach((n) => set(n, true));
