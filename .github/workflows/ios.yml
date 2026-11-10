@@ -52,6 +52,13 @@ jobs:
         env:
           E11_QUICK: ${{ inputs.quick }}
         run: python3 ios/selftest.py build/Build/Products/Debug-iphonesimulator/E11Console.app 2>&1 | tee "$RUNNER_TEMP/ios-selftest.log"; exit ${PIPESTATUS[0]}
+      - name: The Apple pages without the website
+        # (Haris 2026-11-10: the self-test above runs with the website behind the app, the phone without it — what failed on his
+        #  phone passed here; these checks run the phone's way, and any one failing stops the build: nothing signed or sent)
+        id: applecheck
+        continue-on-error: true
+        timeout-minutes: 20
+        run: python3 ios/walktest.py build/Build/Products/Debug-iphonesimulator/E11Console.app --apple 2>&1 | tee "$RUNNER_TEMP/ios-apple.log"; exit ${PIPESTATUS[0]}
       - name: Walk-through for every role, without the website
         # (ios/walktest.py — Haris 2026-11-05: every button, every role; read from the release below)
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.walk != 'no'   # (ios-nav branch: no walk-through on branch pushes — quicker checks while the frame is built)
@@ -64,12 +71,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view ios-selftest >/dev/null 2>&1 || gh release create ios-selftest --prerelease --title "iPhone app self-test" --notes "Latest iPhone app self-test results." --target "$GITHUB_SHA"
-          for f in ios-splash.png ios-splashTicked.png ios-home.png ios-homeSwipe.png ios-homeLead.png ios-homePress.png ios-homeScrolled.png ios-homeFind.png ios-homeDate.png ios-mytasks.png ios-mytasksDone.png ios-mytasksScrolled.png ios-ibx.png ios-ibxSwipe.png ios-ibxUnread.png ios-daily.png ios-inbox.png ios-me.png ios-meProfile.png ios-meTrash.png ios-client.png ios-tpage.png ios-tpageScrolled.png ios-tpageSheet.png ios-tpageComments.png ios-tpageBack.png ios-task.png ios-sheet.png ios-back.png ios-nsheet.png ios-nsheetEnd.png ios-nsheetChannel.png ios-nsheetTitled.png ios-form.png ios-formTuck.png ios-cbar.png ios-cbarMention.png ios-cbarAttach.png ios-cfeed.png ios-cfeedKb.png ios-cfeedDown.png ios-cweb.png ios-cwebKb.png ios-cwebDown.png ios-preview.png ios-signin.png ios-done.png ios-build.log ios-selftest.log ios-server.log ios-crash.txt ios-run.mp4 ios-walk.json ios-walk.txt ios-walk.log ios-walk-shots.zip; do if [ -s "$RUNNER_TEMP/$f" ]; then gh release upload ios-selftest "$RUNNER_TEMP/$f" --clobber || echo "upload failed: $f"; fi; done; true
+          for f in ios-splash.png ios-splashTicked.png ios-home.png ios-homeSwipe.png ios-homeLead.png ios-homePress.png ios-homeScrolled.png ios-homeFind.png ios-homeDate.png ios-mytasks.png ios-mytasksDone.png ios-mytasksScrolled.png ios-ibx.png ios-ibxSwipe.png ios-ibxUnread.png ios-daily.png ios-inbox.png ios-me.png ios-meProfile.png ios-meTrash.png ios-client.png ios-tpage.png ios-tpageScrolled.png ios-tpageSheet.png ios-tpageComments.png ios-tpageBack.png ios-task.png ios-sheet.png ios-back.png ios-nsheet.png ios-nsheetEnd.png ios-nsheetChannel.png ios-nsheetTitled.png ios-form.png ios-formTuck.png ios-cbar.png ios-cbarMention.png ios-cbarAttach.png ios-cfeed.png ios-cfeedKb.png ios-cfeedDown.png ios-cweb.png ios-cwebKb.png ios-cwebDown.png ios-preview.png ios-signin.png ios-done.png ios-build.log ios-selftest.log ios-server.log ios-crash.txt ios-run.mp4 ios-walk.json ios-walk.txt ios-walk.log ios-walk-shots.zip ios-apple.log ios-apple.txt; do if [ -s "$RUNNER_TEMP/$f" ]; then gh release upload ios-selftest "$RUNNER_TEMP/$f" --clobber || echo "upload failed: $f"; fi; done; true
       - name: Self-test failed — nothing sent
-        if: steps.selftest.outcome != 'success'
-        run: echo "The self-test failed (see ios-selftest.log on the release); nothing is signed or sent."; exit 1
+        if: steps.selftest.outcome != 'success' || steps.applecheck.outcome != 'success'
+        run: echo "The self-test failed (see ios-selftest.log / ios-apple.log on the release); nothing is signed or sent."; exit 1
       - name: Sign and send to TestFlight
-        if: (github.ref_name == 'main' || github.event_name == 'workflow_dispatch') && steps.selftest.outcome == 'success'
+        if: (github.ref_name == 'main' || github.event_name == 'workflow_dispatch') && steps.selftest.outcome == 'success' && steps.applecheck.outcome == 'success'
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}

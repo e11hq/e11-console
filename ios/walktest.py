@@ -11,6 +11,9 @@ BASE = f'http://127.0.0.1:{PORT}'
 TMP = os.environ.get('RUNNER_TEMP', '/tmp')
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 APP = sys.argv[1]
+# (--apple: only the Super Admin, only the Apple pages' checks — the phone's way, no website; any failed check fails this
+#  run, and the build signs and sends nothing — Haris 2026-11-10)
+APPLE = '--apple' in sys.argv[2:]
 BUNDLE = 'ae.e11.console.ios'
 EMAIL = 'haris@e11-digital.com'
 SHOTS = os.path.join(TMP, 'walk-shots'); os.makedirs(SHOTS, exist_ok=True)
@@ -39,18 +42,19 @@ try:
         return email
     roles = [('Super Admin', EMAIL)]
     prod = [u for u in users if u.get('role') == 'production' and u.get('email') != EMAIL]
-    if prod:
+    if prod and not APPLE:
         r = api('/api/app/act', {'ev': 'cd', 'id': prod[0]['id'], 'choice': 'cd', 'op': 'cd1'})
         print('CD', prod[0]['email'], r.get('ok'), r.get('error', ''))
         roles.append(('Creative Director', prod[0]['email']))
-    for label, role in (('Account Manager', 'am'), ('Production', 'production'), ('Social', 'social')):
+    for label, role in (() if APPLE else (('Account Manager', 'am'), ('Production', 'production'), ('Social', 'social'))):
         u = next((x for x in users if x.get('role') == role and x.get('email') not in [e for _, e in roles] + [EMAIL]), None)
         roles.append((label, u['email'] if u else add(f'walk-{role}@test.e11', f'Walk {label}', role)))
-    roles.append(('Freelancer', add('walk-free@test.e11', 'Walk Freelancer', 'freelancer')))
-    roles.append(('Office Admin', add('walk-office@test.e11', 'Walk Office', 'office_admin')))
-    roles.append(('Office Admin + Finance', add('walk-officefin@test.e11', 'Walk Office Finance', 'office_admin', 'admin')))
-    roles.append(('Finance only · Admin', add('walk-finadmin@test.e11', 'Walk Finance Admin', 'finance_admin')))
-    roles.append(('Finance only · Viewer', add('walk-finview@test.e11', 'Walk Finance Viewer', 'finance_viewer')))
+    if not APPLE:
+        roles.append(('Freelancer', add('walk-free@test.e11', 'Walk Freelancer', 'freelancer')))
+        roles.append(('Office Admin', add('walk-office@test.e11', 'Walk Office', 'office_admin')))
+        roles.append(('Office Admin + Finance', add('walk-officefin@test.e11', 'Walk Office Finance', 'office_admin', 'admin')))
+        roles.append(('Finance only · Admin', add('walk-finadmin@test.e11', 'Walk Finance Admin', 'finance_admin')))
+        roles.append(('Finance only · Viewer', add('walk-finview@test.e11', 'Walk Finance Viewer', 'finance_viewer')))
     print('walking as', roles)
 
     devs = json.loads(sh('xcrun', 'simctl', 'list', 'devices', 'available', '-j').stdout)['devices']
@@ -64,7 +68,7 @@ try:
         tag = re.sub(r'[^a-z]+', '-', label.lower()).strip('-')
         sh('xcrun', 'simctl', 'terminate', udid, BUNDLE); sh('xcrun', 'simctl', 'uninstall', udid, BUNDLE)
         sh('xcrun', 'simctl', 'install', udid, APP)
-        lenv = dict(os.environ, SIMCTL_CHILD_E11_SERVER=BASE, SIMCTL_CHILD_E11_SELFTEST='walk', SIMCTL_CHILD_E11_SELFTEST_EMAIL=email)
+        lenv = dict(os.environ, SIMCTL_CHILD_E11_SERVER=BASE, SIMCTL_CHILD_E11_SELFTEST='apple' if APPLE else 'walk', SIMCTL_CHILD_E11_SELFTEST_EMAIL=email)
         t_role = time.time()
         r = subprocess.run(['xcrun', 'simctl', 'launch', udid, BUNDLE], env=lenv, capture_output=True, text=True)
         data = sh('xcrun', 'simctl', 'get_app_container', udid, BUNDLE, 'data').stdout.strip()
@@ -118,3 +122,19 @@ finally:
         try: subprocess.run(['xcrun', 'simctl', 'shutdown', 'all'], capture_output=True, timeout=60)
         except Exception: pass
 print('WALK DONE', len(out), 'roles')
+if APPLE:
+    a = (out.get('Super Admin') or {}).get('apple') or {}
+    fails = []
+    def check(ok, what):
+        print(('ok   ' if ok else 'FAIL ') + what, flush=True)
+        if not ok: fails.append(what)
+    st, rv, rl, fc = a.get('start') or {}, a.get('review') or {}, a.get('roles') or {}, a.get('focus') or {}
+    print('measure apple', json.dumps(a))
+    check(st.get('pageReady') is False, f"the Apple pages ran without the website {st}")
+    check(rv.get('cd') is True and rv.get('tab') == 'mytasks', f"Home's In review box: My Tasks with Waiting for CD review on {rv}")
+    rows = rl.get('rows') or []
+    check(bool(rows) and all(r != '<none>' for r in rows), f"the @ list: each person's role under the name {rl}")
+    check(fc.get('none') is True or fc.get('inView') is True, f"a comment opened as from the Inbox stays in view once everything has come {fc}")
+    check(not (out.get('Super Admin') or {}).get('stuck'), "the app ran to the end (no crash, not stuck)")
+    open(os.path.join(TMP, 'ios-apple.txt'), 'w').write('\n'.join(fails) + '\n')
+    sys.exit(1 if fails else 0)

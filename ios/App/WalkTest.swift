@@ -63,14 +63,14 @@ extension Main {
     // (signed in as the build machine's test person — the dev sign-in's cookie — and started the app's own way)
     guard let host = URL(string: serverURL())?.host, let email = procEnv["E11_SELFTEST_EMAIL"],
           let c = HTTPCookie(properties: [.domain: host, .path: "/", .name: "e11_dev_email", .value: email]) else { return }
-    web.configuration.websiteDataStore.httpCookieStore.setCookie(c) { self.bootCheck(); if SELFTEST == "walk" { self.walkWhenReady(0) } else { self.crawlAid() } }   // (crawl: Apple's UI testing taps it — ios/UITests)
+    web.configuration.websiteDataStore.httpCookieStore.setCookie(c) { self.bootCheck(); if SELFTEST == "walk" || SELFTEST == "apple" { self.walkWhenReady(0) } else { self.crawlAid() } }   // (crawl: Apple's UI testing taps it — ios/UITests)
   }
   private func walkWhenReady(_ n: Int) {
     if !(quickBooted && AppData.shared.ready && splash == nil && shownScreen != nil) && n < 240 {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self.walkWhenReady(n + 1) }; return
     }
     selfResult["walkBooted"] = ["after": Double(n) / 4, "quick": quickBooted, "copy": AppData.shared.ready, "pageReady": pageReady]
-    walkRun(walkSteps(), 0)
+    walkRun(SELFTEST == "apple" ? appleSteps() : walkSteps(), 0)
   }
   private func walkRun(_ steps: [(String, () -> Void)], _ i: Int) {
     if i >= steps.count { selfResult["walkLost"] = Main.lost; writeSelf("done"); return }
@@ -91,6 +91,43 @@ extension Main {
   private func tab(_ k: String) { shut(); for p in taskPages { closeTaskPage(p, animated: false) }; selectTab(k) }
   private func ev(_ h: HomeView?, _ e: [String: Any]) { h?.onEvent?(e) }
 
+  /* The Apple pages as the phone runs them — no website behind (Haris 2026-11-10: the self-test ran with the website and
+     passed what failed on his phone). Each check's result in selfResult["apple"]; ios/walktest.py --apple fails the build
+     on any one. */
+  private func apple(_ k: String, _ v: [String: Any]) { var a = (selfResult["apple"] as? [String: Any]) ?? [:]; a[k] = v; selfResult["apple"] = a }
+  private func appleSteps() -> [(String, () -> Void)] {
+    let home = AppData.shared.screen("home").model ?? [:]
+    let cards = ((home["groups"] as? [[String: Any]]) ?? []).flatMap { ($0["cards"] as? [[String: Any]]) ?? [] }.compactMap { $0["id"] as? String }
+    // (the task with the most comments, its oldest one — for the @ lists and opening a comment as the Inbox does)
+    var best: (String, String, Int)? = nil
+    for id in cards.prefix(60) { if let items = AppData.shared.screen("comments", id).model?["items"] as? [[String: Any]], items.count >= 4, let first = items.first?["id"] as? String, items.count > (best?.2 ?? 0) { best = (id, first, items.count) } }
+    let roles = { (l: [[String: Any]]) -> [String] in l.prefix(8).map { "\($0["name"] ?? "?"): \(($0["role"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "<none>")" } }
+    let p = { self.taskPages.last }
+    return [
+      ("aStart", { self.apple("start", ["cards": cards.count, "task": best?.0 ?? "", "comments": best?.2 ?? 0, "pageReady": self.pageReady]) }),
+      // Home's In review box: My Tasks, Waiting for CD review on
+      ("aReview", { self.tab(self.tabKeys.first ?? "today"); DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.homeView.onEvent?(["ev": "review"]) } }),
+      ("aReviewRead", {
+        var sub = ""; if #available(iOS 26.0, *) { sub = MyTasksVC.shared?.navigationItem.subtitle ?? "" }
+        self.apple("review", ["cd": (self.myTasksF["cd"] as? Bool) == true, "tab": self.selectedTabKey, "line": sub])
+        self.myTasksF = (AppData.shared.meModel("tasks", "myTasksDefault")?["filters"] as? [String: Any]) ?? [:]; self.myTasksAgain()
+      }),
+      // a task's @ lists: the roles under the names — the description's people and the comment box's
+      ("aTask", { self.tab(self.tabKeys.first ?? "today"); if let t = best?.0 { self.openTaskPage(t, tab: "comments", focus: "") } }),
+      ("aTaskRoles", {
+        let desc = (p()?.model?["mentionable"] as? [[String: Any]]) ?? [], box = self.composeIfMade?.mentionable ?? []
+        self.apple("roles", ["desc": roles(desc), "box": roles(box), "rows": (desc.isEmpty ? box : desc).prefix(8).map { PickList.person($0) {}.sub ?? "<none>" }])
+        for x in self.taskPages { self.closeTaskPage(x, animated: false) }
+      }),
+      // a long-ago comment opened as from the Inbox: in view once everything has come
+      ("aFocus", { if let b = best { self.openTaskPage(b.0, tab: "comments", focus: "\(b.0)~\(b.1)") } }),
+      ("aFocusWait", {}),
+      ("aFocusRead", {
+        if let b = best { self.apple("focus", self.taskPages.last?.feed?.selfInView(b.1) ?? ["feed": false]) } else { self.apple("focus", ["none": true]) }
+        for x in self.taskPages { self.closeTaskPage(x, animated: false) }
+      }),
+    ]
+  }
   private func walkSteps() -> [(String, () -> Void)] {
     // what to walk through, from the app's own copy
     let home = AppData.shared.screen("home").model ?? [:]
