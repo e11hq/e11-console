@@ -830,7 +830,27 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // (My Tasks or Home with nothing to show — a filter with no tasks, an empty Done, a Home with no tasks at all: Apple's own
     //  unavailable view behind the list, not our grey line — Haris 2026-11-09, the fully-Apple My Tasks: "Make the same
     //  empty for home page when there are no tasks". A client's page keeps its line.)
-    let mtGroups = model["groups"] as? [[String: Any]] ?? []
+    var mtGroups = model["groups"] as? [[String: Any]] ?? []
+    // (a client's page: its tasks in one list, by due date — today, then overdue (the nearest first), then tomorrow and on;
+    //  none at the end; each keeping its status for its line — Haris 2026-11-10 15:05)
+    if isClient {
+      let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd"
+      let today = f.string(from: Date())
+      let all = mtGroups.flatMap { g in ((g["cards"] as? [[String: Any]]) ?? []).map { c -> [String: Any] in var x = c; x["_status"] = g["name"] ?? ""; return x } }
+      func rank(_ c: [String: Any]) -> Int {
+        let d = c["due"] as? String ?? ""
+        return d.isEmpty ? 3 : d == today ? 0 : d < today ? 1 : 2
+      }
+      let sorted = all.enumerated().sorted { a, b in
+        let ra = rank(a.element), rb = rank(b.element)
+        if ra != rb { return ra < rb }
+        let da = a.element["due"] as? String ?? "", db = b.element["due"] as? String ?? ""
+        if da != db { return ra == 1 ? da > db : da < db }   // (overdue: the nearest first; to come: the soonest first)
+        return a.offset < b.offset
+      }.map { $0.element }
+      let empty = mtGroups.compactMap { $0["empty"] as? String }.first { !$0.isEmpty }
+      mtGroups = [["name": "", "cards": sorted, "empty": all.isEmpty ? (empty ?? "") : ""]]
+    }
     let mtEmpty: String? = (isList || !isClient) && listOn && (model["plain"] as? Bool) != true && mtGroups.allSatisfy({ (($0["cards"] as? [Any]) ?? []).isEmpty })
       ? (mtGroups.compactMap { $0["empty"] as? String }.first { !$0.isEmpty } ?? "No open tasks here.") : nil
     var unavailable = false
@@ -891,7 +911,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
           var x = c
           var ml = (c["meta"] as? [[String: Any]]) ?? []
           if let i = ml.firstIndex(where: { $0["dot"] != nil || ($0["t"] as? String) == (model["title"] as? String) }) { ml.remove(at: i) }
-          ml.insert(["t": gname], at: 0)
+          ml.insert(["t": c["_status"] as? String ?? gname], at: 0)
           x["meta"] = ml
           v.set(x, look: L)
         } else { v.set(c, look: L) }
