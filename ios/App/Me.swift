@@ -1063,6 +1063,12 @@ final class MeCtl {
   static let tabRoots: Set<String> = ["plansTab", "overviewTab", "teamTab", "claimsTab", "expensesTab", "reviewsTab"]
   // (Claims: Need approval · All; Expenses: Subscriptions · Office expenses — Haris 2026-11-04)
   private var clSeg = 0, exSeg = 0, rvSeg = 0, rvFocusN = 0
+  private var clFocus: String?   // (a claim opened from the Inbox or a notification: shown and pulsing on the Claims tab)
+  func focusClaim(_ id: String?) {
+    guard let id = id, !id.isEmpty else { return }
+    clFocus = id
+    if let s = stack.first, s.kind == "claims" { if stack.count > 1 { backToRoot() }; draw(s) }
+  }
   // ---------- Part B step 2: the pages' contents from the app's own copy (web/appme-*.js), the page's only where the copy
   // can't say (the device's own state: notifications, Face ID, theme, the sync line…) — each group on its own server
   // switch (kv app-me-<group>); until the copy is this person's, the page's as before ----------
@@ -2404,6 +2410,12 @@ final class MeCtl {
     guard let m = model["claims"] as? [String: Any] else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
     let need = (m["need"] as? [[String: Any]]) ?? [], all = (m["all"] as? [[String: Any]]) ?? []
     let admin = (m["admin"] as? Bool) == true
+    // (a claim from the Inbox: its list picked — Need approval if it waits there, else All — scrolled to, pulsing)
+    var focus: String? = nil
+    if let fid = clFocus {
+      clFocus = nil
+      if need.contains(where: { ($0["id"] as? String) == fid }) { clSeg = 0; focus = fid } else if all.contains(where: { ($0["id"] as? String) == fid }) { clSeg = 1; focus = fid }
+    }
     let seg = part(h, "seg") { SegBlock() }
     seg.set("Need approval · \(need.count)", "All · \(all.count)", clSeg)
     seg.onPick = { [weak self, weak h] i in guard let self = self, let h = h else { return }; self.clSeg = i; UIView.performWithoutAnimation { self.blocks(h); h.setNeedsLayout(); h.layoutIfNeeded() } }
@@ -2418,6 +2430,7 @@ final class MeCtl {
       list.onOpen = { [weak self] id in self?.send(["ev": "clOpen", "id": id]) }
       list.onHold = { [weak self, weak h] id in guard let self = self, admin, let row = rows.first(where: { ($0["id"] as? String) == id }), (row["st"] as? String) != "paid" else { return }; self.paidOn(h, id, sub: "\(row["name"] as? String ?? "") · \(row["amt"] as? String ?? "")") }
       out.append(list)
+      if let fid = focus { DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak h, weak list] in guard let h = h, let list = list, let row = list.row(fid) else { return }; h.scrollToShow(row); list.pulse(fid) } }
     }
     h.setFab("Add claim", "plus", admin ? { [weak self, weak h] in if let h = h { self?.addClaim(h, m) } } : nil)
   }
@@ -3591,6 +3604,17 @@ final class SwipeRows: UIView, HomeBlock {
     setNeedsLayout()
   }
   func closeOthers(_ keep: SwipeRow) { rows.values.filter { $0 !== keep }.forEach { $0.close() } }
+  func row(_ id: String) -> UIView? { rows[id] }
+  // the WhatsApp pulse on one claim: a see-through grey over it, once (as a review request's)
+  func pulse(_ id: String) {
+    guard let r = rows[id] else { return }
+    let band = UIView(frame: r.bounds); band.isUserInteractionEnabled = false; band.alpha = 0
+    band.backgroundColor = Look.c(UIColor.white.withAlphaComponent(0.13), UIColor.black.withAlphaComponent(0.08))
+    r.addSubview(band)
+    UIView.animate(withDuration: 0.2, delay: 0.35, options: [.curveEaseOut]) { band.alpha = 1 } completion: { _ in
+      UIView.animate(withDuration: 0.6, delay: 0.6, options: [.curveEaseInOut]) { band.alpha = 0 } completion: { _ in band.removeFromSuperview() }
+    }
+  }
   func blockHeight(_ W: CGFloat) -> CGFloat { CGFloat(order.count) * SwipeRows.H + 8 }
   override func layoutSubviews() {
     super.layoutSubviews()

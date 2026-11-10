@@ -1351,7 +1351,8 @@ extension Main {
       meCtl.command(["open": ["kind": "plan", "pid": pid, "month": ""]])
       selectTab(tabKeys.contains("plans") ? "plans" : "me")
     case "claim":
-      if (go["page"] as? String) == "fin-reimb", tabKeys.contains("fin-reimb") { selectTab("fin-reimb") }
+      // (the claim itself shown on the Claims tab: scrolled to and pulsing, as a review request — Haris 2026-11-10)
+      if (go["page"] as? String) == "fin-reimb", tabKeys.contains("fin-reimb") { meCtl.focusClaim(go["claimId"] as? String); selectTab("fin-reimb") }
       else { shownScreen?.toast(["t": "Expense claims are on the computer"]) }
     case "trash":
       meCtl.openTrash(q: go["q"] as? String ?? "")
