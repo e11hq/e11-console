@@ -41,7 +41,9 @@ jobs:
   # to update to the version in the build (mac/bin/SHELL_VERSION).
   mac:
     needs: changes
-    if: needs.changes.outputs.mac == 'yes'
+    # (put aside — Haris 2026-11-10 18:38: "discard the terminal app for now": releases don't build the Terminal-installed
+    #  Mac app; the installer keeps the last stored build. Back: `needs.changes.outputs.mac == 'yes'` again)
+    if: false && needs.changes.outputs.mac == 'yes'
     runs-on: ubuntu-latest
     permissions:
       actions: write
