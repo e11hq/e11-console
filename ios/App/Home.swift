@@ -2359,7 +2359,7 @@ final class InboxRow: UIView {
   private(set) var info: [String: Any] = [:]
   private(set) var photo: UIImage?
   var rowSig = ""   // (what the cell shows — set again only when it changed)
-  private let dot = UIView(), when = UILabel()
+  private let dot = UIView(), when = UILabel(), chev = UIImageView()
   // Mail's measures (from Haris's screenshots, 2026-11-01): the picture 44 at 34, the words from 88, 18 from the right
   static let headFont = UIFont.systemFont(ofSize: 16.5, weight: .semibold), headFontRead = UIFont.systemFont(ofSize: 16.5)
   static let lineFont = UIFont.systemFont(ofSize: 14)
@@ -2369,7 +2369,10 @@ final class InboxRow: UIView {
     isUserInteractionEnabled = false
     dot.backgroundColor = .systemBlue; dot.layer.cornerRadius = 3.9
     when.font = InboxRow.lineFont; when.textColor = .secondaryLabel; when.textAlignment = .right
-    addSubview(dot); addSubview(when)
+    // (Mail's › beside the time on the first line, as the Inbox had it — Haris 2026-11-10: "› on the rows will be there")
+    chev.image = UIImage(systemName: "chevron.right", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold))
+    chev.tintColor = .tertiaryLabel; chev.contentMode = .bottom
+    addSubview(dot); addSubview(when); addSubview(chev)
   }
   required init?(coder: NSCoder) { fatalError() }
   func set(_ r: [String: Any], photo: UIImage?) {
@@ -2393,7 +2396,7 @@ final class InboxRow: UIView {
     c.imageToTextPadding = InboxRow.gap
     c.textToSecondaryTextVerticalPadding = 3
     let font = read ? InboxRow.headFontRead : InboxRow.headFont
-    c.text = InboxRow.fit(head, font: font, width: W - InboxRow.lead - InboxRow.pic - InboxRow.gap - InboxRow.trail - whenWidth - 8)
+    c.text = InboxRow.fit(head, font: font, width: W - InboxRow.lead - InboxRow.pic - InboxRow.gap - InboxRow.trail - whenWidth - 9 - 7 - 8)
     c.textProperties.font = font; c.textProperties.color = .label; c.textProperties.numberOfLines = 1
     // the task, then one line of what — each its own line, cut with … (Apple's second text, two lines)
     let ps = NSMutableParagraphStyle(); ps.lineBreakMode = .byTruncatingTail
@@ -2420,7 +2423,8 @@ final class InboxRow: UIView {
     dot.frame = CGRect(x: 20.7 - 3.9, y: H / 2 - 3.9, width: 7.8, height: 7.8)
     let ww = whenWidth
     let base = InboxRow.top + InboxRow.headFont.ascender
-    when.frame = CGRect(x: W - InboxRow.trail - ww, y: base - when.font.ascender, width: ww, height: ceil(when.font.lineHeight))
+    chev.frame = CGRect(x: W - InboxRow.trail - 9, y: base - 11, width: 9, height: 13)
+    when.frame = CGRect(x: chev.frame.minX - 7 - ww, y: base - when.font.ascender, width: ww, height: ceil(when.font.lineHeight))
   }
   var accessibilityText: String {
     [read ? nil : "Unread", head, info["title"] as? String, info["desc"] as? String, when.text].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
