@@ -360,8 +360,8 @@ no colour behind the list — straight on the page's background, Apple's thin li
 with nothing to show uses Apple's own empty state (`UIContentUnavailableConfiguration` — its symbol, bold title, the grey line
 under it, centred; `AppleEmpty` in a cell under what's above it, or behind the whole list as My Tasks and Home), never a line
 of ours; loading is Apple's loading view, never "Loading…"; a search with nothing found is Apple's "No Results · Check the
-spelling or try a new search." (iOS 16: the line alone.) Every new page too; a locked page still showing a line of ours
-(Me's pages) changes only with Haris's yes.
+spelling or try a new search." (iOS 16: the line alone.) Every new page too. Me's pages too since
+2026-11-10 (Haris: "do 1–4").
 **The line between rows, every Apple page — now and later (Haris, 2026-11-10: Apple's own, "softer"):** the lines in Apple's
 lists (Home's, My Tasks', Clients', search's and Me's groups, the task page's Details, the @ / # lists) are Apple's separator
 a little fainter (`HomeLook.line`, light and dark). The Inbox's own lines stay as they are. Every new Apple page sets its
