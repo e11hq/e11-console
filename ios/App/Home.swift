@@ -331,7 +331,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         //  row's cell — the search's wash on its title — when search closed: Haris 2026-11-09)
         let k: String
         if let c = v as? HomeCard { k = "f:" + c.id }
-        else if let f = v as? FileListRow { k = "fs:" + f.id }
+        else if let f = v as? FileListRow { k = f.key }
         else if let e = v as? AppleEmpty { k = "u:" + (e.accessibilityIdentifier ?? "") }
         else { k = "r:\(ObjectIdentifier(v).hashValue)" }
         if views[k] != nil { continue }
@@ -348,7 +348,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if let c = v as? ClientListRow { let k = "k:" + c.id; keys.append(k); views[k] = c; continue }
       if v is ClientsMoreRow { keys.append("k:inactive"); views["k:inactive"] = v; continue }
       // (a file's row: Recently added's, or one search found — its own identity, so a wash never stays: Haris 2026-11-10)
-      if let r = v as? FileListRow { let k = (r.found ? "fs:" : "fr:") + r.id; if views[k] != nil { continue }; keys.append(k); views[k] = r; continue }
+      if let r = v as? FileListRow { let k = r.key; if views[k] != nil { continue }; keys.append(k); views[k] = r; continue }
       if let e = v as? AppleEmpty { let k = "u:" + (e.accessibilityIdentifier ?? "\(ObjectIdentifier(e).hashValue)"); if views[k] != nil { continue }; keys.append(k); views[k] = e; continue }
       if let t = v as? FileTile { let k = t.key; if views[k] != nil { continue }; keys.append(k); views[k] = t; continue }
       // (the Clients tab's and Client Assets' blocks — the clients' group, folders, files: each a cell, the whole width)
@@ -1903,7 +1903,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
           let v = resultFiles[id] ?? { let x = FileListRow(); x.found = true; resultFiles[id] = x; return x }()
           var at = f["where"] as? String ?? ""
           if !cname.isEmpty, at.hasPrefix(cname + " › ") { at = String(at.dropFirst(cname.count + 3)) }
-          v.set(f, line: [at, TaskPage.size(f["size"] as? Int ?? 0)].filter { !$0.isEmpty }.joined(separator: " · "), marks: fm, look: L)
+          v.set(f, line: FileListRow.line(f, at: at), marks: fm, look: L)
           v.onTap = { Main.shared.quickLook(files, at: i) }
           v.menu = { [weak self] in self.map { Main.shared.assetsCtl.fileMenu($0, f, client: cid) } }
           v.onLook = { [weak self] in self?.applyList(animated: false) }

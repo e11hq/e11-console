@@ -147,16 +147,29 @@ final class FileListRow: UIView, AppleRow {
   private(set) var rowContent = UIListContentConfiguration.subtitleCell()
   private(set) var rowSig = ""
   var rowHasAccessory: Bool { false }
-  var rowChevron: Bool { false }
+  var rowChevron: Bool { isFolder }   // (a folder found opens, Apple's ›; a file opens in Quick Look)
+  private(set) var isFolder = false
+  var key: String { (found ? "fs" : "fr") + (isFolder ? "d:" : ":") + id }
   var rowLeading: Bool { false }
   var rowLate: Bool { false }
   func rowTapped() { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onTap?() }
   private var picPath: String?, pic: UIImage?, line = "", marks: [String] = []
   override init(frame: CGRect) { super.init(frame: frame); isUserInteractionEnabled = false }
   required init?(coder: NSCoder) { fatalError() }
+  // a folder search found: the folder in its colour, its name, where it is and how many files (mock-up "Searching Client Assets")
+  func setFolder(_ f: [String: Any], line: String, marks: [String], look L: HomeLook) {
+    isFolder = true; info = f; id = f["id"] as? String ?? ""; self.line = line; self.marks = marks
+    picPath = nil; pic = nil
+    paint(L)
+  }
+  // the line under a file's name, as everywhere: where it is · its type · its size
+  static func line(_ f: [String: Any], at: String) -> String {
+    let ext = ((f["name"] as? String ?? "") as NSString).pathExtension.uppercased()
+    return [at, ext, TaskPage.size(f["size"] as? Int ?? 0)].filter { !$0.isEmpty }.joined(separator: " · ")
+  }
   // line: what's under the name; marks: the words searched for (none — no wash)
   func set(_ f: [String: Any], line: String, marks: [String], look L: HomeLook) {
-    info = f; id = f["id"] as? String ?? ""; self.line = line; self.marks = marks
+    isFolder = false; info = f; id = f["id"] as? String ?? ""; self.line = line; self.marks = marks
     let p = CommentCell.picURL(f)
     if p != picPath {
       picPath = p; pic = nil
@@ -174,12 +187,15 @@ final class FileListRow: UIView, AppleRow {
   }
   private func paint(_ L: HomeLook) {
     let nm = info["name"] as? String ?? "File"
-    let sig = "\(nm)|\(line)|\(marks.joined(separator: ","))|\(pic != nil)|\(picPath ?? "")|\(L.key)"
+    let sig = "\(isFolder)|\(nm)|\(line)|\(marks.joined(separator: ","))|\(pic != nil)|\(picPath ?? "")|\(String(describing: info["rgb"]))|\(L.key)"
     guard sig != rowSig else { return }
     rowSig = sig
     var cfg = UIListContentConfiguration.subtitleCell()
     let ext = (nm as NSString).pathExtension.uppercased()
-    cfg.image = pic ?? FileListRow.badge(ext)
+    if isFolder {
+      cfg.image = UIImage(systemName: "folder.fill")?.withTintColor(NativeSheetVC.color(info["rgb"]) ?? .systemBlue, renderingMode: .alwaysOriginal)
+      cfg.imageProperties.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 30)
+    } else { cfg.image = pic ?? FileListRow.badge(ext) }
     cfg.imageProperties.reservedLayoutSize = CGSize(width: 40, height: 40)
     cfg.imageProperties.maximumSize = CGSize(width: 40, height: 40)
     cfg.imageToTextPadding = 13

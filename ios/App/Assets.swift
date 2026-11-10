@@ -593,7 +593,7 @@ final class AssetsCtl {
       let r = kept(h, (found ? "fs:" : "fr:") + id) { () -> FileListRow in let v = FileListRow(); v.found = found; return v }
       var at = x["where"] as? String ?? ""
       if let c = cname, at.hasPrefix(c + " › ") { at = String(at.dropFirst(c.count + 3)) }
-      r.set(x, line: [at, TaskPage.size(x["size"] as? Int ?? 0)].filter { !$0.isEmpty }.joined(separator: " · "), marks: marks, look: h.look)
+      r.set(x, line: FileListRow.line(x, at: at), marks: marks, look: h.look)
       r.onTap = { [weak self] in self?.preview(x, among: list) }
       r.menu = { [weak self, weak h] in h.flatMap { self?.fileMenu($0, x, client: cid) } }
       r.onLook = { [weak h] in h?.listAgain() }
@@ -632,9 +632,25 @@ final class AssetsCtl {
       let q = s.q.trimmingCharacters(in: .whitespaces)
       if !q.isEmpty {
         // (what search found: Apple's rows, the words washed — each its own row, so no wash stays after search)
+        // (the approved mock-up "Searching Client Assets": its folders found, then its files — Apple's rows, the words washed)
         let found = AssetsCtl.find(all, q)
-        if !found.isEmpty { out.append(head(h, "found", "\(found.count) file\(found.count == 1 ? "" : "s") found" + (AssetsCtl.lastLoose ? " — close matches" : ""))) }
-        if found.isEmpty { let n = empty(h, "foundNone"); n.set("magnifyingglass", "No Results", "Check the spelling or try a new search."); out.append(n) }
+        let loose = AssetsCtl.lastLoose
+        let fr = Find.filter((m["folders"] as? [[String: Any]]) ?? [], q) { "\($0["name"] ?? "")" }
+        let dirs = fr.loose ? [] : fr.items
+        if !dirs.isEmpty {
+          out.append(head(h, "foundDirs", "Folders"))
+          for x in dirs {
+            let id = x["id"] as? String ?? ""
+            let r = kept(h, "fsd:" + id) { () -> FileListRow in let v = FileListRow(); v.found = true; return v }
+            let n = x["total"] as? Int ?? x["files"] as? Int ?? 0
+            r.setFolder(x, line: [x["path"] as? String ?? "", "\(n) file\(n == 1 ? "" : "s")"].filter { !$0.isEmpty }.joined(separator: " · "), marks: fr.marks, look: L)
+            r.onTap = { [weak self] in guard let self = self else { return }; self.push(self.screen("folder", cid, id), animated: true) }
+            r.menu = { [weak self, weak h] in h.flatMap { self?.folderMenu($0, x, client: cid) } }
+            out.append(r)
+          }
+        }
+        if !found.isEmpty { out.append(head(h, "found", "Files · \(found.count)" + (loose ? " — close matches" : ""))) }
+        if found.isEmpty && dirs.isEmpty { let n = empty(h, "foundNone"); n.set("magnifyingglass", "No Results", "Check the spelling or try a new search."); out.append(n) }
         let marks = Find.filter(found, q) { "\($0["name"] ?? "") \($0["where"] ?? "")" }.marks
         out += fileRows(h, found, client: cid, found: true, marks: marks, whereFrom: m["name"] as? String)
       } else {
@@ -783,7 +799,7 @@ final class AssetsCtl {
       let marks = Find.filter(found, q) { "\($0["name"] ?? "") \($0["where"] ?? "")" }.marks
       let rows: [UIView] = found.map { x in
         let r = FileListRow(); r.found = true
-        r.set(x, line: [x["where"] as? String ?? "", TaskPage.size(x["size"] as? Int ?? 0)].filter { !$0.isEmpty }.joined(separator: " · "), marks: marks, look: h.look)
+        r.set(x, line: FileListRow.line(x, at: x["where"] as? String ?? ""), marks: marks, look: h.look)
         r.onTap = { [weak self] in self?.preview(x, among: found) }
         r.menu = { [weak self, weak h] in h.flatMap { self?.fileMenu($0, x, client: x["client"] as? String ?? "") } }
         r.onLook = { [weak h] in h?.listAgain() }
