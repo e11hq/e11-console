@@ -840,7 +840,7 @@ final class AssetsCtl {
     let act = { (it: (String, String, Bool, () -> Void)) -> UIAction in
       let run = it.3
       // (Turn off link: red, as the sheet had it — Haris 2026-11-03)
-      return UIAction(title: it.0, image: AssetsCtl.symbols[it.1].flatMap { UIImage(systemName: $0) }, attributes: it.2 || it.0 == "Turn off link" ? .destructive : []) { _ in HomeView.runAfterMenu(run) }
+      return UIAction(title: it.0, image: AssetsCtl.symbols[it.1].flatMap { UIImage(systemName: $0) }, attributes: it.2 || it.0 == "Turn off link" ? .destructive : []) { _ in run() }
     }
     let main = items.filter { !$0.2 }.map(act), danger = items.filter { $0.2 }.map(act)
     return UIMenu(title: title, children: [UIMenu(options: .displayInline, children: main)] + (danger.isEmpty ? [] : [UIMenu(options: .displayInline, children: danger)]))
