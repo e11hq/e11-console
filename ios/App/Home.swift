@@ -3161,6 +3161,15 @@ extension HomeView: UICollectionViewDelegate {
     animator.addCompletion { [weak row] in row?.onTap?() }
   }
   private static var afterMenu: (() -> Void)?
+  // (a held row's menu choice that opens something — a sheet, a page — run once Apple's menu has fully gone: opened
+  //  while it was still closing, its greyed backdrop stayed under the sheet and the page behind lost its colour —
+  //  Haris 2026-11-10 15:27)
+  static func runAfterMenu(_ f: @escaping () -> Void) {
+    var done = false
+    let once = { if !done { done = true; f() } }
+    afterMenu = once
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { if !done { afterMenu = nil; once() } }   // (no menu closing to wait for)
+  }
   func collectionView(_ cv: UICollectionView, willEndContextMenuInteraction c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
     let run = { let f = HomeView.afterMenu; HomeView.afterMenu = nil; f?() }
     if let a = animator { a.addCompletion(run) } else { DispatchQueue.main.async(execute: run) }
