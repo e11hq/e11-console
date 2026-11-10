@@ -205,6 +205,9 @@ extension Main {
       ("aBarV3", { self.barVariant(3) }), ("aBarV3w", {}),
       ("aBarV4", { self.barVariant(4) }), ("aBarV4w", {}),
       ("aBarV5", { self.barVariant(5) }), ("aBarV5w", {}),
+      ("aBarV6", { self.barVariant(6) }), ("aBarV6w", {}),
+      ("aBarV7", { self.barVariant(7) }), ("aBarV7w", {}),
+      ("aBarV8", { self.barVariant(8) }), ("aBarV8w", {}),
       ("aBarBack", { self.tab("projects"); AppleTabs.shared?.clientsNav.popToRootViewController(animated: false) }),
       // a long-ago comment opened as from the Inbox: in view once everything has come
       ("aFocus", { if let b = best { self.openTaskPage(b.0, tab: "comments", focus: "\(b.0)~\(b.1)") } }),
@@ -223,17 +226,21 @@ extension Main {
     guard let nav = AppleTabs.shared?.clientsNav else { return }
     let vc = UIViewController(); vc.view.backgroundColor = HomeLook(lookBoth).bg
     vc.navigationItem.title = "Variant \(k)"
-    if k >= 1 && k != 5 { vc.navigationItem.largeTitleDisplayMode = .never; vc.navigationItem.backButtonDisplayMode = .minimal }
+    //  6 the small title the newer way (.inline) · 7 only the ‹ without words · 8 only no big title (.never)
+    if k >= 1 && k <= 4 { vc.navigationItem.largeTitleDisplayMode = .never; vc.navigationItem.backButtonDisplayMode = .minimal }
+    if k == 6, #available(iOS 17.0, *) { vc.navigationItem.largeTitleDisplayMode = .inline; vc.navigationItem.backButtonDisplayMode = .minimal }
+    if k == 7 { vc.navigationItem.backButtonDisplayMode = .minimal }
+    if k == 8 { vc.navigationItem.largeTitleDisplayMode = .never }
     let sc = UISearchController(searchResultsController: nil); sc.obscuresBackgroundDuringPresentation = false
     sc.searchBar.placeholder = "Variant \(k)"
     vc.navigationItem.hidesSearchBarWhenScrolling = false
     if k != 5, #available(iOS 16.0, *) { vc.navigationItem.preferredSearchBarPlacement = .stacked }
     vc.navigationItem.searchController = sc
-    if k >= 2 && k != 5 {
+    if k >= 2 && k <= 4 {
       let list = UICollectionView(frame: vc.view.bounds, collectionViewLayout: UICollectionViewCompositionalLayout.list(using: .init(appearance: .insetGrouped)))
       list.autoresizingMask = [.flexibleWidth, .flexibleHeight]; vc.view.addSubview(list); vc.setContentScrollView(list, for: .top)
     }
-    if k >= 3 && k != 5 {
+    if k >= 3 && k <= 4 {
       let sq = UIView(); sq.backgroundColor = .systemBlue; sq.layer.cornerRadius = 7
       sq.translatesAutoresizingMaskIntoConstraints = false; sq.widthAnchor.constraint(equalToConstant: 22).isActive = true; sq.heightAnchor.constraint(equalToConstant: 22).isActive = true
       let l = UILabel(); l.text = "Variant \(k)"; l.font = .systemFont(ofSize: 17, weight: .semibold)
