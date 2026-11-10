@@ -1,4 +1,5 @@
 import UIKit
+import QuickLook
 
 /* Folders and files as the Files app's grid (Haris 2026-11-10, mock-up "Clients — with the rules", approved 12:33): the
    folder in its colour, or the file's own picture in its own shape (a photo wide, a document tall), its name centred under
@@ -13,7 +14,9 @@ final class FileTile: UIView {
   private(set) var sig = ""
   private(set) var info: [String: Any] = [:]
   private let pic = UIImageView(), badge = UILabel(), name = UILabel(), sub = UILabel(), tick = UIImageView()
-  private var lines = 1, isFolder = true, picPath: String?, aspect: CGFloat = 1
+  private var lines = 1, picPath: String?, aspect: CGFloat = 1
+  private(set) var isFolder = true
+  var key: String { (isFolder ? "fd:" : "ff:") + id }   // (its identity in the list)
   static let stripW: CGFloat = 92
   override init(frame: CGRect) {
     super.init(frame: frame)
@@ -31,15 +34,17 @@ final class FileTile: UIView {
   // a folder: its colour, its name, "14 files"
   func folder(_ f: [String: Any], lines: Int) {
     let col = NativeSheetVC.color(f["rgb"]) ?? .systemBlue
-    let n = f["files"] as? Int ?? 0
-    let s = "d|\(f["name"] ?? "")|\(n)|\(String(describing: f["rgb"]))|\(lines)"
+    let n = f["files"] as? Int ?? 0, subs = f["subs"] as? Int ?? 0, fin = (f["final"] as? Bool) == true
+    let s = "d|\(f["name"] ?? "")|\(n)|\(subs)|\(fin)|\(String(describing: f["rgb"]))|\(lines)"
     guard s != sig else { return }
     sig = s; info = f; isFolder = true; self.lines = lines; id = f["id"] as? String ?? ""
     pic.image = UIImage(systemName: "folder.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 52, weight: .regular))
     pic.tintColor = col; pic.backgroundColor = .clear; pic.layer.cornerRadius = 0; pic.layer.borderWidth = 0
     badge.isHidden = true; picPath = nil
     name.text = f["name"] as? String; name.numberOfLines = lines
-    sub.text = "\(n) file\(n == 1 ? "" : "s")"
+    // ("Final · 2 folders · 14 files", "Empty" — as Client Assets had it; a client's page: its files, counted through)
+    let bits = [subs > 0 ? "\(subs) folder\(subs == 1 ? "" : "s")" : "", n > 0 ? "\(n) file\(n == 1 ? "" : "s")" : ""].filter { !$0.isEmpty }
+    sub.text = (fin ? "Final · " : "") + (bits.isEmpty ? "Empty" : bits.joined(separator: " · "))
     accessibilityLabel = "\(name.text ?? "Folder"), folder, \(sub.text ?? "")"
     setNeedsLayout()
   }
@@ -218,5 +223,83 @@ final class FileListRow: UIView, AppleRow {
     let a = UIImageAsset()
     a.register(light, with: UITraitCollection(userInterfaceStyle: .light)); a.register(dark, with: UITraitCollection(userInterfaceStyle: .dark))
     return a.image(with: UITraitCollection.current)
+  }
+}
+
+/* Client Assets' files opened in Apple's own Quick Look (Haris 2026-11-10, approved): swipe sideways for the next and the
+   one before, swipe down to close (it grows out of the tile or row tapped, and goes back into it), Apple's Share — the file
+   itself. Each file fetched with the app's sign-in when it's about to show (the one tapped first, then those beside it),
+   kept in one folder of the phone's caches while Quick Look is open and cleared when it closes. */
+final class FilesLook: NSObject, QLPreviewControllerDataSource, QLPreviewControllerDelegate {
+  static weak var source: UIView?   // (the tile or row tapped — set by the list just before it opens)
+  private static var shown: FilesLook?
+  final class Item: NSObject, QLPreviewItem {
+    let f: [String: Any], src: String
+    var url: URL?, loading = false
+    init(_ f: [String: Any]) { self.f = f; src = Main.previewItem(f)["src"] as? String ?? "" }
+    var previewItemURL: URL? { url }
+    var previewItemTitle: String? { f["name"] as? String }
+  }
+  private var items: [Item] = [], first = 0
+  private weak var from: UIView?, q: QLPreviewController?
+  private let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("quicklook-\(UUID().uuidString)", isDirectory: true)
+  static func show(_ files: [[String: Any]], at i: Int, host: UIViewController, toast: @escaping (String) -> Void) {
+    guard i < files.count else { return }
+    let me = FilesLook()
+    me.items = files.map(Item.init); me.first = i; me.from = source; source = nil
+    try? FileManager.default.createDirectory(at: me.dir, withIntermediateDirectories: true)
+    // ("Opening…" only when it takes a moment — a file already on the phone opens at once)
+    var opened = false
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { if !opened { toast("Opening…") } }
+    me.load(i) { ok in
+      opened = true
+      guard ok else { try? FileManager.default.removeItem(at: me.dir); return toast("Couldn’t open — try again") }
+      let q = QLPreviewController(); q.dataSource = me; q.delegate = me; q.currentPreviewItemIndex = i
+      me.q = q; shown = me
+      host.present(q, animated: true)
+      me.load(i - 1) { _ in }; me.load(i + 1) { _ in }
+    }
+  }
+  private func load(_ i: Int, _ done: @escaping (Bool) -> Void) {
+    guard i >= 0, i < items.count else { return done(false) }
+    let it = items[i]
+    if it.url != nil { return done(true) }
+    if it.loading { return }
+    it.loading = true
+    PreviewLoad.data(it.src) { [weak self] d in
+      it.loading = false
+      guard let self = self, let d = d else { return done(false) }
+      let name = (it.f["name"] as? String ?? "File").replacingOccurrences(of: "/", with: "-")
+      let sub = self.dir.appendingPathComponent("\(i)", isDirectory: true)
+      try? FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+      let u = sub.appendingPathComponent(name)
+      guard (try? d.write(to: u)) != nil else { return done(false) }
+      it.url = u
+      // (the one on show was waiting for it: shown now)
+      if let q = self.q, q.currentPreviewItemIndex == i { q.refreshCurrentPreviewItem() }
+      done(true)
+    }
+  }
+  func numberOfPreviewItems(in c: QLPreviewController) -> Int { items.count }
+  func previewController(_ c: QLPreviewController, previewItemAt i: Int) -> QLPreviewItem {
+    // (about to show: it, and the ones beside it, fetched)
+    load(i) { _ in }; load(i - 1) { _ in }; load(i + 1) { _ in }
+    return items[i]
+  }
+  func previewController(_ c: QLPreviewController, transitionViewFor item: QLPreviewItem) -> UIView? {
+    (item as? Item) === items[first] ? from : nil
+  }
+  func previewControllerDidDismiss(_ c: QLPreviewController) {
+    try? FileManager.default.removeItem(at: dir)
+    FilesLook.shown = nil
+  }
+}
+extension Main {
+  // Client Assets' files (a client's page's search too): Apple's Quick Look
+  func quickLook(_ files: [[String: Any]], at i: Int) {
+    PreviewLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) { [weak self] in
+      guard let self = self, let host = self.sheetHost() else { return }
+      FilesLook.show(files, at: i, host: host) { [weak self] t in self?.shownScreen?.assetsToast(t) }
+    }
   }
 }

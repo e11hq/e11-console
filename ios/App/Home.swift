@@ -274,9 +274,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         if let self = self, ip.section < self.listSecs.count { c.attributedText = self.listSecs[ip.section].head }
         v.contentConfiguration = c
         // (a client's folders: See All at the header's right — Apple's button, as the App Store's rows)
+        // (and a folder's files: Select / Cancel)
         if let self = self, ip.section < self.listSecs.count, let all = self.listSecs[ip.section].seeAll {
-          let b = UIButton(type: .system); b.setTitle("See All", for: .normal); b.titleLabel?.font = .systemFont(ofSize: 15)
-          b.addAction(UIAction { _ in all() }, for: .touchUpInside); b.sizeToFit()
+          let b = UIButton(type: .system); b.setTitle(all.0, for: .normal); b.titleLabel?.font = .systemFont(ofSize: 15)
+          let key = all.2
+          b.addAction(UIAction { [weak self] _ in UISelectionFeedbackGenerator().selectionChanged(); self?.tileSeeAll[key]?.1() }, for: .touchUpInside); b.sizeToFit()
           v.accessories = [.customView(configuration: .init(customView: b, placement: .trailing(), reservedLayoutWidth: .actual))]
         } else { v.accessories = [] }
       }
@@ -338,7 +340,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if v is ClientsMoreRow { keys.append("k:inactive"); views["k:inactive"] = v; continue }
       // (a file's row: Recently added's, or one search found — its own identity, so a wash never stays: Haris 2026-11-10)
       if let r = v as? FileListRow { let k = (r.found ? "fs:" : "fr:") + r.id; if views[k] != nil { continue }; keys.append(k); views[k] = r; continue }
-      if let t = v as? FileTile { let k = (t.info["files"] != nil && t.info["size"] == nil ? "fd:" : "ff:") + t.id; keys.append(k); views[k] = t; continue }
+      if let t = v as? FileTile { let k = t.key; if views[k] != nil { continue }; keys.append(k); views[k] = t; continue }
       // (the Clients tab's and Client Assets' blocks — the clients' group, folders, files: each a cell, the whole width)
       if let b = v as? HomeBlock {
         let k = "b:" + (b.accessibilityIdentifier ?? "\(ObjectIdentifier(b).hashValue)")
@@ -366,7 +368,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     for (n, k) in keys.enumerated() {
       if k.hasPrefix("h:"), let nx = keys[(n + 1)...].first(where: { !$0.hasPrefix("h:") }), isRow(nx) || tiles(nx) {
         let t = tiles(nx)
-        secs.append([]); meta.append(ListSec(rows: !t, head: (views[k] as? UILabel)?.attributedText, tiles: t ? tileKind : .none, seeAll: t ? tileSeeAll[k] : nil)); continue
+        secs.append([]); meta.append(ListSec(rows: !t, head: (views[k] as? UILabel)?.attributedText, tiles: t ? tileKind : .none, seeAll: t ? tileSeeAll[k].map { ($0.0, $0.1, k) } : nil)); continue
       }
       let r = isRow(k), t = tiles(k)
       if meta.last?.rows != r || (meta.last?.tiles != .none) != t { secs.append([]); meta.append(ListSec(rows: r, head: nil, tiles: t ? tileKind : .none)) }
@@ -397,15 +399,17 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     //  Haris 2026-11-10)
     ds.apply(snap, animatingDifferences: animated) { [weak self] in self?.refreshHeads(); self?.showMotto() }
   }
+  // (a row's picture came after it was drawn: the list set again — only that row changes, by its signature)
+  func listAgain() { if listOn { applyList(animated: false) } }
   // a group: rows (Apple's inset group) or not, and its heading (Apple's header)
   struct ListSec {
     enum Tiles { case none, strip, grid }
     let rows: Bool; let head: NSAttributedString?
     var tiles: Tiles = .none
-    var seeAll: (() -> Void)? = nil
+    var seeAll: (String, () -> Void, String)? = nil   // (its words, what it does, its heading's key)
   }
-  // a heading's See All (a client's folders: Client Assets), by the heading's key
-  var tileSeeAll: [String: () -> Void] = [:]
+  // a heading's button — See All (a client's folders: Client Assets), Select / Cancel (a folder's files) — by the heading's key
+  var tileSeeAll: [String: (String, () -> Void)] = [:]
   // Apple's section for tiles: a sideways-scrolling row, or three across
   func tileSection(_ s: ListSec, _ env: NSCollectionLayoutEnvironment) -> NSCollectionLayoutSection {
     let sec: NSCollectionLayoutSection
@@ -434,6 +438,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     return sec
   }
   private var listSecs: [ListSec] = []
+  private static func headButton(_ v: UIView) -> UIButton? { (v as? UIButton) ?? v.subviews.lazy.compactMap { headButton($0) }.first }
   // the headers on screen with new words (a count changed) set again — only those
   private func refreshHeads() {
     guard let cv = list, !isMeList || searching else { return }
@@ -441,6 +446,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     for ip in cv.indexPathsForVisibleSupplementaryElements(ofKind: kind) {
       guard ip.section < listSecs.count, let v = cv.supplementaryView(forElementKind: kind, at: ip) as? UICollectionViewListCell,
             var c = v.contentConfiguration as? UIListContentConfiguration else { continue }
+      // (its button's words — Select ↔ Cancel — crossfading in place)
+      if let b = Self.headButton(v), let w = listSecs[ip.section].seeAll?.0, b.title(for: .normal) != w {
+        UIView.transition(with: b, duration: 0.2, options: .transitionCrossDissolve) { b.setTitle(w, for: .normal); b.sizeToFit() }
+      }
       let want = listSecs[ip.section].head
       if (c.attributedText == nil && want == nil) || (want != nil && c.attributedText?.isEqual(to: want!) == true) { continue }
       c.attributedText = want; v.contentConfiguration = c
@@ -772,7 +781,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
           let h = clientAssetsHead
           let t = NSAttributedString(string: "Client Assets", attributes: [.font: UIFont.systemFont(ofSize: 13), .foregroundColor: UIColor.secondaryLabel])
           if h.attributedText?.isEqual(to: t) != true { h.attributedText = t }
-          tileSeeAll["h:client-assets"] = { [weak self] in self?.send(["ev": "assets", "client": cid]) }
+          tileSeeAll["h:client-assets"] = ("See All", { [weak self] in self?.send(["ev": "assets", "client": cid]) })
           content.append(h)
           var keep = Set<String>()
           for f in folders {
@@ -1874,7 +1883,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
           var at = f["where"] as? String ?? ""
           if !cname.isEmpty, at.hasPrefix(cname + " › ") { at = String(at.dropFirst(cname.count + 3)) }
           v.set(f, line: [at, TaskPage.size(f["size"] as? Int ?? 0)].filter { !$0.isEmpty }.joined(separator: " · "), marks: fm, look: L)
-          v.onTap = { Main.shared.openFiles(files, at: i) }
+          v.onTap = { Main.shared.quickLook(files, at: i) }
           v.menu = { [weak self] in self.map { Main.shared.assetsCtl.fileMenu($0, f, client: cid) } }
           v.onLook = { [weak self] in self?.applyList(animated: false) }
           resultViews.append(v)
@@ -2952,6 +2961,8 @@ extension HomeView: UICollectionViewDelegate {
   func collectionView(_ cv: UICollectionView, didSelectItemAt ip: IndexPath) {
     cv.deselectItem(at: ip, animated: true)
     guard let key = listDS?.itemIdentifier(for: ip) else { return }
+    // (a file's tile or row: Quick Look grows out of it and goes back into it — FilesLook)
+    if listViews[key] is FileTile || listViews[key] is FileListRow { FilesLook.source = (listViews[key] as? FileTile) ?? cv.cellForItem(at: ip) }
     if let r = listViews[key] as? AppleRow { r.rowTapped(); return }
     if let r = listViews[key] as? InboxRow { r.onTap?(); return }
     if let t = listViews[key] as? FileTile { t.onTap?(); return }
@@ -2971,7 +2982,7 @@ extension HomeView: UICollectionViewDelegate {
       return UIContextMenuConfiguration(identifier: key as NSString, previewProvider: nil) { _ in menu() }
     }
     // (a client held: Apple's menu with its lift — Open · Client Details; its sheet once the menu has closed)
-    if ips.count == 1, let key = listDS?.itemIdentifier(for: ips[0]), let row = listViews[key] as? ClientListRow {
+    if ips.count == 1, let key = listDS?.itemIdentifier(for: ips[0]), let row = listViews[key] as? ClientListRow, row.held {
       let id = row.id
       return UIContextMenuConfiguration(identifier: key as NSString, previewProvider: nil) { [weak self, weak row] _ in
         UIMenu(children: [

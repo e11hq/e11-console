@@ -21,6 +21,7 @@ final class ClientListRow: UIView, AppleRow {
   var id = ""
   var onTap: (() -> Void)?
   var onLook: (() -> Void)?   // (its logo came after it was drawn: its cell set again)
+  var held = true   // (its hold menu — not on All Client Assets, whose rows only open)
   private(set) var rowContent = UIListContentConfiguration.subtitleCell()
   private(set) var rowSig = ""
   var rowHasAccessory: Bool { !amIds.isEmpty }
@@ -73,8 +74,10 @@ final class ClientListRow: UIView, AppleRow {
     cfg.textProperties.color = inactive ? .secondaryLabel : L.title
     cfg.textProperties.numberOfLines = 1
     let open = r["open"] as? Int ?? 0, late = r["late"] as? Int ?? 0
-    let m = NSMutableAttributedString(string: "\(open) open", attributes: [.font: UIFont.systemFont(ofSize: 14), .foregroundColor: UIColor.secondaryLabel])
-    if late > 0 {
+    // (All Client Assets: its own line — "3 folders · 41 files")
+    let sub = r["sub"] as? String
+    let m = NSMutableAttributedString(string: sub ?? "\(open) open", attributes: [.font: UIFont.systemFont(ofSize: 14), .foregroundColor: UIColor.secondaryLabel])
+    if sub == nil, late > 0 {
       m.append(NSAttributedString(string: " · ", attributes: [.font: UIFont.systemFont(ofSize: 14), .foregroundColor: UIColor.secondaryLabel]))
       m.append(NSAttributedString(string: "\(late) overdue", attributes: [.font: UIFont.systemFont(ofSize: 14, weight: .medium), .foregroundColor: L.late]))
     }
@@ -82,7 +85,7 @@ final class ClientListRow: UIView, AppleRow {
     cfg.textToSecondaryTextVerticalPadding = 2
     cfg.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 11, leading: 16, bottom: 11, trailing: 8)
     rowContent = cfg
-    accessibilityLabel = "\(name), \(open) open\(late > 0 ? ", \(late) overdue" : "")"
+    accessibilityLabel = sub.map { "\(name), \($0)" } ?? "\(name), \(open) open\(late > 0 ? ", \(late) overdue" : "")"
     if fs != facesSig {
       facesSig = fs
       UIView.performWithoutAnimation {
