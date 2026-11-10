@@ -314,7 +314,7 @@ Manager, Office Admin + Finance Admin…) as our coloured words under the email.
 action straight in it — Change Role (Social Manager a role in it, as the website's Role column already shows it — Haris 20:01 "social manager is
 already a role"; underneath a Social person in socialMgrIds, nothing changes on the server), Super Admin Rights, Finance Access, Clients They Can See (Freelancers), Make Creative
 Director, Restore Access / Remove from Team (only here); your own row only your Finance access; the owner's account locked.
-The role guide its own pushed page "What Each Role Can Do". Add member: Apple's + in the bar (beside your photo on the tab).
+The role guide its own pushed page "What Each Role Can Do". Add member: on Me › Team members (pushed) Apple's + in the bar; on the Team tab "+ Add member" as Home's + New task (Haris 20:07).
 A member's page: Apple's grouped list — the person as Apple's cell, Email / Where / Status / Open tasks, Role and Finance Access
 as Apple's pull-down menus, Super Admin Rights and Creative Director as Apple's switches. Add Team Member: Apple's sheet.
 Mock-up approved (Haris 19:58: "yes").

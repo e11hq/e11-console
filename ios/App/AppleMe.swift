@@ -85,7 +85,7 @@ final class MeVC: UIViewController, TabRoot {
 }
 
 // A role's own tab: its first screen, as Home — Apple's big title and its line, Apple's search (with Apple's scope bar for
-// Team's Active · Past), your photo (and Team's + Add member) as Apple's bar buttons; MeCtl's page in Apple's list
+// Team's Active · Past), your photo as Apple's bar button (Team's "+ Add member" as Home's + New task — Haris 20:07); MeCtl's page in Apple's list
 // (HomeView.applyMeList); a page pushed on it (MePageVC), the tab bar going once it has arrived, as a task.
 //  · Social's Plans (Haris 2026-11-10, the mock-up "Content plans — fully Apple"): "Content plans", clients and posts
 //  · an Office Admin's Team (Haris 2026-11-10, the mock-up "Team members — fully Apple"): "Team members", people
@@ -98,7 +98,7 @@ final class MeTabVC: UIViewController, TabRoot, UISearchResultsUpdating, UISearc
   override func loadView() { let v = UIView(); v.backgroundColor = HomeLook(Main.shared.lookBoth).bg; view = v }
   private(set) weak var h: HomeView?
   private var search: UISearchController?
-  private var meItem: UIBarButtonItem?, plusItem: UIBarButtonItem?
+  private var meItem: UIBarButtonItem?
   private var mePhoto: UIImage?
   var onSearch: ((String) -> Void)?, onScope: ((Int) -> Void)?
   override func viewDidLoad() {
@@ -166,16 +166,6 @@ final class MeTabVC: UIViewController, TabRoot, UISearchResultsUpdating, UISearc
     if b.selectedScopeButtonIndex != selected { b.selectedScopeButtonIndex = selected }
   }
   func searchBar(_ b: UISearchBar, selectedScopeButtonIndexDidChange i: Int) { UISelectionFeedbackGenerator().selectionChanged(); onScope?(i) }
-  // (+ Add member: Apple's + in the bar, beside your photo — the mock-up's C2; gone for those who can't add)
-  func usePlus(_ run: (() -> Void)?) {
-    if let run = run {
-      if plusItem == nil {
-        let p = UIBarButtonItem(systemItem: .add, primaryAction: UIAction { _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); run() })
-        p.accessibilityLabel = "Add member"; plusItem = p
-      }
-      if navigationItem.rightBarButtonItems?.count != 2, let me = meItem, let p = plusItem { navigationItem.rightBarButtonItems = [me, p] }
-    } else if plusItem != nil, let me = meItem { plusItem = nil; navigationItem.rightBarButtonItems = [me] }
-  }
   private var shownLine: String?
   private func setLine(_ d: String) {
     guard d != shownLine else { return }
