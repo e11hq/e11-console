@@ -18,6 +18,18 @@ enum LogoLook {
     v.image = l.image
   }
 
+  // the logo drawn into its tile as one picture (an Apple cell's image — the Clients list, Haris 2026-11-10)
+  static func tile(_ img: UIImage, key: String?, side: CGFloat, radius: CGFloat) -> UIImage {
+    let l = look(img, key: key)
+    return UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in
+      let r = CGRect(x: 0, y: 0, width: side, height: side)
+      UIBezierPath(roundedRect: r, cornerRadius: radius).addClip()
+      l.bg.setFill(); UIRectFill(r)
+      let s = l.image.size, k = min(side / max(1, s.width), side / max(1, s.height))
+      let w = s.width * k, h = s.height * k
+      l.image.draw(in: CGRect(x: (side - w) / 2, y: (side - h) / 2, width: w, height: h))
+    }.withRenderingMode(.alwaysOriginal)
+  }
   private static func look(_ img: UIImage, key: String?) -> Look {
     if let k = key, let l = cache.object(forKey: k as NSString) { return l }
     let l = Look(padded(img), background(img))

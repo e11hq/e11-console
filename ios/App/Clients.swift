@@ -12,201 +12,136 @@ import UIKit
 // a block of Home's list that isn't a card or a heading: its own height, the whole width
 protocol HomeBlock: UIView { func blockHeight(_ W: CGFloat) -> CGFloat }
 
-// the list of clients: one rounded group, a row each (as iPhone's Settings), "Inactive clients · N" under it
-final class ClientsGroup: UIView, HomeBlock {
-  var onOpen: ((String) -> Void)?
-  var onHold: ((String) -> Void)?   // (touch and hold: its sheet — Admins change it, everyone else sees it)
-  var people: [String: [String: Any]] = [:] { didSet { if picsKey(oldValue) != picsKey(people) { (rows + offRows).forEach { $0.paintAms(people) } } } }
-  // the active clients in one rounded group; under it "Inactive clients · N" with a chevron — tapped, the inactive ones
-  // open in a rounded group of their own, the chevron turning (Haris 2026-11-03: closed whenever the list is made, the
-  // heading as it was)
-  private let box = UIView(), offBox = UIView(), more = UIButton(type: .system), chev = UIImageView()
-  private var rows: [ClientRow] = [], offRows: [ClientRow] = [], lines: [UIView] = [], offLines: [UIView] = []
-  private var showInactive = false
-  private var data: ([[String: Any]], [[String: Any]]) = ([], [])
-  private var L = HomeLook(nil)
-  private var made: [String: ClientRow] = [:]
+// ---------- the Clients list, fully Apple (Haris 2026-11-10, mock-up "Clients — with the rules", approved 12:33) ----------
+// Each client is Apple's own list cell in Apple's inset group: its logo whole on its own background (LogoLook) or its colour
+// with initials, its name, "9 open · 1 overdue", Apple's ›. Ours, inside Apple's cell (said plainly): its Account Managers'
+// faces at the right. Held: Apple's menu with its lift (Open · Client Assets · Client Details). The inactive ones: an Apple
+// row "Inactive Clients" with their number, tapped they come in under it with Apple's own list animation.
+final class ClientListRow: UIView, AppleRow {
+  var id = ""
+  var onTap: (() -> Void)?
+  var onLook: (() -> Void)?   // (its logo came after it was drawn: its cell set again)
+  private(set) var rowContent = UIListContentConfiguration.subtitleCell()
+  private(set) var rowSig = ""
+  var rowHasAccessory: Bool { !amIds.isEmpty }
+  var rowLeading: Bool { false }
+  var rowLate: Bool { false }
+  func rowTapped() { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onTap?() }
+  private var r: [String: Any] = [:], inactive = false, L = HomeLook(nil)
+  private var amIds: [String] = [], logoPath: String?, logo: UIImage?
+  private let faces = UIStackView()
+  var name: String { r["name"] as? String ?? "" }
   override init(frame: CGRect) {
     super.init(frame: frame)
-    accessibilityIdentifier = "clients"
-    for b in [box, offBox] { b.layer.cornerRadius = 26; b.layer.cornerCurve = .continuous; b.clipsToBounds = true; addSubview(b) }
-    more.contentHorizontalAlignment = .leading
-    chev.image = UIImage(systemName: "chevron.right", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold))
-    chev.tintColor = .secondaryLabel; chev.contentMode = .center; chev.isUserInteractionEnabled = false
-    more.addAction(UIAction { [weak self] _ in
-      guard let self = self else { return }
-      UISelectionFeedbackGenerator().selectionChanged()
-      self.showInactive.toggle()
-      let opening = self.showInactive
-      self.set(self.data.0, self.data.1, look: self.L)
-      if opening { self.offRows.forEach { $0.alpha = 0 } }
-      UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
-        self.chev.transform = opening ? CGAffineTransform(rotationAngle: .pi / 2) : .identity
-      }
-      // (its screen — over it on the page, or a cell of Apple's list in between: AppleClients.swift)
-      var up = self.superview; while let u = up, !(u is HomeView) { up = u.superview }; (up as? HomeView)?.relayout()
-      UIView.animate(withDuration: 0.25, delay: opening ? 0.1 : 0, options: [.curveEaseOut, .allowUserInteraction]) {
-        self.offRows.forEach { $0.alpha = opening ? 0.75 : 0 }
-      }
-    }, for: .touchUpInside)
-    addSubview(more); addSubview(chev)
+    isUserInteractionEnabled = false
+    faces.spacing = -6; faces.alignment = .center
+    addSubview(faces)
   }
   required init?(coder: NSCoder) { fatalError() }
-  // (closed again — the Clients tab coming back: it always starts closed)
-  func closeInactive() { guard showInactive else { return }; showInactive = false; chev.transform = .identity; set(data.0, data.1, look: L) }
-  // (each row kept by its client while it's there — only what changed is drawn again)
-  // (Haris 2026-11-03: opening Inactive clients, the whole list flew in a second time — every row was made anew, as the
-  // rows kept were looked for in the emptied list, and the new ones grew from the corner inside the list's slide. Now
-  // the rows there stay as they are; a new one is made and put in its place with no animation, then only it fades.)
-  private var fresh: [ClientRow] = []
-  private func row(_ r: [String: Any], inactive: Bool, into b: UIView, from kept: [String: ClientRow]) -> ClientRow {
-    let id = r["id"] as? String ?? ""
-    let v = kept[id] ?? { let x = ClientRow(); x.id = id; x.onTap = { [weak self] in self?.onOpen?(id) }; x.onHold = { [weak self] in self?.onHold?(id) }; _ = PressShrink.add(to: x); self.fresh.append(x); return x }()
-    v.set(r, look: L, inactive: inactive)
-    if v.superview !== b { if v.superview != nil { fresh.append(v) }; b.addSubview(v) }
-    v.paintAms(people)   // (in its group already: the faces' rims take its colour)
-    return v
-  }
-  private func makeLines(_ n: Int, _ old: [UIView], in b: UIView) -> [UIView] {
-    old.dropFirst(n).forEach { $0.removeFromSuperview() }
-    var ls = Array(old.prefix(n))
-    while ls.count < n { let l = UIView(); l.backgroundColor = .separator; b.addSubview(l); ls.append(l); lineFresh.append(l) }
-    return ls
-  }
-  private var lineFresh: [UIView] = []
-  func set(_ active: [[String: Any]], _ inactive: [[String: Any]], look: HomeLook) {
-    data = (active, inactive); L = look
-    box.backgroundColor = L.card; offBox.backgroundColor = L.card
-    let kept = made
-    var gone = made; made = [:]
-    fresh = []; lineFresh = []
-    UIView.performWithoutAnimation {
-      rows = active.map { r in let v = row(r, inactive: false, into: box, from: kept); made[v.id] = v; gone[v.id] = nil; return v }
-      // (the inactive ones are made while open; closing, they stay in their group as it shrinks away)
-      offRows = (showInactive ? inactive : []).map { r in let v = row(r, inactive: true, into: offBox, from: kept); made[v.id] = v; gone[v.id] = nil; return v }
-      if !showInactive { for v in gone.values where v.superview === offBox { made[v.id] = v; gone[v.id] = nil } }
-      gone.values.forEach { $0.removeFromSuperview() }
-      lines = makeLines(max(0, rows.count - 1), lines, in: box)
-      offLines = makeLines(max(0, offRows.count - 1), offLines, in: offBox)
-      // (what's new stands in its place at once, laid out — never grown from the corner)
-      if !fresh.isEmpty || !lineFresh.isEmpty { placeAll(); fresh.forEach { $0.layoutIfNeeded() } }
+  func set(_ r: [String: Any], inactive: Bool, look: HomeLook, people: [String: [String: Any]]) {
+    self.r = r; self.inactive = inactive; L = look
+    // its logo: from the phone at once when it's kept there, else fetched once and the cell set again
+    let lp = r["logo"] as? String
+    if lp != logoPath {
+      logoPath = lp; logo = nil
+      if let p = lp {
+        var now = true
+        FeedLoader.shared.image(p) { [weak self] img in
+          guard let self = self, self.logoPath == p, let img = img else { return }
+          self.logo = LogoLook.tile(img, key: p, side: 40, radius: 11)
+          if !now { self.paint(people); self.onLook?() }
+        }
+        now = false
+      }
     }
-    more.isHidden = inactive.isEmpty; chev.isHidden = inactive.isEmpty
-    more.setAttributedTitle(NSAttributedString(string: "Inactive clients · \(inactive.count)", attributes: [.font: UIFont.systemFont(ofSize: 15), .foregroundColor: UIColor.secondaryLabel]), for: .normal)
-    more.accessibilityLabel = "Inactive clients, \(inactive.count), \(showInactive ? "open" : "closed")"
-    setNeedsLayout()
+    amIds = (r["ams"] as? [String]) ?? []
+    paint(people)
   }
-  private var offH: CGFloat { showInactive ? CGFloat(offRows.count) * ClientRow.H + 6 : 0 }
-  func blockHeight(_ W: CGFloat) -> CGFloat { CGFloat(rows.count) * ClientRow.H + (more.isHidden ? 0 : 50 + offH) }
-  // (the rows and lines inside each group, at the group's width)
-  private func placeAll() {
-    let px = 1 / max(1, traitCollection.displayScale)
-    let w = max(0, bounds.width - 32)
-    for (rs, ls) in [(rows, lines), (offRows, offLines)] {
-      // (size and place without touching its shrink: a frame set on a shrunk row moved its insides)
-      for (i, r) in rs.enumerated() { r.bounds = CGRect(x: 0, y: 0, width: w, height: ClientRow.H); r.center = CGPoint(x: w / 2, y: (CGFloat(i) + 0.5) * ClientRow.H) }
-      for (i, l) in ls.enumerated() { l.frame = CGRect(x: 69, y: CGFloat(i + 1) * ClientRow.H - px / 2, width: w - 69, height: px) }
+  private var facesSig = ""
+  private func paint(_ people: [String: [String: Any]]) {
+    let fs = amIds.map { id in id + (people[id]?["photo"] != nil ? "+" : "") + ((people[id]?["initials"] as? String) ?? "") }.joined(separator: ",")
+    let sig = drawSig(r) + "|\(inactive)|\(L.key)|\(logo != nil)|" + fs
+    guard sig != rowSig else { return }
+    rowSig = sig
+    var cfg = UIListContentConfiguration.subtitleCell()
+    cfg.image = logo ?? ClientListRow.initialsTile(r["ini"] as? String ?? "", NativeSheetVC.color(r["rgb"]) ?? .systemGray)
+    cfg.imageProperties.reservedLayoutSize = CGSize(width: 40, height: 40)
+    cfg.imageProperties.maximumSize = CGSize(width: 40, height: 40)
+    cfg.imageToTextPadding = 13
+    cfg.text = name
+    cfg.textProperties.font = .systemFont(ofSize: 17, weight: .medium)
+    cfg.textProperties.color = inactive ? .secondaryLabel : L.title
+    cfg.textProperties.numberOfLines = 1
+    let open = r["open"] as? Int ?? 0, late = r["late"] as? Int ?? 0
+    let m = NSMutableAttributedString(string: "\(open) open", attributes: [.font: UIFont.systemFont(ofSize: 14), .foregroundColor: UIColor.secondaryLabel])
+    if late > 0 {
+      m.append(NSAttributedString(string: " · ", attributes: [.font: UIFont.systemFont(ofSize: 14), .foregroundColor: UIColor.secondaryLabel]))
+      m.append(NSAttributedString(string: "\(late) overdue", attributes: [.font: UIFont.systemFont(ofSize: 14, weight: .medium), .foregroundColor: L.late]))
+    }
+    cfg.secondaryAttributedText = m
+    cfg.textToSecondaryTextVerticalPadding = 2
+    cfg.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 11, leading: 16, bottom: 11, trailing: 8)
+    rowContent = cfg
+    accessibilityLabel = "\(name), \(open) open\(late > 0 ? ", \(late) overdue" : "")"
+    if fs != facesSig {
+      facesSig = fs
+      UIView.performWithoutAnimation {
+        faces.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        for id in amIds {
+          let p = people[id]
+          let v = UIImageView(image: roundPic(NativeSheetVC.photo(p), initials: p?["initials"] as? String, color: NativeSheetVC.color(p?["color"]), size: 24))
+          v.layer.cornerRadius = 12; v.clipsToBounds = true; v.layer.borderWidth = 2
+          let ring = L.card
+          v.followLook("ring") { [weak v] tc in v?.layer.setBorder(ring, tc) }
+          v.widthAnchor.constraint(equalToConstant: 24).isActive = true; v.heightAnchor.constraint(equalToConstant: 24).isActive = true
+          faces.addArrangedSubview(v)
+        }
+        let w = amIds.isEmpty ? 0 : CGFloat(amIds.count) * 18 + 6
+        frame = CGRect(x: 0, y: 0, width: w, height: 24); faces.frame = bounds
+      }
     }
   }
-  override func layoutSubviews() {
-    super.layoutSubviews()
-    let W = bounds.width
-    box.frame = CGRect(x: 16, y: 0, width: W - 32, height: CGFloat(rows.count) * ClientRow.H)
-    box.isHidden = rows.isEmpty
-    placeAll()
-    more.frame = CGRect(x: 36, y: box.frame.maxY + 6, width: W - 72, height: 44)
-    let tw = ceil(more.attributedTitle(for: .normal)?.size().width ?? 0)
-    chev.bounds = CGRect(x: 0, y: 0, width: 16, height: 16); chev.center = CGPoint(x: more.frame.minX + tw + 12, y: more.frame.midY)
-    offBox.frame = CGRect(x: 16, y: more.frame.maxY, width: W - 32, height: max(0, offH - 6))
+  // a client with no logo: its colour with its initials (as search's client rows)
+  static func initialsTile(_ ini: String, _ col: UIColor) -> UIImage {
+    UIGraphicsImageRenderer(size: CGSize(width: 40, height: 40)).image { _ in
+      col.setFill(); UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: 40, height: 40), cornerRadius: 11).fill()
+      let f = UIFont.systemFont(ofSize: 14, weight: .bold), s = (ini as NSString).size(withAttributes: [.font: f])
+      (ini as NSString).draw(at: CGPoint(x: (40 - s.width) / 2, y: (40 - s.height) / 2), withAttributes: [.font: f, .foregroundColor: UIColor.white])
+    }.withRenderingMode(.alwaysOriginal)
   }
 }
 
-final class ClientRow: UIControl {
-  static let H: CGFloat = 64
-  var id = ""
+// "Inactive Clients · N" — Apple's row; tapped, the inactive ones come in under it (its chevron turns down) and go again
+final class ClientsMoreRow: UIView, AppleRow {
   var onTap: (() -> Void)?
-  var onHold: (() -> Void)? { didSet { if hold == nil { let g = UILongPressGestureRecognizer(target: self, action: #selector(held(_:))); g.minimumPressDuration = 0.45; addGestureRecognizer(g); hold = g } } }
-  private var hold: UILongPressGestureRecognizer?
-  @objc private func held(_ g: UILongPressGestureRecognizer) {
-    guard g.state == .began else { return }
-    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-    cancelTracking(with: nil)   // (no tap after the hold)
-    onHold?()
-    // (springs back as its sheet comes, as the comment cards — Haris 2026-11-03)
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in (self?.gestureRecognizers?.first { $0 is PressShrink } as? PressShrink)?.release() }
-  }
-  private let logo = UIImageView(), ini = UILabel(), name = UILabel(), meta = UILabel(), ams = UIStackView(), chev = UIImageView()
-  private var amIds: [String] = [], logoPath: String?
+  var open = false { didSet { if open != oldValue { UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0) { self.chev.transform = self.open ? CGAffineTransform(rotationAngle: .pi / 2) : .identity }; rowSig = "" ; paint() } } }
+  var count = 0 { didSet { if count != oldValue { paint() } } }
+  private(set) var rowContent = UIListContentConfiguration.valueCell()
+  private(set) var rowSig = ""
+  var rowHasAccessory: Bool { true }
+  var rowChevron: Bool { false }
+  var rowLeading: Bool { false }
+  var rowLate: Bool { false }
+  func rowTapped() { UISelectionFeedbackGenerator().selectionChanged(); onTap?() }
+  private let chev = UIImageView()
   override init(frame: CGRect) {
-    super.init(frame: frame)
-    logo.layer.cornerRadius = 11; logo.layer.cornerCurve = .continuous; logo.clipsToBounds = true; logo.contentMode = .scaleAspectFill
-    ini.font = .systemFont(ofSize: 14, weight: .bold); ini.textColor = .white; ini.textAlignment = .center
-    logo.addSubview(ini)
-    name.font = .systemFont(ofSize: 17); meta.font = .systemFont(ofSize: 13)
-    ams.spacing = -6; ams.alignment = .center
-    chev.image = UIImage(systemName: "chevron.right", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold)); chev.tintColor = .tertiaryLabel; chev.contentMode = .center
-    [logo, name, meta, ams, chev].forEach { $0.isUserInteractionEnabled = false; addSubview($0) }
-    addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.onTap?() }, for: .touchUpInside)
-    isAccessibilityElement = true; accessibilityTraits = .button
+    super.init(frame: CGRect(x: 0, y: 0, width: 14, height: 14))
+    isUserInteractionEnabled = false
+    chev.image = UIImage(systemName: "chevron.right", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold))
+    chev.tintColor = .tertiaryLabel; chev.contentMode = .center; chev.frame = bounds
+    addSubview(chev)
+    accessibilityIdentifier = "clients-inactive"
+    paint()
   }
   required init?(coder: NSCoder) { fatalError() }
-  private var drawnSig = ""
-  func set(_ r: [String: Any], look L: HomeLook, inactive: Bool) {
-    // (the same as it shows: left as it is — only what changed changes, Haris 2026-11-08)
-    let sig = drawSig(r) + "|\(inactive)|\(L.key)"
-    if sig == drawnSig { return }
-    drawnSig = sig
-    let rgb = NativeSheetVC.color(r["rgb"]) ?? .systemGray
-    name.text = r["name"] as? String; name.textColor = inactive ? .secondaryLabel : L.title
-    ini.text = r["ini"] as? String
-    let open = r["open"] as? Int ?? 0, late = r["late"] as? Int ?? 0
-    let m = NSMutableAttributedString(string: "\(open) open", attributes: [.foregroundColor: UIColor.secondaryLabel])
-    if late > 0 { m.append(NSAttributedString(string: " · ", attributes: [.foregroundColor: UIColor.secondaryLabel])); m.append(NSAttributedString(string: "\(late) overdue", attributes: [.foregroundColor: L.late, .font: UIFont.systemFont(ofSize: 13, weight: .medium)])) }
-    meta.attributedText = m
-    accessibilityLabel = "\(name.text ?? ""), \(open) open\(late > 0 ? ", \(late) overdue" : "")"
-    amIds = (r["ams"] as? [String]) ?? []
-    // (its logo where it has one — fetched with the app's sign-in, kept on the phone — else its colour and initials)
-    let lp = r["logo"] as? String
-    if lp != logoPath {
-      logoPath = lp; logo.image = nil; logo.backgroundColor = rgb; logo.contentMode = .scaleAspectFill; ini.isHidden = false
-      if let p = lp { FeedLoader.shared.image(p) { [weak self] img in guard let self = self, self.logoPath == p, let img = img else { return }; LogoLook.put(img, key: p, in: self.logo); self.ini.isHidden = true } }
-    } else if logo.image == nil { logo.backgroundColor = rgb }
-    alpha = inactive ? 0.75 : 1
-    setNeedsLayout()
+  private func paint() {
+    var c = UIListContentConfiguration.valueCell()
+    c.text = "Inactive Clients"; c.textProperties.color = .secondaryLabel
+    c.secondaryText = "\(count)"
+    rowContent = c
+    rowSig = "\(count)|\(open)"
+    accessibilityLabel = "Inactive clients, \(count), \(open ? "open" : "closed")"
   }
-  private var amsSig = ""
-  func paintAms(_ people: [String: [String: Any]]) {
-    // (the same faces: left as they are — made again, they flew in from the corner inside the list's slide)
-    let sig = amIds.map { id in id + (people[id]?["photo"] != nil ? "+" : "") + ((people[id]?["initials"] as? String) ?? "") }.joined(separator: ",")
-    guard sig != amsSig else { return }
-    amsSig = sig
-    UIView.performWithoutAnimation { paintFaces(people); layoutIfNeeded() }
-  }
-  private func paintFaces(_ people: [String: [String: Any]]) {
-    ams.arrangedSubviews.forEach { $0.removeFromSuperview() }
-    for id in amIds {
-      let p = people[id]
-      let v = UIImageView(image: roundPic(NativeSheetVC.photo(p), initials: p?["initials"] as? String, color: NativeSheetVC.color(p?["color"]), size: 24))
-      v.layer.cornerRadius = 12; v.layer.borderWidth = 2; v.clipsToBounds = true
-      let ring = superview?.backgroundColor ?? .systemBackground
-      v.followLook("ring") { [weak v] tc in v?.layer.setBorder(ring, tc) }
-      v.widthAnchor.constraint(equalToConstant: 24).isActive = true; v.heightAnchor.constraint(equalToConstant: 24).isActive = true
-      ams.addArrangedSubview(v)
-    }
-    setNeedsLayout()
-  }
-  override func layoutSubviews() {
-    super.layoutSubviews()
-    let W = bounds.width, H = bounds.height
-    logo.frame = CGRect(x: 16, y: (H - 40) / 2, width: 40, height: 40); ini.frame = logo.bounds
-    chev.frame = CGRect(x: W - 16 - 14, y: 0, width: 14, height: H)
-    let aw = ams.arrangedSubviews.isEmpty ? 0 : CGFloat(ams.arrangedSubviews.count) * 18 + 6
-    ams.frame = CGRect(x: chev.frame.minX - 8 - aw, y: (H - 24) / 2, width: aw, height: 24)
-    let tx: CGFloat = 69, tw = max(0, ams.frame.minX - 8 - tx)
-    name.frame = CGRect(x: tx, y: H / 2 - 21, width: tw, height: 22)
-    meta.frame = CGRect(x: tx, y: H / 2 + 2, width: tw, height: 18)
-  }
-  // (no grey while touched: it shrinks as one, as the comment cards — Haris 2026-11-03)
 }
 
 // a client's Client Assets: "Client Assets · See all ›", then its folders in a row that scrolls sideways

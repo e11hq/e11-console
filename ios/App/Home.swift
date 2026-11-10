@@ -319,6 +319,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     for v in content {
       if let r = v as? InboxRow { let k = "r:" + r.id; keys.append(k); views[k] = r; continue }
       if let c = v as? HomeCard { let k = "c:" + c.id; keys.append(k); views[k] = c; continue }
+      if let c = v as? ClientListRow { let k = "k:" + c.id; keys.append(k); views[k] = c; continue }
+      if v is ClientsMoreRow { keys.append("k:inactive"); views["k:inactive"] = v; continue }
       // (the Clients tab's and Client Assets' blocks — the clients' group, folders, files: each a cell, the whole width)
       if let b = v as? HomeBlock {
         let k = "b:" + (b.accessibilityIdentifier ?? "\(ObjectIdentifier(b).hashValue)")
@@ -393,7 +395,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     cell.contentConfiguration = r.rowContent
     var acc: [UICellAccessory] = []
     if r.rowHasAccessory { acc.append(.customView(configuration: .init(customView: r, placement: .trailing(), reservedLayoutWidth: .actual, maintainsFixedSize: true))) }
-    acc.append(.disclosureIndicator())
+    if r.rowChevron { acc.append(.disclosureIndicator()) }
     cell.accessories = acc
     let card = HomeCard.rowColor(L.card, late: r.rowLate)
     cell.configurationUpdateHandler = { c, state in
@@ -510,7 +512,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private var cards: [String: HomeCard] = [:]
   private var m: [String: Any] = [:]
   private var L = HomeLook(nil)
-  var people: [String: [String: Any]] = [:] { didSet { if picsKey(oldValue) != picsKey(people) { cards.values.forEach { $0.people = people }; meChanged(); if isInbox && !m.isEmpty { drawInbox(m) }; if isClients { clientsGroup.people = people } } } }
+  var people: [String: [String: Any]] = [:] { didSet { if picsKey(oldValue) != picsKey(people) { cards.values.forEach { $0.people = people }; meChanged(); if isInbox && !m.isEmpty { drawInbox(m) }; if isClients && !m.isEmpty { drawClients(m) } } } }
   private var meId = ""
   var bottomRoom: CGFloat = 120 { didSet { if oldValue != bottomRoom { setNeedsLayout() } } }
   // the top of the app's tab bar: the + sits 14 above it, 18 from the right (phone.css .ph-fab), so it's in place from
@@ -1076,10 +1078,15 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var onToastAct: (() -> Void)?
   func assetsToast(_ t: String, cancel: (() -> Void)?) { onToastAct = cancel; toast(cancel == nil ? ["t": t] : ["t": t, "x": true, "ms": 60000.0]) }
   var assetsMenu: (() -> [CornerMenuItem])?
-  private lazy var clientsGroup: ClientsGroup = {
-    let g = ClientsGroup(); g.onOpen = { [weak self] id in self?.send(["ev": "client", "id": id]) }
-    g.onHold = { [weak self] id in self?.send(["ev": "clientHold", "id": id]) }; return g
+  // the Clients list (fully Apple — Clients.swift): each client its own Apple row, kept by its id; "Inactive Clients" and the
+  // inactive ones under it once it's tapped; a heading with no words parts the two groups
+  private var clientRows: [String: ClientListRow] = [:]
+  private lazy var clientsMore: ClientsMoreRow = {
+    let r = ClientsMoreRow()
+    r.onTap = { [weak self] in guard let self = self else { return }; self.clientsMore.open.toggle(); if !self.m.isEmpty { self.drawClients(self.m) } }
+    return r
   }()
+  private lazy var clientsGap: UILabel = { let l = UILabel(); l.accessibilityIdentifier = "clients-gap"; return l }()
   private var stripClient = ""
   private lazy var assetsStrip: AssetsStrip = {
     let a = AssetsStrip()
@@ -1150,13 +1157,31 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var backFrame: CGRect { CGRect(x: 16, y: safeAreaInsets.top + 22 - BTN / 2, width: BTN, height: BTN) }
   func backTap() { send(["ev": "back"]) }
   func relayout() { if listOn { applyList(animated: true); return }; UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.setNeedsLayout(); self.layoutIfNeeded() } }
-  func clientsFresh() { clientsGroup.closeInactive(); setNeedsLayout() }
+  // (the Clients tab coming back: Inactive Clients closed again)
+  func clientsFresh() { if clientsMore.open { clientsMore.open = false; if !m.isEmpty { drawClients(m) } } }
   private func drawClients(_ model: [String: Any]) {
-    content.filter { $0 !== clientsGroup }.forEach { $0.removeFromSuperview() }
-    clientsGroup.people = people
-    clientsGroup.set((model["rows"] as? [[String: Any]]) ?? [], (model["inactive"] as? [[String: Any]]) ?? [], look: L)
-    if !listOn, clientsGroup.superview !== scroll { scroll.addSubview(clientsGroup) }
-    content = [clientsGroup]
+    content.forEach { if !($0 is ClientListRow) && $0 !== clientsMore && $0 !== clientsGap { $0.removeFromSuperview() } }
+    let active = (model["rows"] as? [[String: Any]]) ?? [], inactive = (model["inactive"] as? [[String: Any]]) ?? []
+    var seen = Set<String>()
+    let row = { (r: [String: Any], off: Bool) -> ClientListRow in
+      let id = r["id"] as? String ?? ""
+      seen.insert(id)
+      let v = self.clientRows[id] ?? {
+        let x = ClientListRow(); x.id = id
+        x.onTap = { [weak self] in self?.send(["ev": "client", "id": id]) }
+        x.onLook = { [weak self] in self?.applyList(animated: false) }
+        self.clientRows[id] = x; return x }()
+      v.set(r, inactive: off, look: self.L, people: self.people)
+      return v
+    }
+    var list: [UIView] = active.map { row($0, false) }
+    if !inactive.isEmpty {
+      clientsMore.count = inactive.count
+      list += [clientsGap, clientsMore]
+      if clientsMore.open { list += inactive.map { row($0, true) } }
+    } else { clientsMore.open = false }
+    for id in clientRows.keys where !seen.contains(id) { clientRows[id] = nil }
+    content = list
     // (+ Add client for Admins — Haris 2026-11-03; the app's own New client sheet)
     if (model["canEdit"] as? Bool) == true { setFab("Add client", "plus") { [weak self] in self?.send(["ev": "addClient"]) } } else { fab.isHidden = true }
     if listOn { applyList(animated: window != nil && !isHidden) }
@@ -1992,12 +2017,14 @@ struct HomeLook {
 // and swipes are the list's own (HomeView).
 protocol AppleRow: UIView {
   var rowContent: UIListContentConfiguration { get }
+  var rowChevron: Bool { get }   // (Apple's › at its right — all but a row that opens in place, as Inactive Clients)
   var rowSig: String { get }
   var rowHasAccessory: Bool { get }
   var rowLeading: Bool { get }
   var rowLate: Bool { get }
   func rowTapped()
 }
+extension AppleRow { var rowChevron: Bool { true } }
 final class HomeCard: UIView, AppleRow {
   var onTap: (() -> Void)?
   var id = ""
@@ -2837,6 +2864,16 @@ extension HomeView: UICollectionViewDelegate {
   // and Trash are on its swipe (Haris 2026-11-09 12:36: "no need for them to be in the menu"). My Tasks' Done tab: read only
   func collectionView(_ cv: UICollectionView, contextMenuConfigurationForItemsAt ips: [IndexPath], point: CGPoint) -> UIContextMenuConfiguration? {
     if ips.count == 1, let key = listDS?.itemIdentifier(for: ips[0]), let row = listViews[key] as? InboxRow { return inboxMenu(row, key) }
+    // (a client held: Apple's menu with its lift — Open · Client Details; its sheet once the menu has closed)
+    if ips.count == 1, let key = listDS?.itemIdentifier(for: ips[0]), let row = listViews[key] as? ClientListRow {
+      let id = row.id
+      return UIContextMenuConfiguration(identifier: key as NSString, previewProvider: nil) { [weak self, weak row] _ in
+        UIMenu(children: [
+          UIAction(title: "Open", image: UIImage(systemName: "arrow.up.right.square")) { _ in HomeView.afterMenu = { row?.rowTapped() } },
+          UIAction(title: "Client Details", image: UIImage(systemName: "info.circle")) { _ in HomeView.afterMenu = { self?.send(["ev": "clientHold", "id": id]) } },
+        ])
+      }
+    }
     guard ips.count == 1, let key = listDS?.itemIdentifier(for: ips[0]), let card = listViews[key] as? HomeCard, !(isList && listTab == "done") else { return nil }
     let id = card.id
     return UIContextMenuConfiguration(identifier: key as NSString, previewProvider: nil) { [weak self] _ in
