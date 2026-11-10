@@ -10,7 +10,7 @@ const dubai = (day, hm = '10:31') => Date.parse(`${day}T${hm}:00+04:00`);
 function setup({ tasks = [], projects = [{ id: 'p1' }, { id: 'p2' }], meta = {} } = {}) {
   const kv = new Map();
   const users = [
-    { id: 'soc', role: 'social' }, { id: 'am', role: 'am' }, { id: 'adm', role: 'admin' },
+    { id: 'soc', role: 'social' }, { id: 'soc2', role: 'social' }, { id: 'am', role: 'am' }, { id: 'adm', role: 'admin' },
     { id: 'prod', role: 'production' }, { id: 'old', role: 'social', active: false },
   ];
   const store = {
@@ -21,7 +21,8 @@ function setup({ tasks = [], projects = [{ id: 'p1' }, { id: 'p2' }], meta = {} 
   const sent = [];
   const webPush = { sendTo: async (id, m) => { sent.push({ id, ...m }); return { sent: 1 }; } };
   let clock = 0;
-  const r = createOccasionReminders({ store, webDir, webPush, isAdm: (u) => u.role === 'admin', now: () => clock });
+  // (soc makes a client's plan posts; soc2 is Social on no client)
+  const r = createOccasionReminders({ store, webDir, webPush, poster: (u) => u.id === 'soc' || u.id === 'old', now: () => clock });
   return { r, sent, at: (t) => { clock = t; } };
 }
 
@@ -36,17 +37,15 @@ test('reminder days: 45, 30, 14 and 7 before, weekends moved to Friday', () => {
   assert.equal(sendDay('2026-12-20', 7), '2026-12-11');     // 13 Dec is a Sunday
 });
 
-test('Social, AMs and Admins get it at 10:30, once; Production and inactive people do not', async () => {
+test('only those who make Content plans\' posts get it at 10:30, once — not AMs, Admins, Production, other Social or inactive people', async () => {
   const { r, sent, at } = setup();
   at(dubai('2026-11-10', '10:29'));
   assert.equal(await r.tick(), 0);
   at(dubai('2026-11-10'));
   await r.tick();
   const xmas = sent.filter((m) => m.title === 'Christmas in 45 days');
-  assert.deepEqual(xmas.map((m) => m.id).sort(), ['adm', 'am', 'soc']);
-  assert.match(xmas.find((m) => m.id === 'am').body, /25 Dec · Nothing planned yet\. Plan posts in the Content calendar\./);
-  assert.match(xmas.find((m) => m.id === 'adm').body, /Plan posts in the Content calendar/);
-  assert.match(xmas.find((m) => m.id === 'soc').body, /Set the Occasion on your post tasks so they count as planned\./);
+  assert.deepEqual(xmas.map((m) => m.id).sort(), ['soc']);
+  assert.match(xmas.find((m) => m.id === 'soc').body, /25 Dec · Nothing planned yet\. Set the Occasion on your post tasks so they count as planned\./);
   assert.equal(xmas[0].view, 'calendar');
   const before = sent.length;
   await r.tick();
@@ -71,6 +70,8 @@ test('the open app gets the same list, only for people who should', () => {
   at(dubai('2026-11-10'));
   assert.ok(r.forUser({ id: 'soc', role: 'social' }).list.some((x) => x.name === 'Christmas'));
   assert.equal(r.forUser({ id: 'prod', role: 'production' }).list.length, 0);
+  assert.equal(r.forUser({ id: 'am', role: 'am' }).list.length, 0);
+  assert.equal(r.forUser({ id: 'soc2', role: 'social' }).list.length, 0);
   at(dubai('2026-11-10', '09:00'));
   assert.equal(r.forUser({ id: 'soc', role: 'social' }).list.length, 0);
 });
