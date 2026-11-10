@@ -205,7 +205,8 @@ final class ClientVC: ClientsPushedVC, UISearchResultsUpdating, UISearchControll
     s.searchBar.autocorrectionType = .no
     search = s
     navigationItem.searchController = s
-    navigationItem.hidesSearchBarWhenScrolling = true
+    // (shown at the top as the approved mock-up's board 2 — under the bar, as Client Assets')
+    navigationItem.hidesSearchBarWhenScrolling = false
     if #available(iOS 16.0, *) { navigationItem.preferredSearchBarPlacement = .stacked }
     h.onAppleResign = { [weak self] in self?.search?.searchBar.resignFirstResponder() }
     h.onAppleFind = { [weak self] q in
@@ -262,8 +263,8 @@ final class AssetsVC: ClientsPushedVC, UISearchResultsUpdating, UISearchControll
       if #available(iOS 16.0, *) { navigationItem.preferredSearchBarPlacement = .stacked }
       return
     }
-    // (a client's Client Assets: Apple's search for its files, under the bar — instead of the box of ours)
-    if h.assets == "client" {
+    // (a client's Client Assets, and a folder — "Search in Brand": Apple's search for its files, under the bar, as the mock-up)
+    if h.assets == "client" || h.assets == "folder" {
       let s = UISearchController(searchResultsController: nil)
       s.obscuresBackgroundDuringPresentation = false
       s.searchResultsUpdater = self

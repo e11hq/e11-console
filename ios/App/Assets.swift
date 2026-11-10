@@ -571,7 +571,7 @@ final class AssetsCtl {
   // a group's heading — Apple's header over it (our words, Apple's header)
   private func head(_ h: HomeView, _ id: String, _ t: String) -> UILabel {
     let l = part(h, "head:" + id) { () -> UILabel in let x = UILabel(); x.accessibilityIdentifier = id; return x }
-    let a = NSAttributedString(string: t, attributes: [.font: UIFont.systemFont(ofSize: 13), .foregroundColor: UIColor.secondaryLabel])
+    let a = HomeView.groupHeading(t)
     if l.attributedText?.isEqual(to: a) != true { l.attributedText = a }
     return l
   }
@@ -587,13 +587,15 @@ final class AssetsCtl {
     }
   }
   // files as Apple's rows (Recently added, what search found): tapped, Quick Look; held, Apple's menu with its lift
-  private func fileRows(_ h: HomeView, _ list: [[String: Any]], client cid: String, found: Bool, marks: [String], whereFrom cname: String?) -> [UIView] {
+  private func fileRows(_ h: HomeView, _ list: [[String: Any]], client cid: String, found: Bool, marks: [String], whereFrom cname: String?, recent: Bool = false) -> [UIView] {
     list.map { x in
       let id = x["id"] as? String ?? ""
       let r = kept(h, (found ? "fs:" : "fr:") + id) { () -> FileListRow in let v = FileListRow(); v.found = found; return v }
       var at = x["where"] as? String ?? ""
       if let c = cname, at.hasPrefix(c + " › ") { at = String(at.dropFirst(c.count + 3)) }
-      r.set(x, line: FileListRow.line(x, at: at), marks: marks, look: h.look)
+      // (Recently added: "JPG · 1.9 MB · Today" — the mock-up; found: where it is · its type · its size)
+      let line = recent ? [FileListRow.line(x, at: ""), AssetsCtl.day(x["at"] as? String ?? "")].filter { !$0.isEmpty }.joined(separator: " · ") : FileListRow.line(x, at: at)
+      r.set(x, line: line, marks: marks, look: h.look)
       r.onTap = { [weak self] in self?.preview(x, among: list) }
       r.menu = { [weak self, weak h] in h.flatMap { self?.fileMenu($0, x, client: cid) } }
       r.onLook = { [weak h] in h?.listAgain() }
@@ -626,7 +628,7 @@ final class AssetsCtl {
       guard let cid = s.client else { break }
       let m = models[cid] ?? [:]
       h.drawAssetsBar(name: m["name"] as? String ?? main.clientPageIfMade?.model["title"] as? String ?? "Client Assets", sub: m["sub"] as? String ?? "", logo: m["logo"] as? String, rgb: m["rgb"], ini: m["ini"] as? String, showLogo: false)   // (just the name — no colour box or logo: Haris 2026-11-04)
-      appleVC(h)?.placeholder("Search \(m["name"] as? String ?? "this client")’s files")
+      appleVC(h)?.placeholder("Search files")
       let all = (m["files"] as? [[String: Any]]) ?? []
       let q = s.q.trimmingCharacters(in: .whitespaces)
       if !q.isEmpty {
@@ -663,7 +665,7 @@ final class AssetsCtl {
         let recent = ((m["recent"] as? [String]) ?? []).compactMap { id in all.first { ($0["id"] as? String) == id } }
         if !recent.isEmpty {
           out.append(head(h, "recent", "Recently added"))
-          out += fileRows(h, recent, client: cid, found: false, marks: [], whereFrom: m["name"] as? String)
+          out += fileRows(h, recent, client: cid, found: false, marks: [], whereFrom: nil, recent: true)
         }
       }
       sweep(h)
@@ -672,7 +674,22 @@ final class AssetsCtl {
       guard let cid = s.client, let fid = s.folder else { break }
       let m = models[cid] ?? [:]
       let f = folderInfo(m, fid)
-      h.drawAssetsBar(name: f?["name"] as? String ?? "Folder", sub: m["name"] as? String ?? "", logo: nil, rgb: nil, ini: nil, showLogo: false)
+      let nf = filesIn(m, fid).count
+      h.drawAssetsBar(name: f?["name"] as? String ?? "Folder", sub: [m["name"] as? String ?? "", "\(nf) file\(nf == 1 ? "" : "s")"].filter { !$0.isEmpty }.joined(separator: " · "), logo: nil, rgb: nil, ini: nil, showLogo: false)
+      appleVC(h)?.placeholder("Search in \(f?["name"] as? String ?? "this folder")")
+      // (searching in it — the mock-up's "Search in Brand": its files and its folders' files, Apple's rows, the words washed)
+      let fq = s.q.trimmingCharacters(in: .whitespaces)
+      if !fq.isEmpty {
+        let inside = Set([fid] + folderTree(m, fid))
+        let all = ((m["files"] as? [[String: Any]]) ?? []).filter { inside.contains($0["folder"] as? String ?? "") }
+        let found = AssetsCtl.find(all, fq)
+        if !found.isEmpty { out.append(head(h, "found", "Files · \(found.count)" + (AssetsCtl.lastLoose ? " — close matches" : ""))) }
+        else { let n = empty(h, "foundNone"); n.set("magnifyingglass", "No Results", "Check the spelling or try a new search."); out.append(n) }
+        out += fileRows(h, found, client: cid, found: true, marks: Find.filter(found, fq) { "\($0["name"] ?? "") \($0["where"] ?? "")" }.marks, whereFrom: m["name"] as? String)
+        sweep(h)
+        h.setFab2("", nil); h.setFab("", "plus", nil)
+        h.setContent(out); return
+      }
       let subs = ((m["folders"] as? [[String: Any]]) ?? []).filter { ($0["parent"] as? String) == fid }
       if !subs.isEmpty { out.append(head(h, "folders", "Folders")) }
       out += folderTiles(h, subs, client: cid)
@@ -680,7 +697,7 @@ final class AssetsCtl {
       // (Select: Apple's ticks on the tiles; the words at the header's right — Select ↔ Cancel)
       let i = stack.firstIndex { $0.h === h }
       let picking = i.flatMap { stack[$0].picked }
-      let fh = head(h, "files", files.isEmpty ? "Files" : "\(files.count) file\(files.count == 1 ? "" : "s")")
+      let fh = head(h, "files", files.isEmpty ? "Files" : "\(files.count) file\(files.count == 1 ? "" : "s")")   // ("14 FILES", Select at its right)
       h.tileSeeAll["h:files"] = files.isEmpty ? nil : (picking == nil ? "Select" : "Cancel", { [weak self, weak h] in
         guard let self = self, let h = h, let j = self.stack.firstIndex(where: { $0.h === h }) else { return }
         self.stack[j].picked = self.stack[j].picked == nil ? [] : nil; self.blocks(h)
@@ -1038,6 +1055,21 @@ final class AssetsCtl {
     }
   }
 
+  // (a file's day: Today, Yesterday, or "Nov 8" — as the mock-up's Recently added)
+  static func day(_ iso: String) -> String {
+    let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    guard let d = f.date(from: iso) ?? ISO8601DateFormatter().date(from: iso) else { return "" }
+    let cal = Calendar.current
+    if cal.isDateInToday(d) { return "Today" }
+    if cal.isDateInYesterday(d) { return "Yesterday" }
+    let o = DateFormatter(); o.setLocalizedDateFormatFromTemplate(cal.isDate(d, equalTo: Date(), toGranularity: .year) ? "MMM d" : "MMM d, yyyy")
+    return o.string(from: d)
+  }
+  // (every folder under one, however deep)
+  private func folderTree(_ m: [String: Any], _ id: String) -> [String] {
+    let kids = ((m["folders"] as? [[String: Any]]) ?? []).filter { ($0["parent"] as? String) == id }.compactMap { $0["id"] as? String }
+    return kids + kids.flatMap { folderTree(m, $0) }
+  }
   // ---------- Info ----------
   private static func when(_ iso: String) -> String {
     let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

@@ -33,9 +33,10 @@ final class FileTile: UIView {
   required init?(coder: NSCoder) { fatalError() }
   // a folder: its colour, its name, "14 files"
   func folder(_ f: [String: Any], lines: Int) {
-    let col = NativeSheetVC.color(f["rgb"]) ?? .systemBlue
+    // (Apple's own folder in Apple's blue, every folder the same — as the Files app: Haris 2026-11-10 14:00)
+    let col = UIColor.systemBlue
     let n = f["files"] as? Int ?? 0, subs = f["subs"] as? Int ?? 0, fin = (f["final"] as? Bool) == true
-    let s = "d|\(f["name"] ?? "")|\(n)|\(subs)|\(fin)|\(String(describing: f["rgb"]))|\(lines)"
+    let s = "d|\(f["name"] ?? "")|\(n)|\(subs)|\(fin)|\(lines)"
     guard s != sig else { return }
     sig = s; info = f; isFolder = true; isClient = false; self.lines = lines; id = f["id"] as? String ?? ""
     pic.image = UIImage(systemName: "folder.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 52, weight: .regular))
@@ -125,7 +126,8 @@ final class FileTile: UIView {
     }
   }
   // the tile's height for its width: the picture as wide as the tile (a folder a little less), then its words
-  static func height(width w: CGFloat, lines: Int) -> CGFloat { w * 0.82 + 6 + CGFloat(lines) * 16 + 15 }
+  static func box(_ w: CGFloat) -> CGFloat { min(w * 0.82, 84) }   // (the picture's square: 84 at most — the mock-up)
+  static func height(width w: CGFloat, lines: Int) -> CGFloat { box(w) + 6 + CGFloat(lines) * 16 + 15 }
   override func layoutSubviews() {
     super.layoutSubviews()
     let W = bounds.width
@@ -137,7 +139,7 @@ final class FileTile: UIView {
       sub.frame = CGRect(x: 0, y: name.frame.maxY, width: W, height: 17)
       return
     }
-    let box = W * 0.82
+    let box = FileTile.box(W)
     if isFolder {
       pic.frame = CGRect(x: (W - box) / 2, y: 0, width: box, height: box)
     } else {
@@ -228,11 +230,11 @@ final class FileListRow: UIView, AppleRow {
     var cfg = UIListContentConfiguration.subtitleCell()
     let ext = (nm as NSString).pathExtension.uppercased()
     if isFolder {
-      cfg.image = UIImage(systemName: "folder.fill")?.withTintColor(NativeSheetVC.color(info["rgb"]) ?? .systemBlue, renderingMode: .alwaysOriginal)
+      cfg.image = UIImage(systemName: "folder.fill")?.withTintColor(.systemBlue, renderingMode: .alwaysOriginal)
       cfg.imageProperties.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 30)
     } else { cfg.image = pic ?? FileListRow.badge(ext) }
-    cfg.imageProperties.reservedLayoutSize = CGSize(width: 40, height: 40)
-    cfg.imageProperties.maximumSize = CGSize(width: 40, height: 40)
+    cfg.imageProperties.reservedLayoutSize = CGSize(width: 44, height: 44)
+    cfg.imageProperties.maximumSize = CGSize(width: 44, height: 44)
     cfg.imageToTextPadding = 13
     cfg.attributedText = FileListRow.marked(nm, marks, font: .systemFont(ofSize: 16), color: L.title)
     cfg.textProperties.numberOfLines = 1; cfg.textProperties.lineBreakMode = .byTruncatingMiddle
@@ -252,10 +254,10 @@ final class FileListRow: UIView, AppleRow {
   }
   // (its picture, square with Apple's rounded corners)
   static func thumb(_ img: UIImage) -> UIImage {
-    UIGraphicsImageRenderer(size: CGSize(width: 40, height: 40)).image { _ in
-      UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: 40, height: 40), cornerRadius: 8).addClip()
-      let s = img.size, k = max(40 / max(1, s.width), 40 / max(1, s.height))
-      img.draw(in: CGRect(x: (40 - s.width * k) / 2, y: (40 - s.height * k) / 2, width: s.width * k, height: s.height * k))
+    UIGraphicsImageRenderer(size: CGSize(width: 44, height: 44)).image { _ in
+      UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: 44, height: 44), cornerRadius: 10).addClip()
+      let s = img.size, k = max(44 / max(1, s.width), 44 / max(1, s.height))
+      img.draw(in: CGRect(x: (44 - s.width * k) / 2, y: (44 - s.height * k) / 2, width: s.width * k, height: s.height * k))
     }.withRenderingMode(.alwaysOriginal)
   }
   // (no picture: its type's badge in its colour — the same colours as the grid's tiles; dynamic, so light / dark switch)
@@ -263,10 +265,10 @@ final class FileListRow: UIView, AppleRow {
     let (bg, fg) = FileTile.colours(ext)
     let t = ext.isEmpty ? "FILE" : String(ext.prefix(4))
     let draw = { (tc: UITraitCollection) -> UIImage in
-      UIGraphicsImageRenderer(size: CGSize(width: 40, height: 40)).image { _ in
-        bg.resolvedColor(with: tc).setFill(); UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: 40, height: 40), cornerRadius: 8).fill()
+      UIGraphicsImageRenderer(size: CGSize(width: 44, height: 44)).image { _ in
+        bg.resolvedColor(with: tc).setFill(); UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: 44, height: 44), cornerRadius: 10).fill()
         let f = UIFont.systemFont(ofSize: t.count > 3 ? 10 : 12, weight: .bold), sz = (t as NSString).size(withAttributes: [.font: f])
-        (t as NSString).draw(at: CGPoint(x: (40 - sz.width) / 2, y: (40 - sz.height) / 2), withAttributes: [.font: f, .foregroundColor: fg.resolvedColor(with: tc)])
+        (t as NSString).draw(at: CGPoint(x: (44 - sz.width) / 2, y: (44 - sz.height) / 2), withAttributes: [.font: f, .foregroundColor: fg.resolvedColor(with: tc)])
       }
     }
     let light = draw(UITraitCollection(userInterfaceStyle: .light)), dark = draw(UITraitCollection(userInterfaceStyle: .dark))

@@ -282,6 +282,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         // (and a folder's files: Select / Cancel)
         if let self = self, ip.section < self.listSecs.count, let all = self.listSecs[ip.section].seeAll {
           let b = UIButton(type: .system); b.setTitle(all.0, for: .normal); b.titleLabel?.font = .systemFont(ofSize: 15)
+          // ("See all ›" as the mock-up: Apple's small chevron after the words)
+          if all.0 == "See all" { b.setImage(UIImage(systemName: "chevron.right", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold)), for: .normal); b.semanticContentAttribute = .forceRightToLeft; b.imageEdgeInsets = UIEdgeInsets(top: 0, left: 4, bottom: 0, right: -4) }
           let key = all.2
           b.addAction(UIAction { [weak self] _ in UISelectionFeedbackGenerator().selectionChanged(); self?.tileSeeAll[key]?.1() }, for: .touchUpInside); b.sizeToFit()
           v.accessories = [.customView(configuration: .init(customView: b, placement: .trailing(), reservedLayoutWidth: .actual))]
@@ -793,9 +795,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         let folders = (a["folders"] as? [[String: Any]]) ?? []
         if !folders.isEmpty {
           let h = clientAssetsHead
-          let t = NSAttributedString(string: "Client Assets", attributes: [.font: UIFont.systemFont(ofSize: 13), .foregroundColor: UIColor.secondaryLabel])
+          let t = HomeView.groupHeading("Client Assets")
           if h.attributedText?.isEqual(to: t) != true { h.attributedText = t }
-          tileSeeAll["h:client-assets"] = ("See All", { [weak self] in self?.send(["ev": "assets", "client": cid]) })
+          tileSeeAll["h:client-assets"] = ("See all", { [weak self] in self?.send(["ev": "assets", "client": cid]) })
           content.append(h)
           var keep = Set<String>()
           for f in folders {
@@ -863,7 +865,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         content.append(clientEmptyView)
         continue
       }
-      content.append(h)
+      // (a client's page: its tasks one Apple group, no status headings — the approved mock-up's board 2; each task's status on
+      //  its line instead of the client's own name)
+      if !isClient { content.append(h) }
       for c in g["cards"] as? [[String: Any]] ?? [] {
         guard let id = c["id"] as? String else { continue }
         seen.insert(id)
@@ -876,7 +880,14 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
           cards[id] = v
         }
         v.people = people
-        v.set(c, look: L)
+        if isClient {
+          var x = c
+          var ml = (c["meta"] as? [[String: Any]]) ?? []
+          if let i = ml.firstIndex(where: { $0["dot"] != nil || ($0["t"] as? String) == (model["title"] as? String) }) { ml.remove(at: i) }
+          ml.insert(["t": gname], at: 0)
+          x["meta"] = ml
+          v.set(x, look: L)
+        } else { v.set(c, look: L) }
         content.append(v)
       }
       if let e = g["empty"] as? String, !e.isEmpty, !unavailable {
@@ -1199,6 +1210,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // a client's page (fully Apple, Haris 2026-11-10): its folders' tiles (kept by folder), their heading, Open · Done
   private var stripTiles: [String: FileTile] = [:]
   private lazy var searchEmpty: AppleEmpty = { let e = AppleEmpty(); e.accessibilityIdentifier = "search-empty"; return e }()
+  // a group's heading on the Clients pages, as the mock-up: capitals, 13 grey, a little spacing (Apple's grouped header)
+  static func groupHeading(_ t: String) -> NSAttributedString {
+    NSAttributedString(string: t.uppercased(), attributes: [.font: UIFont.systemFont(ofSize: 13), .foregroundColor: UIColor.secondaryLabel, .kern: 0.4])
+  }
   private lazy var clientEmptyView: AppleEmpty = { let e = AppleEmpty(); e.accessibilityIdentifier = "client-empty"; return e }()
   private lazy var clientAssetsHead: UILabel = { let l = UILabel(); l.accessibilityIdentifier = "client-assets"; return l }()
   // (Apple's switch: "showDone" — its own name: "done" is a card's tick, which the app does itself)
