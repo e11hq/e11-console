@@ -2731,10 +2731,11 @@ final class MeCtl {
       else { n.set("person.2", "No One Yet") }
       out.append(n)
     }
-    // (what each role can do: its own page — the mock-up's B1)
-    out.append(head(h, "guide", ""))
-    out.append(group(h, "guide", [SetItem(key: "guide", title: "What Each Role Can Do", sym: "info", col: .systemBlue, tap: { [weak self] in self?.open("roles") })]))
-    out.append(foot(h, "note", t["note"] as? String ?? ""))
+    // (what each role can do: its own page — the mock-up's B1. One for each list, so switching Active · Past fades it with
+    //  the list instead of sliding it from where it was — Haris 2026-11-10: "come sliding in on tabs")
+    out.append(head(h, "guide\(teamTab)", ""))
+    out.append(group(h, "guide\(teamTab)", [SetItem(key: "guide", title: "What Each Role Can Do", sym: "info", col: .systemBlue, tap: { [weak self] in self?.open("roles") })]))
+    out.append(foot(h, "note\(teamTab)", t["note"] as? String ?? ""))
   }
   // What Each Role Can Do (the mock-up's B1): each role and what it can do, as Apple's cells
   private func rolesBlocks(_ h: HomeView, _ out: inout [UIView]) {
