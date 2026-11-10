@@ -2035,10 +2035,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     h.onEvent = { [weak self] ev in
       guard let self = self else { return }
       // (Done / Due / Delete on a card: as Home's, straight to the server)
-      if page, self.eventOnServer(ev, self.serverClients, pageMe: self.clientsPageMe) { return }
-      // (a client's page's search: only its own tasks and Client Assets — asked before the shared search below, which took it
-      //  and searched every client: Haris 2026-11-10 15:03)
+      // (a client's page's search: only its own tasks and Client Assets — asked first: the server's events and the shared
+      //  search below both take "find" and searched every client, Haris 2026-11-10 15:03; build 1651's self-test)
       if page, (ev["ev"] as? String) == "find", self.clientSearch(ev["q"] as? String ?? "") { return }
+      if page, self.eventOnServer(ev, self.serverClients, pageMe: self.clientsPageMe) { return }
       if page || (ev["ev"] as? String) != "client", self.pagelessEvent(ev) { return }   // (step 9 — the list's search results' tasks too)
       // (a client held: its sheet, the app's own — nothing for the website)
       if !page, (ev["ev"] as? String) == "clientHold", let id = ev["id"] as? String { self.clientSheet(id); return }
