@@ -63,6 +63,7 @@ final class AppleNav: UINavigationController, UINavigationControllerDelegate, UI
     AppleTabs.shared?.mirrorShown(animated: animated, top: vc)
   }
   func navigationController(_ n: UINavigationController, didShow vc: UIViewController, animated: Bool) {
+    BarLog.note("nav didShow \(type(of: vc))")
     Main.shared.taskPagesGone(stack: Main.shared.allNavs.flatMap { $0.viewControllers })
     Main.shared.clientsNavShown(n)   // (the Clients tab's pages — AppleClients.swift)
     Main.shared.meNavShown(n)   // (Me's pages — AppleMe.swift)

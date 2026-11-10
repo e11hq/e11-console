@@ -143,8 +143,10 @@ class ClientsPushedVC: UIViewController {
     navigationItem.rightBarButtonItem = more
   }
   func menuItems() -> [CornerMenuItem] { h.menuItems }
+  override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); BarLog.note("viewDidAppear \(type(of: self))") }
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
+    BarLog.note("viewWillAppear \(type(of: self))")
     // (over the app's own navigation — Client Assets opened from Me: Apple's bar shown, as over a task)
     if navigationController?.isNavigationBarHidden == true { navigationController?.setNavigationBarHidden(false, animated: a) }
   }
@@ -161,6 +163,7 @@ class ClientsPushedVC: UIViewController {
   func setBar(_ t: String, _ sub: String, _ col: UIColor, _ logo: String?, _ ini: String?, _ showLogo: Bool) {
     let key = "\(t)|\(sub)|\(col)|\(logo ?? "")|\(ini ?? "")|\(showLogo)"
     guard key != shownBar else { return }
+    BarLog.note("setBar \(t)|\(sub)|logo:\(showLogo)")
     shownBar = key
     navigationItem.title = t
     if #available(iOS 26.0, *) { navigationItem.subtitle = sub.isEmpty ? nil : sub }
@@ -177,6 +180,7 @@ class ClientsPushedVC: UIViewController {
     iniLabel.frame = CGRect(x: 0, y: 0, width: 22, height: 22)
     if logo != logoShown { logoShown = logo; logoView.image = nil; logoView.contentMode = .scaleAspectFill }
     if logoView.image == nil { logoView.backgroundColor = col; iniLabel.isHidden = false }
+    BarLog.note("titleView logo")
     if let p = logo, logoView.image == nil {
       FeedLoader.shared.image(p) { [weak self] img in
         DispatchQueue.main.async { guard let self = self, self.logoShown == p, let img = img else { return }; LogoLook.put(img, key: p, in: self.logoView); self.iniLabel.isHidden = true }

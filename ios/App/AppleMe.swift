@@ -290,3 +290,13 @@ enum BigLine {
   }
   static var sets: [[String: Any]] = []
 }
+
+
+// (the self-test, Haris 2026-11-10: the search box's glass coming in late as a client's page slides in — every touch of
+//  ours on Apple's top bar during the slide, with its time, beside the frames; off outside the measurement)
+enum BarLog {
+  static var on = false, t0: CFTimeInterval = 0
+  static var notes: [String] = []
+  static func start() { notes = []; t0 = CACurrentMediaTime(); on = true }
+  static func note(_ w: String) { guard on else { return }; notes.append("\(Int((CACurrentMediaTime() - t0) * 1000))ms \(w)") }
+}

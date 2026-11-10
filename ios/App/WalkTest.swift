@@ -160,6 +160,36 @@ extension Main {
         var o = self.meCtl.selfPlans(); o["barHidden"] = (AppleTabs.shared?.barHiddenNow ?? false)
         self.apple("plansTabBack", o)
       }),
+      // (measurement, Haris 2026-11-10: a client's page sliding in from the Clients list — frame by frame, the search box
+      //  and its glass in Apple's bar, and every touch of ours on the bar with its time)
+      ("aBar", { self.tab("projects") }),
+      ("aBarWait", {}),
+      ("aBarPush", {
+        BarLog.start()
+        let nav = AppleTabs.shared?.clientsNav
+        SelfFrames.run(1.6, {
+          let t = Int((CACurrentMediaTime() - BarLog.t0) * 1000)
+          guard let bar = nav?.navigationBar, let w = bar.window else { return ["t": t, "bar": false] }
+          var q: [UIView] = [bar]; var fields: [String] = []
+          while !q.isEmpty { let v = q.removeFirst(); q += v.subviews
+            guard let tf = v as? UISearchTextField else { continue }
+            let f = tf.convert(tf.bounds, to: w); let pa = tf.layer.presentation()?.opacity ?? tf.layer.opacity
+            var bg: [String] = []
+            var r: [UIView] = tf.subviews
+            while !r.isEmpty { let x = r.removeFirst(); r += x.subviews
+              let n = String(describing: type(of: x))
+              if n.contains("Background") || n.contains("Glass") || n.contains("Effect") || n.contains("Backdrop") {
+                bg.append("\(n) a\(String(format: "%.2f", x.layer.presentation()?.opacity ?? x.layer.opacity))\(x.isHidden ? " hidden" : "") \(Int(x.bounds.width))x\(Int(x.bounds.height))")
+              }
+            }
+            fields.append("\(tf.placeholder ?? "") x\(Int(f.minX)) y\(Int(f.minY)) a\(String(format: "%.2f", pa)) bg[\(bg.joined(separator: "; "))] tfbg:\(tf.backgroundColor.map { "\($0)" } ?? "nil")")
+          }
+          return ["t": t, "fields": fields]
+        }) { frames in self.apple("barFrames", ["frames": frames, "log": BarLog.notes]); BarLog.on = false }
+        _ = self.clientsListIfMade?.selfOpenFirstClient()
+      }),
+      ("aBarRead", {}),
+      ("aBarBack", { self.tab("projects"); AppleTabs.shared?.clientsNav.popToRootViewController(animated: false) }),
       // a long-ago comment opened as from the Inbox: in view once everything has come
       ("aFocus", { if let b = best { self.openTaskPage(b.0, tab: "comments", focus: "\(b.0)~\(b.1)") } }),
       ("aFocusWait", {}),
