@@ -307,6 +307,9 @@ status pills ours. A skeleton: status cell, occasions, posts by day; Send Back �
 while a post is marked); ••• Copy Link and **Trash Skeleton — only its maker (the SE) and the Social Manager, only before any
 task is made from it, 30 days in the Trash** (new: website and server too). A post: Apple's sheet, Ask for Changes · Looks
 Good; files in Quick Look, links in Safari. Ask for changes: Apple's sheet. Not started: Apple's empty state.
+**Remind Haris before any Mac app work starts (Haris 2026-11-10 18:34):** the Mac App Store app needs a build for
+content skeleton links (files…/p/<id> — the handler is in mac/swift/main.swift on main, commit 4815aab; the server
+1.9.30 already tells Apple /p/ is the apps'): until it's out, a skeleton link on a Mac with the app may not open there.
 **Remind Haris once every page is done page by page (Haris 2026-11-10 17:39):** (B) take out the leftover website code from
 the Apple pages (about 60 `pageReady` branches — dead on the phone, which runs without the website), moving the main
 self-test's checks into the no-website run (`walktest.py --apple`) page by page first; and the smoothness check — the
