@@ -104,7 +104,7 @@ extension Main {
     let roles = { (l: [[String: Any]]) -> [String] in l.prefix(8).map { "\($0["name"] ?? "?"): \(($0["role"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "<none>")" } }
     let p = { self.taskPages.last }
     return [
-      ("aStart", { self.apple("start", ["cards": cards.count, "task": best?.0 ?? "", "comments": best?.2 ?? 0, "pageReady": self.pageReady]) }),
+      ("aStart", { self.apple("start", ["cards": cards.count, "task": best?.0 ?? cards.first ?? "", "comments": best?.2 ?? 0, "pageReady": self.pageReady]) }),
       // Home's In review box: My Tasks, Waiting for CD review on
       ("aReview", { self.tab(self.tabKeys.first ?? "today"); DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.homeView.onEvent?(["ev": "review"]) } }),
       ("aReviewRead", {
@@ -113,7 +113,9 @@ extension Main {
         self.myTasksF = (AppData.shared.meModel("tasks", "myTasksDefault")?["filters"] as? [String: Any]) ?? [:]; self.myTasksAgain()
       }),
       // a task's @ lists: the roles under the names — the description's people and the comment box's
-      ("aTask", { self.tab(self.tabKeys.first ?? "today"); if let t = best?.0 { self.openTaskPage(t, tab: "comments", focus: "") } }),
+      // (any task when none in the test's copy has four comments — 1655's check opened none and read empty lists)
+      ("aTask", { self.tab(self.tabKeys.first ?? "today"); if let t = best?.0 ?? cards.first { self.openTaskPage(t, tab: "comments", focus: "") } }),
+      ("aTaskWait", {}),
       ("aTaskRoles", {
         let desc = (p()?.model?["mentionable"] as? [[String: Any]]) ?? [], box = self.composeIfMade?.mentionable ?? []
         self.apple("roles", ["desc": roles(desc), "box": roles(box), "rows": (desc.isEmpty ? box : desc).prefix(8).map { PickList.person($0) {}.sub ?? "<none>" }])
