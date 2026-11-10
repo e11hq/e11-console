@@ -3117,7 +3117,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // (the comments in Apple's list — Haris 2026-11-09: each row's height steady, at the latest and back at the top; a
       //  swipe starting on a comment is its Reply, never Details; on the room beside it, Details; the hold menu there)
       ("tpageFeed", pause(2500) + "return '{}'", { self.selfResult["feedAt"] = self.taskPages.last?.feed?.selfCheck() ?? [:]; self.selfResult["feedDays"] = CommentsFeed.selfTestDays(); if let f = self.taskPages.last?.feed { f.scroll.setContentOffset(CGPoint(x: 0, y: -f.scroll.contentInset.top), animated: true) } }),
-      ("tpageFeedTop", pause(1500) + "return '{}'", { self.selfResult["feedTop"] = self.taskPages.last?.feed?.selfCheck() ?? [:]; self.taskPages.last?.feed?.toEnd(animated: false) }),
+      ("tpageFeedTop", pause(1500) + "return '{}'", { self.selfResult["feedTop"] = self.taskPages.last?.feed?.selfCheck() ?? [:]; self.selfResult["feedBar"] = Int((self.taskPages.last?.barBottom ?? -1).rounded()); self.taskPages.last?.feed?.toEnd(animated: false) }),
       // (Comments → Details as the swipe does it — for the film: nothing of Comments may show on Details on the way)
       ("tpageSwipeDetails", pause(1500) + "return '{}'", { if let p = self.taskPages.last { self.toDetailsFromComments(p) } }),
       ("tpageBack", pause(1500) + "return JSON.stringify({ webTask: !!ui.taskId })", { if let p = self.taskPages.last { p.setTab("details", tell: true); self.closeTaskPage(p, animated: false) } }),

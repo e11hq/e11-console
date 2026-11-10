@@ -553,7 +553,7 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
       beside = ownsSwipe(at: CGPoint(x: 6, y: f.midY), in: scroll)
     }
     let parts = order.first.flatMap { itemsById[$0] }.flatMap { menu($0) }?.children.count ?? -1
-    return ["rows": rows, "swipeOn": on, "swipeBeside": beside, "menu": parts, "count": order.count, "list": String(describing: type(of: scroll))]
+    return ["rows": rows, "swipeOn": on, "swipeBeside": beside, "menu": parts, "count": order.count, "list": String(describing: type(of: scroll)), "topRoom": Int(topInset.rounded())]
   }
   var shownCount: Int { order.count }
   @objc private func tappedList() { window?.endEditing(true) }

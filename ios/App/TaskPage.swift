@@ -410,6 +410,9 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     spinner.center = CGPoint(x: W / 2, y: barBottom + 60)
     if scroll.contentInset.top != barBottom { scroll.contentInset.top = barBottom; scroll.verticalScrollIndicatorInsets.top = barBottom; scroll.contentOffset.y = -barBottom }
     if scroll.verticalScrollIndicatorInsets.top != barBottom { scroll.verticalScrollIndicatorInsets.top = barBottom }
+    // (the comments' list follows the bar too — made before the page had its bar (opened from a notification), its day pills
+    //  sat under Details · Comments: Haris 2026-11-10)
+    if let f = feed, f.topInset != barBottom { f.topInset = barBottom }
     scroll.verticalScrollIndicatorInsets.bottom = bottom + 8   // (down to just above the bottom edge)
     // (room under the list for Mark complete, and the keyboard or the description's format bar)
     let inset = max(max(safeAreaInsets.bottom, 20) + (fab.isHidden ? 16 : 72), coverNow() + 16)
