@@ -69,7 +69,14 @@ export function createServer(cfg) {
     webPush.sendTo = async (userId, msg, opts) => {
       // (the iPhone app: no expense claims — they're on the computer — and its badge counts without them; Haris, 2026-11-01)
       const claim = /^claim/.test(String((msg && msg.kind) || ''));
-      const phoneMsg = msg && Number.isInteger(msg.badge) ? { ...msg, badge: store.list('notifications').filter((x) => x.to === userId && !x.read && !/^claim/.test(x.kind || '')).length } : msg;
+      let phoneMsg = msg && Number.isInteger(msg.badge) ? { ...msg, badge: store.list('notifications').filter((x) => x.to === userId && !x.read && !/^claim/.test(x.kind || '')).length } : msg;
+      // (held on the iPhone: Apple's expanded notification with the app's preview of it — a comment's with Reply, its thread
+      //  passed along so the reply lands in it; anything about a task with Mark as Read and Open Task — Haris 2026-11-10)
+      if (phoneMsg && phoneMsg.taskId && phoneMsg.nid && !phoneMsg.category) {
+        const t = store.get('tasks', String(phoneMsg.taskId));
+        const c = phoneMsg.commentId && t ? (t.comments || []).find((x) => x.id === phoneMsg.commentId) : null;
+        phoneMsg = { ...phoneMsg, category: c ? 'e11.comment' : 'e11.task', ...(c ? { threadId: c.parentId || c.id } : {}) };
+      }
       const [a, b] = await Promise.all([webSend(userId, msg, opts), claim ? Promise.resolve({ sent: 0 }) : apns.sendTo(userId, phoneMsg, opts).catch((e) => { console.error('APNs:', e.message); return { sent: 0 }; })]);
       return { sent: (a.sent || 0) + (b.sent || 0), removed: (a.removed || 0) + (b.removed || 0), apns: b.results || [], apnsWhy: b.why || '' };
     }; }
@@ -823,6 +830,33 @@ export function createServer(cfg) {
       if (req.viewingAs) return json(res, 200, { ok: true });
       const r = await apns.ack(u.id, b.token, b.pid);
       return json(res, r.ok ? 200 : 404, r);
+    }
+    // A notification held on the iPhone (the app's Notification Content Extension): what it's about, as the app's Inbox peek
+    // shows it — the task's name, client, status and facts, and for a comment that comment and the one before it
+    if (p === '/api/notif-peek' && req.method === 'POST') {
+      const b = await readBody(req, 16 * 1024).catch(() => ({}));
+      const data = visibleSnapshot(u).data;
+      const n = (data.notifications || []).find((x) => x.id === String(b.nid || '') && x.to === u.id);
+      if (!n || !n.taskId) return json(res, 200, { ok: true, peek: null });
+      let tk = null;
+      try { tk = homeView.taskPage(u, data, n.taskId); } catch (e) { console.error('notif peek:', e.message); }
+      if (!tk) return json(res, 200, { ok: true, peek: null });
+      const t = (data.tasks || []).find((x) => x.id === n.taskId);
+      const c = n.commentId && t ? (t.comments || []).find((x) => x.id === n.commentId) : null;
+      let comments = [], people = tk.people || {}, canReply = false;
+      if (c) {
+        let fd = null;
+        try { fd = homeView.commentsFeed(u, data, n.taskId, c.parentId || null); } catch (e) { console.error('notif peek:', e.message); }
+        const items = (fd && fd.items) || [], i = items.findIndex((x) => x.id === c.id);
+        if (i >= 0) { comments = items.slice(Math.max(0, i - 1), i + 1); people = { ...people, ...(fd.people || {}) }; canReply = fd.canWrite !== false && !fd.readOnly; }
+      }
+      const prio = (tk.prio || []).find((x) => x.key === u.id) || (tk.prio || []).find((x) => x.label);
+      return json(res, 200, { ok: true, peek: {
+        taskId: n.taskId, me: u.id, title: tk.title || '', client: tk.client || null, done: !!tk.done,
+        status: tk.status ? { name: tk.status.name, rgb: tk.status.rgb } : null, dates: tk.dates || null,
+        creator: tk.creator ? tk.creator.id : null, assignees: (tk.assignees || []).map((x) => x.id), prio: prio ? prio.label : '',
+        desc: String(tk.desc || '').slice(0, 400), comments, people, canReply, threadId: c ? (c.parentId || c.id) : null,
+      } });
     }
     if (p === '/api/apns/unregister' && req.method === 'POST') { const b = await readBody(req, 16 * 1024).catch(() => ({})); apns.unregister(b.token); return json(res, 200, { ok: true }); }
 
