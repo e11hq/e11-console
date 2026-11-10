@@ -109,7 +109,10 @@ export function createServer(cfg) {
       store.kv.set('unassign-managers-v1', JSON.stringify({ at: new Date().toISOString(), tasks: ops.length }));
     } catch (e) { console.error('Unassigning managers failed:', e.message); }
   }
-  const occRemind = createOccasionReminders({ store, webDir, webPush, isAdm: (u) => access.isSuper(u), now: cfg.now || (() => Date.now()) });
+  // (the occasion reminders go only to those who make Content plans' posts: Social Managers and a client's Social
+  //  Executives — Haris 2026-11-10)
+  const planPoster = (u) => access.isSocialMgr(u) || store.list('projects').some((p) => !p.archived && !p.deleted && !p.inactive && access.planEditor(u, p.id));
+  const occRemind = createOccasionReminders({ store, webDir, webPush, poster: planPoster, now: cfg.now || (() => Date.now()) });
   if (cfg.occRemind !== false && webDir) occRemind.start();
   const widget = createWidget({ store, access, occRemind: webDir ? occRemind : null, now: cfg.now || (() => Date.now()) });
   const homeView = createHomeView({ webDir, now: cfg.now || (() => Date.now()) });

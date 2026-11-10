@@ -1564,6 +1564,11 @@ final class MeCtl {
     }
   }
   // the Trash, searched for something (a deleted task's update tapped — step 9)
+  // Content plans: its own tab (Social), else Me's page
+  func openPlans() {
+    if main.tabKeys.contains("plans") { main.selectTab("plans"); return }
+    if main.selectedTabKey == "me", tab == "me", !hidden, !stack.isEmpty { openSoon("plans") } else { wantOpen = "plans"; main.selectTab("me") }
+  }
   func openTrash(q: String) {
     trQv = q; trCatv = "all"
     if main.selectedTabKey == "me", tab == "me", !hidden, !stack.isEmpty { openSoon("trash") } else { wantOpen = "trash"; main.selectTab("me") }

@@ -2429,7 +2429,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   func openPush(_ userInfo: [AnyHashable: Any]) {
     let d = userInfo["e11"] as? [String: Any] ?? [:]
     // (Part B step 7: the app's own — where it goes and what's marked read from the copy; a view (the widget): its tab)
-    if let v = d["view"] as? String, AppData.shared.ready { if tabKeys.contains(v) { selectTab(v); return } }
+    // (an occasion not planned yet — the server's "calendar": Content plans, its own tab or Me's page: Haris 2026-11-10,
+    //  tapped it did nothing)
+    if let v = d["view"] as? String, AppData.shared.ready { if v == "calendar" { meCtl.openPlans(); return }; if tabKeys.contains(v) { selectTab(v); return } }
     else if d["view"] == nil, openNotifNative(d["nid"] as? String, hint: d) { return }
     if pageReady { pageJS(waitForApp("window.__e11PushTap && window.__e11PushTap(\(jsonString(d)))")) } else { pendingPush = d; if Main.noPage, !(AppData.shared.ready && quickBooted) { pagelessFlush(1) } }
   }
