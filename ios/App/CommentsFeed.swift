@@ -298,7 +298,7 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     if let pp = m["people"] as? [String: [String: Any]] { people.merge(pp) { _, b in b } }
     let items = ((m["items"] as? [[String: Any]]) ?? []) + pending.map { $0.item }
     let atEnd = mine || wantEnd || isAtEnd()   // (your own voice message, or a comment you've just sent: down to it)
-    if wantEnd { keepId = nil }   // (sent: the latest from now on, not the comment it replied to)
+    if wantEnd { keepId = nil; focusId = nil }   // (sent: the latest from now on, not the comment it replied to)
     wantEnd = false
     let keepTopId = order.first { (frameOf($0)?.maxY ?? 0) > scroll.contentOffset.y + scroll.contentInset.top }
     let keepTopY = keepTopId.flatMap { frameOf($0) }.map { $0.minY - scroll.contentOffset.y }
@@ -378,7 +378,10 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     if countChanged, thread != nil, let s = source.snapshot().indexOfSection("replies"), let h = scroll.headerView(forSection: s) as? DayHead { h.show(repliesWords, pill: false, fade: true) }
     if first { first = false; seenIds = Set(next); endOnLayout = true; toEnd(animated: false); tellSeen(); return }
     // at the latest: new comments stay in view (rule 3); higher up nothing moves — the pill counts them
-    if atEnd { seenIds = Set(next); toEnd(animated: true) }
+    // (opened to a comment — from the Inbox, a notification: it stays the one in view until the finger moves the list; the
+    //  next draw, the server's answer a moment later, took it back to the latest: Haris 2026-11-10 17:03)
+    if focusId != nil { refocus() }
+    else if atEnd { seenIds = Set(next); toEnd(animated: true) }
     else if let id = keepTopId, let f = frameOf(id), let y = keepTopY { scroll.contentOffset.y = f.minY - y }
     let mineNew = newOnes.filter { id in (items.first { ($0["id"] as? String) == id }?["mine"] as? Bool) != true }
     // (someone else's comment arriving while you're looking at these comments: the arrive sound)
@@ -451,7 +454,7 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     if bounds.width > 0 && laidW != bounds.width {
       laidW = bounds.width; scroll.reloadData()
       if let id = pulseWaiting { pulseWaiting = nil; endOnLayout = false; scroll.layoutIfNeeded(); let inbox = pulseFromInbox; pulseFromInbox = false; DispatchQueue.main.async { [weak self] in self?.pulse(id, fromInbox: inbox) } }
-      else if endOnLayout { endOnLayout = false; toEnd(animated: false) }
+      else if endOnLayout { endOnLayout = false; if focusId == nil { toEnd(animated: false) } }
     }
     placeJump()
   }
@@ -461,7 +464,8 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     scroll.contentInset.bottom = bottomRoom; scroll.verticalScrollIndicatorInsets.bottom = bottomRoom
     // (the keyboard dragged down with the list: the list follows the finger, nothing else moves it — keeping it at the
     //  latest at the same time made it jump about, Haris 2026-11-02)
-    if wasEnd && !scroll.isTracking && !scroll.isDragging && !scroll.isDecelerating { toEnd(animated: false) }
+    if focusId != nil { refocus() }
+    else if wasEnd && !scroll.isTracking && !scroll.isDragging && !scroll.isDecelerating { toEnd(animated: false) }
     else if let k = keepId, !scroll.isTracking, !scroll.isDragging { keepInView(k) }
     placeJump()
   }
@@ -471,7 +475,7 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     let end = max(-scroll.contentInset.top, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height)
     scroll.setContentOffset(CGPoint(x: 0, y: end), animated: animated)
   }
-  func scrollViewWillBeginDragging(_ s: UIScrollView) { keepId = nil }   // (moved by the finger: it's theirs again)
+  func scrollViewWillBeginDragging(_ s: UIScrollView) { keepId = nil; focusId = nil }   // (moved by the finger: it's theirs again)
   func scrollViewDidScroll(_ s: UIScrollView) {
     if isAtEnd() { if pendingNew > 0 || jump.alpha > 0 { pendingNew = 0; seenIds = Set(order) }; paintJump(newCount: 0) }
     else if jump.alpha == 0 { paintJump(newCount: pendingNew) }
@@ -500,12 +504,8 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     //  Haris 2026-11-10: "the notification from inbox is not scrolling to view")
     if laidW == 0 || bounds.width == 0 { pulseWaiting = id; pulseFromInbox = fromInbox; endOnLayout = false; return }
     layoutIfNeeded()
-    guard let f = frameOf(id) else { return }
-    // (from the Inbox or a notification, a comment taller than the room it has: its top in the middle of the screen — its
-    //  middle there left its start above the screen: Haris 2026-11-10 14:42; everything else as before)
-    let room = scroll.bounds.height - scroll.contentInset.top - scroll.contentInset.bottom
-    let want = fromInbox && f.height > room * 0.8 ? f.minY - scroll.contentInset.top - room / 2 : f.midY - scroll.bounds.height * 0.4
-    let y = max(-scroll.contentInset.top, min(want, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height))
+    guard let y = focusY(id, inbox: fromInbox) else { return }
+    focusId = id; focusInbox = fromInbox; endOnLayout = false
     // (Apple's own smooth scroll there — it jumped, Haris 2026-11-08; the card lights up as it arrives)
     let moves = abs(scroll.contentOffset.y - y) > 1
     if moves { scroll.setContentOffset(CGPoint(x: 0, y: y), animated: true) }
@@ -518,6 +518,29 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     }
   }
   func has(_ id: String) -> Bool { cells[id] != nil }
+  // (the self-test: the comment opened to, still in view once everything has come — Haris 2026-11-10 17:03)
+  func selfInView(_ id: String) -> [String: Any] {
+    guard let f = frameOf(id) else { return ["row": false] }
+    let top = scroll.contentOffset.y + scroll.contentInset.top, bottom = scroll.contentOffset.y + scroll.bounds.height - scroll.contentInset.bottom
+    return ["row": true, "inView": f.minY < bottom && f.maxY > top, "atEnd": isAtEnd()]
+  }
+  // the comment opened to: where the list stands for it
+  private var focusId: String?, focusInbox = false
+  private func focusY(_ id: String, inbox: Bool) -> CGFloat? {
+    guard let f = frameOf(id) else { return nil }
+    // (from the Inbox or a notification, a comment taller than the room it has: its top in the middle of the screen — its
+    //  middle there left its start above the screen: Haris 2026-11-10 14:42; everything else as before)
+    let room = scroll.bounds.height - scroll.contentInset.top - scroll.contentInset.bottom
+    let want = inbox && f.height > room * 0.8 ? f.minY - scroll.contentInset.top - room / 2 : f.midY - scroll.bounds.height * 0.4
+    return max(-scroll.contentInset.top, min(want, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height))
+  }
+  // (the list drawn again or its room changed while opened to a comment: back to that comment, Apple's smooth scroll)
+  private func refocus() {
+    guard let id = focusId, !scroll.isTracking, !scroll.isDragging, !scroll.isDecelerating else { return }
+    scroll.layoutIfNeeded()
+    guard let y = focusY(id, inbox: focusInbox), abs(scroll.contentOffset.y - y) > 1 else { return }
+    scroll.setContentOffset(CGPoint(x: 0, y: y), animated: true)
+  }
   // (times move on while you look — "now" becomes "1m": a clock every 20 seconds while the comments are on a screen, the
   //  times' words only, nothing else drawn again — Haris 2026-11-10)
   private var clock: Timer?

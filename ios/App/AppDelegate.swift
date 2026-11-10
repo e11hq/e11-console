@@ -2984,6 +2984,19 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       //  Apple's sideways row with See All, Apple's Open · Done; Done then Open again — no open task struck through; its
       //  search, then closed — no wash left on its first task)
       // (Home's In review box: My Tasks with "Waiting for CD review" on — the website loaded too took the tap: Haris 2026-11-10)
+      // (a long-ago comment opened as from the Inbox: still in view once the server's answer has come — it went back to the
+      //  latest: Haris 2026-11-10 17:03)
+      ("focusOpen", pause(1000) + "return '{}'", {
+        let cards = ((AppData.shared.screen("home").model?["groups"] as? [[String: Any]]) ?? []).flatMap { ($0["cards"] as? [[String: Any]]) ?? [] }
+        var best: (String, String, Int)? = nil
+        for c in cards { if let id = c["id"] as? String, let items = AppData.shared.screen("comments", id).model?["items"] as? [[String: Any]], items.count >= 6, let first = items.first?["id"] as? String, items.count > (best?.2 ?? 0) { best = (id, first, items.count) } }
+        if let b = best { self.selfResult["focusTarget"] = b.1; self.openTaskPage(b.0, tab: "comments", focus: "\(b.0)~\(b.1)") } else { self.selfResult["focusTarget"] = "" }
+      }),
+      ("focusRead", pause(5000) + "return '{}'", {
+        let t = self.selfResult["focusTarget"] as? String ?? ""
+        self.selfResult["focusView"] = t.isEmpty ? ["none": true] : (self.taskPages.last?.feed?.selfInView(t) ?? ["feed": false])
+        for p in self.taskPages { self.closeTaskPage(p, animated: false) }
+      }),
       ("homeReview", pause(1000) + "return '{}'", { self.homeView.onEvent?(["ev": "review"]) }),
       ("homeReviewRead", pause(2000) + "return '{}'", { self.selfResult["reviewCd"] = (self.myTasksF["cd"] as? Bool) == true; self.selfResult["reviewTab"] = self.selectedTabKey; self.myTasksF = (AppData.shared.meModel("tasks", "myTasksDefault")?["filters"] as? [String: Any]) ?? [:]; self.selfTapTab("today") }),
       ("clTab", "return '{}'", { self.selfTapTab("projects") }),
