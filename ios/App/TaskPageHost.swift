@@ -568,6 +568,7 @@ extension Main {
     }
     f.onLoaded = { [weak self, weak p] m in
       if let ml = m["mentionable"] as? [[String: Any]] { self?.composeIfMade?.mentionable = ml }
+      self?.composeIfMade?.taskFirst = PickList.taskFirst(p?.model, comments: (m["items"] as? [[String: Any]]) ?? [])
       self?.composeIfMade?.filesFor = { [weak p] in p?.taskFilesForPick ?? [] }
     }
     f.onOpenFile = { [weak self] list, i in self?.openFiles(list, at: i) }

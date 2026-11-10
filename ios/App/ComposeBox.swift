@@ -72,6 +72,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
   private let replyPill = UIButton(type: .custom)
   var editing: String? { didSet { paintSend() } }
   var mentionable: [[String: Any]] = []
+  var taskFirst: [String] = []   // (the task's own people first in the @ list — PickList.taskFirst)
   var filesFor: (() -> [[String: Any]])?   // the task's files, for # (Haris 2026-11-02: picked, a card on the comment)
   var cookies: (@escaping (String) -> Void) -> Void = { $0("") }
   var onSend: (([String: Any], @escaping (Bool) -> Void) -> Void)?   // the act body → sent?
@@ -320,7 +321,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     }
     guard let m = before.range(of: "@([A-Za-z]*)$", options: .regularExpression) else { mentions.isHidden = true; return }
     let q = String(before[m].dropFirst()).lowercased()
-    let hits = mentionable.filter { q.isEmpty || ($0["name"] as? String ?? "").lowercased().split(separator: " ").contains { $0.hasPrefix(q) } }.prefix(4)
+    let hits = PickList.ordered(mentionable.filter { q.isEmpty || ($0["name"] as? String ?? "").lowercased().split(separator: " ").contains { $0.hasPrefix(q) } }, taskFirst).prefix(4)
     guard !hits.isEmpty else { mentions.isHidden = true; return }
     let at = (before as NSString).length - q.count - 1
     mentions.rows = hits.map { p in PickList.person(p) { [weak self] in self?.insertMention(p, at: at) } }
@@ -1010,6 +1011,22 @@ final class PickList: UITableView, UITableViewDataSource, UITableViewDelegate {
     register(UITableViewCell.self, forCellReuseIdentifier: "r")
   }
   required init?(coder: NSCoder) { fatalError() }
+  // the task's own people first — its assignees, its guardian, who made it, then who commented (the latest first); everyone
+  // else after them as before, so anyone can still be found by typing (Haris 2026-11-10)
+  static func taskFirst(_ task: [String: Any]?, comments: [[String: Any]] = []) -> [String] {
+    var out: [String] = []
+    let add = { (id: String?) in if let id = id, !id.isEmpty, !out.contains(id) { out.append(id) } }
+    ((task?["assignees"] as? [[String: Any]]) ?? []).forEach { add($0["id"] as? String) }
+    add(task?["guardian"] as? String)
+    add((task?["creator"] as? [String: Any])?["id"] as? String)
+    comments.reversed().forEach { add($0["who"] as? String) }
+    return out
+  }
+  static func ordered(_ list: [[String: Any]], _ first: [String]) -> [[String: Any]] {
+    guard !first.isEmpty else { return list }
+    let rank = { (p: [String: Any]) -> Int in first.firstIndex(of: p["id"] as? String ?? "") ?? Int.max }
+    return list.enumerated().sorted { let a = rank($0.element), b = rank($1.element); return a != b ? a < b : $0.offset < $1.offset }.map { $0.element }
+  }
   // (one way to make the rows, for the comment box and the description alike)
   static func person(_ p: [String: Any], pick: @escaping () -> Void) -> Row {
     let id = p["id"] as? String ?? ""

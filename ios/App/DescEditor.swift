@@ -312,7 +312,7 @@ extension TaskPage {
     guard let m = before.range(of: "@([A-Za-z]*)$", options: .regularExpression) else { hideMentions(); return }
     let q = String(before[m].dropFirst()).lowercased()
     let all = (model?["mentionable"] as? [[String: Any]]) ?? []
-    let hits = all.filter { q.isEmpty || ($0["name"] as? String ?? "").lowercased().split(separator: " ").contains { $0.hasPrefix(q) } }.prefix(4)
+    let hits = PickList.ordered(all.filter { q.isEmpty || ($0["name"] as? String ?? "").lowercased().split(separator: " ").contains { $0.hasPrefix(q) } }, PickList.taskFirst(model)).prefix(4)
     if hits.isEmpty { hideMentions(); return }
     let at = (before as NSString).length - q.count - 1
     mentionBox.rows = hits.map { p in PickList.person(p) { [weak self] in self?.insertMention(p, from: at) } }
