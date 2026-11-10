@@ -46,7 +46,7 @@ try:
         r = api('/api/app/act', {'ev': 'cd', 'id': prod[0]['id'], 'choice': 'cd', 'op': 'cd1'})
         print('CD', prod[0]['email'], r.get('ok'), r.get('error', ''))
         roles.append(('Creative Director', prod[0]['email']))
-    for label, role in (() if APPLE else (('Account Manager', 'am'), ('Production', 'production'), ('Social', 'social'))):
+    for label, role in ((('Social', 'social'),) if APPLE else (('Account Manager', 'am'), ('Production', 'production'), ('Social', 'social'))):   # (--apple: Social too, for its own Plans tab)
         u = next((x for x in users if x.get('role') == role and x.get('email') not in [e for _, e in roles] + [EMAIL]), None)
         roles.append((label, u['email'] if u else add(f'walk-{role}@test.e11', f'Walk {label}', role)))
     if not APPLE:
@@ -138,6 +138,13 @@ if APPLE:
     pl, pp = a.get('plans') or {}, a.get('plan') or {}
     check(pl.get('kind') == 'plans' and pl.get('apple') is True and not pl.get('loading') and isinstance(pl.get('rows'), int) and pl.get('rows', -1) >= 0 and (pl.get('rows', 0) > 0 or pl.get('empty') == 'No Clients'), f"Content plans: the list from the phone's copy, in Apple's navigation {pl}")
     check(pl.get('rows', 0) == 0 or (pp.get('kind') == 'plan' and not pp.get('loading') and (pp.get('status') is True or pp.get('empty') == 'Not Started Yet')), f"Content plans: a client's month — its status cell or Apple's Not Started Yet {pp}")
-    check(not (out.get('Super Admin') or {}).get('stuck'), "the app ran to the end (no crash, not stuck)")
+    so = (out.get('Social') or {}).get('apple') or {}
+    t0, t1, t2 = so.get('plansTab') or {}, so.get('plansTabPlan') or {}, so.get('plansTabBack') or {}
+    print('measure apple social', json.dumps(so))
+    check(t0.get('shown') is True and t0.get('kind') == 'plans' and t0.get('barHidden') is False and not t0.get('loading'), f"Social's Plans tab: its own Apple screen, the list from the phone's copy {t0}")
+    check(t0.get('rows', 0) == 0 or (t1.get('kind') == 'plan' and t1.get('barHidden') is True and not t1.get('loading')), f"Social's Plans tab: a skeleton opened — the tab bar gone once it's there {t1}")
+    check(t0.get('rows', 0) == 0 or (t2.get('kind') == 'plans' and t2.get('barHidden') is False), f"Social's Plans tab: back — the tab bar there again, the list as it was {t2}")
+    for who in ('Super Admin', 'Social'):
+        check(not (out.get(who) or {}).get('stuck'), f"the app ran to the end as {who} (no crash, not stuck)")
     open(os.path.join(TMP, 'ios-apple.txt'), 'w').write('\n'.join(fails) + '\n')
     sys.exit(1 if fails else 0)

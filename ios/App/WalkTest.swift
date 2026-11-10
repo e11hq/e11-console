@@ -128,6 +128,27 @@ extension Main {
       ("aPlansRead", { self.apple("plans", self.meCtl.selfPlans()); _ = self.meCtl.selfOpenPlan() }),
       ("aPlanWait", {}),
       ("aPlanRead", { self.apple("plan", self.meCtl.selfPlans()); self.meCtl.backToRoot(); self.tab(self.tabKeys.first ?? "today") }),
+      // Social's own Plans tab (its first screen in Apple's navigation): a skeleton opened from it — the tab bar gone once it
+      // has arrived, as a task; back — the tab bar there again and the list as it was (Haris 2026-11-10, the mock-up's A)
+      ("aPlTab", { if self.tabKeys.contains("plans") { self.selfTapTab("plans") } }),
+      ("aPlTabWait", {}),
+      ("aPlTabRead", {
+        guard self.tabKeys.contains("plans") else { return }
+        var o = self.meCtl.selfPlans(); o["shown"] = PlansVC.shared?.view.window != nil; o["barHidden"] = (AppleTabs.shared?.barHiddenNow ?? false)
+        self.apple("plansTab", o); _ = self.meCtl.selfOpenPlan()
+      }),
+      ("aPlTabPlanWait", {}),
+      ("aPlTabPlanRead", {
+        guard self.tabKeys.contains("plans") else { return }
+        var o = self.meCtl.selfPlans(); o["barHidden"] = (AppleTabs.shared?.barHiddenNow ?? false)
+        self.apple("plansTabPlan", o); AppleTabs.shared?.plansNav.popViewController(animated: true)
+      }),
+      ("aPlTabBackWait", {}),
+      ("aPlTabBackRead", {
+        guard self.tabKeys.contains("plans") else { return }
+        var o = self.meCtl.selfPlans(); o["barHidden"] = (AppleTabs.shared?.barHiddenNow ?? false)
+        self.apple("plansTabBack", o)
+      }),
       // a long-ago comment opened as from the Inbox: in view once everything has come
       ("aFocus", { if let b = best { self.openTaskPage(b.0, tab: "comments", focus: "\(b.0)~\(b.1)") } }),
       ("aFocusWait", {}),

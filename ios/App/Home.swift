@@ -3357,12 +3357,12 @@ extension HomeView {
     guard let it = meItems[key] else { return }
     var cf = (it.sub.isEmpty && it.pills.isEmpty) ? UIListContentConfiguration.cell() : UIListContentConfiguration.subtitleCell()
     cf.text = it.title
-    cf.textProperties.font = .systemFont(ofSize: 17); cf.textProperties.color = it.danger ? .systemRed : L.title
+    cf.textProperties.font = .systemFont(ofSize: 17, weight: it.bold ? .semibold : .regular); cf.textProperties.color = it.danger ? .systemRed : L.title
     if !it.sub.isEmpty || !it.pills.isEmpty {
       let a = NSMutableAttributedString(string: it.sub, attributes: [.foregroundColor: it.warn ? UIColor.systemOrange : UIColor.secondaryLabel])
       for (j, p) in it.pills.enumerated() { a.append(NSAttributedString(string: (j == 0 && it.sub.isEmpty ? "" : "  ") + p.0, attributes: [.foregroundColor: p.1, .font: UIFont.systemFont(ofSize: 12, weight: .semibold)])) }
       cf.secondaryAttributedText = a
-      cf.secondaryTextProperties.font = .systemFont(ofSize: 13); cf.secondaryTextProperties.numberOfLines = 2
+      cf.secondaryTextProperties.font = .systemFont(ofSize: 13); cf.secondaryTextProperties.numberOfLines = it.bold ? 0 : 2
       cf.textToSecondaryTextVerticalPadding = 2
     }
     if let p = it.person {

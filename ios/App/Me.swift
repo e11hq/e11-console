@@ -121,10 +121,11 @@ struct SetItem {
   var person: (photo: String?, ini: String, rgb: UIColor)? = nil
   var warn = false                 // (the line under it in orange — "Hasn't signed in yet")
   var dim = false
+  var bold = false                 // (a title in semibold, its lines under it in full — a skeleton's status cell)
   var tap: (() -> Void)? = nil
   var hold: (() -> Void)? = nil
   var flip: ((Bool) -> Void)? = nil
-  var sig: String { "\(title)|\(sub)|\(value)|\(sym ?? "")|\(col?.description ?? "")|\(chevron)|\(toggle != nil)|\(danger)|\(pill ?? "")|\(badge ?? "")|\(count)|\(pills.map { $0.0 }.joined(separator: ","))|\(person?.photo ?? "")|\(person?.ini ?? "")|\(warn)|\(dim)|\(tap != nil)|\(hold != nil)" }
+  var sig: String { "\(title)|\(sub)|\(value)|\(sym ?? "")|\(col?.description ?? "")|\(chevron)|\(toggle != nil)|\(danger)|\(pill ?? "")|\(badge ?? "")|\(count)|\(pills.map { $0.0 }.joined(separator: ","))|\(person?.photo ?? "")|\(person?.ini ?? "")|\(warn)|\(dim)|\(bold)|\(tap != nil)|\(hold != nil)" }
 }
 
 final class SetRow: AssetTile {
@@ -2819,6 +2820,10 @@ final class MeCtl {
     let pid = parts.first ?? "", month = parts.count > 1 ? parts[1] : ""
     guard let m = model["plan"] as? [String: Any], (m["pid"] as? String) == pid, month.isEmpty || (m["month"] as? String) == month else {
       h.drawAssetsBar(name: "Content plan", sub: "", logo: nil, rgb: nil, ini: nil, showLogo: false)
+      // (gone while it's open — trashed or deleted elsewhere: the page goes back with a toast, as every page — Live rule)
+      if model["plan"] is NSNull || model["plan"] == nil, apple, let vc = pageVCs[ObjectIdentifier(h)], vc.appeared, AppData.shared.ready {
+        if trashing == nil, vc.navigationController?.topViewController === vc { vc.navigationController?.popViewController(animated: true); DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in self?.top?.toast(["t": "This content skeleton is no longer here"]) } }
+      }
       let n = part(h, "wait") { AppleEmpty() }; if model["plan"] is NSNull { n.set("calendar", "No Longer Here", "This plan is no longer here.") } else { n.setLoading() }; out.append(n); return
     }
     h.drawAssetsBar(name: m["name"] as? String ?? "", sub: m["sub"] as? String ?? "", logo: nil, rgb: nil, ini: nil, showLogo: false)
@@ -2831,7 +2836,9 @@ final class MeCtl {
     var lines = [b["t"] as? String, b["s"] as? String].compactMap { $0 }.filter { !$0.isEmpty }
     if let n = b["note"] as? String, !n.isEmpty { lines.append("“\(n)”") }
     out.append(head(h, "st", ""))
-    out.append(group(h, "st", [SetItem(key: "st", title: st["t"] as? String ?? "", sub: lines.joined(separator: "\n"), sym: sym, col: MeCtl.stCol(k), chevron: false)]))
+    var stItem = SetItem(key: "st", title: st["t"] as? String ?? "", sub: lines.joined(separator: "\n"), sym: sym, col: MeCtl.stCol(k), chevron: false)
+    stItem.bold = true
+    out.append(group(h, "st", [stItem]))
     let occs = (m["occs"] as? [[String: Any]]) ?? []
     if !occs.isEmpty {
       out.append(head(h, "occ", "Occasions this month"))
@@ -2848,8 +2855,12 @@ final class MeCtl {
       out.append(group(h, "d." + dk, ((d["posts"] as? [[String: Any]]) ?? []).map { x in
         let xid = x["id"] as? String ?? ""
         var sub = [x["fmt"] as? String ?? "", x["ch"] as? String ?? ""].filter { !$0.isEmpty }.joined(separator: " · ")
-        var it = SetItem(key: "x." + xid, title: x["title"] as? String ?? "", sub: "", sym: "photo.on.rectangle", col: NativeSheetVC.color(x["fcol"]) ?? .systemGray, tap: { [weak self] in self?.openPost(planId, xid) })
-        if let c = x["check"] as? [String: Any] {
+        // (each format its own symbol in its colour — the mock-up's)
+        let fsym = ["Carousel": "square.stack.fill", "Reel": "play.rectangle.fill", "Story": "circle.dashed", "Video": "video.fill"][x["fmt"] as? String ?? ""] ?? "photo.fill"
+        var it = SetItem(key: "x." + xid, title: x["title"] as? String ?? "", sub: "", sym: fsym, col: NativeSheetVC.color(x["fcol"]) ?? .systemGray, tap: { [weak self] in self?.openPost(planId, xid) })
+        var check = x["check"] as? [String: Any]
+        if let n = checksNow[xid] { check = ["k": n.state == "ok" ? "ok" : "chg", "t": n.state == "ok" ? "Looks good — you" : "You: “\(n.note)”"] }
+        if let c = check {
           sub += "\n" + (c["t"] as? String ?? "")
           it.pills = [((c["k"] as? String) == "ok" ? "✓" : "!", (c["k"] as? String) == "ok" ? .systemGreen : .systemOrange)]
         } else if let p = x["prog"] as? [String: Any] { it.pills = [(p["t"] as? String ?? "", MeCtl.progCol(p["k"] as? String ?? ""))] }
@@ -2866,11 +2877,17 @@ final class MeCtl {
         let a = UIAlertController(title: "Move this content skeleton to the Trash?", message: "\(client)’s \(monthName) skeleton goes to the Trash for 30 days.", preferredStyle: .alert)
         a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         a.addAction(UIAlertAction(title: "Move to Trash", style: .destructive) { _ in
+          // (at once, on the phone's copy: the page goes and the list has it gone; the server's answer then — a no puts it
+          //  back with why — Haris 2026-11-09 "what you do shows at once")
+          let undo = AppData.shared.patch("plans", planId, [:])
+          self?.trashing = planId
+          if undo != nil { AppData.shared.applyLocal([["kind": "plans", "id": planId, "deleted": true]]) }
+          UINotificationFeedbackGenerator().notificationOccurred(.success)
+          if let h = h, let vc = self?.pageVCs[ObjectIdentifier(h)] { vc.navigationController?.popViewController(animated: true) }
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { self?.top?.toast(["t": "Moved to the Trash"]) }
           self?.request(["ev": "plTrash", "plan": planId]) { r in
-            guard (r["ok"] as? Bool) == true else { h?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]); return }
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-            if let h = h, let vc = self?.pageVCs[ObjectIdentifier(h)] { vc.navigationController?.popViewController(animated: true) }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { self?.top?.toast(["t": "Moved to the Trash"]) }
+            self?.trashing = nil
+            guard (r["ok"] as? Bool) == true else { AppData.shared.putBack(undo); self?.top?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]); return }
           }
         })
         self?.main.topMost().present(a, animated: true)
@@ -2882,17 +2899,28 @@ final class MeCtl {
     // a tap says why). Only for the one who approves it now; gone the moment it's no longer theirs.
     let vc = pageVCs[ObjectIdentifier(h)]
     if let ap = m["approve"] as? [String: Any] {
-      let flagged = ap["flagged"] as? Int ?? 0
+      // (with the marks just made, before the server's answer)
+      let posts = ((m["days"] as? [[String: Any]]) ?? []).flatMap { ($0["posts"] as? [[String: Any]]) ?? [] }
+      let flagged = checksNow.isEmpty ? ap["flagged"] as? Int ?? 0 : posts.filter { x in
+        if let n = checksNow[x["id"] as? String ?? ""] { return n.state == "changes" }
+        return ((x["check"] as? [String: Any])?["k"] as? String) == "chg"
+      }.count
       vc?.setTools("\(planId)|\(flagged)") { [weak self, weak h] in
         let back = UIBarButtonItem(title: "Send Back", primaryAction: UIAction { _ in self?.askNote(title: "Send back for changes", hint: flagged > 0 ? "A note for the whole skeleton (optional) — the posts you marked go with it." : "What should change?", optional: flagged > 0) { note, done in
-          self?.request(["ev": "plBack", "plan": planId, "note": note]) { r in done((r["ok"] as? Bool) == true ? nil : r["error"] as? String ?? "That didn’t work — try again") } } })
+          // (at once: sent back on the phone's copy, the note sheet gone; a no from the server puts it back with why)
+          let undo = AppData.shared.patch("plans", planId, ["status": "changes"])
+          done(nil)
+          self?.request(["ev": "plBack", "plan": planId, "note": note]) { r in if (r["ok"] as? Bool) != true { AppData.shared.putBack(undo); self?.top?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]) } } } })
         let ok = UIBarButtonItem(title: "Approve", primaryAction: UIAction { _ in
           guard let self = self else { return }
           if flagged > 0 { UINotificationFeedbackGenerator().notificationOccurred(.warning); h?.toast(["t": "\(flagged) post\(flagged == 1 ? " is" : "s are") marked Ask for Changes — send it back instead"]); return }
           let a = UIAlertController(title: "Approve this content skeleton?", message: "After this, tasks can be made from it on the computer.", preferredStyle: .alert)
           a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
           a.addAction(UIAlertAction(title: "Approve", style: .default) { [weak self] _ in
-            self?.request(["ev": "plApprove", "plan": planId]) { [weak h] r in if (r["ok"] as? Bool) != true { h?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]) } else { UINotificationFeedbackGenerator().notificationOccurred(.success) } }
+            // (at once: approved on the phone's copy; a no from the server puts it back with why)
+            let undo = AppData.shared.patch("plans", planId, ["status": "approved"])
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            self?.request(["ev": "plApprove", "plan": planId]) { [weak h] r in if (r["ok"] as? Bool) != true { AppData.shared.putBack(undo); h?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]) } }
           })
           a.preferredAction = a.actions.last
           self.main.topMost().present(a, animated: true)
@@ -2902,6 +2930,7 @@ final class MeCtl {
       }
     } else { vc?.setTools("", nil) }
     if let f = m["foot"] as? String, !f.isEmpty { out.append(foot(h, "pfoot", f, centered: true)) }
+    DispatchQueue.main.async { [weak self] in self?.refreshPost() }
   }
   // 🔍 on Content plans (Haris 2026-11-04): the months the app reaches — the one on screen first — clients and posts
   private func planFind(_ h: HomeView, _ raw: String) {
@@ -2938,24 +2967,45 @@ final class MeCtl {
       Find.mark(views, (r["marks"] as? [String]) ?? Find.filter(titles, q) { "\($0["title"] ?? "") \($0["sub"] ?? "")" }.marks)
     }
   }
+  // a post marked, shown on the skeleton at once (its line under it, and Approve dimmed or not) until the server's answer
+  // is in the copy; a no puts it back with why (Haris 2026-11-09 "what you do shows at once")
+  private var checksNow: [String: (state: String, note: String)] = [:]
+  private var trashing: String?
+  // the post open in its sheet: drawn again from the copy as it changes (Live), gone with a toast if the post is gone
+  private weak var postShown: PlanPostVC?
+  private func refreshPost() {
+    guard let vc = postShown, vc.presentingViewController != nil else { return }
+    if let np = AppData.shared.meModel("plans", "plansPost", [vc.planId, vc.postId]) { vc.update(np); return }
+    postShown = nil
+    vc.dismiss(animated: true) { [weak self] in self?.top?.toast(["t": "This post is no longer here"]) }
+  }
+  private func reviewNow(_ plan: String, _ post: String, _ state: String, _ note: String) {
+    checksNow[post] = (state, note)
+    stack.filter { $0.kind == "plan" }.forEach { draw($0) }
+    request(["ev": "plReview", "plan": plan, "post": post, "state": state, "note": note]) { [weak self] r in
+      guard let self = self else { return }
+      self.checksNow[post] = nil
+      if (r["ok"] as? Bool) != true { self.top?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]) }
+      self.stack.filter { $0.kind == "plan" }.forEach { self.draw($0) }
+    }
+  }
   private func openPost(_ plan: String, _ post: String) {
     request(["ev": "plPost", "plan": plan, "post": post]) { [weak self] r in
       guard let self = self else { return }
       guard let p = r["post"] as? [String: Any] else { (self.top)?.toast(["t": r["error"] as? String ?? "This post is no longer here"]); return }
       let client = ((self.model["plan"] as? [String: Any])?["name"] as? String) ?? ""
-      let vc = PlanPostVC(p, line: [client, p["day"] as? String ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
+      let vc = PlanPostVC(p, line: [client, p["day"] as? String ?? ""].filter { !$0.isEmpty }.joined(separator: " · "), plan: plan, post: post)
+      self.postShown = vc
       vc.onReview = { [weak self, weak vc] state in
         guard let self = self else { return }
         if state == "changes" {
           self.askNote(title: "Ask for changes", hint: "\(p["title"] as? String ?? "") — what should change?", optional: false, from: vc) { note, done in
-            self.request(["ev": "plReview", "plan": plan, "post": post, "state": "changes", "note": note]) { r in
-              if (r["ok"] as? Bool) == true { done(nil); vc?.dismiss(animated: true) } else { done(r["error"] as? String ?? "That didn’t work — try again") }
-            }
+            done(nil); vc?.dismiss(animated: true)
+            self.reviewNow(plan, post, "changes", note)
           }
         } else {
-          self.request(["ev": "plReview", "plan": plan, "post": post, "state": "ok"]) { r in
-            if (r["ok"] as? Bool) == true { UINotificationFeedbackGenerator().notificationOccurred(.success); vc?.dismiss(animated: true) } else { vc?.alert(r["error"] as? String ?? "That didn’t work — try again") }
-          }
+          UINotificationFeedbackGenerator().notificationOccurred(.success); vc?.dismiss(animated: true)
+          self.reviewNow(plan, post, "ok", "")
         }
       }
       vc.onOpenFile = { [weak self] all, i in self?.main.openFiles(all.map { ["id": $0["path"] as? String ?? "", "path": $0["path"] as? String ?? "", "name": $0["name"] as? String ?? "File"] }, at: i) }
@@ -3490,11 +3540,19 @@ final class PlanMonthBar: UIView, HomeBlock {
 // the client · day under it; what's in it as Apple's grouped list; Ask for Changes · Looks Good on Apple's toolbar for the
 // approver. A file tapped: the app's Quick Look over the sheet, sideways through all the post's files; a link: Safari in the app.
 final class PlanPostVC: UITableViewController {
-  private let p: [String: Any], line: String
+  private var p: [String: Any]
+  private let line: String
+  let planId: String, postId: String
   var onReview: ((String) -> Void)?, onOpenFile: (([[String: Any]], Int) -> Void)?
   private struct Row { var title: String; var value = ""; var sub = ""; var col: UIColor? = nil; var sym: String? = nil; var file: [String: Any]? = nil; var rtl = false; var body = false }
   private var secs: [(head: String, rows: [Row])] = []
-  init(_ p: [String: Any], line: String) { self.p = p; self.line = line; super.init(style: .insetGrouped) }
+  init(_ p: [String: Any], line: String, plan: String, post: String) { self.p = p; self.line = line; planId = plan; postId = post; super.init(style: .insetGrouped) }
+  // (live: changed elsewhere while it's open — its rows again, crossfading; only when what it shows changed)
+  func update(_ np: [String: Any]) {
+    guard isViewLoaded, (try? JSONSerialization.data(withJSONObject: np, options: .sortedKeys)) != (try? JSONSerialization.data(withJSONObject: p, options: .sortedKeys)) else { return }
+    p = np; build()
+    UIView.transition(with: tableView, duration: 0.25, options: [.transitionCrossDissolve, .allowUserInteraction]) { self.tableView.reloadData() }
+  }
   required init?(coder: NSCoder) { fatalError() }
   private var files: [[String: Any]] { (((p["made"] as? [[String: Any]]) ?? []) + ((p["refs"] as? [[String: Any]]) ?? [])).filter { $0["link"] == nil } }
   override func viewDidLoad() {
@@ -3504,6 +3562,10 @@ final class PlanPostVC: UITableViewController {
     navigationItem.leftBarButtonItem = UIBarButtonItem(systemItem: .close, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "r")
     tableView.separatorColor = HomeLook.line
+    build()
+  }
+  private func build() {
+    secs = []
     var top: [Row] = [Row(title: "Format", value: p["fmt"] as? String ?? ""), Row(title: "Day", value: p["day"] as? String ?? "")]
     if let o = p["occ"] as? String, !o.isEmpty { top.append(Row(title: "Occasion", value: o)) }
     if let c = p["ch"] as? String, !c.isEmpty { top.append(Row(title: "Channels", value: c)) }
@@ -3526,8 +3588,8 @@ final class PlanPostVC: UITableViewController {
       let ask = UIBarButtonItem(title: "Ask for Changes", primaryAction: UIAction { [weak self] _ in self?.onReview?("changes") })
       let ok = UIBarButtonItem(title: "Looks Good", primaryAction: UIAction { [weak self] _ in self?.onReview?("ok") })
       if #available(iOS 26.0, *) { ok.style = .prominent } else { ok.style = .done }
-      toolbarItems = [ask, .flexibleSpace(), ok]
-    }
+      if toolbarItems == nil { toolbarItems = [ask, .flexibleSpace(), ok] }
+    } else if toolbarItems != nil { toolbarItems = nil; navigationController?.setToolbarHidden(true, animated: true) }
   }
   override func viewWillAppear(_ a: Bool) { super.viewWillAppear(a); navigationController?.setToolbarHidden(toolbarItems?.isEmpty ?? true, animated: false) }
   override func numberOfSections(in tv: UITableView) -> Int { secs.count }

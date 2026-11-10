@@ -175,6 +175,8 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
       } }
     }
   }
+  // (the self-test: Apple's tab bar hidden now)
+  var barHiddenNow: Bool { if #available(iOS 18.0, *) { return isTabBarHidden }; return tabBar.isHidden }
   private func hideBar(_ h: Bool, animated: Bool = false) {
     if #available(iOS 18.0, *) { if isTabBarHidden != h { setTabBarHidden(h, animated: animated) } } else if tabBar.isHidden != h { tabBar.isHidden = h }
   }
