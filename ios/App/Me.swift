@@ -1691,7 +1691,10 @@ final class MeCtl {
         self?.main.openFiles([["id": p, "path": p, "name": r["name"] as? String ?? "Expense claim.pdf", "size": r["size"] ?? 0]], at: 0)
       }
     case "pfTest":
-      main.serverTask.request("/api/push/test", body: ["token": main.lastToken ?? ""]) { r in say(r.map { MeCtl.testSaid($0) } ?? "No connection — try again") }
+      main.withToken { [weak self] t, why in
+        guard let t = t else { say(why ?? "iPhone gave no notification address"); return }
+        self?.main.serverTask.request("/api/push/test", body: ["token": t]) { r in say(r.map { MeCtl.testSaid($0) } ?? "No connection — try again") }
+      }
     case "pfOwner":
       main.serverTask.request("/api/owner-view", body: ["mode": ev["mode"] as? String ?? "off"]) { [weak self] r in
         if (r?["ok"] as? Bool) == true { self?.main.restartApp() } else { say(r?["error"] as? String ?? "That didn’t work — try again") }
@@ -3007,8 +3010,11 @@ final class MeCtl {
     top?.toast(["t": "Notifications off"])
   }
   private func pushTest() {
-    main.serverTask.request("/api/push/test", body: ["token": main.lastToken ?? ""]) { [weak self] r in
-      self?.top?.toast(["t": r.map { MeCtl.testSaid($0) } ?? "No connection — try again"])
+    main.withToken { [weak self] t, why in
+      guard let t = t else { self?.top?.toast(["t": why ?? "iPhone gave no notification address"]); return }
+      self?.main.serverTask.request("/api/push/test", body: ["token": t]) { [weak self] r in
+        self?.top?.toast(["t": r.map { MeCtl.testSaid($0) } ?? "No connection — try again"])
+      }
     }
   }
   // what a test notification did, in words — this phone's own answer from Apple (phone.js testSaid)

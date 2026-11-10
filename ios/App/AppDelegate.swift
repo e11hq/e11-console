@@ -2396,6 +2396,18 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let w = pushWaiters; pushWaiters = []
     w.forEach { $0(["ok": true, "state": "on"]) }
   }
+  // this phone's notification address — asked of iPhone now if the app hasn't had it yet (a test notification: the server
+  // then says how this very phone did; iPhone's own refusal is said in words — Haris 2026-11-10: notifications not arriving)
+  func withToken(_ f: @escaping (_ token: String?, _ why: String?) -> Void) {
+    if let t = lastToken { f(t, nil); return }
+    var done = false
+    let once: (String?, String?) -> Void = { t, w in if !done { done = true; f(t, w) } }
+    pushWaiters.append { [weak self] r in
+      if (r["ok"] as? Bool) == true { once(self?.lastToken, nil) } else { once(nil, (r["error"] as? String) ?? "iPhone gave no address") }
+    }
+    UIApplication.shared.registerForRemoteNotifications()
+    DispatchQueue.main.asyncAfter(deadline: .now() + 10) { once(nil, "iPhone gave no notification address within 10 seconds") }
+  }
   func tokenFailed(_ msg: String) {
     let w = pushWaiters; pushWaiters = []
     w.forEach { $0(["ok": false, "error": "Notifications failed: " + msg]) }
