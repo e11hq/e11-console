@@ -1221,7 +1221,7 @@ extension Main {
     return AppData.shared.meModel("tasks", "myTasksSignal", [myTasksF, myTasksTab])
   }
   // a change made here: My Tasks drawn again with it (as if the page had said so)
-  private func myTasksAgain() { if var a = myTasksPageSignal { a["show"] = true; myTasksCommand(a) } }
+  func myTasksAgain() { if var a = myTasksPageSignal { a["show"] = true; myTasksCommand(a) } }
   func myTasksFilterEvent(_ ev: [String: Any]) -> Bool {
     guard let a = myTasksPageSignal, myTasksOwnSignal(me: a["me"] as? String) != nil else { return false }
     switch ev["ev"] as? String ?? "" {

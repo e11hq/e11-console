@@ -433,6 +433,8 @@ extension Main {
       to["cd"] = true
       if (AppData.shared.screen("home").model?["title"] as? String) == "E11 Day" { to["team"] = true }
       myTasksF = to; myTasksTab = "all"
+      // (My Tasks already on its tab: drawn again with these filters — it kept the ones it had: Haris 2026-11-10 15:37)
+      myTasksAgain()
       selectTab("mytasks"); return true
     case "from":
       guard !pageReady, !id.isEmpty else { return false }
