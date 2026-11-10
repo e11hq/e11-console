@@ -1123,7 +1123,7 @@ final class MeCtl {
   // (a question to the page, its answer back — Content plans' post, approve, send back)
   // (Part B step 3: these go straight to the server — /api/app/act, done there as the website would; the changed records
   //  into the app's copy at once. The server switched off for one (kv app-act-<group>), or no answer: the page, as before)
-  private static let serverActs: Set<String> = ["rvApprove", "rvAmend", "clApprove", "clPaid", "clAdd", "clPerson", "exAdd", "exEnd", "plApprove", "plBack", "plReview", "trRestore"]
+  private static let serverActs: Set<String> = ["rvApprove", "rvAmend", "clApprove", "clPaid", "clAdd", "clPerson", "exAdd", "exEnd", "plApprove", "plBack", "plReview", "plTrash", "trRestore"]
   private func request(_ ev: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
     if let name = ev["ev"] as? String, MeCtl.serverActs.contains(name), AppData.shared.tabsOn, JSONSerialization.isValidJSONObject(ev) {
       var b = ev; b["op"] = UUID().uuidString
@@ -2839,6 +2839,27 @@ final class MeCtl {
         return it
       }))
     }
+    // ••• Apple's own menu: Copy Link, and Trash Skeleton for its maker and the Social Manager before any task is made
+    // from it (Haris 2026-11-10, the mock-up's D)
+    let canTrash = (m["trash"] as? Bool) == true, client = m["name"] as? String ?? "", monthName = m["sub"] as? String ?? ""
+    h.assetsMenu = { [weak self, weak h] in
+      var out = [CornerMenuItem(title: "Copy Link", symbol: "link", run: { self?.main.copyPlanLink(planId) })]
+      if canTrash { out.append(CornerMenuItem(title: "Trash Skeleton", symbol: "trash", destructive: true, run: {
+        let a = UIAlertController(title: "Move this content skeleton to the Trash?", message: "\(client)’s \(monthName) skeleton goes to the Trash for 30 days.", preferredStyle: .alert)
+        a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        a.addAction(UIAlertAction(title: "Move to Trash", style: .destructive) { _ in
+          self?.request(["ev": "plTrash", "plan": planId]) { r in
+            guard (r["ok"] as? Bool) == true else { h?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]); return }
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            if let h = h, let vc = self?.pageVCs[ObjectIdentifier(h)] { vc.navigationController?.popViewController(animated: true) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { self?.top?.toast(["t": "Moved to the Trash"]) }
+          }
+        })
+        self?.main.topMost().present(a, animated: true)
+      })) }
+      return out
+    }
+    pageVCs[ObjectIdentifier(h)]?.menuChanged()
     // Send Back · Approve on Apple's toolbar (Approve Apple's prominent button; dimmed while a post is marked for changes —
     // a tap says why). Only for the one who approves it now; gone the moment it's no longer theirs.
     let vc = pageVCs[ObjectIdentifier(h)]

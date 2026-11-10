@@ -457,6 +457,14 @@ extension Main {
     }
   }
   // a task's link on the clipboard (app.js TaskLink.url: files.e11hq.com/t/… on the office's sites)
+  // a content skeleton's link (files…/p/<id>, as the website's Copy link — Haris 2026-11-10)
+  func copyPlanLink(_ id: String) {
+    let host = URL(string: serverURL())?.host ?? ""
+    let enc = id.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-._~"))) ?? id
+    UIPasteboard.general.string = host == "console.e11hq.com" ? "https://files.e11hq.com/p/\(enc)" : host == "test.e11hq.com" ? "https://files-test.e11hq.com/p/\(enc)" : serverURL() + "/?plan=" + enc
+    UINotificationFeedbackGenerator().notificationOccurred(.success)
+    shownScreen?.toast(["t": "Link copied"])
+  }
   func copyTaskLink(_ id: String) {
     let host = URL(string: serverURL())?.host ?? ""
     let enc = id.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-._~"))) ?? id   // (as the website's: "-" stays "-", not %2D — Haris 2026-11-08)

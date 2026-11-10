@@ -222,8 +222,15 @@ final class MePageVC: ClientsPushedVC, UISearchResultsUpdating, UISearchBarDeleg
   required init?(coder: NSCoder) { fatalError() }
   override func viewDidLoad() {
     super.viewDidLoad()
-    // (Me's pages have no ••• of their own: none in the bar)
+    // (Me's pages have no ••• of their own: none in the bar — a skeleton's comes once it knows it has one)
+    moreItem = navigationItem.rightBarButtonItem
     if menuItems().isEmpty { navigationItem.rightBarButtonItem = nil }
+  }
+  private var moreItem: UIBarButtonItem?
+  func menuChanged() {
+    guard isViewLoaded else { return }
+    let want = menuItems().isEmpty ? nil : moreItem
+    if navigationItem.rightBarButtonItem !== want { navigationItem.rightBarButtonItem = want }
   }
   override func viewDidDisappear(_ a: Bool) {
     super.viewDidDisappear(a)

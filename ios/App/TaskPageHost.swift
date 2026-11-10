@@ -1364,8 +1364,11 @@ extension Main {
       popCommand(["kind": "greet", "pre": "Today is", "title": go["title"] as? String ?? "", "sub": "Wish them a happy birthday", "person": who]) { _ in }
     case "daily": if !dailyNative() { return false }
     case "plan":
-      guard let pid = go["id"] as? String else { return false }
-      meCtl.command(["open": ["kind": "plan", "pid": pid, "month": ""]])
+      guard let id = go["id"] as? String else { return false }
+      // (go's id is the skeleton's own; the page opens a client's month — its client and month from the copy, Haris
+      //  2026-11-10: a skeleton's link and notifications)
+      let ref = AppData.shared.meModel("plans", "planRef", [id])
+      meCtl.command(["open": ["kind": "plan", "pid": ref?["pid"] as? String ?? id, "month": ref?["month"] as? String ?? ""]])
       selectTab(tabKeys.contains("plans") ? "plans" : "me")
     case "claim":
       // (the claim itself shown on the Claims tab: scrolled to and pulsing, as a review request — Haris 2026-11-10)

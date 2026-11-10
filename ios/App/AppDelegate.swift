@@ -2468,6 +2468,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       let id = u.path.dropFirst(3).replacingOccurrences(of: "/", with: "")
       openPush(["e11": ["taskId": id]]); return
     }
+    // a content skeleton's link (files…/p/<id>, Haris 2026-11-10): the skeleton, in the app
+    if u.path.range(of: "^/p/[A-Za-z0-9_-]{1,80}/?$", options: .regularExpression) != nil {
+      let id = u.path.dropFirst(3).replacingOccurrences(of: "/", with: "")
+      openPush(["e11": ["planId": id, "kind": "plan"]]); return
+    }
     // a file link (files.e11hq.com/f/<token>, the test copy's files-test…): the page opens the file where it is
     if let r = u.path.range(of: "^/[fd]/[A-Za-z0-9]{6,16}", options: .regularExpression) {
       let tok = String(String(u.path[r]).dropFirst(3))
