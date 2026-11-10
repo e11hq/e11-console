@@ -368,7 +368,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let kindsChanged = listSecs.map { $0.rows } != meta.map { $0.rows }
     listSecs = meta
     if kindsChanged { list?.collectionViewLayout.invalidateLayout() }
-    ds.apply(snap, animatingDifferences: animated) { [weak self] in self?.refreshHeads() }
+    // (the list's length changed: the motto asked again — an empty list switched to a full one left it over the rows:
+    //  Haris 2026-11-10)
+    ds.apply(snap, animatingDifferences: animated) { [weak self] in self?.refreshHeads(); self?.showMotto() }
   }
   // a group: rows (Apple's inset group) or not, and its heading (Apple's header)
   struct ListSec { let rows: Bool; let head: NSAttributedString? }
