@@ -303,3 +303,38 @@ extension Main {
     }
   }
 }
+
+/* Apple's own empty state in the list (Haris 2026-11-10: "Apple's own empty-state views — Yes"): Apple's
+   UIContentUnavailableConfiguration in a cell of the list — its symbol, its bold title, the grey line under it, centred —
+   under what's above it (a client's folders and Open · Done), not over the page. "Loading…" is Apple's own loading view.
+   (iOS 16: the line alone, as before.) */
+final class AppleEmpty: UIView {
+  private(set) var symbol: String?, title = "", line: String?, loading = false
+  private(set) var sig = ""
+  func set(_ symbol: String?, _ title: String, _ line: String? = nil) {
+    self.symbol = symbol; self.title = title; self.line = line; loading = false
+    sig = "\(symbol ?? "")|\(title)|\(line ?? "")"
+  }
+  func setLoading() { symbol = nil; title = "Loading…"; line = nil; loading = true; sig = "loading" }
+  // its cell's content, set by the list
+  func paint(_ cell: UICollectionViewListCell) {
+    if #available(iOS 17.0, *) {
+      var c: UIContentUnavailableConfiguration = loading ? .loading() : .empty()
+      if !loading {
+        c.image = symbol.flatMap { UIImage(systemName: $0) }
+        c.text = title
+        c.secondaryText = line
+      }
+      c.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 28, leading: 24, bottom: 28, trailing: 24)
+      cell.contentConfiguration = c
+    } else {
+      var c = UIListContentConfiguration.cell()
+      c.text = [title, line].compactMap { $0 }.joined(separator: " — ")
+      c.textProperties.font = .systemFont(ofSize: 14); c.textProperties.color = .secondaryLabel; c.textProperties.alignment = .center
+      cell.contentConfiguration = c
+    }
+    cell.accessories = []
+    var bg = UIBackgroundConfiguration.clear(); bg.backgroundColor = .clear
+    cell.backgroundConfiguration = bg
+  }
+}

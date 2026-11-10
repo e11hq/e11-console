@@ -247,6 +247,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       guard let r = self?.listViews[key] as? InboxRow else { return }
       cell.show(r)
     }
+    // (Apple's own empty state — AppleEmpty)
+    let unavailReg = UICollectionView.CellRegistration<UICollectionViewListCell, String> { [weak self] cell, _, key in
+      (self?.listViews[key] as? AppleEmpty)?.paint(cell)
+    }
     let emptyReg = UICollectionView.CellRegistration<UICollectionViewListCell, String> { [weak self] cell, _, key in
       guard let self = self else { return }
       var c = UIListContentConfiguration.cell()
@@ -263,6 +267,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         if v is AppleRow { return cv.dequeueConfiguredReusableCell(using: key.hasPrefix("f:") || v is HomeClientRow ? foundReg : rowReg, for: ip, item: key) }
         if v is InboxRow { return cv.dequeueConfiguredReusableCell(using: inboxReg, for: ip, item: key) }
         if v is FileTile { return cv.dequeueConfiguredReusableCell(using: tileReg, for: ip, item: key) }
+        if v is AppleEmpty { return cv.dequeueConfiguredReusableCell(using: unavailReg, for: ip, item: key) }
         if key.hasPrefix("e:") && v.tag == 8 { return cv.dequeueConfiguredReusableCell(using: emptyReg, for: ip, item: key) }
       }
       return cv.dequeueConfiguredReusableCell(using: reg, for: ip, item: key)
@@ -324,7 +329,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       for v in resultViews {
         // (a task found is its own row, not Home's row of the same task: one identity for both, Apple kept the found
         //  row's cell — the search's wash on its title — when search closed: Haris 2026-11-09)
-        let k = (v as? HomeCard).map { "f:" + $0.id } ?? (v as? FileListRow).map { "fs:" + $0.id } ?? "r:\(ObjectIdentifier(v).hashValue)"
+        let k = (v as? HomeCard).map { "f:" + $0.id } ?? (v as? FileListRow).map { "fs:" + $0.id } ?? (v as? AppleEmpty).map { "u:" + ($0.accessibilityIdentifier ?? "") } ?? "r:\(ObjectIdentifier(v).hashValue)"
         if views[k] != nil { continue }
         // (Client Assets' found files — a block: the whole width, as the list's — AppleClients.swift)
         if let b = v as? HomeBlock { let w = blockWraps[ObjectIdentifier(b)] ?? BlockWrap(b); blockWraps[ObjectIdentifier(b)] = w; keys.append(k); views[k] = w; continue }
@@ -340,6 +345,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if v is ClientsMoreRow { keys.append("k:inactive"); views["k:inactive"] = v; continue }
       // (a file's row: Recently added's, or one search found — its own identity, so a wash never stays: Haris 2026-11-10)
       if let r = v as? FileListRow { let k = (r.found ? "fs:" : "fr:") + r.id; if views[k] != nil { continue }; keys.append(k); views[k] = r; continue }
+      if let e = v as? AppleEmpty { let k = "u:" + (e.accessibilityIdentifier ?? "\(ObjectIdentifier(e).hashValue)"); if views[k] != nil { continue }; keys.append(k); views[k] = e; continue }
       if let t = v as? FileTile { let k = t.key; if views[k] != nil { continue }; keys.append(k); views[k] = t; continue }
       // (the Clients tab's and Client Assets' blocks — the clients' group, folders, files: each a cell, the whole width)
       if let b = v as? HomeBlock {
@@ -384,6 +390,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       guard let v = views[k] else { continue }
       if let r = v as? AppleRow { sigs[k] = r.rowSig }
       else if let t = v as? FileTile { sigs[k] = t.sig }
+      else if let e = v as? AppleEmpty { sigs[k] = e.sig }
       else if let r = v as? InboxRow { sigs[k] = r.rowSig }
       else if k.hasPrefix("e:") && v.tag == 8 { sigs[k] = ((v as? UILabel)?.text ?? "") + "|" + L.key }
       else { sigs[k] = "\(ObjectIdentifier(v).hashValue)|\(itemHeight(k, v))" }
@@ -841,6 +848,14 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       let anchor = (g["anchor"] as? Bool) == true
       if h.isHidden != anchor { h.isHidden = anchor }
       if !listOn { scroll.addSubview(h) }   // (Apple's list: its words are its group's header, or a cell's)
+      // (a client's page with nothing to show: Apple's own empty state under Open · Done — no heading over it; Haris 2026-11-10)
+      let clientEmpty = isClient && listOn && ((g["cards"] as? [Any]) ?? []).isEmpty
+      if clientEmpty {
+        let done = (model["showDone"] as? Bool) == true
+        if done { clientEmptyView.set("checklist", "No Tasks Yet") } else { clientEmptyView.set("checkmark.circle", "No Open Tasks", "Done tasks are under Done.") }
+        content.append(clientEmptyView)
+        continue
+      }
       content.append(h)
       for c in g["cards"] as? [[String: Any]] ?? [] {
         guard let id = c["id"] as? String else { continue }
@@ -1176,6 +1191,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private lazy var clientsGap: UILabel = { let l = UILabel(); l.accessibilityIdentifier = "clients-gap"; return l }()
   // a client's page (fully Apple, Haris 2026-11-10): its folders' tiles (kept by folder), their heading, Open · Done
   private var stripTiles: [String: FileTile] = [:]
+  private lazy var searchEmpty: AppleEmpty = { let e = AppleEmpty(); e.accessibilityIdentifier = "search-empty"; return e }()
+  private lazy var clientEmptyView: AppleEmpty = { let e = AppleEmpty(); e.accessibilityIdentifier = "client-empty"; return e }()
   private lazy var clientAssetsHead: UILabel = { let l = UILabel(); l.accessibilityIdentifier = "client-assets"; return l }()
   // (Apple's switch: "showDone" — its own name: "done" is a card's tick, which the app does itself)
   private lazy var doneSwitch: SegBlock = {
@@ -1889,7 +1906,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
           resultViews.append(v)
         }
       }
-      hint.text = clients.isEmpty && tasks.isEmpty && files.isEmpty ? (r["empty"] as? String ?? "No tasks found. Try a client or person’s name.") : nil
+      let none = clients.isEmpty && tasks.isEmpty && files.isEmpty
+      // (a client's page: Apple's own "No Results" — Haris 2026-11-10; Home's keeps its line, locked)
+      if none && isClient && listOn { searchEmpty.set("magnifyingglass", "No Results", "Check the spelling or try a new search."); resultViews.append(searchEmpty); hint.text = nil }
+      else { hint.text = none ? (r["empty"] as? String ?? "No tasks found. Try a client or person’s name.") : nil }
     } else { hint.text = q.isEmpty ? (isClient ? "Search this client’s tasks and files." : "Search tasks, clients or people.") : nil }
     for id in resultCards.keys where !seen.contains(id) { resultCards[id] = nil }
     for id in resultFiles.keys where !seenFiles.contains(id) { resultFiles[id] = nil }

@@ -566,6 +566,8 @@ final class AssetsCtl {
     for k in h.assetsParts.keys where k.hasPrefix("@") && !keptNow.contains(String(k.dropFirst())) { h.assetsParts[k] = nil }
     keptNow = []
   }
+  // Apple's own empty state in the list (AppleEmpty)
+  private func empty(_ h: HomeView, _ id: String) -> AppleEmpty { part(h, "empty:" + id) { () -> AppleEmpty in let e = AppleEmpty(); e.accessibilityIdentifier = id; return e } }
   // a group's heading — Apple's header over it (our words, Apple's header)
   private func head(_ h: HomeView, _ id: String, _ t: String) -> UILabel {
     let l = part(h, "head:" + id) { () -> UILabel in let x = UILabel(); x.accessibilityIdentifier = id; return x }
@@ -618,8 +620,8 @@ final class AssetsCtl {
         out.append(r)
       }
       sweep(h)
-      if m.isEmpty { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n) }
-      else if list.isEmpty { let n = part(h, "none") { AssetsNote() }; n.label.text = (m["canAdd"] as? Bool) == true ? "No clients yet — add your first client to start collecting their brand assets." : "No clients yet — an Admin or Account Manager will add them here."; out.append(n) }
+      if m.isEmpty { let n = empty(h, "wait"); n.setLoading(); out.append(n) }
+      else if list.isEmpty { let n = empty(h, "none"); n.set("person.2", "No Clients", (m["canAdd"] as? Bool) == true ? "Add your first client to start collecting their brand assets." : "An Admin or Account Manager will add them here."); out.append(n) }
       h.setFab("Add client", "plus", (m["canAdd"] as? Bool) == true ? { [weak self, weak h] in if let h = h { self?.addClient(h) } } : nil)
     case "client":
       guard let cid = s.client else { break }
@@ -631,8 +633,8 @@ final class AssetsCtl {
       if !q.isEmpty {
         // (what search found: Apple's rows, the words washed — each its own row, so no wash stays after search)
         let found = AssetsCtl.find(all, q)
-        out.append(head(h, "found", found.isEmpty ? "No files found" : "\(found.count) file\(found.count == 1 ? "" : "s") found" + (AssetsCtl.lastLoose ? " — close matches" : "")))
-        if found.isEmpty { let n = part(h, "foundNone") { AssetsNote() }; n.label.text = "Try another word."; out.append(n) }
+        if !found.isEmpty { out.append(head(h, "found", "\(found.count) file\(found.count == 1 ? "" : "s") found" + (AssetsCtl.lastLoose ? " — close matches" : ""))) }
+        if found.isEmpty { let n = empty(h, "foundNone"); n.set("magnifyingglass", "No Results", "Check the spelling or try a new search."); out.append(n) }
         let marks = Find.filter(found, q) { "\($0["name"] ?? "") \($0["where"] ?? "")" }.marks
         out += fileRows(h, found, client: cid, found: true, marks: marks, whereFrom: m["name"] as? String)
       } else {
@@ -640,7 +642,8 @@ final class AssetsCtl {
         let tops = ((m["folders"] as? [[String: Any]]) ?? []).filter { $0["parent"] == nil || $0["parent"] is NSNull }
         if !tops.isEmpty { out.append(head(h, "folders", "Folders")) }
         out += folderTiles(h, tops, client: cid)
-        if m.isEmpty { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n) }
+        if m.isEmpty { let n = empty(h, "wait"); n.setLoading(); out.append(n) }
+        else if tops.isEmpty { let n = empty(h, "noFolders"); n.set("folder", "No Folders"); out.append(n) }
         // (Recently added: Apple's rows)
         let recent = ((m["recent"] as? [String]) ?? []).compactMap { id in all.first { ($0["id"] as? String) == id } }
         if !recent.isEmpty {
@@ -685,8 +688,10 @@ final class AssetsCtl {
       }
       out += tiles
       if files.isEmpty {
-        let n = part(h, "empty") { AssetsNote() }
-        n.label.text = m.isEmpty ? "Loading…" : (f?["note"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? ((f?["canUpload"] as? Bool) == true ? "No files yet — tap Upload to add some." : "No files here yet.")
+        // (Apple's empty state: "No Files", and the folder's own note — or Upload — under it)
+        let n = empty(h, "empty")
+        if m.isEmpty { n.setLoading() }
+        else { n.set("doc", "No Files", (f?["note"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? ((f?["canUpload"] as? Bool) == true ? "Tap Upload to add some." : nil)) }
         out.append(n)
       }
       sweep(h)
@@ -784,7 +789,9 @@ final class AssetsCtl {
         r.onLook = { [weak h] in h?.listAgain() }
         return r
       }
-      h.showFound(rows, hint: found.isEmpty ? "No files found." : loose ? "Nothing matched exactly — close matches:" : nil)
+      // (nothing found: Apple's own "No Results" — Haris 2026-11-10)
+      if found.isEmpty { let e = empty(h, "allNone"); e.set("magnifyingglass", "No Results", "Check the spelling or try a new search."); h.showFound([e], hint: nil) }
+      else { h.showFound(rows, hint: loose ? "Nothing matched exactly — close matches:" : nil) }
     default: break
     }
   }
