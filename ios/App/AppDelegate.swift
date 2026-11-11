@@ -597,7 +597,6 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   // at launch and with every change, not from the website. The page still says: whether the bar hides (a page of its own
   // over everything), the Plans tab's count (still its rules), your photo's place; and where it went by itself (an Inbox
   // update opening Reviews) — taken only when it changes. Off on the server (kv app-tabs): the page's tab bar, as before.
-  private var pageTabs: [String: Any]?, pageOn: String?, quickMe: String?
   var lastTabTap: (key: String, at: Date)?
   // Automatic light / dark by the app's own clock: every minute (and on coming back), light from sunrise to sunset
   // (the day's times the page gave, moved to today), told to everything as the page's setAppearance would
@@ -639,10 +638,10 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     guard AppData.shared.tabsOn, AppData.shared.ready, let m = AppData.shared.screen("tabs").model,
           var list = m["tabs"] as? [[String: Any]], !list.isEmpty else { return nil }
     Main.isAdmin = (m["admin"] as? Bool) == true   // (Admins turn links off and on — from the copy)
-    let page = (pageTabs?["tabs"] as? [[String: Any]]) ?? (lastTabs?["tabs"] as? [[String: Any]]) ?? []
+    let page = (lastTabs?["tabs"] as? [[String: Any]]) ?? []
     let keys = list.map { $0["v"] as? String ?? "" }
     let cur = selectedTabKey
-    let on = moved.flatMap { keys.contains($0) ? $0 : nil } ?? (keys.contains(cur) ? cur : (pageOn.flatMap { keys.contains($0) ? $0 : nil } ?? "today"))
+    let on = moved.flatMap { keys.contains($0) ? $0 : nil } ?? (keys.contains(cur) ? cur : "today")
     for i in list.indices {
       let v = list[i]["v"] as? String ?? ""
       let p = page.first(where: { ($0["v"] as? String) == v })
@@ -657,7 +656,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
       }
       list[i]["on"] = v == on
     }
-    return ["tabs": list, "hidden": (pageTabs?["hidden"] as? Bool) ?? false]
+    return ["tabs": list, "hidden": false]
   }
   func setTabs(_ a: [String: Any]) {
     if !meWatched {
@@ -2196,7 +2195,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     let allSteps: [(String, String, (() -> Void)?)] = [
       // (the app without the website — Haris 2026-11-11: the self-test runs the phone's way; what the page used to answer
       //  is read from the app itself)
-      ("home", pause(1500) + "return '{}'", { self.selfResult["appInfo"] = ["native": "ios", "shell": SHELL_VERSION, "server": serverURL()] }),
+      ("home", pause(1500) + "return '{}'", { self.selfResult["appInfo"] = ["native": "ios", "shell": SHELL_VERSION, "server": serverURL()] as [String: Any] }),
       // (Haris 2026-11-09 16:56, exactly: the app opened on E11 Day, My Tasks, another tab, My Tasks again — its big title
       //  gone for good, until the app is opened again; the tabs tapped as a finger does, from the very start, the title
       //  read each time with whatever lies over it)
