@@ -3,6 +3,7 @@ import PhotosUI
 import QuickLook
 import UniformTypeIdentifiers
 import AVFoundation
+import AudioToolbox
 
 /* A group's chat (the mockups — WhatsApp's way, in E11's colours with SF Symbols): bubbles with the time inside and
    ✓✓ (blue once everyone has seen it), names coloured with their role, a reply's quote (tap: up to the original), photos
@@ -18,13 +19,16 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private var data: UITableViewDiffableDataSource<Int, ChatItem>!
   private var msgs: [String: Msg] = [:]
   private var sigs: [String: Int] = [:]
+  private var runs: [String: Run] = [:]
   private let bar = MessageBar()
   private var kb: CGFloat = 0
   private var replying: Msg? { didSet { bar.setReply(replying.map { (Talk.shared.name($0.by), Talk.preview($0)) }, editing: false) } }
   private var editingMsg: Msg?
   private var previewURL: URL?
-  private let titleV = UIStackView(), titleL = UILabel(), subL = UILabel()
+  private let titleV = UIStackView(), titleL = UILabel(), subL = UILabel(), titlePic = Avatar(frame: CGRect(x: 0, y: 0, width: 39, height: 39))
   private let clientLine = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterial))
+  private let downB = UIButton(type: .custom)
+  private var downBottom: NSLayoutConstraint!
 
   private var focus: String?   // (opened from a search result: that message, highlighted)
   init(group: String, focus: String? = nil) { self.group = group; self.focus = focus; super.init(nibName: nil, bundle: nil); hidesBottomBarWhenPushed = true }
@@ -48,7 +52,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       case .day(let s): let c = tv.dequeueReusableCell(withIdentifier: "d", for: ip) as! DayCell; c.set(s); return c
       case .msg(let id):
         let c = tv.dequeueReusableCell(withIdentifier: "b", for: ip) as! BubbleCell
-        if let m = self.msgs[id], let g = Talk.shared.groups[self.group] { c.set(m, group: g, log: Talk.shared.log(self.group)) }
+        if let m = self.msgs[id], let g = Talk.shared.groups[self.group] { c.set(m, group: g, log: Talk.shared.log(self.group), run: self.runs[id] ?? Run()) }
         c.onReplyTap = { [weak self] rid in self?.jump(to: rid) }
         c.onFileTap = { [weak self] m in self?.open(m) }
         c.onRetry = { [weak self] m in guard let self = self else { return }; Talk.shared.retry(self.group, m) }
@@ -56,11 +60,16 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       }
     }
     data.defaultRowAnimation = .fade
-    // the title: the group's name, its people under it; a tap: group info
-    titleL.font = .systemFont(ofSize: 16, weight: .semibold); subL.font = .systemFont(ofSize: 12); subL.textColor = .secondaryLabel
-    titleV.axis = .vertical; titleV.alignment = .center; titleV.addArrangedSubview(titleL); titleV.addArrangedSubview(subL)
+    // the title (the design): the group's picture, its name, its people — at the left after ‹; a tap: group info
+    titleL.font = .systemFont(ofSize: 17, weight: .bold); subL.font = .systemFont(ofSize: 13); subL.textColor = .secondaryLabel
+    titleL.lineBreakMode = .byTruncatingTail; subL.lineBreakMode = .byTruncatingTail
+    let words = UIStackView(arrangedSubviews: [titleL, subL]); words.axis = .vertical; words.alignment = .leading; words.spacing = 0
+    titlePic.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([titlePic.widthAnchor.constraint(equalToConstant: 39), titlePic.heightAnchor.constraint(equalToConstant: 39)])
+    titleV.axis = .horizontal; titleV.alignment = .center; titleV.spacing = 10
+    titleV.addArrangedSubview(titlePic); titleV.addArrangedSubview(words)
     titleV.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(info)))
-    navigationItem.titleView = titleV
+    titleV.widthAnchor.constraint(lessThanOrEqualToConstant: max(140, UIScreen.main.bounds.width - 150)).isActive = true
     setBarButtons()
     bar.onSend = { [weak self] t, ms in self?.send(t, mentions: ms) }
     bar.onPlus = { [weak self] k in self?.attach(k) }
@@ -70,19 +79,38 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     NotificationCenter.default.addObserver(self, selector: #selector(head), name: .talkChanged, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(gone(_:)), name: .talkGone, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(kbMoved(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
-    // ("Client can see this group" — a small pill under the bar)
-    let cl = UILabel(); cl.font = .systemFont(ofSize: 12.5, weight: .medium); cl.textColor = .secondaryLabel
-    let eye = NSMutableAttributedString(attachment: NSTextAttachment(image: UIImage(systemName: "eye", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold))!.withTintColor(.secondaryLabel)))
-    eye.append(NSAttributedString(string: "  Client can see this group")); cl.attributedText = eye
-    clientLine.layer.cornerRadius = 13; clientLine.clipsToBounds = true; clientLine.isHidden = true
-    cl.translatesAutoresizingMaskIntoConstraints = false; clientLine.translatesAutoresizingMaskIntoConstraints = false
-    clientLine.contentView.addSubview(cl); view.addSubview(clientLine)
+    // ("Client can see this group" — the design: a thin orange band right under the bar, always there in a client group)
+    let cl = UILabel(); cl.font = .systemFont(ofSize: 13, weight: .semibold); cl.textColor = Look.clientInk; cl.textAlignment = .center
+    let eyeImg = UIImage(systemName: "eye", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold))!.withRenderingMode(.alwaysTemplate)
+    let eye = NSMutableAttributedString(attachment: NSTextAttachment(image: eyeImg))
+    eye.append(NSAttributedString(string: "  Client can see this group"))
+    eye.addAttribute(.foregroundColor, value: Look.clientInk, range: NSRange(location: 0, length: eye.length)); cl.attributedText = eye
+    let tint = UIView(); tint.backgroundColor = Look.clientInk.withAlphaComponent(0.14); tint.isUserInteractionEnabled = false
+    clientLine.isHidden = true
+    [tint, cl].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; clientLine.contentView.addSubview($0) }
+    clientLine.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(clientLine)
     NSLayoutConstraint.activate([
-      cl.leadingAnchor.constraint(equalTo: clientLine.contentView.leadingAnchor, constant: 12), cl.trailingAnchor.constraint(equalTo: clientLine.contentView.trailingAnchor, constant: -12),
-      cl.topAnchor.constraint(equalTo: clientLine.contentView.topAnchor, constant: 5), cl.bottomAnchor.constraint(equalTo: clientLine.contentView.bottomAnchor, constant: -5),
-      clientLine.centerXAnchor.constraint(equalTo: view.centerXAnchor), clientLine.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 6)])
+      tint.leadingAnchor.constraint(equalTo: clientLine.contentView.leadingAnchor), tint.trailingAnchor.constraint(equalTo: clientLine.contentView.trailingAnchor),
+      tint.topAnchor.constraint(equalTo: clientLine.contentView.topAnchor), tint.bottomAnchor.constraint(equalTo: clientLine.contentView.bottomAnchor),
+      cl.centerXAnchor.constraint(equalTo: clientLine.contentView.centerXAnchor), cl.centerYAnchor.constraint(equalTo: clientLine.contentView.centerYAnchor),
+      clientLine.leadingAnchor.constraint(equalTo: view.leadingAnchor), clientLine.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+      clientLine.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor), clientLine.heightAnchor.constraint(equalToConstant: 30)])
+    // the scroll-down button (the design: 31 round, at the right above the message bar) — shown once you've scrolled up
+    var dc = UIButton.Configuration.plain()
+    dc.image = UIImage(systemName: "chevron.down", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)); dc.baseForegroundColor = .label
+    downB.configuration = dc
+    downB.backgroundColor = Look.downBtn; downB.layer.cornerRadius = 15.5
+    downB.layer.shadowColor = UIColor.black.cgColor; downB.layer.shadowOpacity = 0.3; downB.layer.shadowRadius = 6; downB.layer.shadowOffset = CGSize(width: 0, height: 3)
+    downB.accessibilityLabel = "Scroll to the latest"
+    downB.alpha = 0; downB.translatesAutoresizingMaskIntoConstraints = false
+    downB.addAction(UIAction { [weak self] _ in self?.toBottom(true) }, for: .touchUpInside)
+    view.addSubview(downB)
+    downBottom = downB.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -100)
+    NSLayoutConstraint.activate([downB.widthAnchor.constraint(equalToConstant: 31), downB.heightAnchor.constraint(equalToConstant: 31),
+                                 downB.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -9), downBottom])
     head()
     reload(animated: false)
+    lastSeenId = Talk.shared.log(group).msgs.last?.id
   }
   override func viewDidAppear(_ a: Bool) {
     super.viewDidAppear(a)
@@ -100,31 +128,46 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     }
   }
   private var scrolledOnce = false
+  private var lastSeenId: String?
+  // the scroll-down button: shown once the end of the chat is out of view
+  func scrollViewDidScroll(_ s: UIScrollView) {
+    let away = s.contentOffset.y + s.bounds.height < s.contentSize.height - 160
+    if (downB.alpha > 0) != away { UIView.animate(withDuration: 0.2) { self.downB.alpha = away ? 1 : 0 } }
+  }
 
   @objc private func head() {
     guard let g = Talk.shared.groups[group] else { return }
+    let T = Talk.shared
     titleL.text = g.name
-    let names = g.members.filter { $0 != Talk.shared.me?.id }.map { Talk.shared.people[$0]?.name.split(separator: " ").first.map(String.init) ?? "…" } + ["You"]
-    subL.text = (Talk.shared.clients[g.client]?.name).map { "\($0) · " } .map { $0 + names.joined(separator: ", ") } ?? names.joined(separator: ", ")
-    // a client group, to staff: a thin line at the top and in the box — the client can see what's written here
-    let shared = g.withClient && !Talk.shared.isContact
-    bar.placeholder = shared ? "Message — client can see this" : "Message"
-    clientLine.isHidden = !shared
+    titlePic.set(group: g)
+    // (the people: a client first, as "Rania (Oasis Coffee)"; the team by full name; You last — cut short by the bar)
+    let others = g.members.filter { $0 != T.me?.id }.compactMap { T.people[$0] }
+    let clients = others.filter { $0.contact }.map { p in p.client.flatMap { T.clients[$0]?.name }.map { "\(p.name) (\($0))" } ?? p.name }
+    let team = others.filter { !$0.contact }.map { $0.name }
+    subL.text = (clients + team + ["You"]).joined(separator: ", ")
+    // a client group, to staff: the band under the bar and the box's hint — the client can see what's written here
+    let shared = g.withClient && !T.isContact
+    bar.placeholder = shared ? "Message — client can see this" : ""
+    if clientLine.isHidden == shared { clientLine.isHidden = !shared; table.contentInset.top = shared ? 30 : 0; table.verticalScrollIndicatorInsets.top = table.contentInset.top }
     // (@: the group's people)
-    bar.people = g.members.filter { $0 != Talk.shared.me?.id }.compactMap { id in Talk.shared.people[id].map { (id, $0.name) } }
+    bar.people = g.members.filter { $0 != T.me?.id }.compactMap { id in T.people[id].map { (id, $0.name) } }
   }
   // ---------- search inside the chat: 🔍 — the words, ⌃ ⌄ through the matches (newest first), each brought into view ----------
   private let findBar = UISearchBar()
   private var finds: [String] = [], findAt = 0
   private func setBarButtons() {
-    let info = UIBarButtonItem(title: nil, image: UIImage(systemName: "info.circle"), primaryAction: UIAction { [weak self] _ in self?.info() }, menu: nil)
     let find = UIBarButtonItem(title: nil, image: UIImage(systemName: "magnifyingglass"), primaryAction: UIAction { [weak self] _ in self?.startFind() }, menu: nil)
-    navigationItem.rightBarButtonItems = [info, find]
-    navigationItem.titleView = titleV
+    navigationItem.rightBarButtonItems = [find]
+    let t = UIBarButtonItem(customView: titleV)
+    if #available(iOS 26.0, *) { t.hidesSharedBackground = true }
+    navigationItem.leftItemsSupplementBackButton = true
+    navigationItem.leftBarButtonItems = [t]
+    navigationItem.titleView = nil
     navigationItem.hidesBackButton = false
   }
   private func startFind() {
     findBar.placeholder = "Search this chat"; findBar.delegate = self; findBar.searchBarStyle = .minimal; findBar.text = ""
+    navigationItem.leftBarButtonItems = nil
     navigationItem.titleView = findBar
     navigationItem.hidesBackButton = true
     let up = UIBarButtonItem(title: nil, image: UIImage(systemName: "chevron.up"), primaryAction: UIAction { [weak self] _ in self?.step(1) }, menu: nil)
@@ -155,6 +198,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     guard (n.object as? String) == group else { return }
     let near = table.contentOffset.y + table.bounds.height >= table.contentSize.height - 120
     reload(animated: true)
+    // (someone else's new message while the chat is open: E11 Console's soft arrive sound)
+    if let last = Talk.shared.log(group).msgs.last, last.id != lastSeenId, last.by != Talk.shared.me?.id, last.kind != "sys", lastSeenId != nil, view.window != nil { ChatSound.arrive() }
+    lastSeenId = Talk.shared.log(group).msgs.last?.id
     if near { toBottom(true) }
     if view.window != nil, UIApplication.shared.applicationState == .active { Talk.shared.markRead(group) }
   }
@@ -164,16 +210,24 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     var snap = NSDiffableDataSourceSnapshot<Int, ChatItem>(); snap.appendSections([0])
     var lastDay = "", newSigs: [String: Int] = [:], items: [ChatItem] = []
     msgs = [:]
-    for m in l.msgs {
+    // (a run: one person's messages one after another on the same day — the name on its first, the tail on its last)
+    var newRuns: [String: Run] = [:]
+    let all = l.msgs
+    for (i, m) in all.enumerated() {
       let d = Look.day(m.at)
+      let prev = i > 0 ? all[i - 1] : nil, next = i + 1 < all.count ? all[i + 1] : nil
+      let same = { (o: Msg?) -> Bool in guard let o = o else { return false }; return o.by == m.by && o.kind != "sys" && m.kind != "sys" && Look.day(o.at) == d }
+      newRuns[m.id] = Run(first: !same(prev), last: !same(next))
       if d != lastDay { items.append(.day(d)); lastDay = d }
       msgs[m.id] = m
       var h = Hasher(); h.combine(m.text); h.combine(m.edited); h.combine(m.deleted); h.combine(m.pending); h.combine(m.failed); h.combine(m.reactions); h.combine(m.file?.id)
+      h.combine(newRuns[m.id]); h.combine(Talk.shared.people[m.by]?.color); h.combine(Talk.shared.people[m.by]?.role)
       h.combine(l.readBy.count); h.combine(Talk.shared.groups[group]?.members.count ?? 0)
       for (k, v) in l.readBy.sorted(by: { $0.key < $1.key }) { h.combine(k); h.combine(v) }
       newSigs[m.id] = h.finalize()
       items.append(.msg(m.id))
     }
+    runs = newRuns
     snap.appendItems(items)
     let old = data.snapshot()
     snap.reconfigureItems(items.filter { if case .msg(let id) = $0 { return old.indexOfItem($0) != nil && sigs[id] != newSigs[id] }; return false })
@@ -193,6 +247,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let atEnd = table.contentOffset.y + table.bounds.height >= table.contentSize.height - 40
     table.contentInset.bottom = max(0, cover - view.safeAreaInsets.bottom) + 8
     table.verticalScrollIndicatorInsets.bottom = table.contentInset.bottom
+    downBottom.constant = -(max(cover, bar.bounds.height) + 25)
     if grew && (atEnd || table.isTracking == false) && bar.box.isFirstResponder { toBottom(false) }
   }
   private func jump(to id: String) {
@@ -211,6 +266,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     Talk.shared.send(group, text: text, reply: replying, mentions: mentions)
     replying = nil
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    ChatSound.send()
     toBottom(true)
   }
   private func attach(_ kind: String) {
@@ -313,7 +369,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   func tableView(_ tv: UITableView, previewForHighlightingContextMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? {
     guard let id = c.identifier as? String, let ip = data.indexPath(for: .msg(id)), let cell = tv.cellForRow(at: ip) as? BubbleCell else { return nil }
     let p = UIPreviewParameters(); p.backgroundColor = .clear
-    p.visiblePath = UIBezierPath(roundedRect: cell.bubble.bounds, cornerRadius: 16)
+    p.visiblePath = UIBezierPath(roundedRect: cell.bubble.bounds, cornerRadius: 19)
     return UITargetedPreview(view: cell.bubble, parameters: p)
   }
   private func menu(_ m: Msg) -> UIMenu {
@@ -424,35 +480,123 @@ extension ChatVC: PHPickerViewControllerDelegate, UIImagePickerControllerDelegat
   }
 }
 
-// ---------- the day between messages ----------
+// ---------- the day between messages (the design: a small chip, 20 high, 13 semibold) ----------
 final class DayCell: UITableViewCell {
-  private let l = PaddedLabel()
+  private let chip = UIView(), l = UILabel()
   override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
     super.init(style: style, reuseIdentifier: reuseIdentifier)
     backgroundColor = .clear; selectionStyle = .none
-    l.font = .systemFont(ofSize: 12.5, weight: .medium); l.textColor = .secondaryLabel; l.backgroundColor = .tertiarySystemBackground
-    l.layer.cornerRadius = 9; l.layer.masksToBounds = true; l.textAlignment = .center
-    contentView.addSubview(l)
-    l.translatesAutoresizingMaskIntoConstraints = false
-    NSLayoutConstraint.activate([l.centerXAnchor.constraint(equalTo: contentView.centerXAnchor), l.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 10),
-                                 l.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -6), l.heightAnchor.constraint(equalToConstant: 24)])
+    chip.backgroundColor = Look.dayChip; chip.layer.cornerRadius = 8; chip.layer.cornerCurve = .continuous
+    l.font = .systemFont(ofSize: 13, weight: .semibold); l.textColor = .label; l.textAlignment = .center
+    chip.addSubview(l); contentView.addSubview(chip)
+    [chip, l].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+    NSLayoutConstraint.activate([
+      chip.centerXAnchor.constraint(equalTo: contentView.centerXAnchor), chip.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 14),
+      chip.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4), chip.heightAnchor.constraint(equalToConstant: 20),
+      l.leadingAnchor.constraint(equalTo: chip.leadingAnchor, constant: 10), l.trailingAnchor.constraint(equalTo: chip.trailingAnchor, constant: -10),
+      l.centerYAnchor.constraint(equalTo: chip.centerYAnchor)])
   }
   required init?(coder: NSCoder) { fatalError() }
   func set(_ s: String) { l.text = s }
 }
 
-// ---------- a message ----------
+/* A message sent and one arriving (Haris 2026-11-11): E11 Console's own comment sounds — iPhone's system sound service,
+   silent with the ring switch off, never stopping music or a video; several arriving together: one sound. */
+enum ChatSound {
+  private static var ids: [String: SystemSoundID] = [:]
+  private static var lastArrive = Date.distantPast
+  private static func play(_ name: String) {
+    if ids[name] == nil, let url = Bundle.main.url(forResource: name, withExtension: "wav") {
+      var id: SystemSoundID = 0
+      AudioServicesCreateSystemSoundID(url as CFURL, &id); ids[name] = id
+    }
+    if let id = ids[name], id != 0 { AudioServicesPlaySystemSound(id) }
+  }
+  static func send() { play("chat-send") }
+  static func arrive() {
+    guard Date().timeIntervalSince(lastArrive) > 1.2 else { return }
+    lastArrive = Date(); play("chat-arrive")
+  }
+}
+
+// ---------- a message (the approved design, canvas "E11 Talk — design", board 3) ----------
+// Bubbles of 19 with the tail only on the last of a run from one person (that corner 4), 5 apart inside a run and 13
+// between runs; others' first of a run carries the name in their E11 Console colour and the role under it in grey ("Client"
+// in orange); their last carries their picture beside the tail; the time (and ✓✓ on yours) sits inside, on the last
+// line when it fits, as WhatsApp.
+struct Run: Hashable { var first = true, last = true }
+
+/* The bubble's own shape — rounded 19, the tail's corner 4 and the tail itself — drawn by a shape layer, so the bubble's
+   colour follows light / dark (set again on the look's change: a layer's colour is the one thing Apple can't switch). */
+final class BubbleShape: UIView {
+  private let shape = CAShapeLayer()
+  var fill: UIColor = .clear { didSet { shape.fillColor = fill.resolvedColor(with: traitCollection).cgColor } }
+  var tail: (mine: Bool, on: Bool) = (false, false) { didSet { setNeedsLayout() } }
+  override init(frame: CGRect) { super.init(frame: frame); backgroundColor = .clear; layer.insertSublayer(shape, at: 0) }
+  required init?(coder: NSCoder) { fatalError() }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    shape.frame = bounds
+    shape.path = BubbleShape.path(bounds.size, mine: tail.mine, tail: tail.on).cgPath
+  }
+  override func traitCollectionDidChange(_ p: UITraitCollection?) {
+    super.traitCollectionDidChange(p)
+    if traitCollection.hasDifferentColorAppearance(comparedTo: p) { shape.fillColor = fill.resolvedColor(with: traitCollection).cgColor }
+  }
+  static func path(_ s: CGSize, mine: Bool, tail: Bool, r: CGFloat = 19) -> UIBezierPath {
+    let W = s.width, H = s.height, R = min(r, H / 2, W / 2)
+    let small: CGFloat = 4
+    let tl = R, tr = R, br = mine && tail ? small : R, bl = !mine && tail ? small : R
+    let p = UIBezierPath()
+    p.move(to: CGPoint(x: tl, y: 0))
+    p.addLine(to: CGPoint(x: W - tr, y: 0)); p.addArc(withCenter: CGPoint(x: W - tr, y: tr), radius: tr, startAngle: -.pi / 2, endAngle: 0, clockwise: true)
+    p.addLine(to: CGPoint(x: W, y: H - br)); p.addArc(withCenter: CGPoint(x: W - br, y: H - br), radius: br, startAngle: 0, endAngle: .pi / 2, clockwise: true)
+    p.addLine(to: CGPoint(x: bl, y: H)); p.addArc(withCenter: CGPoint(x: bl, y: H - bl), radius: bl, startAngle: .pi / 2, endAngle: .pi, clockwise: true)
+    p.addLine(to: CGPoint(x: 0, y: tl)); p.addArc(withCenter: CGPoint(x: tl, y: tl), radius: tl, startAngle: .pi, endAngle: -.pi / 2, clockwise: true)
+    p.close()
+    guard tail, H >= 17 else { return p }
+    // (the tail: the design's curve "M0 0 C0 9 3 14 10 17 H0 z", 10 × 17, 8 outside the bubble's edge)
+    let t = UIBezierPath()
+    if mine {
+      t.move(to: CGPoint(x: W - 2, y: H - 17))
+      t.addCurve(to: CGPoint(x: W + 8, y: H), controlPoint1: CGPoint(x: W - 2, y: H - 8), controlPoint2: CGPoint(x: W + 1, y: H - 3))
+      t.addLine(to: CGPoint(x: W - 2, y: H))
+    } else {
+      t.move(to: CGPoint(x: 2, y: H - 17))
+      t.addCurve(to: CGPoint(x: -8, y: H), controlPoint1: CGPoint(x: 2, y: H - 8), controlPoint2: CGPoint(x: -1, y: H - 3))
+      t.addLine(to: CGPoint(x: 2, y: H))
+    }
+    t.close(); p.append(t)
+    return p
+  }
+}
+
+enum Ticks {
+  // ✓✓ as the design draws it (16 × 10): blue-white once everyone has read it, else the time's colour
+  static func image(_ c: UIColor) -> UIImage {
+    UIGraphicsImageRenderer(size: CGSize(width: 16, height: 10)).image { _ in
+      let p = UIBezierPath()
+      p.move(to: CGPoint(x: 1, y: 5)); p.addLine(to: CGPoint(x: 4, y: 8)); p.addLine(to: CGPoint(x: 10, y: 2))
+      p.move(to: CGPoint(x: 6, y: 8)); p.addLine(to: CGPoint(x: 7, y: 9)); p.addLine(to: CGPoint(x: 13, y: 2))
+      p.lineWidth = 1.6; p.lineCapStyle = .round; p.lineJoinStyle = .round
+      c.setStroke(); p.stroke()
+    }
+  }
+}
+
 final class BubbleCell: UITableViewCell {
-  let bubble = UIView()
+  let bubble = BubbleShape()
   private let stack = UIStackView()
-  private let nameL = UILabel(), textL = UILabel(), footL = UILabel()
+  private let nameL = UILabel(), roleL = UILabel(), textL = UILabel(), footL = UILabel(), stamp = UILabel()
   private let quote = UIView(), quoteBar = UIView(), quoteName = UILabel(), quoteText = UILabel()
   private let photo = UIImageView(), fileRow = UIStackView(), fileIcon = UIImageView(), fileName = UILabel(), fileSize = UILabel()
   private let voice = VoiceView()
   private let play = UIImageView(image: UIImage(systemName: "play.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 44)))
   private let vlen = PaddedLabel()
   private let reacts = PaddedLabel(), sysL = PaddedLabel(), retryB = UIButton(type: .system)
+  private let face = Avatar(frame: CGRect(x: 0, y: 0, width: 27, height: 27))
   private var lead: NSLayoutConstraint!, trail: NSLayoutConstraint!, photoH: NSLayoutConstraint!, photoW: NSLayoutConstraint!
+  private var wMine: NSLayoutConstraint!, wTheirs: NSLayoutConstraint!, top: NSLayoutConstraint!, stackTrail: NSLayoutConstraint!
   private var reactsLead: NSLayoutConstraint!, reactsTrail: NSLayoutConstraint!, bubbleBottom: NSLayoutConstraint!, reactsBottom: NSLayoutConstraint!
   private var msg: Msg?
   var onReplyTap: ((String) -> Void)?
@@ -462,11 +606,12 @@ final class BubbleCell: UITableViewCell {
   override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
     super.init(style: style, reuseIdentifier: reuseIdentifier)
     backgroundColor = .clear; selectionStyle = .none
-    bubble.layer.cornerRadius = 16; bubble.layer.cornerCurve = .continuous
-    stack.axis = .vertical; stack.spacing = 4; stack.alignment = .fill
-    nameL.font = .systemFont(ofSize: 13, weight: .semibold)
-    textL.font = .systemFont(ofSize: 16.5); textL.numberOfLines = 0
-    footL.font = .systemFont(ofSize: 11); footL.textAlignment = .right
+    stack.axis = .vertical; stack.spacing = 0; stack.alignment = .fill
+    nameL.font = .systemFont(ofSize: 15, weight: .semibold)
+    roleL.font = .systemFont(ofSize: 12); roleL.textColor = Look.roleInk
+    textL.font = .systemFont(ofSize: 17); textL.numberOfLines = 0
+    footL.font = .systemFont(ofSize: 12); footL.textAlignment = .right
+    stamp.font = .systemFont(ofSize: 12); stamp.textAlignment = .right
     quote.layer.cornerRadius = 8; quote.clipsToBounds = true
     quoteBar.backgroundColor = Look.accent
     quoteName.font = .systemFont(ofSize: 12.5, weight: .semibold); quoteText.font = .systemFont(ofSize: 13); quoteText.numberOfLines = 2
@@ -483,76 +628,94 @@ final class BubbleCell: UITableViewCell {
     fileRow.addArrangedSubview(fileIcon); fileRow.addArrangedSubview(fs); fileRow.spacing = 10; fileRow.alignment = .center
     fileRow.isLayoutMarginsRelativeArrangement = true; fileRow.layoutMargins = UIEdgeInsets(top: 8, left: 8, bottom: 8, right: 8); fileRow.layer.cornerRadius = 10
     fileRow.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(fileTap)))
-    // (a video: its first frame with ▶︎ and its length over it)
     play.tintColor = .white; play.layer.shadowOpacity = 0.35; play.layer.shadowRadius = 6; play.layer.shadowOffset = .zero
     vlen.font = .monospacedDigitSystemFont(ofSize: 11.5, weight: .semibold); vlen.textColor = .white; vlen.backgroundColor = UIColor.black.withAlphaComponent(0.45); vlen.layer.cornerRadius = 8; vlen.layer.masksToBounds = true
     [play, vlen].forEach { photo.addSubview($0); $0.translatesAutoresizingMaskIntoConstraints = false }
     NSLayoutConstraint.activate([play.centerXAnchor.constraint(equalTo: photo.centerXAnchor), play.centerYAnchor.constraint(equalTo: photo.centerYAnchor),
                                  vlen.leadingAnchor.constraint(equalTo: photo.leadingAnchor, constant: 8), vlen.bottomAnchor.constraint(equalTo: photo.bottomAnchor, constant: -8), vlen.heightAnchor.constraint(equalToConstant: 20)])
-    [nameL, quote, photo, fileRow, voice, textL, footL].forEach { stack.addArrangedSubview($0) }
-    bubble.addSubview(stack); contentView.addSubview(bubble)
-    reacts.font = .systemFont(ofSize: 13); reacts.backgroundColor = .secondarySystemBackground; reacts.layer.cornerRadius = 11; reacts.layer.masksToBounds = true
-    reacts.layer.borderWidth = 1.5; reacts.layer.borderColor = Look.chatBg.cgColor
+    [nameL, roleL, quote, photo, fileRow, voice, textL, footL].forEach { stack.addArrangedSubview($0) }
+    stack.setCustomSpacing(2, after: roleL); stack.setCustomSpacing(4, after: quote); stack.setCustomSpacing(4, after: photo); stack.setCustomSpacing(4, after: fileRow)
+    bubble.addSubview(stack); bubble.addSubview(stamp); contentView.addSubview(bubble)
+    face.isUserInteractionEnabled = false; contentView.addSubview(face)
+    reacts.font = .systemFont(ofSize: 14); reacts.backgroundColor = Look.theirs; reacts.layer.cornerRadius = 13; reacts.layer.masksToBounds = true
+    reacts.layer.borderWidth = 2; reacts.layer.borderColor = Look.chatBg.resolvedColor(with: traitCollection).cgColor
     contentView.addSubview(reacts)
-    sysL.font = .systemFont(ofSize: 12.5); sysL.textColor = .secondaryLabel; sysL.backgroundColor = .tertiarySystemBackground; sysL.numberOfLines = 0; sysL.textAlignment = .center
-    sysL.layer.cornerRadius = 9; sysL.layer.masksToBounds = true
+    sysL.font = .systemFont(ofSize: 15); sysL.textColor = .label; sysL.backgroundColor = Look.dayChip; sysL.numberOfLines = 0; sysL.textAlignment = .center
+    sysL.layer.cornerRadius = 10; sysL.layer.masksToBounds = true
     contentView.addSubview(sysL)
     retryB.setImage(UIImage(systemName: "exclamationmark.circle.fill"), for: .normal); retryB.tintColor = .systemRed
     retryB.addAction(UIAction { [weak self] _ in if let m = self?.msg { self?.onRetry?(m) } }, for: .touchUpInside)
     contentView.addSubview(retryB)
-    for v in [bubble, stack, reacts, sysL, retryB] as [UIView] { v.translatesAutoresizingMaskIntoConstraints = false }
-    lead = bubble.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12)
-    trail = bubble.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12)
+    for v in [bubble, stack, stamp, face, reacts, sysL, retryB] as [UIView] { v.translatesAutoresizingMaskIntoConstraints = false }
+    // (yours: 17 from the right edge, at most 281 wide on a 393 phone; others': 44 from the left — their picture in it —
+    // at most 250)
+    lead = bubble.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 44)
+    trail = bubble.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -17)
+    wMine = bubble.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 281 / 393)
+    wTheirs = bubble.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 250 / 393)
+    top = bubble.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 10)
+    stackTrail = stack.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -11)
     photoW = photo.widthAnchor.constraint(equalToConstant: 240); photoH = photo.heightAnchor.constraint(equalToConstant: 180)
     photoW.priority = .init(999); photoH.priority = .init(999)
-    reactsLead = reacts.leadingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: 10)
-    reactsTrail = reacts.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -10)
+    reactsLead = reacts.leadingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: 12)
+    reactsTrail = reacts.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -12)
     bubbleBottom = bubble.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -3)
     reactsBottom = reacts.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -3)
     NSLayoutConstraint.activate([
-      bubble.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 3),
-      bubble.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.78),
-      stack.topAnchor.constraint(equalTo: bubble.topAnchor, constant: 7), stack.bottomAnchor.constraint(equalTo: bubble.bottomAnchor, constant: -6),
-      stack.leadingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: 10), stack.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -10),
+      top,
+      stack.topAnchor.constraint(equalTo: bubble.topAnchor, constant: 8), stack.bottomAnchor.constraint(equalTo: bubble.bottomAnchor, constant: -7),
+      stack.leadingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: 12), stackTrail,
+      stamp.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -11), stamp.bottomAnchor.constraint(equalTo: bubble.bottomAnchor, constant: -6),
+      face.widthAnchor.constraint(equalToConstant: 27), face.heightAnchor.constraint(equalToConstant: 27),
+      face.trailingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: -10), face.bottomAnchor.constraint(equalTo: bubble.bottomAnchor),
       photoW, photoH,
-      reacts.topAnchor.constraint(equalTo: bubble.bottomAnchor, constant: -6), reacts.heightAnchor.constraint(equalToConstant: 22),
-      sysL.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 6), sysL.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -6),
+      reacts.topAnchor.constraint(equalTo: bubble.bottomAnchor, constant: -5), reacts.heightAnchor.constraint(equalToConstant: 26),
+      sysL.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 13), sysL.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -3),
       sysL.centerXAnchor.constraint(equalTo: contentView.centerXAnchor), sysL.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.85),
       retryB.centerYAnchor.constraint(equalTo: bubble.centerYAnchor), retryB.trailingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: -6),
     ])
   }
   required init?(coder: NSCoder) { fatalError() }
+  override func traitCollectionDidChange(_ p: UITraitCollection?) {
+    super.traitCollectionDidChange(p)
+    if traitCollection.hasDifferentColorAppearance(comparedTo: p) { reacts.layer.borderColor = Look.chatBg.resolvedColor(with: traitCollection).cgColor; if let m = msg { foot(m) } }
+  }
+  private var group: Group?, log: GroupLog?
 
-  func set(_ m: Msg, group g: Group, log l: GroupLog) {
-    msg = m
+  func set(_ m: Msg, group g: Group, log l: GroupLog, run: Run) {
+    msg = m; group = g; log = l
     let T = Talk.shared, mine = m.by == T.me?.id
     // a line about the group (made, added, left…): in the middle
     let sys = m.kind == "sys"
-    sysL.isHidden = !sys; bubble.isHidden = sys; reacts.isHidden = true; retryB.isHidden = !(mine && m.failed)
+    sysL.isHidden = !sys; bubble.isHidden = sys; reacts.isHidden = true; retryB.isHidden = !(mine && m.failed); face.isHidden = true
     bubbleBottom.isActive = false; reactsBottom.isActive = false
     if sys { sysL.text = m.text; return }
-    lead.isActive = !mine; trail.isActive = mine
-    bubble.backgroundColor = mine ? Look.mine : Look.theirs
-    let ink: UIColor = mine ? .white : .label, dim: UIColor = mine ? UIColor.white.withAlphaComponent(0.75) : .secondaryLabel
-    // the name, coloured, with the role (others' only)
-    nameL.isHidden = mine
-    if !mine {
+    top.constant = run.first ? 10 : 2
+    lead.isActive = !mine; trail.isActive = mine; wMine.isActive = mine; wTheirs.isActive = !mine
+    stackTrail.constant = mine ? -11 : -12
+    bubble.fill = mine ? Look.mine : Look.theirs
+    bubble.tail = (mine, run.last)
+    let ink: UIColor = mine ? .white : .label, dim: UIColor = mine ? Look.mineTime : Look.roleInk
+    // others' first of a run: the name in their Console colour, the role under it ("Client" in orange); their picture by the last
+    let showName = !mine && run.first
+    nameL.isHidden = !showName; roleL.isHidden = !showName
+    if showName {
       let p = T.people[m.by]
-      let a = NSMutableAttributedString(string: p?.name ?? "Someone", attributes: [.foregroundColor: Look.color(for: m.by)])
-      // (a client contact, to staff: "Name · Company · Client")
-      let role = p.map { $0.contact && !T.isContact ? ($0.role.isEmpty ? "Client" : $0.role + " · Client") : $0.role }
-      if let r = role, !r.isEmpty { a.append(NSAttributedString(string: " · " + r, attributes: [.foregroundColor: Look.color(for: m.by).withAlphaComponent(0.75), .font: UIFont.systemFont(ofSize: 12.5)])) }
-      nameL.attributedText = a
+      nameL.text = p?.name ?? "Someone"; nameL.textColor = Look.person(m.by)
+      let client = p?.contact == true && !T.isContact
+      roleL.text = client ? "Client" : (p?.role ?? ""); roleL.isHidden = roleL.text?.isEmpty != false
+      roleL.textColor = client ? Look.clientInk : Look.roleInk; roleL.font = .systemFont(ofSize: 12, weight: client ? .semibold : .regular)
     }
+    if !mine && run.last { face.isHidden = false; face.set(person: T.people[m.by]) }
     // a reply's quote
     quote.isHidden = m.reply == nil || m.deleted
     if let r = m.reply {
-      quote.backgroundColor = mine ? UIColor.white.withAlphaComponent(0.18) : UIColor.tertiarySystemFill
-      quoteBar.backgroundColor = mine ? .white : Look.color(for: r.by)
-      quoteName.text = T.name(r.by); quoteName.textColor = mine ? .white : Look.color(for: r.by)
+      quote.backgroundColor = UIColor.black.withAlphaComponent(0.22)
+      quoteBar.backgroundColor = Look.person(r.by)
+      quoteName.text = T.name(r.by); quoteName.textColor = mine ? .white : Look.person(r.by)
       quoteText.text = r.text; quoteText.textColor = mine ? UIColor.white.withAlphaComponent(0.85) : .secondaryLabel
     }
-    // a photo / a file
+    // a photo / a file (their own design comes with stage 2; here as before, in the new colours)
     let isVideo = !m.deleted && m.file != nil && m.kind == "video"
     let isPhoto = !m.deleted && m.file != nil && (m.kind == "photo" || isVideo)
     let isVoice = !m.deleted && m.file != nil && m.kind == "voice"
@@ -563,7 +726,6 @@ final class BubbleCell: UITableViewCell {
       photoW.constant = w; photoH.constant = min(320, max(120, w * ratio))
       photo.image = nil
       if let s = f.secs { vlen.text = String(format: "%d:%02d", Int(s) / 60, Int(s) % 60) }
-      // (a video's frame: from the copy on this phone — fetched by itself when it's not too big)
       if !isVideo || f.size <= 60 * 1024 * 1024 || FileManager.default.fileExists(atPath: Net.local(f.id).path) {
         Net.shared.file(f.id) { [weak self] url in
           guard let self = self, self.msg?.id == m.id, let url = url else { return }
@@ -576,48 +738,64 @@ final class BubbleCell: UITableViewCell {
     if isVoice, let f = m.file { voice.set(id: m.id, file: f, ink: ink, dim: dim) }
     fileRow.isHidden = m.deleted || m.file == nil || isPhoto || isVoice
     if let f = m.file, !isPhoto {
-      fileRow.backgroundColor = mine ? UIColor.white.withAlphaComponent(0.16) : .tertiarySystemFill
+      fileRow.backgroundColor = UIColor.black.withAlphaComponent(0.22)
       fileIcon.image = UIImage(systemName: m.kind == "video" ? "play.rectangle.fill" : "doc.fill"); fileIcon.tintColor = ink
       fileName.text = f.name; fileName.textColor = ink
       fileSize.text = ByteCountFormatter.string(fromByteCount: Int64(f.size), countStyle: .file) + " · " + (f.name as NSString).pathExtension.uppercased(); fileSize.textColor = dim
     }
-    // the words
+    // the words — the time sits on their last line when it fits (room kept for it at the end, as WhatsApp)
+    let a = NSMutableAttributedString()
     if m.deleted {
-      let a = NSMutableAttributedString(attachment: NSTextAttachment(image: UIImage(systemName: "nosign")!.withTintColor(dim)))
-      a.append(NSAttributedString(string: " This message was deleted", attributes: [.font: UIFont.italicSystemFont(ofSize: 15), .foregroundColor: dim]))
-      textL.attributedText = a; textL.isHidden = false
+      a.append(NSAttributedString(attachment: NSTextAttachment(image: UIImage(systemName: "nosign")!.withTintColor(dim))))
+      a.append(NSAttributedString(string: " " + (mine ? "You deleted this message" : "This message was deleted"), attributes: [.font: UIFont.italicSystemFont(ofSize: 17), .foregroundColor: dim]))
     } else {
-      // (@mentions in bold, in the accent — white on mine)
-      let a = NSMutableAttributedString(string: m.text, attributes: [.font: UIFont.systemFont(ofSize: 16.5), .foregroundColor: ink])
+      a.append(NSAttributedString(string: m.text, attributes: [.font: UIFont.systemFont(ofSize: 17), .foregroundColor: ink]))
       for id in m.mentions {
         guard let n = T.people[id]?.name, !n.isEmpty else { continue }
         var from = m.text.startIndex
         while let r = m.text.range(of: "@" + n, range: from..<m.text.endIndex) {
-          a.addAttributes([.font: UIFont.systemFont(ofSize: 16.5, weight: .semibold), .foregroundColor: mine ? UIColor.white : Look.accent], range: NSRange(r, in: m.text))
+          a.addAttributes([.font: UIFont.systemFont(ofSize: 17, weight: .semibold), .foregroundColor: mine ? UIColor.white : Look.person(id)], range: NSRange(r, in: m.text))
           from = r.upperBound
         }
       }
-      textL.attributedText = a
-      textL.isHidden = m.text.isEmpty
     }
-    // the time inside, "Edited", and ✓ / ✓✓ (blue once everyone has seen it) on mine
-    let foot = NSMutableAttributedString(string: (m.edited && !m.deleted ? "Edited " : "") + Look.clock(m.at), attributes: [.foregroundColor: dim])
+    let words = a.length > 0
+    textL.isHidden = !words
+    footL.isHidden = words; stamp.isHidden = !words
+    foot(m)
+    if words {
+      // (an invisible space as wide as the time at the end of the words: the time goes there, or onto its own line)
+      let room = NSTextAttachment(); room.bounds = CGRect(x: 0, y: 0, width: ceil(stamp.intrinsicContentSize.width) + 10, height: 1)
+      a.append(NSAttributedString(attachment: room))
+      textL.attributedText = a
+    }
+    // reactions under the bubble: each emoji with its count
+    let counts = Dictionary(grouping: m.reactions.values, by: { $0 }).map { ($0.key, $0.value.count) }.sorted { $0.1 > $1.1 }
+    reacts.isHidden = counts.isEmpty || m.deleted
+    reacts.text = counts.map { $0.0 }.joined() + (m.reactions.count > 1 ? " \(m.reactions.count)" : "")
+    reactsLead.isActive = !mine; reactsTrail.isActive = mine
+    if reacts.isHidden { bubbleBottom.isActive = true } else { reactsBottom.isActive = true }
+  }
+  // the time inside — "Edited" before it, ✓✓ after it on yours (blue-white once everyone has read it; never for a client)
+  private func foot(_ m: Msg) {
+    guard let g = group, let l = log else { return }
+    let T = Talk.shared, mine = m.by == T.me?.id
+    let dim: UIColor = mine ? Look.mineTime : Look.roleInk
+    let f = NSMutableAttributedString(string: (m.edited && !m.deleted ? "Edited " : "") + Look.clock(m.at), attributes: [.foregroundColor: dim, .font: UIFont.systemFont(ofSize: 12)])
     if mine && !m.deleted {
       let others = g.members.filter { $0 != m.by }
       let idx = l.msgs.firstIndex { $0.id == m.id } ?? 0
       let allSeen = !T.isContact && !others.isEmpty && others.allSatisfy { p in l.readBy[p].flatMap { r in l.msgs.firstIndex { $0.id == r } }.map { $0 >= idx } ?? false }
-      let sym = m.pending ? (m.failed ? "exclamationmark.circle" : "clock") : allSeen ? "checkmark.circle.fill" : "checkmark"
-      let tint: UIColor = allSeen ? UIColor(red: 0.62, green: 0.86, blue: 1, alpha: 1) : dim
-      foot.append(NSAttributedString(string: " "))
-      foot.append(NSAttributedString(attachment: NSTextAttachment(image: UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 10, weight: .bold))!.withTintColor(tint))))
+      f.append(NSAttributedString(string: " "))
+      if m.pending {
+        f.append(NSAttributedString(attachment: NSTextAttachment(image: UIImage(systemName: m.failed ? "exclamationmark.circle" : "clock", withConfiguration: UIImage.SymbolConfiguration(pointSize: 10, weight: .bold))!.withTintColor(dim.resolvedColor(with: traitCollection)))))
+      } else {
+        let t = NSTextAttachment(image: Ticks.image((allSeen ? Look.readTick : Look.mineTime).resolvedColor(with: traitCollection)))
+        t.bounds = CGRect(x: 0, y: -1, width: 16, height: 10)
+        f.append(NSAttributedString(attachment: t))
+      }
     }
-    footL.attributedText = foot
-    // reactions under the bubble: each emoji with its count
-    let counts = Dictionary(grouping: m.reactions.values, by: { $0 }).map { ($0.key, $0.value.count) }.sorted { $0.1 > $1.1 }
-    reacts.isHidden = counts.isEmpty || m.deleted
-    reacts.text = counts.map { $0.1 > 1 ? "\($0.0) \($0.1)" : $0.0 }.joined(separator: " ")
-    reactsLead.isActive = !mine; reactsTrail.isActive = mine
-    if reacts.isHidden { bubbleBottom.isActive = true } else { reactsBottom.isActive = true }
+    footL.attributedText = f; stamp.attributedText = f
   }
   // a video's first frame (kept)
   private static let frames = NSCache<NSString, UIImage>()
@@ -635,19 +813,30 @@ final class BubbleCell: UITableViewCell {
   @objc private func quoteTap() { if let r = msg?.reply { onReplyTap?(r.id) } }
   @objc private func fileTap() { if let m = msg { onFileTap?(m) } }
   func flash() {
-    let c = bubble.backgroundColor
-    UIView.animate(withDuration: 0.2, animations: { self.bubble.backgroundColor = UIColor.systemYellow.withAlphaComponent(0.5) }) { _ in UIView.animate(withDuration: 0.6) { self.bubble.backgroundColor = c } }
+    let c = bubble.fill
+    UIView.animate(withDuration: 0.2, animations: { self.bubble.alpha = 0.55 }) { _ in UIView.animate(withDuration: 0.6) { self.bubble.alpha = 1; self.bubble.fill = c } }
   }
 }
 
 // ---------- the message bar (Haris 2026-11-05 "like WhatsApp"): + · the box · camera · mic; typing → send ----------
+/* The message box (the design): it can switch to iPhone's emoji keyboard from its smiley — Apple's own keyboard,
+   asked for through the text view's input mode. */
+final class EmojiBox: UITextView {
+  var emoji = false
+  override var textInputMode: UITextInputMode? {
+    if emoji, let m = UITextInputMode.activeInputModes.first(where: { $0.primaryLanguage == "emoji" }) { return m }
+    return super.textInputMode
+  }
+}
+
 final class MessageBar: UIView, UITextViewDelegate {
-  let box = UITextView()
+  let box = EmojiBox()
+  private let smiley = UIButton(type: .system)
   private let plus = UIButton(type: .system), cam = UIButton(type: .system), mic = UIButton(type: .system), sendB = UIButton(type: .system)
   private let place = UILabel()
   var placeholder = "Message" { didSet { place.text = placeholder } }
   private let replyV = UIView(), replyName = UILabel(), replyText = UILabel(), replyX = UIButton(type: .system), replyBar = UIView()
-  private let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
+  private let blur = UIView()
   var onSend: ((String, [String]) -> Void)?
   var onPlus: ((String) -> Void)?
   var onCancelReply: (() -> Void)?
@@ -661,16 +850,33 @@ final class MessageBar: UIView, UITextViewDelegate {
   private let rec = VoiceRecorder()
   private let recV = UIView(), recDot = UIView(), recTime = UILabel(), recHint = UILabel()
   private var recCancelled = false, recStartX: CGFloat = 0
-  private var boxH: CGFloat = 36
+  private var boxH: CGFloat = 32
 
   override init(frame: CGRect) {
     super.init(frame: CGRect(x: 0, y: 0, width: 390, height: 52))
     autoresizingMask = .flexibleHeight
+    blur.backgroundColor = Look.barBg
     addSubview(blur)
-    let sym = { (n: String) in UIImage(systemName: n, withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .regular)) }
-    plus.setImage(sym("plus"), for: .normal); cam.setImage(sym("camera"), for: .normal); mic.setImage(sym("mic"), for: .normal)
-    sendB.setImage(UIImage(systemName: "arrow.up.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 30, weight: .regular)), for: .normal)
-    [plus, cam, mic, sendB].forEach { $0.tintColor = Look.accent; addSubview($0) }
+    // (the design: + · the box with its smiley · camera · the mic in a round button — while typing, send in our blue)
+    let sym = { (n: String, size: CGFloat) in UIImage(systemName: n, withConfiguration: UIImage.SymbolConfiguration(pointSize: size, weight: .regular)) }
+    plus.setImage(sym("plus", 21), for: .normal); cam.setImage(sym("camera", 21), for: .normal)
+    [plus, cam].forEach { $0.tintColor = .label; addSubview($0) }
+    var mc = UIButton.Configuration.filled()
+    mc.image = UIImage(systemName: "mic.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .semibold))
+    mc.baseBackgroundColor = .label; mc.baseForegroundColor = .systemBackground; mc.cornerStyle = .capsule; mc.contentInsets = .zero
+    mic.configuration = mc
+    var sc = UIButton.Configuration.filled()
+    sc.image = UIImage(systemName: "arrow.up", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .bold))
+    sc.baseBackgroundColor = Look.rgb(0x2F7BFF); sc.baseForegroundColor = .white; sc.cornerStyle = .capsule; sc.contentInsets = .zero
+    sendB.configuration = sc
+    mic.accessibilityLabel = "Hold to record a voice message"; sendB.accessibilityLabel = "Send"
+    [mic, sendB].forEach { addSubview($0) }
+    smiley.setImage(sym("face.smiling", 18), for: .normal); smiley.tintColor = .label; smiley.accessibilityLabel = "Emoji"
+    smiley.addAction(UIAction { [weak self] _ in
+      guard let self = self else { return }
+      self.box.emoji.toggle()
+      if self.box.isFirstResponder { self.box.reloadInputViews() } else { self.box.becomeFirstResponder() }
+    }, for: .touchUpInside)
     plus.showsMenuAsPrimaryAction = true
     plus.menu = UIMenu(children: [
       UIAction(title: "Photos", image: UIImage(systemName: "photo.on.rectangle")) { [weak self] _ in self?.onPlus?("photos") },
@@ -691,11 +897,10 @@ final class MessageBar: UIView, UITextViewDelegate {
     mentionV.axis = .vertical; mentionV.isHidden = true
     addSubview(mentionV)
     sendB.addAction(UIAction { [weak self] _ in self?.sendNow() }, for: .touchUpInside)
-    box.font = .systemFont(ofSize: 16.5); box.backgroundColor = .secondarySystemBackground; box.layer.cornerRadius = 18; box.layer.cornerCurve = .continuous
-    box.textContainerInset = UIEdgeInsets(top: 8, left: 10, bottom: 8, right: 10); box.delegate = self; box.isScrollEnabled = false
-    box.layer.borderWidth = 0.5; box.layer.borderColor = UIColor.separator.cgColor
-    addSubview(box)
-    place.text = "Message"; place.font = .systemFont(ofSize: 16.5); place.textColor = .placeholderText; box.addSubview(place)
+    box.font = .systemFont(ofSize: 17); box.backgroundColor = Look.field; box.layer.cornerRadius = 16; box.layer.cornerCurve = .continuous
+    box.textContainerInset = UIEdgeInsets(top: 6, left: 8, bottom: 6, right: 34); box.delegate = self; box.isScrollEnabled = false
+    addSubview(box); addSubview(smiley)
+    place.text = ""; place.font = .systemFont(ofSize: 16); place.textColor = .systemGray; box.addSubview(place)
     replyV.backgroundColor = .clear
     replyBar.backgroundColor = Look.accent; replyName.font = .systemFont(ofSize: 13, weight: .semibold); replyName.textColor = Look.accent
     replyText.font = .systemFont(ofSize: 13); replyText.textColor = .secondaryLabel
@@ -708,7 +913,7 @@ final class MessageBar: UIView, UITextViewDelegate {
   required init?(coder: NSCoder) { fatalError() }
   // (the bar stays above the home indicator when the keyboard is down)
   private var mentionH: CGFloat { mentionV.isHidden ? 0 : CGFloat(mentionV.arrangedSubviews.count) * 44 }
-  override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: boxH + 16 + (replyV.isHidden ? 0 : 46) + mentionH + safeAreaInsets.bottom) }
+  override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: boxH + 14 + (replyV.isHidden ? 0 : 46) + mentionH + safeAreaInsets.bottom) }
   override func safeAreaInsetsDidChange() { super.safeAreaInsetsDidChange(); invalidateIntrinsicContentSize() }
   override func layoutSubviews() {
     super.layoutSubviews()
@@ -720,13 +925,15 @@ final class MessageBar: UIView, UITextViewDelegate {
     replyName.frame = CGRect(x: 24, y: 7, width: W - 70, height: 17); replyText.frame = CGRect(x: 24, y: 24, width: W - 70, height: 17)
     replyX.frame = CGRect(x: W - 44, y: 6, width: 36, height: 36)
     let typing = !box.text.isEmpty
-    let y = top + 8, by = y + boxH - 36
-    plus.frame = CGRect(x: 6, y: by, width: 40, height: 36)
-    let right: CGFloat = typing ? 50 : 88
-    box.frame = CGRect(x: 48, y: y, width: W - 48 - right, height: boxH)
-    place.frame = CGRect(x: 15, y: 8, width: box.bounds.width - 30, height: 20)
-    sendB.frame = CGRect(x: W - 46, y: by, width: 40, height: 36)
-    cam.frame = CGRect(x: W - 84, y: by, width: 38, height: 36); mic.frame = CGRect(x: W - 46, y: by, width: 40, height: 36)
+    // (the design's places: + at 10, the box from 46, camera and mic at the right; the buttons stay level with the box's last line)
+    let y = top + 8, by = y + boxH - 32
+    plus.frame = CGRect(x: 10, y: by, width: 32, height: 32)
+    let right: CGFloat = typing ? 49 : 87
+    box.frame = CGRect(x: 46, y: y, width: W - 46 - right, height: boxH)
+    smiley.frame = CGRect(x: box.frame.maxX - 34, y: y + boxH - 32, width: 32, height: 32)
+    place.frame = CGRect(x: 13, y: 6, width: box.bounds.width - 46, height: 20)
+    sendB.frame = CGRect(x: W - 41, y: by, width: 32, height: 32)
+    cam.frame = CGRect(x: W - 79, y: by, width: 32, height: 32); mic.frame = CGRect(x: W - 41, y: by, width: 32, height: 32)
     sendB.isHidden = !typing; cam.isHidden = typing; mic.isHidden = typing
     recV.frame = CGRect(x: 8, y: y, width: W - 60, height: 36)
     recDot.frame = CGRect(x: 10, y: 13, width: 10, height: 10)
@@ -742,7 +949,7 @@ final class MessageBar: UIView, UITextViewDelegate {
         guard let self = self else { return }
         guard ok else { toast("Allow the microphone for E11 Talk in Settings to record"); return }
         self.recTime.text = "0:00"
-        self.recV.isHidden = false; self.box.isHidden = true; self.plus.isHidden = true; self.cam.isHidden = true
+        self.recV.isHidden = false; self.box.isHidden = true; self.smiley.isHidden = true; self.plus.isHidden = true; self.cam.isHidden = true
         self.recDot.alpha = 1
         UIView.animate(withDuration: 0.6, delay: 0, options: [.repeat, .autoreverse]) { self.recDot.alpha = 0.2 }
       }
@@ -757,7 +964,7 @@ final class MessageBar: UIView, UITextViewDelegate {
   }
   private func endRecording(send: Bool) {
     recDot.layer.removeAllAnimations()
-    recV.isHidden = true; box.isHidden = false; plus.isHidden = false; recHint.alpha = 1
+    recV.isHidden = true; box.isHidden = false; smiley.isHidden = false; plus.isHidden = false; recHint.alpha = 1
     setNeedsLayout()
     guard rec.isRecording else { return }
     if let r = rec.stop(keep: send) { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onVoice?(r.0, r.1, r.2) }
@@ -804,7 +1011,7 @@ final class MessageBar: UIView, UITextViewDelegate {
   }
   func textChanged() {
     place.isHidden = !box.text.isEmpty
-    let h = min(130, max(36, ceil(box.sizeThatFits(CGSize(width: max(100, box.bounds.width), height: 400)).height)))
+    let h = min(130, max(32, ceil(box.sizeThatFits(CGSize(width: max(100, box.bounds.width), height: 400)).height)))
     box.isScrollEnabled = h >= 130
     if h != boxH { boxH = h; invalidateIntrinsicContentSize() }
     UIView.animate(withDuration: 0.15) { self.setNeedsLayout(); self.layoutIfNeeded() }

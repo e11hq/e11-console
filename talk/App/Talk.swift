@@ -370,9 +370,22 @@ final class Talk {
 // ---------- small shared pieces ----------
 enum Look {
   static let accent = UIColor(red: 0.18, green: 0.44, blue: 0.89, alpha: 1)   // E11 Talk's blue (#2f6fe4)
-  static let mine = UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.16, green: 0.38, blue: 0.85, alpha: 1) : UIColor(red: 0.18, green: 0.44, blue: 0.89, alpha: 1) }
-  static let theirs = UIColor { $0.userInterfaceStyle == .dark ? UIColor(white: 0.17, alpha: 1) : .white }
-  static let chatBg = UIColor { $0.userInterfaceStyle == .dark ? .black : UIColor(red: 0.95, green: 0.95, blue: 0.97, alpha: 1) }
+  // the chat's colours, from the approved design (canvas "E11 Talk — design", 2026-11-11): dark · light
+  static func dyn(_ dark: UInt32, _ light: UInt32) -> UIColor { UIColor { $0.userInterfaceStyle == .dark ? rgb(dark) : rgb(light) } }
+  static func rgb(_ v: UInt32, _ a: CGFloat = 1) -> UIColor { UIColor(red: CGFloat((v >> 16) & 0xff) / 255, green: CGFloat((v >> 8) & 0xff) / 255, blue: CGFloat(v & 0xff) / 255, alpha: a) }
+  static let mine = dyn(0x2B5FA3, 0x2F7BFF)          // your bubbles
+  static let theirs = dyn(0x262628, 0xFFFFFF)        // everyone else's
+  static let chatBg = dyn(0x0A0A0A, 0xF2F2F7)        // behind the chat
+  static let barBg = dyn(0x141414, 0xF9F9F9)         // the message bar
+  static let field = dyn(0x2B2B2B, 0xFFFFFF)         // the message box
+  static let dayChip = dyn(0x1C1C1E, 0xFFFFFF)       // "Today", "Yesterday"
+  static let downBtn = dyn(0x2C2C2E, 0xFFFFFF)       // the scroll-down button
+  static let clientInk = dyn(0xFFB340, 0xD97A00)     // "Client can see this group", a client's "Client"
+  static let roleInk = UIColor.systemGray            // a role under a name (#8E8E93)
+  static let mineTime = UIColor { $0.userInterfaceStyle == .dark ? rgb(0xA9C3E6) : UIColor.white.withAlphaComponent(0.8) }
+  static let readTick = UIColor { $0.userInterfaceStyle == .dark ? rgb(0x8FDBFF) : .white }
+  // a person's colour: their initials' colour in E11 Console (Haris 2026-11-11), else one picked from their id
+  static func person(_ id: String) -> UIColor { hex(Talk.shared.people[id]?.color) ?? color(for: id) }
   static func hex(_ s: String?) -> UIColor? {
     guard var h = s?.trimmingCharacters(in: .whitespaces), h.hasPrefix("#") else { return nil }
     h.removeFirst(); if h.count == 3 { h = h.map { "\($0)\($0)" }.joined() }
@@ -383,8 +396,10 @@ enum Look {
   static let nameColors: [UIColor] = [.systemPurple, .systemOrange, .systemTeal, .systemPink, .systemGreen, .systemIndigo, .systemBrown, .systemRed]
   static func color(for id: String) -> UIColor { nameColors[abs(id.unicodeScalars.reduce(0) { ($0 &* 31) &+ Int($1.value) }) % nameColors.count] }
   static func initials(_ s: String) -> String {
-    let w = s.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).prefix(2)
-    return w.map { String($0.prefix(1)) }.joined().uppercased()
+    let all = s.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+    guard let first = all.first else { return "" }
+    let next = all.dropFirst().first { $0.lowercased() != "al" } ?? all.dropFirst().first
+    return (String(first.prefix(1)) + (next.map { String($0.prefix(1)) } ?? "")).uppercased()
   }
   static func time(_ ms: Double, short: Bool = true) -> String {
     let d = Date(timeIntervalSince1970: ms / 1000), cal = Calendar.current, f = DateFormatter()
@@ -440,7 +455,7 @@ final class Avatar: UIView {
     else { lbl.text = String(g.name.prefix(1)).uppercased(); backgroundColor = Look.hex(c?.color) ?? Look.accent; img.isHidden = true; lbl.isHidden = false; want = nil }
   }
   func set(client c: Client) { set(name: c.name, color: Look.hex(c.color) ?? Look.accent, picture: c.logo) }
-  func set(person p: Person?) { set(name: p?.name ?? "?", color: Look.color(for: p?.id ?? ""), picture: p?.photo) }
+  func set(person p: Person?) { set(name: p?.name ?? "?", color: p.map { Look.person($0.id) } ?? Look.accent, picture: p?.photo) }
 }
 
 // a short line at the bottom (as Console's toasts)
