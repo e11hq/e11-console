@@ -130,6 +130,9 @@ any build runs, the simulator check build included. A push to an `ios-*` branch 
 changes stay as local commits and are pushed only once Haris says yes to building. **Since 2026-11-08 a push starts no build
 at all**, and there's no separate check build: one TestFlight build (`gh workflow run ios.yml --ref ios-nav -f send=yes
 -f walk=no`) runs the self-test and **signs and sends nothing if any self-test step fails**.
+**Quick builds while working (Haris 2026-11-11 13:00: "I dont want long simulator test now … do it briefly as the last
+step"):** builds while working add `-f checks=none` — the app built, signed and sent with no simulator self-test (~10 min,
+not ~35); the full self-test (`checks=full`, the default) runs as the last step, before a release or a lock.
 
 **TestFlight only on Haris's yes (Haris, 2026-11-03):** "publish, publish app build" builds, self-tests and signs the
 iPhone app, then keeps it on his Mac (ios.yml `send: ask`, the default). When a build has finished, ask Haris; only on
