@@ -89,3 +89,18 @@ test("the owner's own codes for others: out of the admins' record, telling no on
   const ownerSees = await fetch(base + '/api/signin/codes', { headers: { 'X-Dev-Email': 'owner@e11.test' } }).then((r) => r.json());
   assert.ok(ownerSees.codes.some((x) => x.byOwner));
 });
+
+test('the page draws its first step in a browser (its data read back whole)', async () => {
+  const { chromium } = await import('playwright').catch(() => ({}));
+  if (!chromium) return;
+  const b = await chromium.launch();
+  try {
+    const p = await b.newPage();
+    const errs = []; p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + '/oidc/authorize?' + new URLSearchParams({ ...REQ, response_type: 'code' }));
+    await p.fill('#em', 'sara@e11.test');
+    await p.click('button.go');
+    await p.waitForSelector('#pw');
+    assert.deepEqual(errs, []);
+  } finally { await b.close(); }
+});

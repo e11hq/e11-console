@@ -1,10 +1,10 @@
 // Our sign-in page (Haris 2026-11-11, the approved mock-up "Sign-in — fully Apple"): the E11 wordmark, then email →
 // password, or a sign-in code (an admin's, or the owner's own) → set a password → in. One page, its steps drawn by a
 // little script; everything checked by the server (signin.js). Light and dark follow the phone. No outside files.
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 export function signinPage({ mark = '', req = {} }) {
-  const reqJson = esc(JSON.stringify(req));
+  // (inside a <script> block nothing is HTML-decoded: only what could close the block is escaped)
+  const reqJson = JSON.stringify(req).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
   return `<!doctype html>
 <html lang="en">
 <head>
