@@ -2698,6 +2698,7 @@ const Sync = (() => {
     if (typeof ViewAs !== 'undefined') ViewAs.init(me.viewAs);   // test site only: the owner using the app as someone else
     AppIcon.setOwner(me.owner); if (me.appIcon) AppIcon.sync(me.appIcon);
     ownerId = me.ownerId || null;
+    signinOn = !!me.signin;
     if (typeof OwnerView !== 'undefined') OwnerView.init(me);
     MacUpdate.check(me.macShell);
     if (ServerHost.setOffice) ServerHost.setOffice(me.office);
@@ -8987,6 +8988,7 @@ function projectAccessDialog(u) {
 }
 
 let ownerId = null;   // the app's owner (Admins are told, so their Team page shows that account locked)
+let signinOn = false; // our own sign-in is on for this site (New sign-in code in a member's menu)
 function memberMenu(anchor, id, head) {
   const u = userById(id);
   if (!u) return;
@@ -9048,9 +9050,22 @@ function memberMenu(anchor, id, head) {
   if (u.active === false) items.push({ label: 'Restore access', icon: 'user', run: () => { u.active = true; persist(); renderContent(); } });
   else {
     if (!Host.isServer) items.push({ label: 'Reset password…', icon: 'lock', run: () => resetPasswordFlow(u) });
+    if (signinOn) items.push({ label: 'New sign-in code…', icon: 'lock', run: () => signinCodeFlow(u) });
     items.push({ label: 'Remove from team', icon: 'trash', danger: true, run: () => removeMemberFlow(u) });
   }
   showMenu(anchor, items.map((it, i) => (it === '-' || it.label ? it : { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) })), { native: true });
+}
+// A sign-in code for someone (Haris 2026-11-11): 4 digits, once, 24 hours — passed on with the message the server writes
+async function signinCodeFlow(u) {
+  let r;
+  try { r = await api('POST', '/api/signin/code', { userId: u.id }); } catch (e) { return toast((e && e.message) || 'Couldn’t make a code — try again'); }
+  if (!r || !r.ok) return toast((r && r.error) || 'Couldn’t make a code — try again');
+  const copy = await dialog({ title: `Sign-in code for ${fullName(u)}`, okText: 'Copy Message', cancelText: 'Done',
+    bodyHtml: `<div style="font-size:40px;font-weight:700;letter-spacing:12px;text-align:center;margin:6px 0 4px;font-variant-numeric:tabular-nums">${esc(r.code)}</div>`
+      + `<p style="text-align:center;margin:0 0 10px;color:var(--text-2)">${r.newUser ? 'New user' : 'Forgot password'} · works once, until ${esc(r.until)}</p>`
+      + `<p style="margin:0;color:var(--text-2)">A new code cancels the old one. Send it privately — WhatsApp or in person.</p>` });
+  if (!copy) return;
+  try { await navigator.clipboard.writeText(r.message); toast('Copied — paste it to ' + fullName(u).split(' ')[0]); } catch (e) { toast('Couldn’t copy — the code is ' + r.code); }
 }
 async function resetPasswordFlow(u) {
   const v = await formDialog({ title: `Reset password for ${fullName(u)}`, okText: 'Reset password', intro: 'They’ll sign in with this temporary password and be asked to choose a new one.',

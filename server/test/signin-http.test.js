@@ -46,6 +46,7 @@ test("an admin's code → a new password → Cloudflare's token; the other admin
   assert.equal((await post('/api/signin/code', { userId: 'u-sara' }, { 'X-Dev-Email': 'sara@e11.test' })).ok, false, 'not an admin');
   const made = await post('/api/signin/code', { userId: 'u-sara' }, { 'X-Dev-Email': 'omar@e11.test' });
   assert.ok(made.ok); assert.match(made.code, /^\d{4}$/); assert.equal(made.newUser, true);
+  assert.match(made.message, new RegExp(`Hi Sara,[\\s\\S]*Welcome to E11 Console[\\s\\S]*sara@e11.test[\\s\\S]*${made.code}[\\s\\S]*Omar Saleh$`));
   const s = await api('start', { email: 'sara@e11.test' });
   assert.deepEqual([s.ok, s.password, s.owner], [true, false, false]);
   const c = await api('code', { email: 'sara@e11.test', code: made.code });

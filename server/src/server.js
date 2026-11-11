@@ -9,6 +9,12 @@ import { openStore } from './store.js';
 import { createAuth } from './auth.js';
 import { createSignin } from './signin.js';
 import { signinPage } from './signin-page.js';
+// The message an admin sends with a sign-in code (Haris 2026-11-11, project doc own-sign-in-plan.md): new user or forgot password
+function signinMessage({ first, email, code, until, by, newUser, site }) {
+  return newUser
+    ? `Hi ${first},\n\nWelcome to E11 Console! Here's how to sign in for the first time:\n\n1. Open E11 Console: the iPhone app, the Mac app, or ${site}\n2. Your email (your username): ${email}\n3. Your sign-in code: ${code}\n4. Set your own password; the app opens once it's set.\n\nThe code works once and only until ${until}. If it runs out, just ask me for a new one.\n\nOn your iPhone or Mac you'll stay signed in, and Face ID / Touch ID gets you back in.\n\nPlease don't share this code with anyone.\n\n${by}`
+    : `Hi ${first},\n\nHere's a new sign-in code for E11 Console:\n\nEmail: ${email}\nCode: ${code}\n\nSign in with it and set a new password. Your old password stops working once you do. The code works once and only until ${until}.\n\nPlease don't share this code with anyone.\n\n${by}`;
+}
 import { createAccess } from './access.js';
 import { createFiles, mimeOf, httpError, IMAGES } from './files.js';
 import { createCfSync } from './cfsync.js';
@@ -825,14 +831,17 @@ export function createServer(cfg) {
       const t = store.get('users', String(body.userId || ''));
       if (!t || t.removed || t.active === false) return json(res, 404, { ok: false, error: 'Not on the team' });
       const r = signin.makeCode(t.email, real.email, { byOwner });
-      return json(res, r.ok ? 200 : 400, r.ok ? { ...r, name: t.name || t.email, by: real.name || real.email, newUser: !r.hasPassword } : r);
+      if (!r.ok) return json(res, 400, r);
+      const name = t.name || t.email, by = real.name || real.email, newUser = !r.hasPassword;
+      const until = new Date(r.expires).toLocaleString('en-GB', { timeZone: process.env.TZ || 'Asia/Dubai', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true });
+      return json(res, 200, { ...r, name, by, newUser, until, message: signinMessage({ first: String(name).split(/\s+/)[0], email: r.email, code: r.code, until, by, newUser, site: isTestSite ? 'test.e11hq.com' : 'console.e11hq.com' }) });
     }
     if (signin && p === '/api/signin/codes') {
       const real = req.realUser || u, owner = isOwner(real);
       if (!owner && !access.isAdm(real)) return json(res, 403, { ok: false, error: 'Only Super Admins and Office Admins' });
       return json(res, 200, { ok: true, codes: signin.codesRecord({ owner }) });
     }
-    if (p === '/api/me') return json(res, 200, { ok: true, user: access.shape(u, 'users', u), owner: isOwner(u), review: !!review, appIcon: appIcon.info(), macShell, version, rev: store.rev(), office: office.info(req),
+    if (p === '/api/me') return json(res, 200, { ok: true, user: access.shape(u, 'users', u), owner: isOwner(u), review: !!review, signin: !!signin, appIcon: appIcon.info(), macShell, version, rev: store.rev(), office: office.info(req),
       // (E11 Talk in the Mac app's sidebar: on the test site while it's built — Haris 2026-11-06; live when E11 Talk goes live)
       talk: isTestSite && !review,
       ownerView: req.ownerView || null, canOwnerView: ownerViewOk(req.realUser || u),
@@ -864,6 +873,7 @@ export function createServer(cfg) {
         testSite: isTestSite,
         viewAs: isTestSite && owner ? { real: { id: real.id, name: real.name || real.email }, as: req.viewingAs ? { id: u.id, name: u.name || u.email } : null } : null,
         sample: isTestSite && owner && !req.viewingAs,
+        signin: !!signin,   // (our own sign-in on: New Sign-in Code in Team members)
       };
       try { return json(res, 200, { ok: true, ...appStart.start(u, store.get('meta', 'main') || {}, (cfg.now || Date.now)(), appIcon.info()), ...me9, version, review: !!review }); }
       catch (e) { return json(res, 500, { ok: false, error: e.message }); }
