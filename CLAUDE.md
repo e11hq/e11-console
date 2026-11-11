@@ -122,8 +122,7 @@ screens dark, the main five light); the startup logo animation stays as Talk has
 every gap, size, colour, placement and every animation, done the Apple way (Apple's parts and Apple's animations set to
 match, never our own drawing). Light and dark follow the iPhone. Decisions: project doc `claude/talk-design-reference.md`.
 **E11 Talk is always the account E11 Console is signed in as (Haris 2026-11-11 23:55):** never a different account on the
-same phone. Talk's "Use Another Account" opens E11 Console's Me page scrolled to Sign Out, pulsing it — a change to the
-locked E11 Console app (a link into Me), made with the shared sign-in, only on Haris's yes. Client contacts (no Console)
+same phone; no "Use Another Account" in Talk (dropped, Haris 23:55) — to change account, sign out of E11 Console. Client contacts (no Console)
 sign in to Talk only, with Console's sign-in steps (email, password; first time the admin's sign-in code + new password).
 **E11 Talk never follows "View as" (Haris 2026-11-11 23:39):** "View as…" is only for E11 Console — E11 Talk always stays
 on the main account signed in on the phone (it switched Talk to that person before and cost Haris his own chats, 17:04).
