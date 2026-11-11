@@ -63,7 +63,6 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
     UNUserNotificationCenter.current().delegate = self
     NotifActions.register()
     Dirham.setup()
-    LoopProbe.report()   // (TestFlight, for a while: the task page's sizes before a stop — copied for Haris)
     return true
   }
   // (iPhone woke the app for its uploads and downloads — Transfers: the next piece sent, what finished filed)

@@ -214,8 +214,8 @@ our chips centred, no lines on the boxes' edges, the task cards' colour, Home's 
 change, Show More, steady heights — no cell, header or footer taking the safe area, the crash found and fixed), a trashed
 file going at once, the upload bar with Cancel, My Tasks' strike-through fix and its title exception, E11 Day's three boxes in
 the card colour, the list's end gap. Nothing touches them — look, behaviour or code, or a shared piece they use — without
-telling Haris first and his yes. (The TestFlight crash recorder, LoopProbe, is still in; it comes out once a few days pass
-with no crash notes.)
+telling Haris first and his yes. (The TestFlight crash recorder, LoopProbe, taken out 2026-11-11 — Haris
+asked; no crash notes since.)
 
 **iPhone Home and the task page — COMPLETED and LOCKED (Haris, 2026-11-08 13:21: "the home page and task page is
 completed, and they need to be locked, no changes will touch these pages now without me knowing"):** build **1571**, commit

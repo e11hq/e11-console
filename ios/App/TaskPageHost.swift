@@ -10,7 +10,6 @@ import QuickLook
 extension Main {
   func openTaskPage(_ id: String, tab: String, focus: String, trash: String? = nil) {
     endEditing()
-    LoopProbe.start()
     ProfileAskCard.current?.go()   // (a task opened: the birthday / city card slips away)
     FeedLoader.shared.cookies = serverHome.cookies   // (before anything is drawn: its pictures are fetched with it)
     let p = TaskPage(id: id, frame: view.bounds)
@@ -79,7 +78,6 @@ extension Main {
   }
   func closeTaskPage(_ p: TaskPage, animated: Bool = true) {
     guard let i = taskPages.firstIndex(where: { $0 === p }) else { return }
-    if taskPages.count == 1 { LoopProbe.end() }
     p.endEditing(true)
     if p.tab == "comments" { taskHideComments() }
     taskPages.remove(at: i)
