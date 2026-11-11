@@ -509,6 +509,9 @@ tried again by themselves and given to every list showing that person. The full 
 (its stable); main's 3a81fe3 (Finance-only search finds no tasks) is on test only. Next: the App Store screenshots — the
 approved Style F Dark frames with real captures from the App Review copy (project doc `claude/app-store-screenshots-plan.md`),
 then the release.
+**The App Store release waits for E11 Talk (Haris, 2026-11-11 20:16: "3"):** the Talk button (E11 Day, Clients) does nothing
+yet — App Review would reject a button that does nothing (2.1) — so E11 Console and E11 Talk are sent for review together,
+Talk's button opening the real app; it stays as it is until then (not hidden, not changed). The screenshots keep it.
 **STABLE — iPhone build 1687 and server 1.9.38 (Haris, 2026-11-11 17:41: "secure 1687 aside as the stable version"):**
 commit aa5f787, branch `stable/ios-1687`; the server commit 2415d3b, branch `stable/server-1.9.38` (never moved or deleted).
 The version to go back to if later work breaks something. Next, in order (Haris 17:41): background uploads and downloads;
