@@ -189,6 +189,50 @@ extension Main {
         var o = self.meCtl.selfReviews(); o["barHidden"] = (AppleTabs.shared?.barHiddenNow ?? false)
         self.apple("reviewsBack", o); self.tab(self.tabKeys.first ?? "today")
       }),
+      // an Office Admin's Overview, Claims and Expenses, and Me › Trash (Haris 2026-11-11, the mock-up "Remaining pages —
+      // fully Apple"): each tab its own Apple screen from the phone's copy; a claim's swipes and Apple's menu; a claim opened —
+      // HR Approved / Paid On… on Apple's toolbar, the tab bar gone; back; the Trash's rows with their swipes and menu
+      ("aOv", { if self.officeTabs { self.selfTapTab("today") } }),
+      ("aOvWait", {}),
+      ("aOvRead", {
+        guard self.officeTabs else { return }
+        var o = self.meCtl.selfOffice(); o["shown"] = MeTabVC.byKey["today"]?.view.window != nil; o["barHidden"] = (AppleTabs.shared?.barHiddenNow ?? false)
+        self.apple("overview", o)
+        if self.tabKeys.contains("fin-reimb") { self.selfTapTab("fin-reimb") }
+      }),
+      ("aClWait", {}),
+      ("aClRead", {
+        guard self.tabKeys.contains("fin-reimb") else { return }
+        var o = self.meCtl.selfOffice(); o["shown"] = MeTabVC.byKey["fin-reimb"]?.view.window != nil
+        self.apple("claims", o); _ = self.meCtl.selfOpenClaim()
+      }),
+      ("aClOpenWait", {}),
+      ("aClOpenRead", {
+        guard self.tabKeys.contains("fin-reimb") else { return }
+        var o = self.meCtl.selfOffice(); o["barHidden"] = (AppleTabs.shared?.barHiddenNow ?? false)
+        self.apple("claim", o); if o["kind"] as? String == "claim" { AppleTabs.shared?.roleNavs["fin-reimb"]?.popViewController(animated: true) }
+      }),
+      ("aClBackWait", {}),
+      ("aClBackRead", {
+        guard self.tabKeys.contains("fin-reimb") else { return }
+        var o = self.meCtl.selfOffice(); o["barHidden"] = (AppleTabs.shared?.barHiddenNow ?? false)
+        self.apple("claimsBack", o)
+        if self.tabKeys.contains("fin-expenses") { self.selfTapTab("fin-expenses") }
+      }),
+      ("aExWait", {}),
+      ("aExRead", {
+        guard self.tabKeys.contains("fin-expenses") else { return }
+        var o = self.meCtl.selfOffice(); o["shown"] = MeTabVC.byKey["fin-expenses"]?.view.window != nil
+        self.apple("expenses", o); self.tab(self.tabKeys.first ?? "today")
+      }),
+      ("aTr", { if self.meApple, !self.officeTabs { self.selfTapTab("me") } }),
+      ("aTrWait", {}),
+      ("aTrOpen", { if self.meApple, !self.officeTabs { self.meCtl.selfOpenTrash() } }),
+      ("aTrOpenWait", {}),
+      ("aTrRead", {
+        guard self.meApple, !self.officeTabs else { return }
+        self.apple("trash", self.meCtl.selfOffice()); self.meCtl.backToRoot(); self.tab(self.tabKeys.first ?? "today")
+      }),
       // (measurement, Haris 2026-11-10: a client's page sliding in from the Clients list — frame by frame, the search box
       //  and its glass in Apple's bar, and every touch of ours on the bar with its time)
       ("aBar", { self.tab("projects") }),

@@ -191,14 +191,14 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
   func sync(from bar: Tabs) {
     let items = bar.items ?? []
     guard !items.isEmpty else { return }
-    let home = APPLE_HOME ? Main.shared.tabKeys.firstIndex(of: "today") : nil
+    let home = APPLE_HOME && !Main.shared.officeTabs ? Main.shared.tabKeys.firstIndex(of: "today") : nil   // (an Office Admin's "today" is Overview, their own tab)
     let mt = APPLE_MYTASKS ? Main.shared.tabKeys.firstIndex(of: "mytasks") : nil
     let ib = APPLE_INBOX ? Main.shared.tabKeys.firstIndex(of: "inbox") : nil
     let cl = APPLE_CLIENTS ? Main.shared.tabKeys.firstIndex(of: "projects") : nil
     let ca = APPLE_CLIENTS ? Main.shared.tabKeys.firstIndex(of: "clients") : nil
     let me = APPLE_ME ? Main.shared.tabKeys.firstIndex(of: "me") : nil
     var rl: [String: Int] = [:]
-    for k in APPLE_ROLE_TABS { if let i = Main.shared.tabKeys.firstIndex(of: k) { rl[k] = i } }
+    for k in APPLE_ROLE_TABS where Main.shared.roleApple(k) { if let i = Main.shared.tabKeys.firstIndex(of: k) { rl[k] = i } }
     if slots.count != items.count || home != homeAt || mt != myTasksAt || ib != inboxAt || cl != clientsAt || ca != assetsAt || me != meAt || rl != roleAt {
       while slots.count < items.count { slots.append(TabSlot()) }
       if slots.count > items.count { slots = Array(slots.prefix(items.count)) }

@@ -50,6 +50,9 @@ try:
         meta = (snap.get('data') or snap).get('meta') or {}
         cdu = next((u for u in users if u.get('id') == meta.get('cdUserId') and u.get('email') != EMAIL), None)
         if cdu: roles.append(('Creative Director', cdu['email']))
+        # (and an Office Admin with Finance, for Overview, Claims and Expenses — Haris 2026-11-11)
+        ofu = next((u for u in users if u.get('role') == 'office_admin' and u.get('fin') == 'admin' and u.get('email') != EMAIL and u.get('active') is not False), None)
+        roles.append(('Office Admin + Finance', ofu['email'] if ofu else add('walk-officefin@test.e11', 'Walk Office Finance', 'office_admin', 'admin')))
     for label, role in ((('Social', 'social'),) if APPLE else (('Account Manager', 'am'), ('Production', 'production'), ('Social', 'social'))):   # (--apple: Social too, for its own Plans tab)
         u = next((x for x in users if x.get('role') == role and x.get('email') not in [e for _, e in roles] + [EMAIL]), None)
         roles.append((label, u['email'] if u else add(f'walk-{role}@test.e11', f'Walk {label}', role)))
@@ -169,7 +172,20 @@ if APPLE:
         check(r0.get('waiting', 0) == 0 or r0.get('menu') == ['Approve', 'Request Amendments…', 'Open Task'], f"the CD's Reviews: a request held — Apple's menu Approve · Request Amendments… · Open Task {r0.get('menu')}")
         check(r0.get('waiting', 0) == 0 or (r1.get('kind') == 'review' and r1.get('tools') == ['Request Amendments', 'Approve'] and r1.get('barHidden') is True), f"the CD's Reviews: a request opened — Request Amendments · Approve on Apple's toolbar, the tab bar gone {r1}")
         check(r0.get('waiting', 0) == 0 or (r2.get('kind') == 'reviews' and r2.get('barHidden') is False), f"the CD's Reviews: back — the tab bar there again {r2}")
-    for who in ('Super Admin', 'Social', 'Creative Director'):
+    of = (out.get('Office Admin + Finance') or {}).get('apple') or {}
+    o0, o1, o2, o3, o4 = of.get('overview') or {}, of.get('claims') or {}, of.get('claim') or {}, of.get('claimsBack') or {}, of.get('expenses') or {}
+    print('measure apple office', json.dumps(of))
+    if 'Office Admin + Finance' in out:
+        check(o0.get('shown') is True and o0.get('kind') == 'overview' and o0.get('apple') is True and not o0.get('loading') and o0.get('numbers') is True and o0.get('barHidden') is False, f"an Office Admin's Overview: its own Apple screen, the month's numbers as Apple's cells {o0}")
+        check(o1.get('shown') is True and o1.get('kind') == 'claims' and not o1.get('loading') and o1.get('pick') == 12, f"Claims: its own Apple screen from the phone's copy, the last 12 months to pick {o1}")
+        check(o1.get('claims', 0) == 0 or ('Open Claim' in (o1.get('menu') or []) and 'Share PDF' in (o1.get('menu') or [])), f"Claims: a claim held — Apple's menu with Open Claim and Share PDF {o1.get('menu')}")
+        check(o1.get('claims', 0) == 0 or (o2.get('kind') == 'claim' and o2.get('barHidden') is True and not o2.get('loading')), f"Claims: a claim opened — its own page, the tab bar gone {o2}")
+        check(o1.get('claims', 0) == 0 or (o3.get('kind') == 'claims' and o3.get('barHidden') is False), f"Claims: back — the tab bar there again {o3}")
+        check(o4.get('shown') is True and o4.get('kind') == 'expenses' and not o4.get('loading') and o4.get('subs', -1) >= 0, f"Expenses: its own Apple screen from the phone's copy {o4}")
+    tr = ((out.get('Super Admin') or {}).get('apple') or {}).get('trash') or {}
+    print('measure apple trash', json.dumps(tr))
+    check(tr.get('kind') == 'trash' and (tr.get('items', 0) == 0 or ('Restore' in (tr.get('menu') or []) and tr.get('lead') == ['Restore'])), f"Me › Trash: Apple's cells — swipe right Restore, Apple's menu with Restore {tr}")
+    for who in ('Super Admin', 'Social', 'Creative Director', 'Office Admin + Finance'):
         if who not in out: continue
         check(not (out.get(who) or {}).get('stuck'), f"the app ran to the end as {who} (no crash, not stuck)")
     open(os.path.join(TMP, 'ios-apple.txt'), 'w').write('\n'.join(fails) + '\n')

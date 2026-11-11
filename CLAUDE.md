@@ -318,6 +318,19 @@ The role guide its own pushed page "What Each Role Can Do". Add member: on Me �
 A member's page: Apple's grouped list — the person as Apple's cell, Email / Where / Status / Open tasks, Role and Finance Access
 as Apple's pull-down menus, Super Admin Rights and Creative Director as Apple's switches. Add Team Member: Apple's sheet.
 Mock-up approved (Haris 19:58: "yes").
+**iPhone Office Admin (Overview, Claims, Expenses), Me › Trash, Me › My profile — mock-up APPROVED (Haris 2026-11-11 07:25:
+"A–I go for it", "use same function we have"):** canvas "Remaining pages — fully Apple". All the first options: **A1** Overview's
+three numbers as Apple's cells in a "November" group, each opening its tab; Need HR approval / Office expenses / Client Assets
+as Apple's groups with See All. **B1** ••• Month (the last 12, as the website) on Claims and Office Expenses. **C1** ••• Mark All
+HR Approved · Set All Paid On… (Finance Admins). **D1** under All: No claims and Not answered yet, as the website's. **E1** a
+claim opened: its own pushed page — the person, items by date (a tap opens the receipt in Quick Look), Share PDF, Paid On… ·
+HR Approved on Apple's toolbar. **F1** ended subscriptions their own faded group. **G1** Trash: a file or folder shows its own
+picture. **H1** a trashed task opens the task page itself, view only, Restore on Apple's toolbar, ••• Delete Forever (Super
+Admins). **I1** My profile: Apple's header as Settings (photo, Edit → Apple's menu Take Photo · Choose Photo · Remove Photo,
+name, role). Everywhere: Apple's cells, swipes (Claims: right HR Approved, left Paid On…; Office expenses / Trash: left
+Delete), hold menus with Apple's lift; Add Claim / Add Subscription / Add Office Expense as Apple's form sheets. Ours, said
+plainly: "+ Add …" as Home's, the claims' coloured status words, My profile's role pills, Trash's Mail buttons. Every action
+the same function the website / server already has (no new server acts unless the website has it).
 **Remind Haris before any Mac app work starts (Haris 2026-11-10 18:34):** the Mac App Store app needs a build for
 content skeleton links (files…/p/<id> — the handler is in mac/swift/main.swift on main, commit 4815aab; the server
 1.9.30 already tells Apple /p/ is the apps'): until it's out, a skeleton link on a Mac with the app may not open there.

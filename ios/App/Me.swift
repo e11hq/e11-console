@@ -127,7 +127,23 @@ struct SetItem {
   var menu: (() -> UIMenu?)? = nil   // (touch and hold: Apple's own menu straight away — a team member, Haris 2026-11-10)
   var popup: (() -> UIMenu)? = nil   // (the value as Apple's pull-down menu — a member's Role and Finance Access)
   var flip: ((Bool) -> Void)? = nil
-  var sig: String { "\(title)|\(sub)|\(value)|\(sym ?? "")|\(col?.description ?? "")|\(chevron)|\(toggle != nil)|\(danger)|\(pill ?? "")|\(badge ?? "")|\(count)|\(pills.map { $0.0 }.joined(separator: ","))|\(person?.photo ?? "")|\(person?.ini ?? "")|\(warn)|\(dim)|\(bold)|\(tap != nil)|\(hold != nil)|\(menu != nil)|\(popup != nil)" }
+  // (Apple's own swipes on the row — a claim's HR Approved / Paid On…, an office expense's or a Trash item's Delete:
+  //  Haris 2026-11-11, "A–I go for it")
+  var lead: [MeSwipe] = []
+  var trail: [MeSwipe] = []
+  var line3: (String, UIColor)? = nil   // (a third line in its own colour — a subscription's invoices, days left in the Trash)
+  var pic: String? = nil                // (a file's own picture as the row's picture — the Trash's G1)
+  var sig: String { "\(sigBase)|\(lead.map { $0.title }.joined(separator: ","))|\(trail.map { $0.title }.joined(separator: ","))|\(line3?.0 ?? "")|\(line3?.1.description ?? "")|\(pic ?? "")" }
+  private var sigBase: String { "\(title)|\(sub)|\(value)|\(sym ?? "")|\(col?.description ?? "")|\(chevron)|\(toggle != nil)|\(danger)|\(pill ?? "")|\(badge ?? "")|\(count)|\(pills.map { $0.0 }.joined(separator: ","))|\(person?.photo ?? "")|\(person?.ini ?? "")|\(warn)|\(dim)|\(bold)|\(tap != nil)|\(hold != nil)|\(menu != nil)|\(popup != nil)" }
+}
+
+// one of Apple's swipe buttons on a settings row
+struct MeSwipe {
+  var title: String
+  var sym: String
+  var col: UIColor
+  var destructive = false
+  var run: (@escaping (Bool) -> Void) -> Void
 }
 
 final class SetRow: AssetTile {
@@ -582,18 +598,6 @@ final class SegBlock: UIView, HomeBlock {
   override func layoutSubviews() { super.layoutSubviews(); seg.frame = CGRect(x: 16, y: 6, width: bounds.width - 32, height: 34) }
 }
 
-// a page's search and filters as one, stuck under the bar once they reach it (HomeView.pinHead)
-final class PinStack: UIView, HomeBlock {
-  private var parts: [UIView] = []
-  func set(_ v: [UIView]) { if v.count != parts.count || zip(v, parts).contains(where: { $0 !== $1 }) { parts.forEach { $0.removeFromSuperview() }; parts = v; v.forEach { addSubview($0) } }; setNeedsLayout() }
-  func blockHeight(_ W: CGFloat) -> CGFloat { parts.reduce(0) { $0 + (($1 as? HomeBlock)?.blockHeight(W) ?? 0) } }
-  override func layoutSubviews() {
-    super.layoutSubviews()
-    var y: CGFloat = 0
-    for v in parts { let h = (v as? HomeBlock)?.blockHeight(bounds.width) ?? 0; v.frame = CGRect(x: 0, y: y, width: bounds.width, height: h); y += h }
-  }
-}
-
 // Mail's category buttons in a row that scrolls sideways when they don't all fit (the Trash has six)
 final class CatsBlock: UIView, HomeBlock {
   let cats: MailCats
@@ -618,220 +622,53 @@ final class CatsBlock: UIView, HomeBlock {
   override func layoutSubviews() { super.layoutSubviews(); sc.frame = CGRect(x: 0, y: 4, width: bounds.width, height: MailCats.H); fit() }
 }
 
-// one rounded group of the Trash's rows, each kept by its id while it shows the same
-final class TrashGroup: UIView, HomeBlock {
-  private let box = UIView()
-  private var rows: [TrashRow] = [], made: [String: (TrashRow, String)] = [:], lines: [UIView] = []
-  var onEvent: (([String: Any]) -> Void)?
-  override init(frame: CGRect) { super.init(frame: frame); box.layer.cornerRadius = 26; box.layer.cornerCurve = .continuous; box.clipsToBounds = true; addSubview(box) }
-  required init?(coder: NSCoder) { fatalError() }
-  func set(_ items: [[String: Any]], look L: HomeLook) {
-    box.backgroundColor = L.card
-    var keep = made; made = [:]
-    var fresh: [TrashRow] = []
-    UIView.performWithoutAnimation {
-      rows = items.map { it in
-        let id = it["id"] as? String ?? UUID().uuidString, sig = jsonString(it) + "|\(L.key)"
-        if let k = keep.removeValue(forKey: id) { if k.1 == sig { made[id] = k; k.0.onEvent = { [weak self] e in self?.onEvent?(e) }; return k.0 }; k.0.removeFromSuperview() }
-        let r = TrashRow(); r.set(it, look: L); r.onEvent = { [weak self] e in self?.onEvent?(e) }; box.addSubview(r); made[id] = (r, sig); fresh.append(r); return r
-      }
-      keep.values.forEach { $0.0.removeFromSuperview() }
-      while lines.count > max(0, rows.count - 1) { lines.removeLast().removeFromSuperview() }
-      while lines.count < max(0, rows.count - 1) { let l = UIView(); l.backgroundColor = .separator; box.addSubview(l); lines.append(l) }
-      if !fresh.isEmpty { place(); fresh.forEach { $0.layoutIfNeeded() } }
-    }
-    setNeedsLayout()
-  }
-  func blockHeight(_ W: CGFloat) -> CGFloat { rows.reduce(0) { $0 + $1.height(W - 32) } }
-  private func place() {
-    let w = max(0, bounds.width - 32), px = 1 / max(1, traitCollection.displayScale)
-    var y: CGFloat = 0
-    for (i, r) in rows.enumerated() {
-      let h = r.height(w); r.place(CGRect(x: 0, y: y, width: w, height: h)); y += h
-      if i < lines.count { box.bringSubviewToFront(lines[i]); lines[i].frame = CGRect(x: 58, y: y - px / 2, width: w - 58, height: px) }
-    }
-  }
-  override func layoutSubviews() { super.layoutSubviews(); box.frame = CGRect(x: 16, y: 0, width: bounds.width - 32, height: blockHeight(bounds.width)); place() }
-}
-
-// a row in the Trash: its kind's icon, name, kind · where · who · when, its files' pictures, days left; Mail's swipes —
-// right: Restore (green), left: Delete forever (red, Super Admins); touch and hold: its sheet
-final class TrashRow: AssetTile, UIGestureRecognizerDelegate {
-  private let body = UIView(), icon = SettingsIcon(), sym = UIImageView(), name = UILabel(), sub = UILabel(), left = UILabel()
-  private let restoreB = UIButton(type: .system), foreverB = UIButton(type: .system)
-  // (each button's icon and word at their own width, never squeezed — clipped by the button while it opens, and faded in;
-  //  Haris 2026-11-03: "Delete forever" wrapped letter by letter on a slow swipe)
-  private let restoreC = UIView(), foreverC = UIView()
-  private static let RW: CGFloat = 96, FW: CGFloat = 110
-  private var chips: [UIImageView] = [], more = UILabel()
-  private var it: [String: Any] = [:]
-  var onEvent: (([String: Any]) -> Void)?
-  private var canR = false, canF = false
-  private var shift: CGFloat = 0 { didSet {
-    body.transform = CGAffineTransform(translationX: shift, y: 0)
-    // (always fully there — no width, nothing shows: fading them with the spring let the page show through the red as it
-    //  closed, Haris 2026-11-06)
-    restoreB.alpha = 1; foreverB.alpha = 1
-    // (each button fills what the row has uncovered, as Mail's)
-    let H = bounds.height
-    restoreB.frame = CGRect(x: 0, y: 0, width: max(0, shift), height: H)
-    foreverB.frame = CGRect(x: bounds.width + min(0, shift), y: 0, width: max(0, -shift), height: H)
-    placeContent()
-  } }
-  // (the icon and word sit by the row's edge as it goes, at their own width; beyond the button's full width they stay
-  //  centred in what's uncovered)
-  private func placeContent() {
-    let H = bounds.height, rw = restoreB.bounds.width, fw = foreverB.bounds.width
-    let RW = TrashRow.RW, FW = TrashRow.FW
-    restoreC.frame = CGRect(x: rw <= RW ? rw - RW : (rw - RW) / 2, y: 0, width: RW, height: H)
-    foreverC.frame = CGRect(x: fw <= FW ? 0 : (fw - FW) / 2, y: 0, width: FW, height: H)
-    restoreC.alpha = min(1, max(0, (rw - 24) / (RW * 0.6))); foreverC.alpha = min(1, max(0, (fw - 24) / (FW * 0.6)))
-  }
-  override init(frame: CGRect) {
-    super.init(frame: frame)
-    clipsToBounds = true
-    for (b, cv, t, c, sy) in [(restoreB, restoreC, "Restore", UIColor.systemGreen, "arrow.uturn.backward"), (foreverB, foreverC, "Delete forever", UIColor.systemRed, "trash.fill")] {
-      var cf = UIButton.Configuration.plain()
-      // (square — only the group's own corners round it: the first row's top, the last row's bottom; Haris 2026-11-03)
-      // (the colour on the button itself, not its configuration's background: that one followed the button's size a step
-      //  behind while the spring moved it, and the page showed through between the row and the red / green — Haris
-      //  2026-11-06)
-      cf.background.backgroundColor = .clear; cf.background.cornerRadius = 0; cf.cornerStyle = .fixed
-      b.configuration = cf; b.backgroundColor = c; b.layer.cornerRadius = 0; b.alpha = 0; b.clipsToBounds = true; b.accessibilityLabel = t; addSubview(b)
-      let iv = UIImageView(image: UIImage(systemName: sy, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold))); iv.tintColor = .white; iv.contentMode = .center
-      let l = UILabel(); l.text = t; l.font = .systemFont(ofSize: 12, weight: .semibold); l.textColor = .white; l.textAlignment = .center; l.numberOfLines = 1
-      iv.translatesAutoresizingMaskIntoConstraints = false; l.translatesAutoresizingMaskIntoConstraints = false
-      cv.isUserInteractionEnabled = false; cv.addSubview(iv); cv.addSubview(l); b.addSubview(cv)
-      NSLayoutConstraint.activate([iv.centerXAnchor.constraint(equalTo: cv.centerXAnchor), iv.bottomAnchor.constraint(equalTo: cv.centerYAnchor, constant: 1),
-                                   l.centerXAnchor.constraint(equalTo: cv.centerXAnchor), l.topAnchor.constraint(equalTo: iv.bottomAnchor, constant: 5)])
-    }
-    restoreB.addAction(UIAction { [weak self] _ in self?.act("trRestore") }, for: .touchUpInside)
-    foreverB.addAction(UIAction { [weak self] _ in self?.act("trForever") }, for: .touchUpInside)
-    sym.tintColor = .white; sym.contentMode = .center; icon.addSubview(sym)
-    name.font = .systemFont(ofSize: 17); name.numberOfLines = 2
-    sub.font = .systemFont(ofSize: 13); sub.textColor = .secondaryLabel; sub.numberOfLines = 2
-    left.font = .systemFont(ofSize: 13); left.textAlignment = .right
-    more.font = .systemFont(ofSize: 12, weight: .semibold); more.textColor = .secondaryLabel
-    [icon, name, sub, left, more].forEach { $0.isUserInteractionEnabled = false; body.addSubview($0) }
-    body.isUserInteractionEnabled = false
-    addSubview(body)
-    let pan = UIPanGestureRecognizer(target: self, action: #selector(pan(_:))); pan.delegate = self; addGestureRecognizer(pan)
-    onTap = { [weak self] in guard let self = self else { return }; if abs(self.shift) > 1 { self.close() } else { self.onEvent?(["ev": "trTap", "id": self.it["id"] ?? ""]) } }
-    onHold = { [weak self] in guard let self = self else { return }; self.close(); self.onEvent?(["ev": "trHold", "id": self.it["id"] ?? ""]) }
-  }
-  required init?(coder: NSCoder) { fatalError() }
-  private func act(_ ev: String) { UIImpactFeedbackGenerator(style: .medium).impactOccurred(); onEvent?(["ev": ev, "id": it["id"] ?? ""]); close() }
-  func set(_ x: [String: Any], look L: HomeLook) {
-    it = x
-    body.backgroundColor = L.card   // (the row itself covers the buttons under it until swiped)
-    canR = (x["restore"] as? Bool) == true; canF = (x["forever"] as? Bool) == true
-    icon.color = NativeSheetVC.color(x["col"]) ?? .systemGray
-    sym.image = UIImage(systemName: x["sym"] as? String ?? "trash.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
-    name.text = x["t"] as? String; name.textColor = L.title
-    sub.text = x["s"] as? String
-    left.text = x["left"] as? String
-    let soon = (x["soon"] as? Bool) == true
-    left.textColor = soon ? .systemRed : .secondaryLabel; left.font = .systemFont(ofSize: 13, weight: soon ? .semibold : .regular)
-    chips.forEach { $0.removeFromSuperview() }
-    chips = ((x["files"] as? [[String: Any]]) ?? []).map { f in
-      let v = UIImageView(); v.layer.cornerRadius = 7; v.clipsToBounds = true; v.contentMode = .scaleAspectFill; v.backgroundColor = .tertiarySystemFill
-      let ext = f["ext"] as? String ?? "FILE"
-      let lab = UILabel(); lab.text = ext; lab.font = .systemFont(ofSize: 8.5, weight: .heavy); lab.textColor = .secondaryLabel; lab.textAlignment = .center; lab.frame = CGRect(x: 0, y: 0, width: 36, height: 36); v.addSubview(lab)
-      if let pic = f["pic"] as? String { FeedLoader.shared.image(pic) { [weak v, weak lab] img in guard let img = img else { return }; v?.image = img; lab?.isHidden = true } }
-      body.addSubview(v); return v
-    }
-    let m = x["more"] as? Int ?? 0
-    more.text = m > 0 ? "+\(m) more" : nil; more.isHidden = m == 0
-    accessibilityLabel = [name.text, sub.text, left.text].compactMap { $0 }.joined(separator: ", ")
-    setNeedsLayout()
-  }
-  private func textW(_ w: CGFloat) -> CGFloat { w - 58 - 16 - 92 }
-  func height(_ w: CGFloat) -> CGFloat {
-    let tw = textW(w)
-    let nh = min(42, ceil(name.sizeThatFits(CGSize(width: tw, height: 100)).height)), sh = min(32, ceil(sub.sizeThatFits(CGSize(width: tw + 92, height: 100)).height))
-    return 11 + nh + 2 + sh + (chips.isEmpty ? 0 : 42) + 11
-  }
-  override func layoutSubviews() {
-    super.layoutSubviews()
-    let W = bounds.width, H = bounds.height
-    body.bounds = CGRect(origin: .zero, size: bounds.size); body.center = CGPoint(x: W / 2, y: H / 2)
-    restoreB.frame = CGRect(x: 0, y: 0, width: max(0, shift), height: H); foreverB.frame = CGRect(x: W + min(0, shift), y: 0, width: max(0, -shift), height: H)
-    placeContent()
-    icon.frame = CGRect(x: 16, y: 13, width: 30, height: 30); sym.frame = icon.bounds
-    let tw = textW(W)
-    let nh = min(42, ceil(name.sizeThatFits(CGSize(width: tw, height: 100)).height))
-    name.frame = CGRect(x: 58, y: 11, width: tw, height: nh)
-    let lw: CGFloat = 84
-    left.frame = CGRect(x: W - 16 - lw, y: 11, width: lw, height: 20)
-    let sh = min(32, ceil(sub.sizeThatFits(CGSize(width: tw + 92, height: 100)).height))
-    sub.frame = CGRect(x: 58, y: name.frame.maxY + 2, width: W - 58 - 16, height: sh)
-    var x: CGFloat = 58
-    for c in chips { c.frame = CGRect(x: x, y: sub.frame.maxY + 6, width: 36, height: 36); x += 41 }
-    more.frame = CGRect(x: x + 2, y: sub.frame.maxY + 6, width: 80, height: 36)
-  }
-  // (sideways only: the list still scrolls)
-  override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
-    guard g.view === self, let p = g as? UIPanGestureRecognizer else { return super.gestureRecognizerShouldBegin(g) }
-    let v = p.velocity(in: self)
-    return abs(v.x) > abs(v.y) * 1.2 && ((v.x > 0 && (canR || shift < 0)) || (v.x < 0 && (canF || shift > 0)))
-  }
-  private var start: CGFloat = 0
-  @objc private func pan(_ g: UIPanGestureRecognizer) {
-    switch g.state {
-    case .began: start = shift; cancelTracking(with: nil)
-    case .changed:
-      var x = start + g.translation(in: self).x
-      if !canR { x = min(0, x) }; if !canF { x = max(0, x) }
-      shift = x
-    default:
-      let v = g.velocity(in: self).x
-      // (a long swipe left — more than half the row — deletes forever, as Mail's full swipe; Restore is never a long swipe,
-      //  it only opens to its button, which is then tapped: Haris 2026-11-08)
-      if shift < -bounds.width * 0.55 && canF { act("trForever"); return }
-      let to: CGFloat = shift > 44 || (shift > 10 && v > 400) ? 96 : shift < -44 || (shift < -10 && v < -400) ? -110 : 0
-      if to != 0 && abs(start) < 1 { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
-      SwipeSpring.run(from: shift, to: to, velocity: v) { self.shift = to }
-    }
-  }
-  func close() { SwipeSpring.run(from: shift, to: 0, velocity: 0) { self.shift = 0 } }
-}
-
-// My profile's top: your photo (or initials), Change photo (blue) and Remove (red), as iPhone's own
+// My profile's top, as iPhone Settings' account page (Haris 2026-11-11, the mock-up's I1): your photo (or initials), Edit
+// under it — Apple's own menu: Take Photo · Choose Photo · Remove Photo — then your name and your role
 final class ProfileHead: UIView, HomeBlock {
-  private let pic = UIImageView(), change = UIButton(type: .system), remove = UIButton(type: .system)
+  private let pic = UIImageView(), edit = UIButton(configuration: .plain()), name = UILabel(), role = UILabel()
   private var photoPath: String?, ini = "", hasPhoto = false
   // (uploading: the photo dimmed with iPhone's spinner on it, until the new photo has come — Haris 2026-11-03)
   private let dim = UIView(), spin = UIActivityIndicatorView(style: .medium)
   private var busy = false, waitingNew = false
-  var onChange: (() -> Void)?, onRemove: (() -> Void)?
+  var onPick: ((String) -> Void)?, onRemove: (() -> Void)?
   override init(frame: CGRect) {
     super.init(frame: frame)
     pic.layer.cornerRadius = 48; pic.clipsToBounds = true
-    change.titleLabel?.font = .systemFont(ofSize: 16); remove.titleLabel?.font = .systemFont(ofSize: 16)
-    remove.setTitle("Remove", for: .normal); remove.tintColor = .systemRed
-    change.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.onChange?() }, for: .touchUpInside)
-    remove.addAction(UIAction { [weak self] _ in self?.onRemove?() }, for: .touchUpInside)
-    [pic, change, remove].forEach { addSubview($0) }
+    var bc = UIButton.Configuration.plain(); bc.title = "Edit"; bc.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10)
+    bc.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { var a = $0; a.font = .systemFont(ofSize: 15, weight: .medium); return a }
+    edit.configuration = bc; edit.showsMenuAsPrimaryAction = true
+    name.font = .systemFont(ofSize: 24, weight: .bold); name.textAlignment = .center; name.adjustsFontSizeToFitWidth = true; name.minimumScaleFactor = 0.7
+    role.font = .systemFont(ofSize: 15); role.textColor = .secondaryLabel; role.textAlignment = .center
+    [pic, edit, name, role].forEach { addSubview($0) }
     dim.backgroundColor = UIColor.black.withAlphaComponent(0.4); dim.layer.cornerRadius = 48; dim.alpha = 0; dim.isUserInteractionEnabled = false
     spin.color = .white; spin.hidesWhenStopped = true
     addSubview(dim); addSubview(spin)
+    paintMenu()
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  private func paintMenu() {
+    var a: [UIMenuElement] = [UIAction(title: "Take Photo", image: UIImage(systemName: "camera")) { [weak self] _ in self?.onPick?("camera") },
+                              UIAction(title: "Choose Photo", image: UIImage(systemName: "photo.on.rectangle")) { [weak self] _ in self?.onPick?("photos") }]
+    if hasPhoto { a.append(UIMenu(options: .displayInline, children: [UIAction(title: "Remove Photo", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in self?.onRemove?() }])) }
+    edit.menu = UIMenu(children: a)
   }
   private func setBusy(_ on: Bool) {
     if on { spin.startAnimating() } else { spin.stopAnimating() }
     UIView.animate(withDuration: 0.2) { self.dim.alpha = on ? 1 : 0 }
-    change.isEnabled = !on; remove.isEnabled = !on
-    UIView.performWithoutAnimation { change.setTitle(on ? "Uploading…" : hasPhoto ? "Change photo" : "Add photo", for: .normal); change.layoutIfNeeded() }
-    setNeedsLayout()
+    edit.isEnabled = !on
   }
-  required init?(coder: NSCoder) { fatalError() }
   func set(_ p: [String: Any], look L: HomeLook) {
+    let had = hasPhoto
     hasPhoto = (p["hasPhoto"] as? Bool) == true
+    if had != hasPhoto { paintMenu() }
     let nowBusy = (p["photoBusy"] as? Bool) == true
     if nowBusy && !busy { busy = true; waitingNew = true; setBusy(true) }
     else if !nowBusy && busy { busy = false; if (p["photo"] as? String) == photoPath || p["photo"] == nil { waitingNew = false; setBusy(false) } }
-    if !busy && !waitingNew { UIView.performWithoutAnimation { change.setTitle(hasPhoto ? "Change photo" : "Add photo", for: .normal); change.layoutIfNeeded() } }
-    change.tintColor = .systemBlue
-    remove.isHidden = !hasPhoto
+    let nm = p["name"] as? String ?? ""
+    let roles = ((p["pills"] as? [[String: Any]]) ?? []).compactMap { $0["t"] as? String }.joined(separator: " ")
+    let line = [roles, p["city"] as? String ?? ""].filter { !$0.isEmpty }.joined(separator: " · ")
+    if name.text != nm { name.text = nm }
+    if role.text != line { role.text = line }
     let i = p["ini"] as? String ?? "", rgb = NativeSheetVC.color(p["rgb"]) ?? .systemGray
     let ph = p["photo"] as? String
     if ph != photoPath || i != ini || pic.image == nil {
@@ -845,16 +682,16 @@ final class ProfileHead: UIView, HomeBlock {
     }
     setNeedsLayout()
   }
-  func blockHeight(_ W: CGFloat) -> CGFloat { 8 + 96 + 6 + 34 + 4 }
+  func blockHeight(_ W: CGFloat) -> CGFloat { 8 + 96 + 4 + 32 + 30 + 22 + 8 }
   override func layoutSubviews() {
     super.layoutSubviews()
     let W = bounds.width
     pic.frame = CGRect(x: (W - 96) / 2, y: 8, width: 96, height: 96)
     dim.frame = pic.frame; spin.center = CGPoint(x: pic.frame.midX, y: pic.frame.midY)
-    let cw = ceil(change.sizeThatFits(CGSize(width: 200, height: 34)).width), rw = remove.isHidden ? 0 : ceil(remove.sizeThatFits(CGSize(width: 200, height: 34)).width)
-    let gap: CGFloat = remove.isHidden ? 0 : 24, x = (W - cw - gap - rw) / 2
-    change.frame = CGRect(x: x, y: 110, width: cw, height: 34)
-    remove.frame = CGRect(x: x + cw + gap, y: 110, width: rw, height: 34)
+    let ew = ceil(edit.sizeThatFits(CGSize(width: 200, height: 32)).width)
+    edit.frame = CGRect(x: (W - ew) / 2, y: 108, width: ew, height: 32)
+    name.frame = CGRect(x: 20, y: 140, width: W - 40, height: 30)
+    role.frame = CGRect(x: 20, y: 170, width: W - 40, height: 22)
   }
 }
 
@@ -1004,8 +841,10 @@ final class MeCtl {
     if has("profile") || kinds.contains("profile"), let x = AppData.shared.meModel("profile", "profile", [env]) { var v = x; if let pv = p["profile"] as? [String: Any] { for k in ["photoBusy", "owner"] { v[k] = pv[k] } }; if pfBusy { v["photoBusy"] = true }; m["profile"] = v }
     if has("team") || kinds.contains("team"), let x = AppData.shared.meModel("team", "team", [env]) { m["team"] = x }
     if has("trash") || kinds.contains("trash"), let x = AppData.shared.meModel("trash", "trash", [trQv, trCatv, env]) { m["trash"] = x }
-    if tab == "fin-reimb" || has("claims"), let x = AppData.shared.meModel("claims", "claims") { m["claims"] = x }
-    if tab == "fin-expenses" || has("expenses"), let x = AppData.shared.meModel("expenses", "expenses") { m["expenses"] = x }
+    // (the month picked in ••• — Claims and Office expenses, the last 12: Haris 2026-11-11 B1; a claim open: its page, E1)
+    if tab == "fin-reimb" || has("claims") || kinds.contains("claim"), let x = AppData.shared.meModel("claims", "claims", [clMonth ?? ""]) { m["claims"] = x }
+    if let s = stack.last(where: { $0.kind == "claim" }), let id = s.id, let x = AppData.shared.meModel("claims", "claim", [id]) { m["claim"] = x }
+    if tab == "fin-expenses" || has("expenses"), let x = AppData.shared.meModel("expenses", "expenses", [exMonth ?? ""]) { m["expenses"] = x }
     if tab == "today" || has("overview"), let x = AppData.shared.meModel("overview", "overview") { m["overview"] = x }
     if tab == "reviews" || has("reviews"), let x = AppData.shared.meModel("reviews", "reviews") { var v = x; v["focus"] = (p["reviews"] as? [String: Any])?["focus"]; m["reviews"] = v }
     if has("plans") || kinds.contains("plans"), let x = AppData.shared.meModel("plans", "plansList", [plMonth ?? ""]) { m["plans"] = x }
@@ -1018,7 +857,7 @@ final class MeCtl {
   // (a question to the page, its answer back — Content plans' post, approve, send back)
   // (Part B step 3: these go straight to the server — /api/app/act, done there as the website would; the changed records
   //  into the app's copy at once. The server switched off for one (kv app-act-<group>), or no answer: the page, as before)
-  private static let serverActs: Set<String> = ["rvApprove", "rvAmend", "clApprove", "clPaid", "clAdd", "clPerson", "exAdd", "exEnd", "plApprove", "plBack", "plReview", "plTrash", "trRestore"]
+  private static let serverActs: Set<String> = ["rvApprove", "rvAmend", "clApprove", "clPaid", "clAdd", "clPerson", "exAdd", "exEnd", "exInv", "exDel", "plApprove", "plBack", "plReview", "plTrash", "trRestore"]
   private func request(_ ev: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
     if let name = ev["ev"] as? String, MeCtl.serverActs.contains(name), AppData.shared.tabsOn, JSONSerialization.isValidJSONObject(ev) {
       var b = ev; b["op"] = UUID().uuidString
@@ -1177,76 +1016,40 @@ final class MeCtl {
     guard mineNow else { send(["ev": "pfPhotoOff"]); return }
     confirm(["title": "Remove your photo?", "body": "Your initials show instead.", "okText": "Remove", "danger": true]) { [weak self] in self?.pfSet("avatar", ["value": NSNull()], page: ["ev": "pfPhotoOff"]) }
   }
-  // a Trash item tapped (a file: its preview; else its sheet) or held (its sheet: Preview, Restore, Delete forever) —
-  // phone.js trTap / trashHold, from the copy (web/appme-people.js trashItem)
-  private func trashOwn(_ h: HomeView, _ id: String, tap: Bool) -> Bool {
-    guard let it = brain("trash", "trashItem", [id]) else { return false }
+  // a Trash item (the mock-up "Remaining pages — fully Apple", Haris 2026-11-11 · G1 · H1): a task opens its own task page,
+  // view only, Restore on Apple's toolbar; a file or folder its preview; touch and hold: Apple's menu — Open (View Only) or
+  // Preview, Restore, Delete Forever (Super Admins). From the copy (web/appme-people.js trashItem).
+  private func trashTap(_ id: String) {
+    guard let it = brain("trash", "trashItem", [id]) else { return }
+    if (it["type"] as? String) == "task", let tid = it["taskId"] as? String { main.openTaskPage(tid, tab: "details", focus: "", trash: id); return }
     let files = (it["files"] as? [[String: Any]]) ?? []
-    let preview = { [weak self] in self?.main.openFiles(files.map { ["id": $0["id"] ?? "", "path": $0["path"] ?? "", "name": $0["name"] ?? "File", "size": $0["size"] ?? 0] }, at: 0) }
-    // (a task tapped: the same tall sheet as the website's — Haris 2026-11-06; a file: its preview; else its sheet)
-    if tap, (it["type"] as? String) == "task", trashSheet(h, id) { return true }
-    if tap, (it["type"] as? String) != "task", !files.isEmpty { preview(); return true }
-    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-    let a = UIAlertController(title: it["title"] as? String, message: it["left"] as? String, preferredStyle: .actionSheet)
-    if (it["type"] as? String) == "task" { a.addAction(UIAlertAction(title: "Open (view only)", style: .default) { [weak self, weak h] _ in if let h = h { _ = self?.trashSheet(h, id) } }) }
-    else if !files.isEmpty { a.addAction(UIAlertAction(title: files.count == 1 ? "Preview" : "Preview files", style: .default) { _ in preview() }) }
-    if (it["restore"] as? Bool) == true {
-      a.addAction(UIAlertAction(title: "Restore", style: .default) { [weak self, weak h] _ in
-        self?.request(["ev": "trRestore", "id": id]) { r in h?.toast(["t": (r["ok"] as? Bool) == true ? (r["toast"] as? String ?? "Restored") : (r["error"] as? String ?? "That didn’t work — try again")]) }
-      })
-    }
-    if (it["forever"] as? Bool) == true { a.addAction(UIAlertAction(title: "Delete forever", style: .destructive) { [weak self] _ in self?.trForever(id) }) }
-    a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-    main.topMost().present(a, animated: true)
-    return true
+    if !files.isEmpty { main.openFiles(files.map { ["id": $0["id"] ?? "", "path": $0["path"] ?? "", "name": $0["name"] ?? "File", "size": $0["size"] ?? 0] }, at: 0) }
   }
-  // a task in the Trash: the website's tall sheet (TrashSheetVC) from the copy — the pictures fetched first (a moment at
-  // most), Restore and a file's preview answered here; back from the preview, the sheet again (app.js trashTaskView)
-  private func trashSheet(_ h: HomeView, _ id: String) -> Bool {
-    guard var a = brain("trash", "trashSheet", [id]) else { return false }
-    let all = (a["allFiles"] as? [[String: Any]]) ?? []; a["allFiles"] = nil
-    let g = DispatchGroup()
-    var pics: [String: String] = [:]
-    var urls = Set<String>()
-    func want(_ u: Any?) { if let s = u as? String, !s.isEmpty { urls.insert(s) } }
-    for p in (a["props"] as? [[String: Any]]) ?? [] { for x in (p["people"] as? [[String: Any]]) ?? [] { want((x["person"] as? [String: Any])?["photoUrl"]) } }
-    for f in (a["files"] as? [[String: Any]]) ?? [] { want(f["thumbUrl"]) }
-    for c in (a["comments"] as? [[String: Any]]) ?? [] { want((c["person"] as? [String: Any])?["photoUrl"]); for f in (c["files"] as? [[String: Any]]) ?? [] { want(f["thumbUrl"]) } }
-    for u in urls {
-      guard let url = URL(string: u.hasPrefix("http") ? u : serverURL() + u) else { continue }
-      g.enter()
-      main.fetchPhoto(url) { img in
-        if let d = img?.jpegData(compressionQuality: 0.85) { DispatchQueue.main.async { pics[u] = "data:image/jpeg;base64," + d.base64EncodedString() } }
-        g.leave()
-      }
-    }
-    let show = { [weak self, weak h] in
-      guard let self = self else { return }
-      let person = { (p: Any?) -> Any? in guard var x = p as? [String: Any] else { return p }; if let u = x["photoUrl"] as? String, let d = pics[u] { x["photo"] = d }; return x }
-      let file = { (f: [String: Any]) -> [String: Any] in var x = f; if let u = f["thumbUrl"] as? String, let d = pics[u] { x["thumb"] = d }; return x }
-      var b = a
-      b["props"] = ((a["props"] as? [[String: Any]]) ?? []).map { p -> [String: Any] in var x = p; if let ppl = p["people"] as? [[String: Any]] { x["people"] = ppl.map { var y = $0; y["person"] = person($0["person"]); return y } }; return x }
-      b["files"] = ((a["files"] as? [[String: Any]]) ?? []).map(file)
-      b["comments"] = ((a["comments"] as? [[String: Any]]) ?? []).map { c -> [String: Any] in var x = c; x["person"] = person(c["person"]); x["files"] = ((c["files"] as? [[String: Any]]) ?? []).map(file); return x }
-      guard let host = self.main.sheetHost() else { return }
-      UIImpactFeedbackGenerator(style: .light).impactOccurred()
-      host.present(TrashSheetVC(b) { [weak self, weak h] r in
-        guard let self = self else { return }
-        switch r["action"] as? String ?? "" {
-        case "restore":
-          self.request(["ev": "trRestore", "id": id]) { r in h?.toast(["t": (r["ok"] as? Bool) == true ? (r["toast"] as? String ?? "Restored") : (r["error"] as? String ?? "That didn’t work — try again")]) }
-        case "preview":
-          if let i = all.firstIndex(where: { ($0["id"] as? String) == (r["file"] as? String) }) { self.main.openFiles(all, at: i) }
-        default: break
-        }
-      }, animated: true)
-      _ = h
-    }
-    var shown = false
-    g.notify(queue: .main) { if !shown { shown = true; show() } }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { if !shown { shown = true; show() } }
-    return true
+  private func trashMenu(_ h: HomeView?, _ id: String) -> UIMenu? {
+    guard let it = brain("trash", "trashItem", [id]) else { return nil }
+    let task = (it["type"] as? String) == "task", files = (it["files"] as? [[String: Any]]) ?? []
+    var a: [UIMenuElement] = []
+    if task { a.append(UIAction(title: "Open (View Only)", image: UIImage(systemName: "eye")) { [weak self] _ in self?.trashTap(id) }) }
+    else if !files.isEmpty { a.append(UIAction(title: files.count == 1 ? "Preview" : "Preview Files", image: UIImage(systemName: "eye")) { [weak self] _ in self?.trashTap(id) }) }
+    if (it["restore"] as? Bool) == true { a.append(UIAction(title: "Restore", image: UIImage(systemName: "arrow.uturn.backward")) { [weak self, weak h] _ in self?.trRestore(h, id) }) }
+    if (it["forever"] as? Bool) == true { a.append(UIMenu(options: .displayInline, children: [UIAction(title: "Delete Forever", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in self?.trForever(id) }])) }
+    return a.isEmpty ? nil : UIMenu(children: a)
   }
+  private func trRestore(_ h: HomeView?, _ id: String, done: ((Bool) -> Void)? = nil) {
+    request(["ev": "trRestore", "id": id]) { [weak self] r in
+      let ok = (r["ok"] as? Bool) == true
+      if ok { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+      (h ?? self?.top)?.toast(["t": ok ? (r["toast"] as? String ?? "Restored") : (r["error"] as? String ?? "That didn’t work — try again")])
+      done?(ok)
+    }
+  }
+  // (a trashed task's own page — its Restore and Delete Forever: TaskVC, when the task page shows a task from the Trash)
+  func trashActs(_ id: String) -> (restore: Bool, forever: Bool) {
+    guard let it = brain("trash", "trashItem", [id]) else { return (false, false) }
+    return ((it["restore"] as? Bool) == true, (it["forever"] as? Bool) == true)
+  }
+  func trashRestore(_ id: String, _ done: @escaping (Bool) -> Void) { trRestore(nil, id, done: done) }
+  func trashForever(_ id: String) { trForever(id) }
   // Trash: Delete forever, Empty Trash — asked first, as the website does
   private func trForever(_ id: String) {
     guard let q = brain("trash", "trashAsk", [id]), q["title"] != nil else { send(["ev": "trForever", "id": id]); return }
@@ -1652,10 +1455,6 @@ final class MeCtl {
   // ---------- Step 9: what the page did for Me, done by the app (phone.js NativeMe __e11Me) ----------
   private func nativeEv(_ ev: [String: Any]) {
     let say = { [weak self] (t: String) in (self?.top ?? self?.shown)?.toast(["t": t]) }
-    let file = { [weak self] (path: String, name: String) in
-      guard !path.isEmpty else { return }
-      self?.main.openFiles([["id": path, "path": path, "name": name]], at: 0)
-    }
     switch ev["ev"] as? String ?? "" {
     case "nav":
       switch ev["to"] as? String ?? "" {
@@ -1668,12 +1467,6 @@ final class MeCtl {
       case "projects": say("Every client’s tasks are on the computer for now")
       default: break
       }
-    case "ovFile": file(ev["path"] as? String ?? "", ev["name"] as? String ?? "File")
-    case "exInv":
-      let id = ev["id"] as? String ?? ""
-      let ex = (model["expenses"] as? [String: Any]) ?? [:]
-      let rows = ((ex["subs"] as? [[String: Any]]) ?? []) + ((ex["office"] as? [[String: Any]]) ?? [])
-      if let f = rows.first(where: { ($0["id"] as? String) == id })?["invFile"] as? [String: Any] { file(f["path"] as? String ?? "", f["name"] as? String ?? "Invoice") }
     case "rvTask": if let t = ev["tid"] as? String, !t.isEmpty { main.openTaskPage(t, tab: "details", focus: "") }
     case "rvFile":
       // (the request's files, from its task's own page model — they carry where each file is)
@@ -1683,13 +1476,6 @@ final class MeCtl {
       let want = (((it.0["files"] as? [[String: Any]]) ?? []) + ((it.0["carriedFiles"] as? [[String: Any]]) ?? [])).compactMap { $0["id"] as? String }
       let list = want.compactMap { id in all.first { ($0["id"] as? String) == id } }
       if let i = list.firstIndex(where: { ($0["id"] as? String) == (ev["fid"] as? String) }) { main.openFiles(list, at: i) }
-    case "clOpen", "ovClaim":
-      // (the claim's PDF, drawn by the server — the same everywhere: Haris 2026-11-05)
-      say("Preparing the PDF…")
-      main.serverTask.request("/api/app/claimPdf", body: ["id": ev["id"] as? String ?? ""]) { [weak self] r in
-        guard let r = r, (r["ok"] as? Bool) == true, let p = r["path"] as? String else { say(r?["error"] as? String ?? "Could not make the PDF"); return }
-        self?.main.openFiles([["id": p, "path": p, "name": r["name"] as? String ?? "Expense claim.pdf", "size": r["size"] ?? 0]], at: 0)
-      }
     case "pfTest":
       main.withToken { [weak self] t, why in
         guard let t = t else { say(why ?? "iPhone gave no notification address"); return }
@@ -2067,6 +1853,35 @@ final class MeCtl {
     guard let id = (((model["reviews"] as? [String: Any])?["waiting"] as? [[String: Any]])?.first?["id"] as? String) else { return nil }
     open("review", id); return id
   }
+  // an Office Admin's tabs and Me › Trash, as the phone shows them (the no-website self-test — Haris 2026-11-11): what's on
+  // show, a claim's swipes and menu, a claim opened with its toolbar; a Trash item's swipes and menu
+  func selfOffice() -> [String: Any] {
+    guard let s = stack.last else { return ["open": false] }
+    var o: [String: Any] = ["kind": s.kind, "tab": tab, "apple": apple, "rows": s.h.meKeys.count]
+    if let e = s.h.assetsParts["wait"] as? AppleEmpty, e.superview != nil { o["loading"] = e.loading }
+    let titles = { (m: UIMenu?) -> [String] in (m?.children ?? []).flatMap { ($0 as? UIMenu)?.children ?? [$0] }.compactMap { ($0 as? UIAction)?.title } }
+    if let c = model["claims"] as? [String: Any] {
+      let all = (c["all"] as? [[String: Any]]) ?? []
+      o["claims"] = all.count; o["need"] = ((c["need"] as? [Any]) ?? []).count; o["pick"] = ((c["pick"] as? [Any]) ?? []).count
+      if let x = all.first(where: { ($0["legacy"] as? Bool) != true }), let h = stack.first?.h {
+        let it = claimItem(h, x, admin: (c["admin"] as? Bool) == true)
+        o["menu"] = titles(it.menu?()); o["lead"] = it.lead.map { $0.title }; o["trail"] = it.trail.map { $0.title }
+      }
+    }
+    if let x = model["expenses"] as? [String: Any] { o["subs"] = ((x["subs"] as? [Any]) ?? []).count; o["ended"] = ((x["ended"] as? [Any]) ?? []).count }
+    if let ov = model["overview"] as? [String: Any] { o["fin"] = ov["fin"] ?? false; o["numbers"] = s.h.meKeys.contains("Claims submitted") }
+    if s.kind == "trash", let t = model["trash"] as? [String: Any], let x = ((t["groups"] as? [[String: Any]])?.first?["items"] as? [[String: Any]])?.first {
+      let it = trashRow(s.h, x)
+      o["items"] = t["n"] ?? 0; o["menu"] = titles(it.menu?()); o["lead"] = it.lead.map { $0.title }; o["trail"] = it.trail.map { $0.title }
+    }
+    if let vc = pageVCs[ObjectIdentifier(s.h)] { o["tools"] = (vc.toolbarItems ?? []).compactMap { $0.title } }
+    return o
+  }
+  func selfOpenClaim() -> String? {
+    guard let id = (((model["claims"] as? [String: Any])?["all"] as? [[String: Any]])?.first(where: { ($0["legacy"] as? Bool) != true })?["id"] as? String) else { return nil }
+    open("claim", id); return id
+  }
+  func selfOpenTrash() { open("trash") }
   // Content plans, as the phone shows them (the no-website self-test — Haris 2026-11-10): the list, and a client's month
   func selfOpenPlan() -> String? {
     guard let r = ((model["plans"] as? [String: Any])?["rows"] as? [[String: Any]])?.first, let pid = r["pid"] as? String else { return nil }
@@ -2106,14 +1921,19 @@ final class MeCtl {
     var mm: [String: Any] = ["show": true, "me": me ?? "", "look": main.lookBoth]
     if s.kind == "me" { mm["title"] = apple ? "Settings" : "Me"; mm["date"] = "E11 Console App" }   // (in Apple's navigation: "Settings" — Haris 2026-11-08; the tab stays "Me")
     if s.h.assets == "overviewTab" { mm["title"] = "Overview"; mm["date"] = Date().formatted(.dateTime.weekday(.wide).month(.wide).day()) }
-    if s.h.assets == "claimsTab" { mm["title"] = "Claims"; mm["date"] = "Reimbursements" }
+    if s.h.assets == "claimsTab" { mm["title"] = "Claims"; mm["date"] = (model["claims"] as? [String: Any])?["sub"] as? String ?? "" }
     if s.h.assets == "reviewsTab" {
       // (the requests and the skeletons waiting for you — one decided here already gone)
       let w = ((model["reviews"] as? [String: Any])?["waiting"] as? [[String: Any]]) ?? []
       let n = w.filter { !rvGone.contains($0["id"] as? String ?? "") }.count + rvSkeletons.count
       mm["title"] = "Reviews"; mm["date"] = model["reviews"] == nil ? "" : n == 0 ? "Nothing waiting" : n == 1 ? "1 request waiting" : "\(n) requests waiting"
     }
-    if s.h.assets == "expensesTab" { mm["title"] = "Expenses"; mm["date"] = exSeg == 0 ? "Subscriptions" : "Office expenses" }
+    if s.h.assets == "expensesTab" {
+      let x = (model["expenses"] as? [String: Any]) ?? [:]
+      let n = x["subsN"] as? Int ?? 0, o = x["officeN"] as? Int ?? 0
+      mm["title"] = "Expenses"
+      mm["date"] = x.isEmpty ? "" : exSeg == 0 ? "\(n) subscription\(n == 1 ? "" : "s") · \(x["subsTotal"] as? String ?? "") a month" : "\(x["omName"] as? String ?? "") · \(o) expense\(o == 1 ? "" : "s") · \(x["officeTotal"] as? String ?? "")"
+    }
     if s.h.assets == "teamTab" { mm["title"] = "Team members"; mm["date"] = team.isEmpty ? "" : "\(team["active"] as? Int ?? 0) active · \(team["pastN"] as? Int ?? 0) past" }
     if s.h.assets == "plansTab" || s.h.assets == "plansPage" { mm["title"] = "Content plans"; mm["date"] = plansLine }   // (the line under the big title, as the other tabs have — Haris 2026-11-03)
     s.h.bottomRoom = (main.tabBar.isHidden ? 40 : main.view.bounds.height - main.tabBar.frame.minY) + 96
@@ -2280,6 +2100,7 @@ final class MeCtl {
     case "overview":
       overviewBlocks(h, &out)
     case "reviews": reviewsBlocks(h, &out)
+    case "claim": claimBlocks(h, s.id ?? "", &out)
     case "review": reviewBlocks(h, s.id ?? "", &out)
     case "claims":
       claimsBlocks(h, &out)
@@ -2335,40 +2156,87 @@ final class MeCtl {
       return it
     }
   }
-  // an Office Admin's Overview (Haris 2026-11-04): with Finance — the three cards, then the latest 3 in Client Assets, the 3
-  // claims waiting for HR approval and the latest 3 office expenses; without — the latest 10 in Client Assets
+  // ---------- an Office Admin's Overview — fully Apple (Haris 2026-11-11 07:25, the mock-up "Remaining pages — fully
+  //  Apple", A1) ----------
+  // Its tab (MeTabVC "today"): Apple's big title "Overview" with the day, Apple's search for every client's files, your
+  // photo. With Finance: the month's three numbers as Apple's cells, each opening its tab; Need HR approval (a claim opens
+  // its page), the month's office expenses and the latest in Client Assets, each with See All. Without: the latest 10 in
+  // Client Assets.
+  private var ovQ = "", ovAsked = "", ovFound: [String: Any]? = nil
   private func overviewBlocks(_ h: HomeView, _ out: inout [UIView]) {
+    if h.assets == "overviewTab", let vc = MeTabVC.byKey["today"] {
+      vc.onSearch = { [weak self, weak h] q in guard let self = self, let h = h, self.ovQ != q else { return }; self.ovQ = q; self.ovSearch(h) }
+    }
+    let q = ovQ.trimmingCharacters(in: .whitespaces)
+    if !q.isEmpty {
+      guard let r = ovFound, ovAsked == q else { let n = part(h, "wait") { AppleEmpty() }; n.setLoading(); out.append(n); return }
+      let found = (r["found"] as? [[String: Any]]) ?? []
+      if found.isEmpty { let n = part(h, "none") { AppleEmpty() }; n.set("magnifyingglass", "No Results", "Check the spelling or try a new search."); out.append(n); return }
+      let items = found.map { f -> SetItem in
+        var it = SetItem(key: "s." + (f["id"] as? String ?? ""), title: f["name"] as? String ?? "", sub: f["where"] as? String ?? "", chevron: false, tap: { [weak self] in self?.openOne(f["path"] as? String ?? "", f["name"] as? String ?? "File") })
+        it.person = (photo: f["pic"] as? String, ini: f["ext"] as? String ?? "", rgb: .systemGray)
+        return it
+      }
+      out.append(head(h, "ovs", (r["loose"] as? Bool) == true ? "Close matches" : "Files · \(items.count)"))
+      let g = group(h, "ovs", items); Find.mark([g], (r["marks"] as? [String]) ?? Find.terms(q)); out.append(g)
+      return
+    }
     guard let o = model["overview"] as? [String: Any] else { let n = part(h, "wait") { AppleEmpty() }; n.setLoading(); out.append(n); return }
-    if let cards = o["cards"] as? [[String: Any]] { let c = part(h, "cards") { OvCards() }; c.set(cards, look: h.look); out.append(c) }
-    let sec = { (k: String, t: String, to: String?) -> SetHead in
-      let v = self.head(h, k, t); v.link(to == nil ? nil : "All"); v.onLink = { [weak self] in if let to = to { self?.ovGo(to) } }; return v }
+    let sec = { (k: String, t: String, to: String) -> SetHead in
+      let v = self.head(h, k, t); v.link("See All"); v.onLink = { [weak self] in self?.ovGo(to) }; return v }
     let files = ((o["assets"] as? [[String: Any]]) ?? []).map { f -> SetItem in
-      var it = SetItem(key: "f." + (f["id"] as? String ?? ""), title: f["name"] as? String ?? "", sub: f["where"] as? String ?? "", value: f["when"] as? String ?? "", chevron: false, tap: { [weak self] in self?.send(["ev": "ovFile", "id": f["id"] as? String ?? "", "path": f["path"] as? String ?? "", "name": f["name"] as? String ?? ""]) })
+      var it = SetItem(key: "f." + (f["id"] as? String ?? ""), title: f["name"] as? String ?? "", sub: f["where"] as? String ?? "", value: f["when"] as? String ?? "", chevron: false, tap: { [weak self] in self?.openOne(f["path"] as? String ?? "", f["name"] as? String ?? "File") })
       it.person = (photo: f["pic"] as? String, ini: f["ext"] as? String ?? "", rgb: NativeSheetVC.color(f["rgb"]) ?? .systemGray)
       return it
     }
-    out.append(sec("ova", "Client Assets · latest", "assets"))
-    if files.isEmpty { out.append(foot(h, "ova0", "No files yet.")) } else { out.append(group(h, "ova", files)) }
     if (o["fin"] as? Bool) == true {
+      // (the month's numbers — Apple's cells, each opening its tab)
+      let cards = (o["cards"] as? [[String: Any]]) ?? []
+      let n = { (i: Int) -> String in i < cards.count ? (cards[i]["n"] as? String ?? "") : "" }
+      let of = cards.first?["of"] as? String ?? ""
+      out.append(head(h, "ovn", o["cm"] as? String ?? ""))
+      out.append(group(h, "ovn", [
+        SetItem(key: "n.cl", title: "Claims submitted", value: of.isEmpty ? n(0) : "\(n(0)) of \(of.replacingOccurrences(of: "/ ", with: ""))", sym: "person.2.fill", col: .systemIndigo, tap: { [weak self] in self?.ovGo("claimsAll") }),
+        SetItem(key: "n.ex", title: "Office expenses so far", value: n(1), sym: "doc.text.fill", col: .systemGray, tap: { [weak self] in self?.ovGo("expenses") }),
+        SetItem(key: "n.sb", title: "Monthly subscriptions", value: n(2), sym: "arrow.triangle.2.circlepath", col: .systemIndigo, tap: { [weak self] in self?.ovGo("subs") }),
+      ]))
       let cl = ((o["claims"] as? [[String: Any]]) ?? []).map { c -> SetItem in
-        var it = SetItem(key: "c." + (c["id"] as? String ?? ""), title: c["name"] as? String ?? "", sub: c["sub"] as? String ?? "", value: c["amt"] as? String ?? "", tap: { [weak self] in self?.send(["ev": "ovClaim", "id": c["id"] as? String ?? ""]) })
-        it.person = (photo: nil, ini: c["ini"] as? String ?? "", rgb: NativeSheetVC.color(c["rgb"]) ?? .systemGray)
+        let id = c["id"] as? String ?? ""
+        var it = SetItem(key: "c." + id, title: c["name"] as? String ?? "", sub: c["sub"] as? String ?? "", value: c["amt"] as? String ?? "", tap: { [weak self] in self?.open("claim", id) })
+        it.person = (photo: c["photo"] as? String, ini: c["ini"] as? String ?? "", rgb: NativeSheetVC.color(c["rgb"]) ?? .systemGray)
         return it
       }
-      out.append(sec("ovc", "Need HR approval", "claims"))
+      out.append(sec("ovc", "Need HR approval · \(o["needN"] as? Int ?? cl.count)", "claims"))
       if cl.isEmpty { out.append(foot(h, "ovc0", "No claims waiting.")) } else { out.append(group(h, "ovc", cl)) }
       let ex = ((o["expenses"] as? [[String: Any]]) ?? []).map { x in SetItem(key: "x." + (x["id"] as? String ?? ""), title: x["name"] as? String ?? "", sub: x["sub"] as? String ?? "", value: x["amt"] as? String ?? "", sym: "doc.text.fill", col: .systemGray, chevron: false) }
-      out.append(sec("ovx", "Office expenses · latest", "expenses"))
+      out.append(sec("ovx", "Office expenses · \(o["nowName"] as? String ?? "")", "expenses"))
       if ex.isEmpty { out.append(foot(h, "ovx0", "None this month yet.")) } else { out.append(group(h, "ovx", ex)) }
+      out.append(sec("ova", "Client Assets · latest", "assets"))
+    } else {
+      out.append(sec("ova", "Client Assets · latest", "assets"))
     }
+    if files.isEmpty { out.append(foot(h, "ova0", "No files yet.")) } else { out.append(group(h, "ova", files)) }
   }
-  // Overview's "All": that tab, as if tapped (Claims, Expenses, Client Assets) — never the website's Home underneath
-  // (Haris 2026-11-04: it went to "E11 Day"); Client Assets with Finance is Me's page
+  // Overview's search: every client's files (Client Assets' own search, from the phone's copy)
+  private func ovSearch(_ h: HomeView) {
+    let q = ovQ.trimmingCharacters(in: .whitespaces)
+    guard !q.isEmpty else { ovFound = nil; ovAsked = ""; blocks(h); return }
+    request(["ev": "ovFind", "q": q]) { [weak self, weak h] r in
+      guard let self = self, let h = h, self.ovQ.trimmingCharacters(in: .whitespaces) == q else { return }
+      self.ovFound = r; self.ovAsked = q; self.blocks(h)
+    }
+    blocks(h)
+  }
+  private func openOne(_ path: String, _ name: String) { guard !path.isEmpty else { return }; main.openFiles([["id": path, "path": path, "name": name]], at: 0) }
+  // Overview's See All and its numbers: that tab, as if tapped (Claims, Expenses, Client Assets) — never the website's Home
+  // underneath (Haris 2026-11-04: it went to "E11 Day"); Client Assets with Finance is Me's page
   private func ovGo(_ to: String) {
-    let key = ["assets": "clients", "claims": "fin-reimb", "expenses": "fin-expenses"][to] ?? ""
-    // (on the list the section was about: Need approval; Office expenses — Haris 2026-11-04)
+    let key = ["assets": "clients", "claims": "fin-reimb", "claimsAll": "fin-reimb", "expenses": "fin-expenses", "subs": "fin-expenses"][to] ?? ""
+    // (on the list the row was about: Need approval, or All; Office expenses, or Subscriptions — Haris 2026-11-04)
     if to == "claims" { clSeg = 0 }
-    if to == "expenses" { exSeg = 1 }
+    if to == "claimsAll" { clSeg = 1 }
+    if to == "expenses" { exSeg = 1; exMonth = nil }
+    if to == "subs" { exSeg = 0 }
     if main.tabKeys.contains(key) { main.selectTab(key); return }
     if key == "clients" { coverWait = Date(); send(["ev": "nav", "to": "clients"]) }
   }
@@ -2544,44 +2412,210 @@ final class MeCtl {
     }
     main.topMost().present(vc.inNav(), animated: true)
   }
-  // ---------- an Office Admin's Claims (Haris 2026-11-04) ----------
+  // ---------- an Office Admin's Claims — fully Apple (Haris 2026-11-11 07:25, the mock-up "Remaining pages — fully Apple":
+  //  B1 · C1 · D1 · E1) ----------
+  // Its tab (MeTabVC "fin-reimb"): Apple's big title "Claims", its line the month, how many and the total; Apple's search
+  // (by name); ••• Apple's menu — Mark All HR Approved, Set All Paid On… (Finance Admins) and Month (the last 12, as the
+  // website); Need Approval · All as Apple's segmented control at the top of the list; each claim Apple's cell (the
+  // person, what's in it, the amount, its status in its colour — ours), Apple's swipes (right: HR Approved, left: Paid
+  // On…), touch and hold: Apple's menu (Open Claim, Share PDF, HR Approved, Paid On…); a tap opens its page (E1). Under All:
+  // No claims and Not answered yet (D1).
+  private var clMonth: String?, clQ = ""
+  private func clPill(_ r: [String: Any]) -> [(String, UIColor)] {
+    let t = r["pill"] as? String ?? ""
+    guard !t.isEmpty else { return [] }
+    return [(t, r["pk"] as? String == "paid" ? .systemGreen : r["pk"] as? String == "ok" ? .systemBlue : .systemOrange)]
+  }
+  private func claimItem(_ h: HomeView, _ r: [String: Any], admin: Bool) -> SetItem {
+    let id = r["id"] as? String ?? "", st = r["st"] as? String ?? ""
+    let legacy = (r["legacy"] as? Bool) == true
+    let inv = r["inv"] as? [String: Any]
+    let tap: (() -> Void)?
+    if !legacy { tap = { [weak self] in self?.open("claim", id) } }
+    else if let f = inv { tap = { [weak self] in self?.openOne(f["path"] as? String ?? "", f["name"] as? String ?? "Invoice") } }
+    else { tap = nil }
+    var it = SetItem(key: "c." + id, title: r["name"] as? String ?? "", sub: r["sub"] as? String ?? "", value: r["amt"] as? String ?? "", chevron: tap != nil, pills: clPill(r), tap: tap)
+    it.person = (photo: r["photo"] as? String, ini: r["ini"] as? String ?? "", rgb: NativeSheetVC.color(r["rgb"]) ?? .systemGray)
+    guard !legacy else { return it }
+    if admin, st == "submitted" { it.lead = [MeSwipe(title: "HR Approved", sym: "checkmark", col: TaskSwipe.green) { [weak self, weak h] fin in fin(true); self?.clApprove(h, [id]) }] }
+    if admin, st != "paid" { it.trail = [MeSwipe(title: "Paid On…", sym: "calendar", col: .systemBlue) { [weak self, weak h] fin in fin(true); self?.paidOn(h, [id], sub: "\(r["name"] as? String ?? "") · \(r["amt"] as? String ?? "")") }] }
+    it.menu = { [weak self, weak h] in
+      guard self != nil else { return nil }
+      var a: [UIMenuElement] = [UIAction(title: "Open Claim", image: UIImage(systemName: "doc.text")) { [weak self] _ in self?.open("claim", id) },
+                                UIAction(title: "Share PDF", image: UIImage(systemName: "square.and.arrow.up")) { [weak self] _ in self?.claimPdf(id) }]
+      var b: [UIMenuElement] = []
+      if admin, st == "submitted" { b.append(UIAction(title: "HR Approved", image: UIImage(systemName: "checkmark.circle")) { [weak self, weak h] _ in self?.clApprove(h, [id]) }) }
+      if admin, st != "paid" { b.append(UIAction(title: "Paid On…", image: UIImage(systemName: "calendar")) { [weak self, weak h] _ in self?.paidOn(h, [id], sub: "\(r["name"] as? String ?? "") · \(r["amt"] as? String ?? "")") }) }
+      if !b.isEmpty { a.append(UIMenu(options: .displayInline, children: b)) }
+      return UIMenu(children: a)
+    }
+    return it
+  }
   private func claimsBlocks(_ h: HomeView, _ out: inout [UIView]) {
     guard let m = model["claims"] as? [String: Any] else { let n = part(h, "wait") { AppleEmpty() }; n.setLoading(); out.append(n); return }
     let need = (m["need"] as? [[String: Any]]) ?? [], all = (m["all"] as? [[String: Any]]) ?? []
     let admin = (m["admin"] as? Bool) == true
-    // (a claim from the Inbox: its list picked — Need approval if it waits there, else All — scrolled to, pulsing)
+    if h.assets == "claimsTab", let vc = MeTabVC.byKey["fin-reimb"] {
+      vc.onSearch = { [weak self, weak h] q in guard let self = self, let h = h, self.clQ != q else { return }; self.clQ = q; self.blocks(h) }
+      vc.useMore { [weak self, weak h] in self?.claimsMenu(h) ?? [] }
+    }
+    // (a claim from the Inbox: its list picked — Need approval if it waits there, else All — shown and lit a moment;
+    //  another month on show: back to the claim month, where it is)
     var focus: String? = nil
     if let fid = clFocus {
       clFocus = nil
       if need.contains(where: { ($0["id"] as? String) == fid }) { clSeg = 0; focus = fid } else if all.contains(where: { ($0["id"] as? String) == fid }) { clSeg = 1; focus = fid }
+      else if clMonth != nil { clMonth = nil; clFocus = fid; DispatchQueue.main.async { [weak self] in self?.redraw() } }
+      clQ = ""
+    }
+    let q = clQ.trimmingCharacters(in: .whitespaces)
+    if !q.isEmpty {
+      let f = Find.filter(all, q) { "\($0["name"] ?? "") \($0["sub"] ?? "")" }
+      if f.items.isEmpty { let n = part(h, "none") { AppleEmpty() }; n.set("magnifyingglass", "No Results", "Check the spelling or try a new search."); out.append(n); return }
+      out.append(head(h, "cls", f.loose ? "Close matches" : "Claims · \(f.items.count)"))
+      let g = group(h, "cls", f.items.map { claimItem(h, $0, admin: admin) }); Find.mark([g], f.marks); out.append(g)
+      return
     }
     let seg = part(h, "seg") { SegBlock() }
-    seg.set("Need approval · \(need.count)", "All · \(all.count)", clSeg)
-    seg.onPick = { [weak self, weak h] i in guard let self = self, let h = h else { return }; self.clSeg = i; UIView.performWithoutAnimation { self.blocks(h); h.setNeedsLayout(); h.layoutIfNeeded() } }
+    seg.set("Need Approval · \(need.count)", "All · \(all.count)", clSeg)
+    seg.onPick = { [weak self, weak h] i in guard let self = self, let h = h else { return }; self.clSeg = i; self.blocks(h) }
     out.append(seg)
-    out.append(foot(h, "clsub", "\(m["label"] as? String ?? "") · \(m["sub"] as? String ?? "")"))
     let rows = clSeg == 0 ? need : all
-    if rows.isEmpty { out.append(foot(h, "cl0", clSeg == 0 ? "Nothing waiting for HR approval." : "No claims this month yet.", centered: true)) }
-    else {
-      let list = part(h, "claims") { SwipeRows() }
-      list.set(rows, look: h.look, admin: admin)
-      list.onApprove = { [weak self, weak h] id in self?.request(["ev": "clApprove", "id": id]) { r in if (r["ok"] as? Bool) == true { UINotificationFeedbackGenerator().notificationOccurred(.success); h?.toast(["t": "Marked HR approved"]) } else { h?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]) } } }
-      list.onOpen = { [weak self] id in self?.send(["ev": "clOpen", "id": id]) }
-      list.onHold = { [weak self, weak h] id in guard let self = self, admin, let row = rows.first(where: { ($0["id"] as? String) == id }), (row["st"] as? String) != "paid" else { return }; self.paidOn(h, id, sub: "\(row["name"] as? String ?? "") · \(row["amt"] as? String ?? "")") }
-      out.append(list)
-      if let fid = focus { DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak h, weak list] in guard let h = h, let list = list, let row = list.row(fid) else { return }; h.scrollToShow(row); list.pulse(fid) } }
+    if rows.isEmpty {
+      let n = part(h, "cl0") { AppleEmpty() }
+      if clSeg == 0 { n.set("checkmark.circle", "All Caught Up", "No claims are waiting for HR approval.") } else { n.set("doc.text", "No Claims Yet", "Claims sent from the app for \(m["label"] as? String ?? "this month") show here.") }
+      out.append(n)
+    } else {
+      out.append(head(h, "cl", ""))
+      out.append(group(h, "cl", rows.map { claimItem(h, $0, admin: admin) }))
+      out.append(foot(h, "cl", (m["foot"] as? String ?? "") + (admin ? " Swipe right for HR Approved, left for Paid On…" : "")))
     }
+    // (D1 — as the website's Finance page: who said they have none, and who hasn't answered while the month is open)
+    if clSeg == 1 {
+      let none = (m["none"] as? [[String: Any]]) ?? [], waiting = (m["waiting"] as? [[String: Any]]) ?? []
+      let person = { (p: [String: Any]) -> SetItem in var it = SetItem(key: p["id"] as? String ?? "", title: p["name"] as? String ?? "", chevron: false); it.person = (photo: p["photo"] as? String, ini: p["ini"] as? String ?? "", rgb: NativeSheetVC.color(p["rgb"]) ?? .systemGray); it.dim = true; return it }
+      if !none.isEmpty { out.append(head(h, "cln", "No claims · \(none.count)")); out.append(group(h, "cln", none.map(person))) }
+      if !waiting.isEmpty { out.append(head(h, "clw", "Not answered yet · \(waiting.count)")); out.append(group(h, "clw", waiting.map(person))); out.append(foot(h, "clw", "They can still send theirs from the app until the 27th.")) }
+    }
+    if let fid = focus { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak h] in h?.meFlash("c." + fid) } }
     h.setFab("Add claim", "plus", admin ? { [weak self, weak h] in if let h = h { self?.addClaim(h, m) } } : nil)
   }
-  // hold a claim → Paid on: iPhone's own calendar (as the website, a submitted one is HR approved with it)
-  private func paidOn(_ h: HomeView?, _ id: String, sub: String = "") {
+  // Claims' •••: Mark All HR Approved and Set All Paid On… (the month on show, Finance Admins — the website's two buttons),
+  // then the month (the last 12)
+  private func claimsMenu(_ h: HomeView?) -> [UIMenuElement] {
+    guard let m = model["claims"] as? [String: Any] else { return [] }
+    let all = (m["all"] as? [[String: Any]]) ?? []
+    let open = all.filter { ($0["legacy"] as? Bool) != true && ($0["st"] as? String) != "paid" }.compactMap { $0["id"] as? String }
+    let sub = all.filter { ($0["st"] as? String) == "submitted" }.compactMap { $0["id"] as? String }
+    var out: [UIMenuElement] = []
+    if (m["admin"] as? Bool) == true {
+      let a = UIAction(title: "Mark All HR Approved", image: UIImage(systemName: "checkmark.circle"), attributes: sub.isEmpty ? .disabled : []) { [weak self, weak h] _ in self?.clApprove(h, sub) }
+      let p = UIAction(title: "Set All Paid On…", image: UIImage(systemName: "calendar"), attributes: open.isEmpty ? .disabled : []) { [weak self, weak h] _ in self?.paidOn(h, open, sub: "\(open.count) claim\(open.count == 1 ? "" : "s") · \(m["label"] as? String ?? "")") }
+      out.append(UIMenu(options: .displayInline, children: [a, p]))
+    }
+    let cur = m["month"] as? String ?? ""
+    let months = ((m["pick"] as? [[String: Any]]) ?? []).map { x -> UIAction in
+      let v = x["m"] as? String ?? ""
+      return UIAction(title: x["t"] as? String ?? v, state: v == cur ? .on : .off) { [weak self] _ in
+        guard let self = self, v != cur else { return }
+        UISelectionFeedbackGenerator().selectionChanged()
+        self.clMonth = v; self.redraw()
+      }
+    }
+    out.append(UIMenu(title: "Month", options: .displayInline, children: months))
+    return out
+  }
+  // HR approved — one claim or all at once: shown at once (the rule "what you do shows at once"), the server's answer then
+  private func clApprove(_ h: HomeView?, _ ids: [String]) {
+    guard !ids.isEmpty else { return }
+    UINotificationFeedbackGenerator().notificationOccurred(.success)
+    request(["ev": "clApprove", "ids": ids]) { r in
+      if (r["ok"] as? Bool) == true { h?.toast(["t": (r["text"] as? String) ?? (ids.count > 1 ? "\(ids.count) claims marked HR approved" : "Marked HR approved")]) } else { h?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]) }
+    }
+  }
+  // Paid on — iPhone's own calendar (as the website, a submitted one is HR approved with it); one claim or all at once
+  private func paidOn(_ h: HomeView?, _ ids: [String], sub: String = "") {
+    guard !ids.isEmpty else { return }
     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     let fmt = DateFormatter(); fmt.calendar = Calendar(identifier: .gregorian); fmt.locale = Locale(identifier: "en_US_POSIX"); fmt.dateFormat = "yyyy-MM-dd"
     main.topMost().present(DateSheetVC(["value": fmt.string(from: Date()), "min": "", "max": "", "clearable": false, "md": false, "title": "Paid on", "sub": sub]) { [weak self, weak h] r in
       if (r["cancel"] as? Bool) == true || (r["ok"] as? Bool) == false { return }
       guard let d = r["date"] as? String, !d.isEmpty else { return }
-      self?.request(["ev": "clPaid", "id": id, "date": d]) { r in if (r["ok"] as? Bool) == true { UINotificationFeedbackGenerator().notificationOccurred(.success); h?.toast(["t": "Marked paid"]) } else { h?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]) } }
+      self?.request(["ev": "clPaid", "ids": ids, "date": d]) { r in if (r["ok"] as? Bool) == true { UINotificationFeedbackGenerator().notificationOccurred(.success); h?.toast(["t": (r["text"] as? String) ?? "Marked paid"]) } else { h?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]) } }
     }, animated: true)
+  }
+  // a claim's PDF, made by the server (its sheet, receipts and signature) — shared with iPhone's own share sheet
+  private func claimPdf(_ id: String) {
+    top?.toast(["t": "Preparing the PDF…"])
+    main.serverTask.request("/api/app/claimPdf", body: ["id": id]) { [weak self] r in
+      guard let self = self else { return }
+      guard let r = r, (r["ok"] as? Bool) == true, let p = r["path"] as? String else { self.top?.toast(["t": r?["error"] as? String ?? "Could not make the PDF"]); return }
+      let name = r["name"] as? String ?? "Expense claim.pdf"
+      let url = "/__file/" + p.split(separator: "/").map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }.joined(separator: "/")
+      FeedLoader.shared.data(url) { [weak self] d in
+        DispatchQueue.main.async {
+          guard let self = self else { return }
+          guard let d = d, !d.isEmpty else { self.top?.toast(["t": "Couldn’t get the PDF — try again"]); return }
+          let f = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+          try? d.write(to: f, options: .atomic)
+          let a = UIActivityViewController(activityItems: [f], applicationActivities: nil)
+          a.completionWithItemsHandler = { _, _, _, _ in try? FileManager.default.removeItem(at: f) }
+          if let pop = a.popoverPresentationController { pop.sourceView = self.main.view; pop.sourceRect = CGRect(x: self.main.view.bounds.midX, y: self.main.view.bounds.midY, width: 1, height: 1) }
+          self.main.topMost().present(a, animated: true)
+        }
+      }
+    }
+  }
+  // A claim opened (E1): pushed — the person and its total, its items under their day (a tap opens the receipt in Quick
+  // Look, swiping through all of them), Share PDF; Paid On… · HR Approved on Apple's toolbar (Finance Admins)
+  private func claimBlocks(_ h: HomeView, _ id: String, _ out: inout [UIView]) {
+    let vc = pageVCs[ObjectIdentifier(h)]
+    guard let c = model["claim"] as? [String: Any], (c["id"] as? String) == id else {
+      h.drawAssetsBar(name: "Claim", sub: "", logo: nil, rgb: nil, ini: nil, showLogo: false)
+      vc?.setTools("", nil)
+      let w = part(h, "wait") { AppleEmpty() }; w.setLoading(); out.append(w); return
+    }
+    if (c["gone"] as? Bool) == true {
+      vc?.setTools("", nil)
+      // (gone while it's open — deleted, or taken back: the page goes back with a toast, as every page)
+      if apple, let vc = vc, vc.appeared, vc.navigationController?.topViewController === vc {
+        vc.navigationController?.popViewController(animated: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in self?.top?.toast(["t": "This claim isn’t here any more"]) }
+      }
+      let w = part(h, "wait") { AppleEmpty() }; w.set("doc.text", "Not Here", "This claim isn’t here any more."); out.append(w); return
+    }
+    let st = c["st"] as? String ?? "", admin = (c["admin"] as? Bool) == true
+    h.drawAssetsBar(name: c["name"] as? String ?? "Claim", sub: "\(c["month"] as? String ?? "") · \(c["pill"] as? String ?? "")", logo: nil, rgb: nil, ini: nil, showLogo: false)
+    var who = SetItem(key: "who", title: c["name"] as? String ?? "", sub: c["sub"] as? String ?? "", value: c["amt"] as? String ?? "", chevron: false, pills: clPill(["pill": c["pill"] ?? "", "pk": st == "paid" ? "paid" : st == "approved" ? "ok" : "sub"]))
+    who.person = (photo: c["photo"] as? String, ini: c["ini"] as? String ?? "", rgb: NativeSheetVC.color(c["rgb"]) ?? .systemGray)
+    who.bold = true
+    out.append(head(h, "who", "")); out.append(group(h, "who", [who]))
+    let groups = (c["groups"] as? [[String: Any]]) ?? []
+    let receipts: [[String: Any]] = groups.flatMap { ($0["items"] as? [[String: Any]]) ?? [] }.compactMap { i in (i["receipt"] as? [String: Any]).map { ["id": $0["path"] ?? "", "path": $0["path"] ?? "", "name": $0["name"] ?? "Receipt", "size": $0["size"] ?? 0] } }
+    for (gi, g) in groups.enumerated() {
+      let items = ((g["items"] as? [[String: Any]]) ?? []).map { i -> SetItem in
+        let rc = i["receipt"] as? [String: Any], path = rc?["path"] as? String ?? ""
+        var it = SetItem(key: i["id"] as? String ?? "", title: i["desc"] as? String ?? "", value: i["amt"] as? String ?? "", chevron: false,
+                         tap: rc == nil ? nil : { [weak self] in if let at = receipts.firstIndex(where: { ($0["path"] as? String) == path }) { self?.main.openFiles(receipts, at: at) } })
+        if rc != nil { it.sym = "paperclip"; it.col = .systemGray }
+        return it
+      }
+      out.append(head(h, "g\(gi)", g["head"] as? String ?? ""))
+      out.append(group(h, "g\(gi)", items))
+    }
+    if !receipts.isEmpty { out.append(foot(h, "rc", "A tap on an item opens its receipt.")) }
+    out.append(head(h, "pdf", ""))
+    out.append(group(h, "pdf", [SetItem(key: "pdf", title: "Share PDF", sym: "square.and.arrow.up", col: .systemBlue, chevron: false, tap: { [weak self] in self?.claimPdf(id) })]))
+    out.append(foot(h, "pdf", "The claim as the website’s PDF, with its receipts and signature."))
+    guard admin, st != "paid" else { vc?.setTools("", nil); return }
+    let nm = "\(c["name"] as? String ?? "") · \(c["amt"] as? String ?? "")"
+    vc?.setTools("cl|\(id)|\(st)") { [weak self, weak h] in
+      let paid = UIBarButtonItem(title: "Paid On…", primaryAction: UIAction { _ in self?.paidOn(h, [id], sub: nm) })
+      guard st == "submitted" else { return [.flexibleSpace(), paid] }
+      let ok = UIBarButtonItem(title: "HR Approved", primaryAction: UIAction { _ in self?.clApprove(h, [id]) })
+      if #available(iOS 26.0, *) { ok.style = .prominent; ok.tintColor = .systemGreen } else { ok.style = .done; ok.tintColor = .systemGreen }
+      return [paid, .flexibleSpace(), ok]
+    }
   }
   private func addClaim(_ h: HomeView, _ m: [String: Any]) {
     let people = ((m["people"] as? [[String: Any]]) ?? []).map { ($0["id"] as? String ?? "", $0["name"] as? String ?? "") }
@@ -2594,39 +2628,149 @@ final class MeCtl {
     }
     main.topMost().present(vc.inNav(), animated: true)
   }
-  // ---------- an Office Admin's Expenses ----------
+  // ---------- an Office Admin's Expenses — fully Apple (the mock-up's B1 · F1) ----------
+  // Its tab (MeTabVC "fin-expenses"): Apple's big title "Expenses" and its line; Apple's search; Subscriptions · Office
+  // Expenses as Apple's segmented control; each one Apple's cell — a subscription's billing day and its invoices (this
+  // month's, the months still missing one), touch and hold: its invoice, Add … Invoice, Delete Subscription; the ended ones
+  // their own faded group (F1). Office expenses: the month picked in ••• (the last 12, B1), a tap opens the invoice or adds
+  // it, Apple's swipe to Delete, touch and hold: Invoice / Add Invoice, Delete. "+ Add …" as Home's + New task.
+  private var exMonth: String?, exQ = ""
+  private func subItem(_ h: HomeView, _ x: [String: Any], admin: Bool) -> SetItem {
+    let id = x["id"] as? String ?? "", ended = (x["ended"] as? Bool) == true
+    let inv = x["invFile"] as? [String: Any]
+    let lk = x["lk"] as? String ?? ""
+    var tap: (() -> Void)? = nil
+    if !ended, let f = inv { tap = { [weak self] in self?.openOne(f["path"] as? String ?? "", f["name"] as? String ?? "Invoice") } }
+    var it = SetItem(key: "s." + id, title: x["name"] as? String ?? "", sub: x["sub"] as? String ?? "", value: x["amt"] as? String ?? "", sym: "arrow.triangle.2.circlepath", col: ended ? .systemGray : .systemIndigo, chevron: false, tap: tap)
+    let lc: UIColor = lk == "miss" ? UIColor.systemOrange : lk == "ok" ? UIColor.systemGreen : UIColor.secondaryLabel
+    it.line3 = (x["line"] as? String ?? "", lc)
+    it.dim = ended
+    guard admin, !ended else { return it }
+    it.menu = { [weak self, weak h] in
+      guard let self = self else { return nil }
+      var a: [UIMenuElement] = []
+      let nowName = x["nowName"] as? String ?? "", nowM = x["nowMonth"] as? String ?? ""
+      if let f = inv { a.append(UIAction(title: "Open \(nowName) Invoice", image: UIImage(systemName: "doc.text")) { [weak self] _ in self?.openOne(f["path"] as? String ?? "", f["name"] as? String ?? "Invoice") }) }
+      else { a.append(self.invoiceMenu("Add \(nowName) Invoice", h, id: id, month: nowM, folder: "Subscriptions")) }
+      for m in (x["missing"] as? [[String: Any]]) ?? [] { a.append(self.invoiceMenu("Add \(m["t"] as? String ?? "") Invoice", h, id: id, month: m["m"] as? String ?? "", folder: "Subscriptions")) }
+      a.append(UIMenu(options: .displayInline, children: [UIAction(title: "Delete Subscription", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self, weak h] _ in self?.endSub(h, id, x["name"] as? String ?? "this subscription") }]))
+      return UIMenu(children: a)
+    }
+    return it
+  }
+  private func officeItem(_ h: HomeView, _ x: [String: Any], admin: Bool) -> SetItem {
+    let id = x["id"] as? String ?? "", inv = x["invFile"] as? [String: Any], month = x["month"] as? String ?? ""
+    var it = SetItem(key: "o." + id, title: x["name"] as? String ?? "", sub: x["sub"] as? String ?? "", value: x["amt"] as? String ?? "", sym: "doc.text.fill", col: .systemGray, chevron: false,
+                     tap: inv != nil ? { [weak self] in self?.openOne(inv?["path"] as? String ?? "", inv?["name"] as? String ?? "Invoice") } : nil)
+    it.line3 = inv != nil ? ("Invoice", UIColor.secondaryLabel) : (admin ? "No invoice — hold to add it" : "No invoice", UIColor.systemOrange)
+    guard admin else { return it }
+    it.trail = [MeSwipe(title: "Delete", sym: "trash", col: .systemRed, destructive: true) { [weak self, weak h] fin in self?.delExpense(h, id, x["name"] as? String ?? "this expense", fin) }]
+    it.menu = { [weak self, weak h] in
+      guard let self = self else { return nil }
+      var a: [UIMenuElement] = []
+      if let f = inv { a.append(UIAction(title: "Open Invoice", image: UIImage(systemName: "doc.text")) { [weak self] _ in self?.openOne(f["path"] as? String ?? "", f["name"] as? String ?? "Invoice") }) }
+      else { a.append(self.invoiceMenu("Add Invoice", h, id: id, month: month, folder: "Expenses")) }
+      a.append(UIMenu(options: .displayInline, children: [UIAction(title: "Delete", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self, weak h] _ in self?.delExpense(h, id, x["name"] as? String ?? "this expense", nil) }]))
+      return UIMenu(children: a)
+    }
+    return it
+  }
   private func expensesBlocks(_ h: HomeView, _ out: inout [UIView]) {
     guard let m = model["expenses"] as? [String: Any] else { let n = part(h, "wait") { AppleEmpty() }; n.setLoading(); out.append(n); return }
-    let subs = (m["subs"] as? [[String: Any]]) ?? [], office = (m["office"] as? [[String: Any]]) ?? []
+    let subs = (m["subs"] as? [[String: Any]]) ?? [], ended = (m["ended"] as? [[String: Any]]) ?? [], office = (m["office"] as? [[String: Any]]) ?? []
     let admin = (m["admin"] as? Bool) == true
+    if h.assets == "expensesTab", let vc = MeTabVC.byKey["fin-expenses"] {
+      vc.onSearch = { [weak self, weak h] q in guard let self = self, let h = h, self.exQ != q else { return }; self.exQ = q; self.blocks(h) }
+      if exSeg == 1 { vc.useMore { [weak self] in self?.expensesMenu() ?? [] } } else { vc.useMore(nil) }
+    }
+    let q = exQ.trimmingCharacters(in: .whitespaces)
+    if !q.isEmpty {
+      let f = Find.filter(subs + office, q) { "\($0["name"] ?? "") \($0["sub"] ?? "")" }
+      if f.items.isEmpty { let n = part(h, "none") { AppleEmpty() }; n.set("magnifyingglass", "No Results", "Check the spelling or try a new search."); out.append(n); return }
+      out.append(head(h, "exf", f.loose ? "Close matches" : "Found · \(f.items.count)"))
+      let g = group(h, "exf", f.items.map { x in x["month"] != nil ? officeItem(h, x, admin: admin) : subItem(h, x, admin: admin) }); Find.mark([g], f.marks); out.append(g)
+      return
+    }
     let seg = part(h, "seg") { SegBlock() }
-    seg.set("Subscriptions · \(subs.count)", "Office expenses · \(office.count)", exSeg)
-    seg.onPick = { [weak self, weak h] i in guard let self = self, let h = h else { return }; self.exSeg = i; if let s = self.stack.first(where: { $0.h === h }) { self.draw(s) }; UIView.performWithoutAnimation { h.setNeedsLayout(); h.layoutIfNeeded() } }
+    seg.set("Subscriptions · \(subs.count)", "Office Expenses · \(office.count)", exSeg)
+    seg.onPick = { [weak self, weak h] i in guard let self = self, let h = h else { return }; self.exSeg = i; if let s = self.stack.first(where: { $0.h === h }) { self.draw(s) }; self.blocks(h) }
     out.append(seg)
-    out.append(foot(h, "exsub", exSeg == 0 ? "\(subs.count) subscription\(subs.count == 1 ? "" : "s") · \(m["subsTotal"] as? String ?? "") a month" : "\(m["month"] as? String ?? "") · \(m["officeTotal"] as? String ?? "")"))
-    let rows = exSeg == 0 ? subs : office
-    if rows.isEmpty { out.append(foot(h, "ex0", exSeg == 0 ? "No monthly subscriptions." : "No office expenses this month yet.", centered: true)) }
-    else {
-      let items = rows.map { x -> SetItem in
-        let id = x["id"] as? String ?? ""
-        var it = SetItem(key: "e." + id, title: x["name"] as? String ?? "", sub: x["sub"] as? String ?? "", value: x["amt"] as? String ?? "", sym: exSeg == 0 ? "arrow.triangle.2.circlepath" : "doc.text.fill", col: exSeg == 0 ? .systemIndigo : .systemGray, chevron: (x["inv"] as? Bool) == true,
-                         tap: (x["inv"] as? Bool) == true ? { [weak self] in self?.send(["ev": "exInv", "id": id]) } : nil)
-        // (hold a subscription → Delete subscription, ending today — Haris 2026-11-04)
-        if exSeg == 0, admin { it.hold = { [weak self, weak h] in self?.endSub(h, id, x["name"] as? String ?? "this subscription") } }
-        return it
+    if exSeg == 0 {
+      if subs.isEmpty { let n = part(h, "ex0") { AppleEmpty() }; n.set("arrow.triangle.2.circlepath", "No Subscriptions", "Monthly subscriptions you add are recorded as an expense on their billing day."); out.append(n) }
+      else {
+        out.append(head(h, "exs", ""))
+        out.append(group(h, "exs", subs.map { subItem(h, $0, admin: admin) }))
+        out.append(foot(h, "exs", "Each is recorded as an expense on its billing day." + (admin ? " Touch and hold one for its invoices." : "")))
       }
-      out.append(group(h, exSeg == 0 ? "exs" : "exo", items))
+      if !ended.isEmpty { out.append(head(h, "exe", "Ended · \(ended.count)")); out.append(group(h, "exe", ended.map { subItem(h, $0, admin: admin) })); out.append(foot(h, "exe", "Past months stay in the records.")) }
+    } else {
+      if office.isEmpty { let n = part(h, "ex0") { AppleEmpty() }; n.set("doc.text", "No Office Expenses", "Nothing added for \(m["omName"] as? String ?? "this month") yet."); out.append(n) }
+      else {
+        out.append(head(h, "exo", ""))
+        out.append(group(h, "exo", office.map { officeItem(h, $0, admin: admin) }))
+        out.append(foot(h, "exo", admin ? "Swipe left to delete. Touch and hold for the invoice." : ""))
+      }
     }
     h.setFab(exSeg == 0 ? "Add subscription" : "Add office expense", "plus", admin ? { [weak self, weak h] in if let h = h { self?.addExpense(h, sub: self?.exSeg == 0) } } : nil)
+  }
+  // Office Expenses' •••: the month (the last 12)
+  private func expensesMenu() -> [UIMenuElement] {
+    guard let m = model["expenses"] as? [String: Any] else { return [] }
+    let cur = m["om"] as? String ?? ""
+    let months = ((m["pick"] as? [[String: Any]]) ?? []).map { x -> UIAction in
+      let v = x["m"] as? String ?? ""
+      return UIAction(title: x["t"] as? String ?? v, state: v == cur ? .on : .off) { [weak self] _ in
+        guard let self = self, v != cur else { return }
+        UISelectionFeedbackGenerator().selectionChanged()
+        self.exMonth = v; self.redraw()
+      }
+    }
+    return [UIMenu(title: "Month", options: .displayInline, children: months)]
+  }
+  // an invoice added afterwards (the website's subInvoice / txInvoice): picked from Files, Photos or the Camera — Apple's
+  // menu — sent up into Finance/<folder>/<month>, then saved on the record
+  private func invoiceMenu(_ title: String, _ h: HomeView?, id: String, month: String, folder: String) -> UIMenu {
+    let src = [("Files", "folder", "files"), ("Photos", "photo.on.rectangle", "photos"), ("Camera", "camera", "camera")].map { t in
+      UIAction(title: t.0, image: UIImage(systemName: t.1)) { [weak self, weak h] _ in self?.addInvoice(h, id: id, month: month, folder: folder, source: t.2) }
+    }
+    return UIMenu(title: title, image: UIImage(systemName: "paperclip"), children: src)
+  }
+  private func addInvoice(_ h: HomeView?, id: String, month: String, folder: String, source: String) {
+    Picker.shared.pick(from: main.topMost(), single: true, source: source) { [weak self, weak h] r in
+      guard let self = self, let x = ((r["files"] as? [[String: Any]]) ?? []).first, let tok = x["token"] as? String, let url = Picker.shared.url(tok) else { return }
+      let name = x["name"] as? String ?? "Invoice"
+      let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.intValue ?? 0
+      h?.toast(["t": "Adding the invoice…"])
+      Uploader.send(url, name: name, task: "", dest: "Finance/\(folder)/\(month)", cookies: self.main.serverHome.cookies, progress: { _ in }) { [weak self, weak h] path in
+        guard let self = self else { return }
+        guard let p = path else { h?.toast(["t": "Couldn’t upload — try again"]); return }
+        self.request(["ev": "exInv", "id": id, "month": month, "invoice": ["path": p, "name": name, "size": size]]) { r in
+          if (r["ok"] as? Bool) == true { UINotificationFeedbackGenerator().notificationOccurred(.success); h?.toast(["t": (r["text"] as? String) ?? "Invoice added"]) } else { h?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]) }
+        }
+      }
+    }
   }
   private func endSub(_ h: HomeView?, _ id: String, _ name: String) {
     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     let today = Date().formatted(.dateTime.month(.abbreviated).day())
     let a = UIAlertController(title: "Delete \(name)?", message: "It ends today, \(today). It won’t be counted from next month — this month only if its billing day has passed. Months already recorded stay.", preferredStyle: .actionSheet)
-    a.addAction(UIAlertAction(title: "Delete subscription", style: .destructive) { [weak self, weak h] _ in
+    a.addAction(UIAlertAction(title: "Delete Subscription", style: .destructive) { [weak self, weak h] _ in
       self?.request(["ev": "exEnd", "id": id]) { r in if (r["ok"] as? Bool) == true { UINotificationFeedbackGenerator().notificationOccurred(.success); h?.toast(["t": "Subscription deleted"]) } else { h?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]) } }
     })
     a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+    if let pop = a.popoverPresentationController { pop.sourceView = main.view; pop.sourceRect = CGRect(x: main.view.bounds.midX, y: main.view.bounds.maxY - 80, width: 1, height: 1) }
+    main.topMost().present(a, animated: true)
+  }
+  // an office expense removed (the website's remove: it no longer counts) — asked first, as the website
+  private func delExpense(_ h: HomeView?, _ id: String, _ name: String, _ fin: ((Bool) -> Void)?) {
+    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    let a = UIAlertController(title: "Remove \(name)?", message: "It will no longer count in the expenses.", preferredStyle: .actionSheet)
+    a.addAction(UIAlertAction(title: "Remove", style: .destructive) { [weak self, weak h] _ in
+      fin?(true)
+      self?.request(["ev": "exDel", "id": id]) { r in if (r["ok"] as? Bool) == true { UINotificationFeedbackGenerator().notificationOccurred(.success) } else { h?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]) } }
+    })
+    a.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in fin?(false) })
+    if let pop = a.popoverPresentationController { pop.sourceView = main.view; pop.sourceRect = CGRect(x: main.view.bounds.midX, y: main.view.bounds.maxY - 80, width: 1, height: 1) }
     main.topMost().present(a, animated: true)
   }
   private func addExpense(_ h: HomeView, sub: Bool?) {
@@ -2638,46 +2782,6 @@ final class MeCtl {
       self?.request(ev) { r in if (r["ok"] as? Bool) == true { done(nil); h?.toast(["t": isSub ? "Subscription added" : "Office expense added"]) } else { done(r["error"] as? String ?? "That didn’t work — try again") } }
     }
     main.topMost().present(vc.inNav(), animated: true)
-  }
-  // 🔍 on Claims (by name) and Expenses (by name): the list's own rows, found here
-  private func listFind(_ h: HomeView, _ raw: String) {
-    let q = raw.trimmingCharacters(in: .whitespaces).lowercased()
-    guard !q.isEmpty else { h.showFound([], hint: h.assets == "claimsTab" ? "Search claims by name." : "Search subscriptions and office expenses."); return }
-    // (typos forgiven, the words marked — every search alike: Haris 2026-11-06)
-    if h.assets == "claimsTab" {
-      let m = model["claims"] as? [String: Any] ?? [:]
-      let f = Find.filter((m["all"] as? [[String: Any]]) ?? [], q) { "\($0["name"] ?? "") \($0["sub"] ?? "")" }
-      if f.items.isEmpty { h.showFound([], hint: "No claims found."); return }
-      let list = SwipeRows(); list.set(f.items, look: h.look, admin: false)
-      list.onOpen = { [weak self] id in self?.send(["ev": "clOpen", "id": id]) }
-      h.showFound([list], hint: f.loose ? "Nothing matched exactly — close matches:" : nil)
-      Find.mark([list], f.marks)
-    } else {
-      let m = model["expenses"] as? [String: Any] ?? [:]
-      let f = Find.filter(((m["subs"] as? [[String: Any]]) ?? []) + ((m["office"] as? [[String: Any]]) ?? []), q) { "\($0["name"] ?? "") \($0["sub"] ?? "")" }
-      if f.items.isEmpty { h.showFound([], hint: "Nothing found."); return }
-      let g = SetGroup(); g.set(f.items.map { x in let id = x["id"] as? String ?? ""; return SetItem(key: "f." + id, title: x["name"] as? String ?? "", sub: x["sub"] as? String ?? "", value: x["amt"] as? String ?? "", chevron: (x["inv"] as? Bool) == true, tap: (x["inv"] as? Bool) == true ? { [weak self] in self?.send(["ev": "exInv", "id": id]) } : nil) }, look: h.look)
-      h.showFound([g], hint: f.loose ? "Nothing matched exactly — close matches:" : nil)
-      Find.mark([g], f.marks)
-    }
-  }
-  // 🔍 on Overview: every client's files (Client Assets' search), a tap previews it — Haris 2026-11-04
-  private func overviewFind(_ h: HomeView, _ raw: String) {
-    let q = raw.trimmingCharacters(in: .whitespaces)
-    guard !q.isEmpty else { h.showFound([], hint: "Search the files of every client — logos, guidelines, fonts…"); return }
-    request(["ev": "ovFind", "q": q]) { [weak self, weak h] r in
-      guard let self = self, let h = h, h.searching else { return }
-      let found = (r["found"] as? [[String: Any]]) ?? []
-      let items = found.map { f -> SetItem in
-        var it = SetItem(key: "s." + (f["id"] as? String ?? ""), title: f["name"] as? String ?? "", sub: f["where"] as? String ?? "", chevron: false, tap: { [weak self] in self?.send(["ev": "ovFile", "id": f["id"] as? String ?? "", "path": f["path"] as? String ?? "", "name": f["name"] as? String ?? ""]) })
-        it.person = (photo: f["pic"] as? String, ini: f["ext"] as? String ?? "", rgb: .systemGray)
-        return it
-      }
-      if items.isEmpty { h.showFound([], hint: "No files found."); return }
-      let g = SetGroup(); g.set(items, look: h.look)
-      h.showFound([g], hint: (r["loose"] as? Bool) == true ? "Nothing matched exactly — close matches:" : nil)
-      Find.mark([g], (r["marks"] as? [String]) ?? Find.terms(q))
-    }
   }
   private func teamBlocks(_ h: HomeView, _ out: inout [UIView]) {
     let t = team
@@ -2756,10 +2860,7 @@ final class MeCtl {
     guard let p = model["profile"] as? [String: Any] else { let n = part(h, "wait") { AppleEmpty() }; n.setLoading(); out.append(n); return }
     let top = part(h, "photo") { ProfileHead() }
     top.set(p, look: h.look)
-    top.onChange = { [weak self] in
-      guard let self = self else { return }
-      self.main.topMost().present(AttachSheetVC(title: "Your photo") { [weak self] src in self?.pfPhoto(src) }, animated: true)
-    }
+    top.onPick = { [weak self] src in self?.pfPhoto(src) }
     top.onRemove = { [weak self] in self?.pfPhotoOff() }
     out.append(top)
     let v: (String) -> String = { k in p[k] as? String ?? "" }
@@ -2828,37 +2929,17 @@ final class MeCtl {
       cats.choose((MeCtl.trashCats.firstIndex { $0.0 == (t["cat"] as? String ?? "all") }) ?? 0)
       cats.onPick = { [weak self] i in self?.trCatv = MeCtl.trashCats[i].0; self?.send(["ev": "trCat", "k": MeCtl.trashCats[i].0]) }
       out.append(cats)
-    } else {
-    let find = part(h, "find") { AssetsFind() }
-    find.field.placeholder = "Search the Trash"
-    if !find.field.isFirstResponder, (find.field.text ?? "") != (t["q"] as? String ?? "") { find.field.text = t["q"] as? String }
-    find.onChange = { [weak self] q in self?.trQv = q; self?.send(["ev": "trQ", "q": q]) }
-    let cats = part(h, "cats") { CatsBlock(items: MeCtl.trashCats.map { c in MailCats.Item(key: c.0, sym: c.1, name: c.2, fill: c.0 == "all" ? MailCats.neutral : c.0 == "mine" ? MailCats.purple : MailCats.blue) }) }
-    cats.choose((MeCtl.trashCats.firstIndex { $0.0 == (t["cat"] as? String ?? "all") }) ?? 0)
-    cats.onPick = { [weak self] i in self?.trCatv = MeCtl.trashCats[i].0; self?.send(["ev": "trCat", "k": MeCtl.trashCats[i].0]) }
-    let stack = part(h, "pin") { PinStack() }
-    stack.set([find, cats])
-    if h.pinHead !== stack { h.pinHead = stack }
     }
     let groups = (t["groups"] as? [[String: Any]]) ?? []
+    let tq = t["q"] as? String ?? ""
     for g in groups {
       let items = (g["items"] as? [[String: Any]]) ?? []
       let k = g["name"] as? String ?? ""
       out.append(head(h, "tr." + k, "\(k) · \(items.count)"))
-      let tg = part(h, "trg." + k) { TrashGroup() }
-      tg.onEvent = { [weak self, weak h] ev in
-        // (Restore: straight to the server — step 3 — with the page's own toast; the rest as before)
-        if (ev["ev"] as? String) == "trRestore" { self?.request(ev) { r in h?.toast(["t": (r["ok"] as? Bool) == true ? (r["toast"] as? String ?? "Restored") : (r["error"] as? String ?? "That didn’t work — try again")]) }; return }
-        if (ev["ev"] as? String) == "trForever", let id = ev["id"] as? String { self?.trForever(id); return }
-        // (a tap and touch and hold, the app's own — without the website they did nothing: Haris 2026-11-06)
-        if let k = ev["ev"] as? String, k == "trTap" || k == "trHold", let id = ev["id"] as? String, let self = self, let h = h, self.trashOwn(h, id, tap: k == "trTap") { return }
-        self?.send(ev)
-      }
-      tg.set(items, look: h.look)
+      let gv = group(h, "tr." + k, items.map { trashRow(h, $0) })
       // (the words searched for, marked — every search alike: Haris 2026-11-06)
-      let tq = t["q"] as? String ?? ""
-      Find.mark([tg], tq.isEmpty ? [] : Find.filter(items, tq) { "\($0["t"] ?? "") \($0["s"] ?? "")" }.marks)
-      out.append(tg)
+      Find.mark([gv], tq.isEmpty ? [] : Find.filter(items, tq) { "\($0["t"] ?? "") \($0["s"] ?? "")" }.marks)
+      out.append(gv)
     }
     if let none = t["none"] as? String, !none.isEmpty { let w = part(h, "none") { AppleEmpty() }
       // (Apple's own: a search with nothing found — No Results; the Trash empty — its title, the server's words under it)
@@ -2866,6 +2947,22 @@ final class MeCtl {
       else { let parts = none.components(separatedBy: " — "); let rest = parts.dropFirst().joined(separator: " — "); w.set("trash", parts.count > 1 ? "Trash Is Empty" : none, rest.isEmpty ? nil : rest.prefix(1).uppercased() + rest.dropFirst()) }
       out.append(w) }
     out.append(foot(h, "trnote", t["note"] as? String ?? ""))
+  }
+  // one Trash item as Apple's cell: its kind's symbol (a file or folder: its own picture — G1), name, kind · where · who ·
+  // when, days left (red near the end); Apple's swipes — right Restore, left Delete Forever (Super Admins); touch and hold:
+  // Apple's menu
+  private func trashRow(_ h: HomeView, _ x: [String: Any]) -> SetItem {
+    let id = x["id"] as? String ?? "", type = x["type"] as? String ?? ""
+    let col = (x["col"] as? [Int]).map { MeCtl.rgb($0) } ?? .systemGray
+    let files = (x["files"] as? [[String: Any]]) ?? []
+    let opens = (x["task"] as? Bool) == true || !files.isEmpty
+    var it = SetItem(key: "t." + id, title: x["t"] as? String ?? "", sub: x["s"] as? String ?? "", sym: x["sym"] as? String ?? "trash.fill", col: col, chevron: false, tap: opens ? { [weak self] in self?.trashTap(id) } : nil)
+    it.line3 = (x["left"] as? String ?? "", (x["soon"] as? Bool) == true ? UIColor.systemRed : UIColor.secondaryLabel)
+    if type != "task", type != "comment", let p = files.first?["pic"] as? String { it.pic = p }
+    if (x["restore"] as? Bool) == true { it.lead = [MeSwipe(title: "Restore", sym: "arrow.uturn.backward", col: TaskSwipe.green) { [weak self, weak h] fin in fin(true); self?.trRestore(h, id) }] }
+    if (x["forever"] as? Bool) == true { it.trail = [MeSwipe(title: "Delete Forever", sym: "trash", col: .systemRed, destructive: true) { [weak self] fin in fin(false); self?.trForever(id) }] }
+    it.menu = { [weak self, weak h] in self?.trashMenu(h, id) }
+    return it
   }
   private func person(_ id: String) -> [String: Any]? {
     let t = team
@@ -3172,8 +3269,6 @@ final class MeCtl {
     case "toast": send(["ev": "toast"])
     // (your photo on the Content plans tab: the Me tab, as from every other tab — Haris 2026-11-04)
     case "me" where MeCtl.tabRoots.contains(h.assets ?? ""): main.selectTab("me")
-    case "find" where h.assets == "overviewTab": overviewFind(h, ev["q"] as? String ?? "")
-    case "find" where h.assets == "claimsTab" || h.assets == "expensesTab": listFind(h, ev["q"] as? String ?? "")
     case "find" where h.assets == "plansPage" || h.assets == "me.plan" || h.assets == "plansTab": planFind(h, ev["q"] as? String ?? "")
     default: break
     }
@@ -3478,34 +3573,6 @@ final class TouchSpot: UIGestureRecognizer, UIGestureRecognizerDelegate {
 // always in the middle, wide, blue with white, its full name; the others grey with their short name. The running month
 // to 6 months after the one being planned can be tapped or swiped to (swipe the row, as the Inbox's); the months either
 // side show faded and can't be. A tap or swipe slides the row and grows / shrinks the pills in the Inbox's timing.
-// Overview's three cards (Haris 2026-11-04): a big number, a small "/ 18" beside it, a line under
-final class OvCards: UIView, HomeBlock {
-  private var tiles: [(box: UIView, n: UILabel, t: UILabel)] = []
-  func set(_ cards: [[String: Any]], look L: HomeLook) {
-    while tiles.count < cards.count {
-      let b = UIView(); b.layer.cornerRadius = 16; b.layer.cornerCurve = .continuous
-      let n = UILabel(); n.adjustsFontSizeToFitWidth = true; n.minimumScaleFactor = 0.6
-      let t = UILabel(); t.font = .systemFont(ofSize: 12); t.textColor = .secondaryLabel; t.numberOfLines = 3
-      b.addSubview(n); b.addSubview(t); addSubview(b); tiles.append((b, n, t))
-    }
-    for (i, c) in cards.enumerated() {
-      let x = tiles[i]; x.box.backgroundColor = L.card
-      let s = NSMutableAttributedString(string: c["n"] as? String ?? "", attributes: [.font: UIFont.systemFont(ofSize: 24, weight: .bold), .foregroundColor: UIColor.label])
-      if let of = c["of"] as? String { s.append(NSAttributedString(string: " " + of, attributes: [.font: UIFont.systemFont(ofSize: 14, weight: .semibold), .foregroundColor: UIColor.secondaryLabel])) }
-      x.n.attributedText = s; x.t.text = c["t"] as? String
-    }
-    setNeedsLayout()
-  }
-  func blockHeight(_ W: CGFloat) -> CGFloat { 104 }
-  override func layoutSubviews() {
-    super.layoutSubviews()
-    let gap: CGFloat = 9, w = (bounds.width - 32 - gap * 2) / 3
-    for (i, x) in tiles.enumerated() {
-      x.box.frame = CGRect(x: 16 + CGFloat(i) * (w + gap), y: 6, width: w, height: 92)
-      x.n.frame = CGRect(x: 12, y: 10, width: w - 24, height: 30); x.t.frame = CGRect(x: 12, y: 42, width: w - 24, height: 44)
-    }
-  }
-}
 final class PlanMonthChips: UIView, HomeBlock {
   static let H: CGFloat = 38
   var onPick: ((String) -> Void)?
@@ -3787,160 +3854,26 @@ final class NoteVC: UIViewController, UITextViewDelegate {
   }
 }
 
-// ---------- an Office Admin's claim rows (Haris 2026-11-04): a short swipe shows a button, then it's tapped —
-// right: HR approved (a submitted claim, Finance Admins); left: Open claim (its PDF). Held: Paid on. A tap opens it too.
-// Each row kept by its id and only drawn again when what it shows changed. ----------
-final class SwipeRows: UIView, HomeBlock {
-  var onApprove: ((String) -> Void)?, onOpen: ((String) -> Void)?, onHold: ((String) -> Void)?
-  private let box = UIView()
-  private var rows: [String: SwipeRow] = [:], order: [String] = [], seps: [UIView] = []
-  private static let H: CGFloat = 70
-  override init(frame: CGRect) { super.init(frame: frame); box.layer.cornerRadius = 16; box.layer.cornerCurve = .continuous; box.clipsToBounds = true; addSubview(box) }
-  required init?(coder: NSCoder) { fatalError() }
-  func set(_ list: [[String: Any]], look L: HomeLook, admin: Bool) {
-    box.backgroundColor = L.card
-    let ids = list.compactMap { $0["id"] as? String }
-    for (id, r) in rows where !ids.contains(id) { r.removeFromSuperview(); rows[id] = nil }
-    UIView.performWithoutAnimation {
-      for x in list {
-        guard let id = x["id"] as? String else { continue }
-        let r = rows[id] ?? { let r = SwipeRow(); r.owner = self; box.addSubview(r); rows[id] = r; return r }()
-        r.set(x, look: L, canApprove: admin && (x["st"] as? String) == "submitted")
-        r.onApprove = { [weak self] in self?.onApprove?(id) }; r.onOpen = { [weak self] in self?.onOpen?(id) }; r.onHold = { [weak self] in self?.onHold?(id) }
-      }
-    }
-    order = ids
-    while seps.count < max(0, ids.count - 1) { let v = UIView(); v.backgroundColor = UIColor.separator; box.addSubview(v); seps.append(v) }
-    seps.enumerated().forEach { $0.element.isHidden = $0.offset >= ids.count - 1 }
-    setNeedsLayout()
-  }
-  func closeOthers(_ keep: SwipeRow) { rows.values.filter { $0 !== keep }.forEach { $0.close() } }
-  func row(_ id: String) -> UIView? { rows[id] }
-  // the WhatsApp pulse on one claim: a see-through grey over it, once (as a review request's)
-  func pulse(_ id: String) {
-    guard let r = rows[id] else { return }
-    let band = UIView(frame: r.bounds); band.isUserInteractionEnabled = false; band.alpha = 0
-    band.backgroundColor = Look.c(UIColor.white.withAlphaComponent(0.13), UIColor.black.withAlphaComponent(0.08))
-    r.addSubview(band)
-    UIView.animate(withDuration: 0.2, delay: 0.35, options: [.curveEaseOut]) { band.alpha = 1 } completion: { _ in
-      UIView.animate(withDuration: 0.6, delay: 0.6, options: [.curveEaseInOut]) { band.alpha = 0 } completion: { _ in band.removeFromSuperview() }
-    }
-  }
-  func blockHeight(_ W: CGFloat) -> CGFloat { CGFloat(order.count) * SwipeRows.H + 8 }
-  override func layoutSubviews() {
-    super.layoutSubviews()
-    box.frame = CGRect(x: 16, y: 4, width: bounds.width - 32, height: CGFloat(order.count) * SwipeRows.H)
-    for (i, id) in order.enumerated() { if let r = rows[id] { r.bounds = CGRect(x: 0, y: 0, width: box.bounds.width, height: SwipeRows.H); r.center = CGPoint(x: box.bounds.width / 2, y: CGFloat(i) * SwipeRows.H + SwipeRows.H / 2) } }
-    for (i, v) in seps.enumerated() where !v.isHidden { v.frame = CGRect(x: 62, y: CGFloat(i + 1) * SwipeRows.H - 0.5, width: box.bounds.width - 62, height: 0.5); box.bringSubviewToFront(v) }
-  }
-}
-final class SwipeRow: UIView, UIGestureRecognizerDelegate {
-  weak var owner: SwipeRows?
-  var onApprove: (() -> Void)?, onOpen: (() -> Void)?, onHold: (() -> Void)?
-  private let front = UIView(), pic = UIImageView(), name = UILabel(), sub = UILabel(), amt = UILabel(), pill = PaddedLabel()
-  private let left = UIButton(type: .system), right = UIButton(type: .system)
-  private var canApprove = false, offset: CGFloat = 0, photoPath: String?
-  private static let W: CGFloat = 84
-  override init(frame: CGRect) {
-    super.init(frame: frame)
-    clipsToBounds = true
-    for (b, t, s, c) in [(left, "HR approved", "checkmark", UIColor.systemGreen), (right, "Open claim", "doc.text", UIColor.systemBlue)] {
-      var cfg = UIButton.Configuration.plain(); cfg.image = UIImage(systemName: s, withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)); cfg.imagePlacement = .top; cfg.imagePadding = 4
-      cfg.attributedTitle = AttributedString(t, attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 12, weight: .semibold)])); cfg.baseForegroundColor = .white
-      // square, as Mail's swipe buttons — no rounded corners (Haris 2026-11-04)
-      cfg.cornerStyle = .fixed; cfg.background.cornerRadius = 0; cfg.background.backgroundColor = c
-      b.configuration = cfg; b.backgroundColor = c; b.layer.cornerRadius = 0; b.alpha = 0; addSubview(b)
-    }
-    left.addAction(UIAction { [weak self] _ in UINotificationFeedbackGenerator().notificationOccurred(.success); self?.close(); self?.onApprove?() }, for: .touchUpInside)
-    right.addAction(UIAction { [weak self] _ in self?.close(); self?.onOpen?() }, for: .touchUpInside)
-    pic.layer.cornerRadius = 18; pic.clipsToBounds = true; pic.contentMode = .scaleAspectFill
-    name.font = .systemFont(ofSize: 16, weight: .medium); sub.font = .systemFont(ofSize: 13); sub.textColor = .secondaryLabel
-    amt.font = .systemFont(ofSize: 15, weight: .semibold); amt.textAlignment = .right
-    pill.font = .systemFont(ofSize: 11.5, weight: .semibold); pill.layer.cornerRadius = 7; pill.clipsToBounds = true; pill.insets = UIEdgeInsets(top: 2, left: 7, bottom: 2, right: 7)
-    [pic, name, sub, amt, pill].forEach { front.addSubview($0) }
-    addSubview(front)
-    let pan = UIPanGestureRecognizer(target: self, action: #selector(panned(_:))); pan.delegate = self; front.addGestureRecognizer(pan)
-    front.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
-    let hold = UILongPressGestureRecognizer(target: self, action: #selector(held(_:))); hold.minimumPressDuration = 0.45; front.addGestureRecognizer(hold)
-    _ = PressShrink.add(to: front)
-  }
-  required init?(coder: NSCoder) { fatalError() }
-  private var sig = ""
-  func set(_ x: [String: Any], look L: HomeLook, canApprove ok: Bool) {
-    canApprove = ok
-    front.backgroundColor = L.card
-    let s = "\(x["name"] ?? "")|\(x["sub"] ?? "")|\(x["amt"] ?? "")|\(x["pill"] ?? "")|\(x["pk"] ?? "")|\(x["photo"] ?? "")|\(ok)|\(L.key)"
-    guard s != sig else { return }
-    sig = s
-    name.text = x["name"] as? String; sub.text = x["sub"] as? String; amt.text = x["amt"] as? String
-    pill.text = x["pill"] as? String
-    let col: UIColor = (x["pk"] as? String) == "sub" ? .systemOrange : (x["pk"] as? String) == "ok" ? .systemGreen : .secondaryLabel
-    pill.textColor = col; pill.backgroundColor = (x["pk"] as? String) == "paid" ? UIColor.tertiarySystemFill : col.withAlphaComponent(0.16)
-    let ini = x["ini"] as? String ?? "", rgb = NativeSheetVC.color(x["rgb"]) ?? .systemGray
-    let ph = x["photo"] as? String
-    if ph != photoPath || pic.image == nil {
-      photoPath = ph; pic.image = roundPic(nil, initials: ini, color: rgb, size: 36)
-      if let p = ph { FeedLoader.shared.image(p) { [weak self] i in guard let self = self, self.photoPath == p, let i = i else { return }; self.pic.image = roundPic(i, initials: nil, color: nil, size: 36) } }
-    }
-    left.isHidden = !ok
-    setNeedsLayout()
-  }
-  override func layoutSubviews() {
-    super.layoutSubviews()
-    let W = bounds.width, H = bounds.height
-    left.frame = CGRect(x: 0, y: 0, width: SwipeRow.W, height: H); right.frame = CGRect(x: W - SwipeRow.W, y: 0, width: SwipeRow.W, height: H)
-    front.bounds = CGRect(x: 0, y: 0, width: W, height: H); front.center = CGPoint(x: W / 2 + offset, y: H / 2)
-    // the buttons only while the row is swiped — a touch and hold shrinks the row, and nothing may show behind it
-    if offset > 0 { left.alpha = 1 } else if offset < 0 { right.alpha = 1 }
-    pic.frame = CGRect(x: 14, y: (H - 36) / 2, width: 36, height: 36)
-    let aw = max(ceil(amt.sizeThatFits(CGSize(width: 160, height: 20)).width), ceil(pill.sizeThatFits(CGSize(width: 160, height: 20)).width))
-    amt.frame = CGRect(x: W - 14 - aw, y: H / 2 - 20, width: aw, height: 20)
-    let pw = ceil(pill.sizeThatFits(CGSize(width: 160, height: 20)).width); pill.frame = CGRect(x: W - 14 - pw, y: H / 2 + 3, width: pw, height: 18)
-    name.frame = CGRect(x: 62, y: H / 2 - 20, width: W - 62 - aw - 24, height: 20); sub.frame = CGRect(x: 62, y: H / 2 + 2, width: W - 62 - aw - 24, height: 18)
-  }
-  func close() { guard offset != 0 else { return }; offset = 0; UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, animations: { self.layoutSubviews() }) { _ in self.hideButtons() } }
-  private func hideButtons() { if offset == 0 { left.alpha = 0; right.alpha = 0 } }
-  @objc private func tapped() { if offset != 0 { close(); return }; onOpen?() }
-  @objc private func held(_ g: UILongPressGestureRecognizer) { if g.state == .began { close(); onHold?() } }
-  private var startOffset: CGFloat = 0
-  @objc private func panned(_ g: UIPanGestureRecognizer) {
-    let dx = g.translation(in: self).x
-    switch g.state {
-    case .began: startOffset = offset; owner?.closeOthers(self)
-    case .changed:
-      var o = startOffset + dx
-      o = min(canApprove ? SwipeRow.W + 20 : 0, max(-SwipeRow.W - 20, o))
-      offset = o; layoutSubviews()
-    default:
-      let v = g.velocity(in: self).x
-      let to: CGFloat = (offset > 36 || (v > 400 && offset > 0)) && canApprove ? SwipeRow.W : (offset < -36 || (v < -400 && offset < 0)) ? -SwipeRow.W : 0
-      if to != 0 && to != startOffset { UISelectionFeedbackGenerator().selectionChanged() }
-      offset = to
-      UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, animations: { self.layoutSubviews() }) { _ in self.hideButtons() }
-    }
-  }
-  override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
-    guard let p = g as? UIPanGestureRecognizer else { return true }
-    let v = p.velocity(in: self); return abs(v.x) > abs(v.y) * 1.2
-  }
-}
-
-// ---------- the add sheets (Haris 2026-11-04): a claim by hand (Person, Amount, last / this month, its PDF), a subscription
-// (Name, Amount, Billing day, Invoice), an office expense (Name, Amount, Payment date, Invoice) ----------
-final class MoneyFormVC: UIViewController {
+// ---------- the add sheets — Apple's form sheet (Haris 2026-11-11 07:25, the mock-up "Remaining pages — fully Apple"):
+// Apple's grouped list in iPhone's own sheet, ✕ and ✓ in its bar. A claim by hand: Person (Apple's pull-down menu — the
+// team, other people, someone who isn't a team member), Amount, Month (last / this, Apple's segmented control), the
+// claim's PDF; a subscription: Name, Amount, Billing Day (Apple's menu, 1st–31st), the invoice; an office expense: Name,
+// Amount, Payment Date (Apple's date picker), the invoice. The file: Apple's menu — Files, Photos, Camera. ✓ lights up once
+// what it needs is in. ----------
+final class MoneyFormVC: UITableViewController, UITextFieldDelegate {
   enum Kind { case claim, sub, expense }
   let kind: Kind
   var onSave: (([String: Any], @escaping (String?) -> Void) -> Void)?
   var onPerson: ((String, @escaping (String?, String?) -> Void) -> Void)?
-  private let people: [(String, String)], months: [(String, String)]
+  private let months: [(String, String)]
   private let cookies: (@escaping (String) -> Void) -> Void
-  private let stack = UIStackView(), nameF = UITextField(), amountF = UITextField(), personB = UIButton(type: .system), dayB = UIButton(type: .system), fileB = UIButton(type: .system)
-  private let monthSeg = UISegmentedControl(), datePick = UIDatePicker(), err = UILabel()
-  private var who: String?, day = Calendar.current.component(.day, from: Date()), file: [String: Any]?, busy = false
+  private let nameF = UITextField(), amountF = UITextField(), monthSeg = UISegmentedControl(), datePick = UIDatePicker()
+  private var who: String?, day = Calendar.current.component(.day, from: Date()), file: [String: Any]?, busy = false, saving = false, err: String?
   private var peopleList: [(String, String)]
+  private var ok: UIBarButtonItem?
   init(kind: Kind, people: [(String, String)], months: [(String, String)], cookies: @escaping (@escaping (String) -> Void) -> Void) {
-    self.kind = kind; self.people = people; self.peopleList = people; self.months = months; self.cookies = cookies
-    super.init(nibName: nil, bundle: nil)
+    self.kind = kind; self.peopleList = people; self.months = months; self.cookies = cookies
+    super.init(style: .insetGrouped)
   }
   required init?(coder: NSCoder) { fatalError() }
   func inNav() -> UIViewController {
@@ -3948,69 +3881,106 @@ final class MoneyFormVC: UIViewController {
     if let s = n.sheetPresentationController { s.detents = [.large()]; s.prefersGrabberVisible = true }
     return n
   }
-  private func label(_ t: String) -> UILabel { let l = UILabel(); l.text = t.uppercased(); l.font = .systemFont(ofSize: 13); l.textColor = .secondaryLabel; return l }
-  private func boxed(_ v: UIView) -> UIView {
-    let b = UIView(); b.backgroundColor = .secondarySystemGroupedBackground; b.layer.cornerRadius = 12; b.layer.cornerCurve = .continuous
-    v.translatesAutoresizingMaskIntoConstraints = false; b.addSubview(v)
-    NSLayoutConstraint.activate([v.leadingAnchor.constraint(equalTo: b.leadingAnchor, constant: 14), v.trailingAnchor.constraint(equalTo: b.trailingAnchor, constant: -14), v.topAnchor.constraint(equalTo: b.topAnchor, constant: 6), v.bottomAnchor.constraint(equalTo: b.bottomAnchor, constant: -6), b.heightAnchor.constraint(greaterThanOrEqualToConstant: 48)])
-    return b
+  // the rows of each group: (what, label)
+  private enum Row { case person, name, amount, month, day, date, file }
+  private var groups: [[Row]] {
+    switch kind {
+    case .claim: return [[.person, .amount, .month], [.file]]
+    case .sub: return [[.name, .amount, .day], [.file]]
+    case .expense: return [[.name, .amount, .date], [.file]]
+    }
   }
   override func viewDidLoad() {
     super.viewDidLoad()
-    view.backgroundColor = .systemGroupedBackground
-    title = kind == .claim ? "Add claim by hand" : kind == .sub ? "Add subscription" : "Add office expense"
-    navigationItem.leftBarButtonItem = UIBarButtonItem(systemItem: .cancel, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
-    navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Save", primaryAction: UIAction { [weak self] _ in self?.save() })
-    let scroll = UIScrollView(); scroll.keyboardDismissMode = .interactive
-    stack.axis = .vertical; stack.spacing = 8
-    scroll.translatesAutoresizingMaskIntoConstraints = false; stack.translatesAutoresizingMaskIntoConstraints = false
-    view.addSubview(scroll); scroll.addSubview(stack)
-    NSLayoutConstraint.activate([scroll.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor), scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor), scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor), scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-      stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: 12), stack.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor, constant: 18), stack.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor, constant: -18), stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -24)])
-    if kind == .claim {
-      stack.addArrangedSubview(label("Person"))
-      personB.contentHorizontalAlignment = .leading; personB.showsMenuAsPrimaryAction = true; personB.titleLabel?.font = .systemFont(ofSize: 17)
-      paintPerson(); stack.addArrangedSubview(boxed(personB))
-    } else {
-      stack.addArrangedSubview(label("Name"))
-      nameF.placeholder = kind == .sub ? "e.g. Adobe Creative Cloud" : "e.g. Studio lights"; nameF.font = .systemFont(ofSize: 17); nameF.autocapitalizationType = .words
-      stack.addArrangedSubview(boxed(nameF))
-    }
-    stack.addArrangedSubview(label("Amount (\u{20C3})"))
-    amountF.placeholder = "0.00"; amountF.keyboardType = .decimalPad; amountF.font = .systemFont(ofSize: 17)
-    stack.addArrangedSubview(boxed(amountF))
-    switch kind {
-    case .claim:
-      stack.addArrangedSubview(label("Month"))
-      for (i, m) in months.enumerated() { monthSeg.insertSegment(withTitle: m.1, at: i, animated: false) }
-      monthSeg.selectedSegmentIndex = max(0, months.count - 1)
-      stack.addArrangedSubview(monthSeg)
-      let hint = UILabel(); hint.text = "It joins that month’s claims as Submitted — then HR approved and Paid on, as every claim."; hint.font = .systemFont(ofSize: 12.5); hint.textColor = .secondaryLabel; hint.numberOfLines = 0
-      stack.addArrangedSubview(hint)
-    case .sub:
-      stack.addArrangedSubview(label("Billing day each month"))
-      dayB.contentHorizontalAlignment = .leading; dayB.showsMenuAsPrimaryAction = true; dayB.titleLabel?.font = .systemFont(ofSize: 17)
-      paintDay(); stack.addArrangedSubview(boxed(dayB))
-    case .expense:
-      stack.addArrangedSubview(label("Payment date"))
-      datePick.datePickerMode = .date; datePick.preferredDatePickerStyle = .compact; datePick.maximumDate = Date()
-      let row = UIStackView(arrangedSubviews: [datePick, UIView()]); stack.addArrangedSubview(boxed(row))
-    }
-    stack.addArrangedSubview(label(kind == .claim ? "PDF" : "Invoice"))
-    fileB.contentHorizontalAlignment = .leading; fileB.showsMenuAsPrimaryAction = true; fileB.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
-    paintFile(); stack.addArrangedSubview(boxed(fileB))
-    err.font = .systemFont(ofSize: 14); err.textColor = .systemRed; err.numberOfLines = 0
-    stack.addArrangedSubview(err)
-    for v in stack.arrangedSubviews where v is UILabel && (v as! UILabel).font.pointSize == 13 { stack.setCustomSpacing(6, after: v) }
+    title = kind == .claim ? "Add Claim" : kind == .sub ? "Add Subscription" : "Add Office Expense"
+    navigationItem.leftBarButtonItem = UIBarButtonItem(systemItem: .close, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
+    let b = UIBarButtonItem(systemItem: .done, primaryAction: UIAction { [weak self] _ in self?.save() })
+    ok = b; navigationItem.rightBarButtonItem = b
+    tableView.keyboardDismissMode = .interactive
+    nameF.placeholder = kind == .sub ? "e.g. Adobe Creative Cloud" : "e.g. Studio lights"; nameF.autocapitalizationType = .words
+    amountF.placeholder = "\u{20C3} 0.00"; amountF.keyboardType = .decimalPad
+    for f in [nameF, amountF] { f.font = .systemFont(ofSize: 17); f.clearButtonMode = .whileEditing; f.delegate = self; f.addAction(UIAction { [weak self] _ in self?.paintOK() }, for: .editingChanged) }
+    nameF.textAlignment = .left; amountF.textAlignment = .right
+    for (i, m) in months.enumerated() { monthSeg.insertSegment(withTitle: m.1.components(separatedBy: " ").first ?? m.1, at: i, animated: false) }
+    monthSeg.selectedSegmentIndex = max(0, months.count - 1)
+    datePick.datePickerMode = .date; datePick.preferredDatePickerStyle = .compact; datePick.maximumDate = Date()
+    paintOK()
   }
   override func viewDidAppear(_ animated: Bool) { super.viewDidAppear(animated); if kind == .claim { amountF.becomeFirstResponder() } else { nameF.becomeFirstResponder() } }
-  private func paintPerson() {
-    personB.setTitle(peopleList.first(where: { $0.0 == who })?.1 ?? "Choose a person…", for: .normal)
-    personB.setTitleColor(who == nil ? .secondaryLabel : .label, for: .normal)
-    let team = peopleList.filter { $0.0.hasPrefix("u:") }.map { p in UIAction(title: p.1, state: p.0 == who ? .on : .off) { [weak self] _ in self?.who = p.0; self?.paintPerson() } }
-    let other = peopleList.filter { $0.0.hasPrefix("p:") }.map { p in UIAction(title: p.1, state: p.0 == who ? .on : .off) { [weak self] _ in self?.who = p.0; self?.paintPerson() } }
-    let add = UIAction(title: "Someone who isn’t a team member…", image: UIImage(systemName: "plus")) { [weak self] _ in self?.askPerson() }
-    personB.menu = UIMenu(children: [UIMenu(title: "Team members", options: .displayInline, children: team)] + (other.isEmpty ? [] : [UIMenu(title: "Other people", options: .displayInline, children: other)]) + [UIMenu(options: .displayInline, children: [add])])
+  private func paintOK() {
+    let amount = Double((amountF.text ?? "").replacingOccurrences(of: ",", with: "")) ?? 0
+    let named = kind == .claim ? who != nil : !(nameF.text ?? "").trimmingCharacters(in: .whitespaces).isEmpty
+    ok?.isEnabled = !saving && !busy && amount > 0 && named && (kind != .claim || file != nil)
+  }
+  override func numberOfSections(in tableView: UITableView) -> Int { groups.count }
+  override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { groups[section].count }
+  override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? { section == 1 ? (kind == .claim ? "Claim PDF" : "Invoice") : nil }
+  override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
+    if section == 1, let e = err { return e }
+    switch (kind, section) {
+    case (.claim, 0): return "Added by hand, it waits for HR approval like a claim sent from the app."
+    case (.sub, 0): return "Recorded as an expense on this day every month."
+    case (.claim, 1): return "Required — the claim with its receipts."
+    default: return section == 1 ? "Optional — it can be added later." : nil
+    }
+  }
+  override func tableView(_ tableView: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
+    let c = UITableViewCell(style: .default, reuseIdentifier: nil)
+    c.selectionStyle = .none
+    var cf = UIListContentConfiguration.valueCell()
+    let row = groups[ip.section][ip.row]
+    switch row {
+    case .person:
+      cf.text = "Person"
+      c.contentConfiguration = cf
+      c.accessoryView = personButton()
+    case .name:
+      cf.text = "Name"; c.contentConfiguration = cf
+      field(nameF, in: c, leading: 92)
+    case .amount:
+      cf.text = "Amount"; c.contentConfiguration = cf
+      field(amountF, in: c, leading: 110)
+    case .month:
+      cf.text = "Month"; c.contentConfiguration = cf
+      monthSeg.sizeToFit(); c.accessoryView = monthSeg
+    case .day:
+      cf.text = "Billing Day"; c.contentConfiguration = cf
+      c.accessoryView = dayButton()
+    case .date:
+      cf.text = "Payment Date"; c.contentConfiguration = cf
+      datePick.sizeToFit(); c.accessoryView = datePick
+    case .file:
+      var f = UIListContentConfiguration.cell()
+      f.text = busy ? "Uploading…" : file.map { $0["name"] as? String ?? "File" } ?? (kind == .claim ? "Attach PDF" : "Attach Invoice")
+      f.textProperties.color = file == nil ? .tintColor : .label
+      f.image = UIImage(systemName: file == nil ? "paperclip" : "doc.fill")
+      c.contentConfiguration = f
+      c.accessoryView = fileButton()
+    }
+    return c
+  }
+  private func field(_ f: UITextField, in c: UITableViewCell, leading: CGFloat) {
+    f.removeFromSuperview()
+    f.translatesAutoresizingMaskIntoConstraints = false
+    c.contentView.addSubview(f)
+    NSLayoutConstraint.activate([f.leadingAnchor.constraint(equalTo: c.contentView.leadingAnchor, constant: leading), f.trailingAnchor.constraint(equalTo: c.contentView.layoutMarginsGuide.trailingAnchor),
+                                 f.centerYAnchor.constraint(equalTo: c.contentView.centerYAnchor), f.heightAnchor.constraint(greaterThanOrEqualToConstant: 34)])
+  }
+  // (Apple's pop-up buttons: the choice as the button's words, its menu on a tap)
+  private func popup(_ title: String, _ menu: UIMenu, dim: Bool = false) -> UIButton {
+    var bc = UIButton.Configuration.plain()
+    bc.title = title; bc.image = UIImage(systemName: "chevron.up.chevron.down", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold))
+    bc.imagePlacement = .trailing; bc.imagePadding = 5; bc.baseForegroundColor = dim ? .secondaryLabel : .label; bc.contentInsets = .zero
+    let b = UIButton(configuration: bc); b.menu = menu; b.showsMenuAsPrimaryAction = true; b.sizeToFit()
+    return b
+  }
+  private func personButton() -> UIButton {
+    let pick = { [weak self] (id: String) in self?.who = id; self?.tableView.reloadRows(at: [IndexPath(row: 0, section: 0)], with: .none); self?.paintOK() }
+    let team = peopleList.filter { $0.0.hasPrefix("u:") }.map { p in UIAction(title: p.1, state: p.0 == who ? .on : .off) { _ in pick(p.0) } }
+    let other = peopleList.filter { $0.0.hasPrefix("p:") }.map { p in UIAction(title: p.1, state: p.0 == who ? .on : .off) { _ in pick(p.0) } }
+    let add = UIAction(title: "Someone Who Isn’t a Team Member…", image: UIImage(systemName: "plus")) { [weak self] _ in self?.askPerson() }
+    let m = UIMenu(children: [UIMenu(title: "Team members", options: .displayInline, children: team)] + (other.isEmpty ? [] : [UIMenu(title: "Other people", options: .displayInline, children: other)]) + [UIMenu(options: .displayInline, children: [add])])
+    return popup(peopleList.first(where: { $0.0 == who })?.1 ?? "Choose", m, dim: who == nil)
   }
   private func askPerson() {
     let a = UIAlertController(title: "Someone who isn’t a team member", message: nil, preferredStyle: .alert)
@@ -4018,22 +3988,27 @@ final class MoneyFormVC: UIViewController {
     a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
     a.addAction(UIAlertAction(title: "Add", style: .default) { [weak self, weak a] _ in
       let n = (a?.textFields?.first?.text ?? "").trimmingCharacters(in: .whitespaces); guard !n.isEmpty else { return }
-      self?.onPerson?(n) { id, name in guard let self = self, let id = id else { self?.err.text = "Couldn’t add that person — try again"; return }; self.peopleList.append((id, name ?? n)); self.who = id; self.paintPerson() }
+      self?.onPerson?(n) { id, name in
+        guard let self = self else { return }
+        guard let id = id else { self.err = "Couldn’t add that person — try again"; self.tableView.reloadSections([1], with: .none); return }
+        self.peopleList.append((id, name ?? n)); self.who = id; self.err = nil
+        self.tableView.reloadRows(at: [IndexPath(row: 0, section: 0)], with: .none); self.paintOK()
+      }
     })
     present(a, animated: true)
   }
-  private func paintDay() {
-    let ord = { (n: Int) -> String in n % 10 == 1 && n != 11 ? "\(n)st" : n % 10 == 2 && n != 12 ? "\(n)nd" : n % 10 == 3 && n != 13 ? "\(n)rd" : "\(n)th" }
-    dayB.setTitle(ord(day), for: .normal); dayB.setTitleColor(.label, for: .normal)
-    dayB.menu = UIMenu(children: (1...31).map { n in UIAction(title: ord(n), state: n == day ? .on : .off) { [weak self] _ in self?.day = n; self?.paintDay() } })
+  private static func ord(_ n: Int) -> String { n % 10 == 1 && n != 11 ? "\(n)st" : n % 10 == 2 && n != 12 ? "\(n)nd" : n % 10 == 3 && n != 13 ? "\(n)rd" : "\(n)th" }
+  private func dayButton() -> UIButton {
+    let m = UIMenu(children: (1...31).map { n in UIAction(title: MoneyFormVC.ord(n), state: n == day ? .on : .off) { [weak self] _ in self?.day = n; self?.tableView.reloadRows(at: [IndexPath(row: 2, section: 0)], with: .none) } })
+    return popup(MoneyFormVC.ord(day), m)
   }
-  private func paintFile() {
-    let has = file != nil
-    fileB.setTitle(busy ? "Uploading…" : has ? "📎 \(file?["name"] as? String ?? "File")" : (kind == .claim ? "📎 Attach the claim (PDF)" : "📎 Attach invoice"), for: .normal)
-    fileB.setTitleColor(.systemBlue, for: .normal)
+  private func fileButton() -> UIView? {
     var acts = [("Files", "folder", "files"), ("Photos", "photo.on.rectangle", "photos"), ("Camera", "camera", "camera")].map { t in UIAction(title: t.0, image: UIImage(systemName: t.1)) { [weak self] _ in self?.pick(t.2) } }
-    if has { acts.append(UIAction(title: "Remove", image: UIImage(systemName: "xmark"), attributes: .destructive) { [weak self] _ in self?.file = nil; self?.paintFile() }) }
-    fileB.menu = UIMenu(children: acts)
+    if file != nil { acts.append(UIAction(title: "Remove", image: UIImage(systemName: "xmark"), attributes: .destructive) { [weak self] _ in self?.file = nil; self?.tableView.reloadSections([1], with: .none); self?.paintOK() }) }
+    if busy { let s = UIActivityIndicatorView(style: .medium); s.startAnimating(); return s }
+    var bc = UIButton.Configuration.plain(); bc.image = UIImage(systemName: file == nil ? "plus.circle.fill" : "ellipsis.circle"); bc.contentInsets = .zero
+    let b = UIButton(configuration: bc); b.menu = UIMenu(children: acts); b.showsMenuAsPrimaryAction = true; b.sizeToFit()
+    return b
   }
   private func monthNow() -> String { let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM"; return f.string(from: Date()) }
   private func pick(_ src: String) {
@@ -4043,17 +4018,18 @@ final class MoneyFormVC: UIViewController {
       let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.intValue ?? 0
       let month = self.kind == .claim && self.monthSeg.selectedSegmentIndex >= 0 && self.monthSeg.selectedSegmentIndex < self.months.count ? self.months[self.monthSeg.selectedSegmentIndex].0 : self.monthNow()
       let dest = "Finance/" + (self.kind == .claim ? "Reimbursements" : self.kind == .sub ? "Subscriptions" : "Expenses") + "/" + month
-      self.busy = true; self.paintFile()
+      self.busy = true; self.err = nil; self.tableView.reloadSections([1], with: .none); self.paintOK()
       Uploader.send(url, name: name, task: "", dest: dest, cookies: self.cookies, progress: { _ in }) { [weak self] path in
         guard let self = self else { return }
         self.busy = false
-        if let p = path { self.file = ["path": p, "name": name, "size": size]; self.err.text = nil } else { self.err.text = "Couldn’t upload — try again" }
-        self.paintFile()
+        if let p = path { self.file = ["path": p, "name": name, "size": size] } else { self.err = "Couldn’t upload — try again" }
+        self.tableView.reloadSections([1], with: .none); self.paintOK()
       }
     }
   }
   private func save() {
-    guard !busy else { err.text = "Still uploading — one moment"; return }
+    guard !busy else { return }
+    view.endEditing(true)
     var f: [String: Any] = ["amount": (amountF.text ?? "").replacingOccurrences(of: ",", with: "")]
     switch kind {
     case .claim:
@@ -4065,11 +4041,11 @@ final class MoneyFormVC: UIViewController {
       let d = DateFormatter(); d.calendar = Calendar(identifier: .gregorian); d.locale = Locale(identifier: "en_US_POSIX"); d.dateFormat = "yyyy-MM-dd"; f["date"] = d.string(from: datePick.date)
     }
     if let x = file { f["file"] = x }
-    navigationItem.rightBarButtonItem?.isEnabled = false
+    saving = true; paintOK()
     onSave?(f) { [weak self] e in
       guard let self = self else { return }
-      self.navigationItem.rightBarButtonItem?.isEnabled = true
-      if let e = e { UINotificationFeedbackGenerator().notificationOccurred(.error); self.err.text = e } else { UINotificationFeedbackGenerator().notificationOccurred(.success); self.dismiss(animated: true) }
+      self.saving = false; self.paintOK()
+      if let e = e { UINotificationFeedbackGenerator().notificationOccurred(.error); self.err = e; self.tableView.reloadSections([1], with: .none) } else { UINotificationFeedbackGenerator().notificationOccurred(.success); self.dismiss(animated: true) }
     }
   }
 }
@@ -4077,7 +4053,6 @@ final class MoneyFormVC: UIViewController {
 // ---------- the CD's Reviews' pieces of ours (the mock-up "Review Requests — fully Apple", 2026-11-10): a request's files
 // as now, and Request Amendments' sheet ----------
 
-// the sender and the files, large and swipeable (the mock-up's D2 — a tap opens Quick Look; the strip under them)
 // The CD's review files ready before she opens a request (Haris 2026-11-11 07:08: "You can do these 3"): each request
 // in Waiting has its pictures fetched quietly as the phone's copy changes — the strip's small ones first, then the large
 // ones — into the phone's picture store (FeedLoader → DiskPics), so a request opens with its files already there, offline
@@ -4126,6 +4101,7 @@ enum ReviewWarm {
   }
 }
 
+// the sender and the files, large and swipeable (the mock-up's D2 — a tap opens Quick Look; the strip under them)
 final class ReviewHero: UIView, HomeBlock, UIScrollViewDelegate {
   var onFile: ((String) -> Void)?
   private let pic = UIImageView(), who = UILabel(), meta = UILabel(), dot = UIView(), rtag = PaddedLabel()

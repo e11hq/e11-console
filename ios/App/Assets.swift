@@ -14,23 +14,6 @@ import UIKit
 
 // ---------- pieces ----------
 
-// the search bar for a client's files (as iPhone's own: a grey capsule with the lens)
-final class AssetsFind: UIView, HomeBlock, UITextFieldDelegate {
-  let field = UISearchTextField()
-  var onChange: ((String) -> Void)?
-  override init(frame: CGRect) {
-    super.init(frame: frame)
-    field.font = .systemFont(ofSize: 17); field.returnKeyType = .search; field.autocorrectionType = .no
-    field.delegate = self
-    field.addAction(UIAction { [weak self] _ in self?.onChange?(self?.field.text ?? "") }, for: .editingChanged)
-    addSubview(field)
-  }
-  required init?(coder: NSCoder) { fatalError() }
-  func textFieldShouldReturn(_ t: UITextField) -> Bool { t.resignFirstResponder(); return true }
-  func blockHeight(_ W: CGFloat) -> CGFloat { 52 }
-  override func layoutSubviews() { super.layoutSubviews(); field.frame = CGRect(x: 16, y: 4, width: bounds.width - 32, height: 40) }
-}
-
 // a tile that's tapped, or touched and held as the comment cards are (Haris 2026-11-03): the whole card shrinks as one
 // from the moment the finger is down (the shared PressShrink); held long enough — the haptic, its sheet slides up, and
 // it springs back

@@ -14,14 +14,17 @@ import UIKit
 let APPLE_ME = APPLE_NAV
 // A role's own tab in its own Apple navigation, as Home (MeTabVC): Social's Plans (Haris 2026-11-10 18:13, the mock-up
 // "Content plans — fully Apple"), an Office Admin's Team (19:58, the mock-up "Team members — fully Apple"), the CD's Reviews
-// (21:20, the mock-up "Review Requests — fully Apple")
-let APPLE_ROLE_TABS: [String] = APPLE_NAV ? ["plans", "team", "reviews"] : []
+// (21:20, the mock-up "Review Requests — fully Apple"), an Office Admin's Overview ("today" — only theirs: everyone else's
+// "today" is Home), Claims and Expenses (2026-11-11 07:25, the mock-up "Remaining pages — fully Apple": "A–I go for it")
+let APPLE_ROLE_TABS: [String] = APPLE_NAV ? ["plans", "team", "reviews", "today", "fin-reimb", "fin-expenses"] : []
 
 extension Main {
   // (Me in its own Apple navigation — for everyone with a Me tab)
   var meApple: Bool { APPLE_ME && tabKeys.contains("me") }
   // (a role's tab its own Apple screen — Social's Plans, an Office Admin's Team)
-  func roleApple(_ key: String) -> Bool { APPLE_ROLE_TABS.contains(key) && tabKeys.contains(key) }
+  func roleApple(_ key: String) -> Bool { APPLE_ROLE_TABS.contains(key) && tabKeys.contains(key) && (key != "today" || officeTabs) }
+  // (an Office Admin's tabs: their first tab, "today", is Overview — not Home)
+  var officeTabs: Bool { tabKeys.contains("fin-reimb") || tabKeys.contains("team") }
   // Me's navigation has settled (a push, a pop, the tab tapped again popping everything): the pages no longer in it are
   // gone for the app too — Me's, Client Assets', the Clients list opened from Me
   func meNavShown(_ n: UINavigationController) {
@@ -55,7 +58,7 @@ final class MeVC: UIViewController, TabRoot {
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
     Main.shared.drawBeforeShow("me")   // (its rows from the phone's copy before it first shows)
-    if APPLE_ROLE_TABS.contains(where: Main.shared.tabKeys.contains) { Main.shared.meCtl.willShowTab("me") } else if h == nil { Main.shared.meCtl.prepareRoot() }   // (a role's own tab given back — Social's Plans, an Office Admin's Team)
+    if APPLE_ROLE_TABS.contains(where: Main.shared.roleApple) { Main.shared.meCtl.willShowTab("me") } else if h == nil { Main.shared.meCtl.prepareRoot() }   // (a role's own tab given back — Social's Plans, an Office Admin's Team)
   }
   func adopt(_ v: HomeView) {
     loadViewIfNeeded()
@@ -106,7 +109,7 @@ final class MeTabVC: UIViewController, TabRoot, UISearchResultsUpdating, UISearc
   override func viewDidLoad() {
     super.viewDidLoad()
     navigationItem.backButtonDisplayMode = .minimal
-    navigationItem.title = ["team": "Team members", "reviews": "Reviews"][key] ?? "Content plans"
+    navigationItem.title = ["team": "Team members", "reviews": "Reviews", "today": "Overview", "fin-reimb": "Claims", "fin-expenses": "Expenses"][key] ?? "Content plans"
     let me = UIBarButtonItem(image: BarImage.me(nil, traitCollection), primaryAction: UIAction { _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); Main.shared.selectTab("me") })
     me.accessibilityLabel = "Me"
     BarImage.bare(me)
@@ -116,7 +119,7 @@ final class MeTabVC: UIViewController, TabRoot, UISearchResultsUpdating, UISearc
     let s = UISearchController(searchResultsController: nil)
     s.obscuresBackgroundDuringPresentation = false
     s.searchResultsUpdater = self; s.delegate = self
-    s.searchBar.placeholder = ["team": "Search people", "reviews": "Search tasks, clients or people"][key] ?? "Search clients and posts"
+    s.searchBar.placeholder = ["team": "Search people", "reviews": "Search tasks, clients or people", "today": "Search Client Assets", "fin-reimb": "Search claims by name", "fin-expenses": "Search subscriptions and expenses"][key] ?? "Search clients and posts"
     s.searchBar.autocorrectionType = .no
     search = s
     navigationItem.hidesSearchBarWhenScrolling = false
@@ -124,6 +127,25 @@ final class MeTabVC: UIViewController, TabRoot, UISearchResultsUpdating, UISearc
     BigLine.prime(self, key)
   }
   func paintMe() { meItem?.image = BarImage.me(mePhoto ?? MePhoto.shared.image, traitCollection) }
+  // ••• beside your photo — Apple's own pull-down menu, worked out each time it opens (Claims: Mark All HR Approved, Set All
+  // Paid On…, Month; Office Expenses: Month — Haris 2026-11-11, B1 · C1); nil: none
+  private var moreItem: UIBarButtonItem?
+  private var moreMenu: (() -> [UIMenuElement])?
+  func useMore(_ make: (() -> [UIMenuElement])?) {
+    moreMenu = make
+    guard let me = meItem else { return }
+    if make == nil {
+      if moreItem != nil { moreItem = nil; navigationItem.rightBarButtonItems = [me] }
+      return
+    }
+    if moreItem == nil {
+      let m = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in done(self?.moreMenu?() ?? []) }])
+      let b = UIBarButtonItem(title: nil, image: UIImage(systemName: "ellipsis"), primaryAction: nil, menu: m)
+      b.accessibilityLabel = "More"
+      moreItem = b
+      navigationItem.rightBarButtonItems = [me, b]
+    }
+  }
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
     paintMe()

@@ -496,6 +496,20 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   // Apple's swipe actions: right — Done · Due; left — Copy link · Delete (as our round buttons did)
   private func swipeActions(_ ip: IndexPath, leading: Bool) -> UISwipeActionsConfiguration? {
+    // (a settings row with Apple's swipes — Claims, Office expenses, the Trash: Haris 2026-11-11)
+    if let key = listDS?.itemIdentifier(for: ip), let it = meItems[key] {
+      let list = leading ? it.lead : it.trail
+      guard !list.isEmpty else { return nil }
+      let acts = list.map { w -> UIContextualAction in
+        let a = UIContextualAction(style: w.destructive ? .destructive : .normal, title: w.title) { _, _, finish in UIImpactFeedbackGenerator(style: .light).impactOccurred(); w.run(finish) }
+        a.image = UIImage(systemName: w.sym)
+        if !w.destructive { a.backgroundColor = w.col }
+        return a
+      }
+      let cfg = UISwipeActionsConfiguration(actions: acts)
+      cfg.performsFirstActionWithFullSwipe = !list[0].destructive
+      return cfg
+    }
     if let key = listDS?.itemIdentifier(for: ip), let row = listViews[key] as? InboxRow {
       guard leading else { return nil }
       let a = UIContextualAction(style: .normal, title: row.read ? "Unread" : "Read") { [weak row] _, _, finish in
@@ -3325,6 +3339,16 @@ extension HomeView {
     if let v = listViews[key] { return "b|\(itemHeight(key, v))" }   // (a block's own height changed — its cell sized again)
     return "b"
   }
+  // (a row shown and lit a moment with Apple's own highlight — a claim opened from the Inbox or a notification: the Claims
+  //  tab's highlight, kept as Apple's list's own, Haris 2026-11-11)
+  func meFlash(_ itemKey: String) {
+    guard let ds = listDS, let cv = list, let k = meItems.keys.first(where: { $0.hasSuffix(":" + itemKey) }), let ip = ds.indexPath(for: k) else { return }
+    cv.scrollToItem(at: ip, at: .centeredVertically, animated: true)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak cv] in
+      cv?.cellForItem(at: ip)?.isHighlighted = true
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak cv] in UIView.animate(withDuration: 0.35) { cv?.cellForItem(at: ip)?.isHighlighted = false } }
+    }
+  }
   func reconfigureMe(_ key: String) {
     guard let ds = listDS else { return }
     var s = ds.snapshot()
@@ -3361,14 +3385,20 @@ extension HomeView {
     var cf = (it.sub.isEmpty && it.pills.isEmpty) ? UIListContentConfiguration.cell() : UIListContentConfiguration.subtitleCell()
     cf.text = it.title
     cf.textProperties.font = .systemFont(ofSize: 17, weight: it.bold ? .semibold : .regular); cf.textProperties.color = it.danger ? .systemRed : L.title
-    if !it.sub.isEmpty || !it.pills.isEmpty {
+    if !it.sub.isEmpty || !it.pills.isEmpty || it.line3 != nil {
       let a = NSMutableAttributedString(string: it.sub, attributes: [.foregroundColor: it.warn ? UIColor.systemOrange : UIColor.secondaryLabel])
       for (j, p) in it.pills.enumerated() { a.append(NSAttributedString(string: (j == 0 && it.sub.isEmpty ? "" : "  ") + p.0, attributes: [.foregroundColor: p.1, .font: UIFont.systemFont(ofSize: 12, weight: .semibold)])) }
+      if let l = it.line3 { a.append(NSAttributedString(string: (a.length > 0 ? "\n" : "") + l.0, attributes: [.foregroundColor: l.1])) }
       cf.secondaryAttributedText = a
-      cf.secondaryTextProperties.font = .systemFont(ofSize: 13); cf.secondaryTextProperties.numberOfLines = it.bold ? 0 : 2
+      cf.secondaryTextProperties.font = .systemFont(ofSize: 13); cf.secondaryTextProperties.numberOfLines = it.bold ? 0 : it.line3 != nil ? 3 : 2
       cf.textToSecondaryTextVerticalPadding = 2
     }
-    if let p = it.person {
+    if let pth = it.pic {
+      // (a file's own picture, Apple's rounded square — its symbol until the picture is on the phone)
+      cf.image = meSquare(pth, it.sym ?? "doc.fill", it.col ?? .systemGray, key)
+      cf.imageProperties.maximumSize = CGSize(width: 40, height: 40); cf.imageProperties.reservedLayoutSize = CGSize(width: 40, height: 0); cf.imageProperties.cornerRadius = 8
+      cf.imageToTextPadding = 12
+    } else if let p = it.person {
       cf.image = mePic(p.photo, p.ini, p.rgb, key)
       cf.imageProperties.maximumSize = CGSize(width: 36, height: 36); cf.imageProperties.reservedLayoutSize = CGSize(width: 36, height: 0); cf.imageProperties.cornerRadius = 18
       cf.imageToTextPadding = 12
@@ -3434,6 +3464,23 @@ extension HomeView {
       }
     }
     return roundPic(nil, initials: ini, color: rgb, size: 36)
+  }
+  private func meSquare(_ path: String, _ sym: String, _ col: UIColor, _ key: String) -> UIImage {
+    let k = "sq|" + path
+    if let img = mePics[k] { return img }
+    if !mePicAsked.contains(k) {
+      mePicAsked.insert(k)
+      FeedLoader.shared.image(path) { [weak self] img in
+        guard let self = self, let img = img else { return }
+        let side: CGFloat = 40, r = UIGraphicsImageRenderer(size: CGSize(width: side, height: side))
+        let sq = r.image { _ in
+          let s = max(side / img.size.width, side / img.size.height), w = img.size.width * s, h = img.size.height * s
+          img.draw(in: CGRect(x: (side - w) / 2, y: (side - h) / 2, width: w, height: h))
+        }
+        DispatchQueue.main.async { self.mePics[k] = sq; self.reconfigureMe(key) }
+      }
+    }
+    return HomeView.settingsIcon(sym, col)
   }
   // the coloured rounded square with its white symbol, as iPhone's Settings has them (shown by Apple's cell)
   private static var icons: [String: UIImage] = [:]

@@ -166,6 +166,23 @@ final class TaskVC: UIViewController {
   }
   // •••: the page's own menu (Copy link, Attach Files, Delete task — as it was)
   func setMenu() {
+    // (a task from the Trash, view only — Haris 2026-11-11, the mock-up's H1: Restore on Apple's toolbar, ••• Delete Forever
+    //  for Super Admins; nothing else to do on it)
+    if let tid = page.trashId {
+      let acts = Main.shared.meCtl.trashActs(tid)
+      navigationItem.rightBarButtonItem = acts.forever ? UIBarButtonItem(title: nil, image: UIImage(systemName: "ellipsis"), primaryAction: nil, menu: UIMenu(children: [
+        UIAction(title: "Delete Forever", image: UIImage(systemName: "trash"), attributes: .destructive) { _ in Main.shared.meCtl.trashForever(tid) }])) : nil
+      if acts.restore, toolbarItems == nil {
+        let r = UIBarButtonItem(title: "Restore", primaryAction: UIAction { [weak self] _ in
+          guard let p = self?.page else { return }
+          UIImpactFeedbackGenerator(style: .light).impactOccurred()
+          Main.shared.meCtl.trashRestore(tid) { ok in if ok { Main.shared.leaveTaskPage(p) } }
+        })
+        if #available(iOS 26.0, *) { r.style = .prominent } else { r.style = .done }
+        toolbarItems = [.flexibleSpace(), r]
+      }
+      return
+    }
     // (the description being written: Apple's own Done ends it, where ••• is — Haris 2026-11-07; the shared Done was
     //  hidden behind this page)
     if page.editingDesc {
@@ -184,10 +201,15 @@ final class TaskVC: UIViewController {
     //  isn't told again: told during the slide back it drew its search box anew, the box's glass coming in at the end —
     //  Haris 2026-11-07, E11 Talk never does it)
     if navigationController?.isNavigationBarHidden == true { navigationController?.setNavigationBarHidden(false, animated: a) }
+    if page.trashId != nil { navigationController?.setToolbarHidden(toolbarItems?.isEmpty ?? true, animated: a) }   // (Restore)
     // (Details' edge swipe goes back; the paging scroller waits for it — on Comments it doesn't start, so the scroller takes it)
     // (and on Details the swipe back from anywhere too, as before the paging — Haris 2026-11-07)
     if let g = navigationController?.interactivePopGestureRecognizer { page.pagerWaits(for: g) }
     if let g = (navigationController as? AppleNav)?.backAnywhere { page.pagerWaits(for: g) }
+  }
+  override func viewWillDisappear(_ a: Bool) {
+    super.viewWillDisappear(a)
+    if page.trashId != nil, toolbarItems?.isEmpty == false { navigationController?.setToolbarHidden(true, animated: a) }
   }
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
