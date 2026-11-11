@@ -1494,6 +1494,10 @@ final class MeCtl {
           DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { self?.main.restartApp() }
         }
       }
+    // (the phone's own way couldn't run yet — the rules not loaded, or the copy not this person's yet: these went to the
+    //  website, which isn't there, and the tap did nothing — Haris 2026-11-11: say so instead)
+    case "addMember", "cd", "pfName", "pfBday", "pfPhoto", "pfPhotoOff", "push", "theme", "trEmpty", "trForever":
+      say("Not ready yet — try again in a moment")
     case "import": say("Moving data from the Mac app is done on the Mac")
     case "update", "videoCheck": say("Not available here right now — try again in a moment")
     // (a page's own view changed — the content plans' month, a list's filter: drawn again from the copy with it; the month
