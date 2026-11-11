@@ -673,7 +673,9 @@ final class AssetsCtl {
         tiles.append(t)
       }
       out += tiles
-      if files.isEmpty {
+      // (only when the folder holds nothing at all: a folder of folders isn't empty — the client's Files holds only folders,
+      //  and "No Files" showed under them: Haris 2026-11-11)
+      if files.isEmpty && (subs.isEmpty || m.isEmpty) {
         // (Apple's empty state: "No Files", and the folder's own note — or Upload — under it)
         let n = empty(h, "empty")
         if m.isEmpty { n.setLoading() }
