@@ -92,6 +92,15 @@ test('everyone else as before: an Admin\'s search finds every client and task', 
   assert.ok(s.tasks.length >= 6);
 });
 
+// Finance only · Admin / Viewer: no tasks app — their search finds no tasks (Haris 2026-11-11)
+test('Finance only: search finds no tasks', () => {
+  const f = JSON.parse(JSON.stringify(data));
+  f.users.push({ id: 'u-f', name: 'Fay Finance', email: 'f@x.test', role: 'finance_admin', active: true }, { id: 'u-fv', name: 'Vic Finance', email: 'fv@x.test', role: 'finance_viewer', active: true });
+  const { R, M } = as('u-f');
+  for (const id of ['u-f', 'u-fv']) assert.equal(M.search(R, f, id, Date.now(), 'Northline').tasks.length, 0, id);
+  assert.ok(M.search(R, f, 'u-a', Date.now(), 'Northline').tasks.length >= 6, 'an Admin as before');
+});
+
 // a client's page and the Clients list's counts, as each role's lists have them (Haris 2026-11-08): Admins and the CD
 // everything; Production / Socials their own lists'
 test('a client\'s page: everything for an Admin, each one\'s own tasks for the rest', () => {

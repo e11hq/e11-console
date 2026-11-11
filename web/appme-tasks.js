@@ -273,7 +273,10 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
       return f;
     }
     // (each word's best field kept too: why a task was found — app.js searchWhy; Haris 2026-11-06)
-    const docs = W.tasks.filter((t) => (!only || t.projectId === only) && !r.amReadOnly(t) && searchOwnOk(t)).map((t) => {
+    // (Finance only · Admin / Viewer: no tasks app — a task's finance status only on the computer; search finds no tasks,
+    //  only what they can open — Haris 2026-11-11)
+    const finOnlyU = u.role === 'finance_admin' || u.role === 'finance_viewer';
+    const docs = W.tasks.filter((t) => !finOnlyU && (!only || t.projectId === only) && !r.amReadOnly(t) && searchOwnOk(t)).map((t) => {
       const words = new Map(), fields = taskFields(t), at = new Map();
       fields.forEach((fl, i) => sWords(fl.text).forEach((w) => { if (!words.has(w) || words.get(w) < fl.w) { words.set(w, fl.w); at.set(w, i); } }));
       Object.keys(FLAGS).forEach((k) => { if (FLAGS[k](t)) { words.set('#' + k, 4); at.set('#' + k, -1); } });
