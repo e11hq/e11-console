@@ -332,7 +332,6 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   var taskPages: [TaskPage] = []
   lazy var serverTask: ServerTask = { let s = ServerTask(); s.cookies = serverHome.cookies; return s }()
   var taskPan: UIScreenEdgePanGestureRecognizer?
-  var cornerWaited = false
   var copyWatch: UUID?
   var prefetchedAt: [String: Date] = [:]
   // the screen hidden as a task was tapped (for the website's task page): the app's own page shows it again under itself
@@ -341,9 +340,6 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   var taskTabHidden = false
   var cornerPending = false
   var composeIfMade: ComposeBox?
-  lazy var corner: CornerButton = {
-    CornerButton()   // (its taps are set the first time it's placed: updateCornerNow)
-  }()
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
     defer { if let h = homeIfMade { h.tabTop = homeTabTop } }   // (23+: Home's + by the tab bar)
@@ -1695,7 +1691,6 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { self.whenPageHasClient(id, tries: tries - 1, then) }
     }
   }
-  var clientPanFrom: ((CornerButton.Spot, CornerButton.Spot, CornerButton.Spot), (CornerButton.Spot, CornerButton.Spot, CornerButton.Spot))?
   // (let go part way through the edge swipe: the rest of the way out, from where the finger left it)
   func clientLeavingBySwipe(_ p: HomeView, _ l: HomeView) {
     clientLeaving = true
@@ -2472,20 +2467,19 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
         self.probe(name, js) {
           if name.hasPrefix("form") { self.selfResult[name + "Geo"] = FormSheetVC.current?.geo() ?? ["error": "no form"] }
           if name.hasPrefix("nsheet") { self.selfResult[name + "Geo"] = (self.presentedViewController as? NativeSheetVC)?.geo() ?? ["error": "no native sheet"] }
-          if name == "home" || name == "inbox" || name.hasPrefix("home") { var g = self.homeGeo(); g["corner"] = self.corner.kind; g["sheet"] = self.presentedViewController.map { String(describing: type(of: $0)) } ?? ""; self.selfResult[name + "Native"] = g }
+          if name == "home" || name == "inbox" || name.hasPrefix("home") { var g = self.homeGeo(); g["sheet"] = self.presentedViewController.map { String(describing: type(of: $0)) } ?? ""; self.selfResult[name + "Native"] = g }
           if name.hasPrefix("tpage") {
             let p = self.taskPages.last
             self.selfResult[name + "Native"] = ["pages": self.taskPages.count, "title": p?.model?["title"] as? String ?? "", "tab": p?.tab ?? "", "drawn": p?.model != nil,
-              "x": p?.transform.tx ?? -1, "tabBar": !self.tabBar.isHidden, "compose": self.composeIfMade.map { !$0.isHidden } ?? false, "content": p?.scroll.contentSize.height ?? 0, "details": p?.detailsGeo() ?? [:], "feed": (p?.feed?.model?["items"] as? [Any])?.count ?? -1, "corner": self.corner.kind, "sheet": self.presentedViewController.map { String(describing: type(of: $0)) } ?? "", "cornerW": self.corner.frame.width, "cornerX": self.corner.frame.maxX, "copy": AppData.shared.ready, "copyTask": p.map { AppData.shared.screen("task", $0.taskId).model?["title"] as? String ?? "" } ?? ""] as [String: Any]
+              "x": p?.transform.tx ?? -1, "tabBar": !self.tabBar.isHidden, "compose": self.composeIfMade.map { !$0.isHidden } ?? false, "content": p?.scroll.contentSize.height ?? 0, "details": p?.detailsGeo() ?? [:], "feed": (p?.feed?.model?["items"] as? [Any])?.count ?? -1, "sheet": self.presentedViewController.map { String(describing: type(of: $0)) } ?? "", "copy": AppData.shared.ready, "copyTask": p.map { AppData.shared.screen("task", $0.taskId).model?["title"] as? String ?? "" } ?? ""] as [String: Any]
           }
-          if ["me", "meTeam", "meAbout", "meProfile", "meTrash", "meBack"].contains(name) { let t = self.cornerTarget(); self.selfResult[name + "Native"] = self.meCtl.geo(corner: "\(t.0.kind),\(t.1.kind),\(t.2.kind)") }
+          if ["me", "meTeam", "meAbout", "meProfile", "meTrash", "meBack"].contains(name) { self.selfResult[name + "Native"] = self.meCtl.geo() }
           if name == "daily" { self.selfResult["dailyNative"] = ["sheet": self.presentedViewController.map { String(describing: type(of: $0)) } ?? ""] }
           // (Client Assets, the app's own — shell 32: the page's folder opened as the app's screens)
-          if name == "client" { self.selfResult["clientAssets"] = ["open": self.assetsCtl.isOpen, "screens": self.assetsCtl.screens.count, "kind": self.assetsCtl.top?.assets ?? "", "parts": self.assetsCtl.top?.assetsParts.count ?? 0, "shown": self.assetsCtl.shown != nil, "corner": self.corner.kind, "web": (self.web?.isHidden ?? true) ? "hidden" : "under"] as [String: Any] }
+          if name == "client" { self.selfResult["clientAssets"] = ["open": self.assetsCtl.isOpen, "screens": self.assetsCtl.screens.count, "kind": self.assetsCtl.top?.assets ?? "", "parts": self.assetsCtl.top?.assetsParts.count ?? 0, "shown": self.assetsCtl.shown != nil, "web": (self.web?.isHidden ?? true) ? "hidden" : "under"] as [String: Any] }
           if name.hasPrefix("ibx") {
             var g: [String: Any] = ["made": self.inboxIfMade != nil, "shown": self.screenOf("inbox") != nil, "server": self.serverInboxIfMade?.on ?? false, "query": self.serverInboxIfMade?.query ?? ""]
             if let h = self.inboxIfMade { g.merge(h.inboxGeo()) { a, _ in a } }
-            g["corner"] = self.corner.kind; g["cornerW"] = self.corner.frame.width; g["cornerA"] = self.corner.alpha
             g["appleMark"] = InboxVC.shared?.markShown ?? ""
             // (who the server's Inbox is for, who the page says is signed in, and what the server sent — for the empty-Inbox runs)
             g["me"] = self.serverInboxIfMade?.me ?? ""; g["pageMe"] = self.inboxPageMe ?? ""

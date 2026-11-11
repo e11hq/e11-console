@@ -54,7 +54,7 @@ extension Main {
     let g = UIButton(type: .system)
     g.isUserInteractionEnabled = false
     g.accessibilityElementsHidden = true
-    if corner.superview === view { view.insertSubview(g, belowSubview: corner) } else { view.insertSubview(g, belowSubview: tabsMark) }
+    view.insertSubview(g, belowSubview: tabsMark)
     m.ghost = g
     from?.fabVeiled = true; to?.fabVeiled = true; m.veilA = from; m.veilB = to
     let done = { [weak g] in

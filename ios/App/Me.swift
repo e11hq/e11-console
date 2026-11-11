@@ -1583,7 +1583,7 @@ final class MeCtl {
     guard let s = stack.last, let i = v.subviews.firstIndex(of: s.h) else { return }
     let mine = Set(stack.map { ObjectIdentifier($0.h) })
     guard v.subviews[(i + 1)...].contains(where: { x in (x is HomeView || x is TaskPage) && !x.isHidden && !mine.contains(ObjectIdentifier(x)) }) else { return }
-    for x in stack { if main.corner.superview === v { v.insertSubview(x.h, belowSubview: main.corner) } else { v.insertSubview(x.h, belowSubview: main.tabsMark) } }
+    for x in stack { v.insertSubview(x.h, belowSubview: main.tabsMark) }
   }
   // shown at once under a page going back to Me (Client Assets' ‹): the page says so a moment later — if it doesn't,
   // out of sight again
@@ -1729,7 +1729,6 @@ final class MeCtl {
     return borrow()
   }
   // the edge swipe: the top one follows the finger, the one under it coming back, the top buttons between them
-  private var panFrom: ((CornerButton.Spot, CornerButton.Spot, CornerButton.Spot), (CornerButton.Spot, CornerButton.Spot, CornerButton.Spot))?
   func edgePan(_ g: UIScreenEdgePanGestureRecognizer) {
     guard stack.count > 1, let s = stack.last, !leaving, !apple else { return }
     let W = main.view.bounds.width
@@ -1738,16 +1737,14 @@ final class MeCtl {
     switch g.state {
     case .began:
       s.h.endEditing(true)
-      u.isHidden = false; u.transform = .identity; panFrom = (main.cornerTargetFor(s.h), main.cornerTargetFor(u))
+      u.isHidden = false; u.transform = .identity
       u.transform = CGAffineTransform(translationX: -W * 0.3, y: 0)
     case .changed:
       s.h.transform = CGAffineTransform(translationX: x, y: 0)
       u.transform = CGAffineTransform(translationX: -W * 0.3 * (1 - x / W), y: 0)
-      if let f = panFrom { main.corner.between(f.0, f.1, x / W) }
     case .ended, .cancelled, .failed:
       let v = g.velocity(in: main.view).x
       let go = g.state == .ended && (v > 300 || (x > W * 0.4 && v > -200))
-      panFrom = nil
       if go {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         leaving = true; main.updateCorner()
@@ -1853,7 +1850,7 @@ final class MeCtl {
     if s.kind == "plan" { o["model"] = (model["plan"] as? [String: Any]).map { ["pid": $0["pid"] ?? "", "st": ($0["st"] as? [String: Any])?["t"] ?? "", "empty": $0["empty"] != nil, "trash": $0["trash"] ?? false] } ?? "none" }
     return o
   }
-  func geo(corner: String) -> [String: Any] {
+  func geo() -> [String: Any] {
     let h = stack.last?.h
     let groups: [[String: Any]] = ((model["team"] as? [String: Any])?["groups"] as? [[String: Any]]) ?? []
     var people = 0
@@ -1864,7 +1861,7 @@ final class MeCtl {
     let card: Bool = model["card"] != nil
     let profile: Bool = model["profile"] is [String: Any]
     // (apple: Me in its own Apple navigation — its pages have Apple's ‹, not the shared one)
-    return ["open": isOpen, "screens": stack.count, "kind": kind, "parts": parts, "shown": shown != nil, "corner": corner, "people": people, "rows": rows, "card": card, "profile": profile, "apple": apple]
+    return ["open": isOpen, "screens": stack.count, "kind": kind, "parts": parts, "shown": shown != nil, "people": people, "rows": rows, "card": card, "profile": profile, "apple": apple]
   }
   func refresh() { if isOpen, stack.contains(where: { $0.kind == "about" }) { loadAbout(false) } }
 

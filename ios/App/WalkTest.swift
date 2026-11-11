@@ -45,7 +45,6 @@ extension Main {
     let bad = ["Loading", "No answer", "went wrong", "Couldn", "Could not", "try again", "isn’t here", "not available", "on the computer", "Error"]
     s["issues"] = Array(Set(all.filter { t in bad.contains { t.localizedCaseInsensitiveContains($0) } })).prefix(6).map { String($0.prefix(90)) }
     s["words"] = Array(all.filter { $0.count > 1 }.prefix(40)).map { String($0.prefix(50)) }
-    s["corner"] = "\(corner.left.kind),\(corner.mid.kind),\(corner.corner.kind)"
     return s
   }
 
@@ -427,8 +426,6 @@ extension Main {
       ("taskGuardian", { self.shut(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { p()?.pickGuardian() } }),
       ("taskAttach", { self.shut(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { p()?.attachSheet() } }),
       ("taskComments", { self.shut(); p()?.setTab("comments", tell: true) }),
-      ("taskMenu", { self.selfResult["walkMenu"] = self.corner.items.map { $0.title + ($0.children.isEmpty ? "" : " [" + $0.children.map { $0.title }.joined(separator: ", ") + "]") } }),
-      ("taskCopy", { func find(_ l: [CornerMenuItem]) -> CornerMenuItem? { for x in l { if x.title.contains("Copy") { return x }; if let y = find(x.children) { return y } }; return nil }; find(self.corner.items)?.run?() }),
       ("taskBack", { if let x = p() { x.setTab("details", tell: true); self.closeTaskPage(x, animated: false) } }),
     ]
     if let f = withFiles {
@@ -511,7 +508,7 @@ extension Main {
       let presented = self.presentedViewController != nil
       let top: UIView? = self.taskPages.last ?? self.shownScreen
       for v in self.view.subviews {
-        let keep = !presented && (v === top || v === self.tabsMark || v === self.corner || v === self.composeIfMade || v is CornerButton)
+        let keep = !presented && (v === top || v === self.tabsMark || v === self.composeIfMade)
         if v.accessibilityElementsHidden == keep { v.accessibilityElementsHidden = !keep }
       }
     }

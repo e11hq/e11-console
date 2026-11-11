@@ -207,11 +207,7 @@ try:
     check(tp.get('pages') == 1 and tp.get('drawn') is True and tp.get('x') == 0 and tp.get('tabBar') is False, f"a task opens as the app's own page, drawn from the server {tp}")
     # (the Inbox in Apple's navigation: Mark all read is Apple's bar button on its own screen, not the shared corner button)
     _ib = res.get('ibxInbox') or {}
-    check(((_ib.get('corner') == 'read' and _ib.get('cornerA', 0) > 0.9) or _ib.get('appleMark') == 'read') and (res.get('homeNative') or {}).get('corner') == ('none' if (res.get('homeNative') or {}).get('apple') else 'search'), f"the corner button: Search on Home, Mark all read on the Inbox {(res.get('homeNative') or {}).get('corner')} {res.get('ibxInbox')}")
-    if (res.get('homeNative') or {}).get('apple'):
-      check(tp.get('corner') != 'more', f"a task page has Apple's own ‹ and •••, the shared ones stay out {tp.get('corner')}")
-    else:
-      check(tp.get('corner') == 'more' and tpb.get('corner') != 'more', f"the corner button is the task page's ••• and back again {tp.get('corner')} → {tpb.get('corner')}")
+    check(_ib.get('appleMark') == 'read', f"Mark all read is Apple's bar button on the Inbox {res.get('ibxInbox')}")
     check((res.get('tpageSheetNative') or {}).get('sheet') == 'NativeSheetVC', f"Assignees opens iPhone's own people sheet (changed by role again) {res.get('tpageSheetNative')}")
     check(tps.get('content', 0) > 300, f"the task page has its rows {tps}")
     check(tpc.get('feed', -1) > 0, f"the comments are the app's own (drawn from the server) {tpc}")
@@ -285,13 +281,13 @@ try:
     check(res.get('splashGone') is True, f"the startup screen went before Home {res.get('splashGone')}")
     check(set(seen) >= {x for x in {'home', 'inbox', 'me', 'meTeam', 'meAbout', 'meProfile', 'meTrash', 'meBack', 'client', 'tpage', 'rpage', 'nsheet', 'nsheetEnd', 'nsheetChannel', 'nsheetTitled'} if not any(x.startswith(g) for g in SKIP)}, f'all stages ran {sorted(seen)}')
     mn, mt, ma, mb = res.get('meNative') or {}, res.get('meTeamNative') or {}, res.get('meAboutNative') or {}, res.get('meBackNative') or {}
-    check(mn.get('open') is True and mn.get('kind') == 'me' and mn.get('card') is True and (mn.get('rows') or 0) >= 2 and mn.get('corner') == 'none,none,none', f"the app's Me: your card and its groups, no top buttons {mn}", need=('me',))
-    check(mt.get('kind') == 'team' and mt.get('screens') == 2 and (mt.get('people') or 0) >= 1 and (str(mt.get('corner')).startswith('back,') or mt.get('apple') is True), f"Team members slides in over Me, the people in it, ‹ at the top {mt}", need=('me',))
+    check(mn.get('open') is True and mn.get('kind') == 'me' and mn.get('card') is True and (mn.get('rows') or 0) >= 2, f"the app's Me: your card and its groups, no top buttons {mn}", need=('me',))
+    check(mt.get('kind') == 'team' and mt.get('screens') == 2 and (mt.get('people') or 0) >= 1 and mt.get('apple') is True, f"Team members slides in over Me, the people in it, ‹ at the top {mt}", need=('me',))
     check(ma.get('kind') == 'about' and (ma.get('parts') or 0) >= 2, f"About: its cards and What's new {ma}", need=('me',))
     mp = res.get('meProfileNative') or {}
-    check(mp.get('kind') == 'profile' and mp.get('profile') is True and (mp.get('rows') or 0) >= 4 and (str(mp.get('corner')).startswith('back,') or mp.get('apple') is True), f"My profile: the app's own, its groups, ‹ at the top {mp}", need=('me',))
+    check(mp.get('kind') == 'profile' and mp.get('profile') is True and (mp.get('rows') or 0) >= 4 and mp.get('apple') is True, f"My profile: the app's own, its groups, ‹ at the top {mp}", need=('me',))
     mtr = res.get('meTrashNative') or {}
-    check(mtr.get('kind') == 'trash' and (mtr.get('parts') or 0) >= 3 and (str(mtr.get('corner')).startswith('back,') or mtr.get('apple') is True), f"Trash: the app's own, its search and categories, ‹ at the top {mtr}", need=('me',))
+    check(mtr.get('kind') == 'trash' and (mtr.get('parts') or 0) >= 3 and mtr.get('apple') is True, f"Trash: the app's own, its search and categories, ‹ at the top {mtr}", need=('me',))
     check(mb.get('kind') == 'me' and mb.get('screens') == 1, f"‹ back to Me {mb}", need=('me',))
     # light / dark the Apple way (Haris 2026-11-09): every tab's screen follows the phone, none forced, nothing drawn again
     def lookOk(d, style, bright):

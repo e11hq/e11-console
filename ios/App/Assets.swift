@@ -457,7 +457,6 @@ final class AssetsCtl {
     main.edgePanOn(); main.updateCorner()
   }
   // the edge swipe on the top one: it follows the finger, the one under it coming back, the top buttons between them
-  private var panFrom: ((CornerButton.Spot, CornerButton.Spot, CornerButton.Spot), (CornerButton.Spot, CornerButton.Spot, CornerButton.Spot))?
   func edgePan(_ g: UIScreenEdgePanGestureRecognizer) {
     guard let s = stack.last, !leaving, appleNav == nil else { return }
     let W = main.view.bounds.width
@@ -466,16 +465,14 @@ final class AssetsCtl {
     switch g.state {
     case .began:
       s.h.endEditing(true)
-      if let u = u as? HomeView { u.isHidden = false; u.transform = .identity; panFrom = (main.cornerTargetFor(s.h), main.cornerTargetFor(u)) } else { u?.isHidden = false; panFrom = nil }
+      if let u = u as? HomeView { u.isHidden = false; u.transform = .identity } else { u?.isHidden = false }
       u?.transform = CGAffineTransform(translationX: -W * 0.3, y: 0)
     case .changed:
       s.h.transform = CGAffineTransform(translationX: x, y: 0)
       u?.transform = CGAffineTransform(translationX: -W * 0.3 * (1 - x / W), y: 0)
-      if let f = panFrom { main.corner.between(f.0, f.1, x / W) }
     case .ended, .cancelled, .failed:
       let v = g.velocity(in: main.view).x
       let go = g.state == .ended && (v > 300 || (x > W * 0.4 && v > -200))
-      panFrom = nil
       if go {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         leaving = true; main.updateCorner()

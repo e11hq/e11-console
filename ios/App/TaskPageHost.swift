@@ -32,8 +32,7 @@ extension Main {
       p.frame = vc.view.bounds
       vc.view.addSubview(p)
     }
-    // (under the shared top buttons, which stay where they are)
-    else if corner.superview === view { view.insertSubview(p, belowSubview: corner) } else { view.insertSubview(p, belowSubview: tabsMark) }
+    else { view.insertSubview(p, belowSubview: tabsMark) }
     // (opened while the startup screen shows — a task link, a notification: the startup screen stays on top and fades
     //  out, so the task is there under it; Haris 2026-11-05)
     if let s = splash { s.superview?.bringSubviewToFront(s); splashGone() }
@@ -222,16 +221,13 @@ extension Main {
       p.endEditing(true)
       if clientFrom != nil { view.insertSubview(l, belowSubview: p) }   // (opened from another tab: that tab's screen under it)
       l.isHidden = false; l.transform = .identity   // (shown, in place, to see where its buttons are)
-      clientPanFrom = (cornerTargetFor(p), cornerTargetFor(l))
       l.transform = CGAffineTransform(translationX: -W * 0.3, y: 0)
     case .changed:
       p.transform = CGAffineTransform(translationX: x, y: 0)
       l.transform = CGAffineTransform(translationX: -W * 0.3 * (1 - x / W), y: 0)
-      if let f = clientPanFrom { corner.between(f.0, f.1, x / W) }
     case .ended, .cancelled, .failed:
       let v = g.velocity(in: view).x
       let go = g.state == .ended && (v > 300 || (x > W * 0.4 && v > -200))
-      clientPanFrom = nil
       if go {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         clientsOn = "list"
