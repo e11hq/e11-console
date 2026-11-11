@@ -148,6 +148,7 @@ extension Main {
       ("aPlTabPlanWait", {}),
       ("aPlTabPlanRead", {
         guard self.tabKeys.contains("plans") else { return }
+        AppleTabs.shared?.mirrorShown()   // (a count changing while the page shows: the tab bar stays away)
         var o = self.meCtl.selfPlans(); o["barHidden"] = (AppleTabs.shared?.barHiddenNow ?? false)
         self.apple("plansTabPlan", o); AppleTabs.shared?.roleNavs["plans"]?.popViewController(animated: true)
       }),
@@ -170,6 +171,7 @@ extension Main {
       ("aRvReqWait", {}),
       ("aRvReqRead", {
         guard self.tabKeys.contains("reviews") else { return }
+        AppleTabs.shared?.mirrorShown()   // (a count changing while the page shows: the tab bar stays away)
         var o = self.meCtl.selfReviews(); o["barHidden"] = (AppleTabs.shared?.barHiddenNow ?? false)
         self.apple("reviewReq", o); if o["kind"] as? String == "review" { AppleTabs.shared?.roleNavs["reviews"]?.popViewController(animated: true) }
       }),
@@ -199,6 +201,7 @@ extension Main {
       ("aClOpenWait", {}),
       ("aClOpenRead", {
         guard self.tabKeys.contains("fin-reimb") else { return }
+        AppleTabs.shared?.mirrorShown()   // (a count changing while the page shows: the tab bar stays away)
         var o = self.meCtl.selfOffice(); o["barHidden"] = (AppleTabs.shared?.barHiddenNow ?? false)
         self.apple("claim", o); if o["kind"] as? String == "claim" { AppleTabs.shared?.roleNavs["fin-reimb"]?.popViewController(animated: true) }
       }),

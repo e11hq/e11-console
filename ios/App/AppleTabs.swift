@@ -273,7 +273,10 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
     // (a page pushed over the tabs — a task, a reply: no tab bar, Apple's slide away)
     let shown = top ?? (ownNav?.topViewController ?? nav.topViewController)
     // (on a tab's own navigation — Home's, My Tasks' — it's done as the page comes: homeNavWillShow)
-    if shown !== main && !(shown is TabRoot) && !(shown is ClientsPushedVC) { if !ownShown { hideBar(true, animated: animated) }; return }   // (Client Assets opened from Me keeps it — Haris 2026-11-08)
+    // (a page pushed on a role tab — a skeleton on Plans, a review request, a claim: hidden as homeNavWillShow hides it; a
+    //  count changing put it back over Apple's toolbar — Haris 2026-11-11, a review request)
+    let rolePage = shown is MePageVC && roleNavs.values.contains { $0 === shown?.navigationController }
+    if shown !== main && (rolePage || (!(shown is TabRoot) && !(shown is ClientsPushedVC))) { if !ownShown || rolePage { hideBar(true, animated: animated) }; return }   // (Client Assets opened from Me keeps it — Haris 2026-11-08)
     let b = main.tabBar
     // (faded by the app — a New task draft tucked over it: hidden Apple's way, never its alpha set by us; Apple put it
     //  back as the list scrolled, in a snap — Haris 2026-11-07)
