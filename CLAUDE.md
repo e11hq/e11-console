@@ -337,6 +337,14 @@ content skeleton links (files…/p/<id> — the handler is in mac/swift/main.swi
 **The Terminal-installed Mac app — put aside (Haris 2026-11-10 18:38: "discard the terminal app for now"):** releases don't
 build it (release.yml's mac job off, commit d10cfe1); the installer keeps its last stored build. Its build was failing since
 2026-11-09 (pendingFileLink declared only in the App Store app's part). Back only when Haris says.
+**The website out of the iPhone app — STARTED (Haris 2026-11-11 08:07: "remove the website completely and only cloudflare
+signing will be the only website left"; 08:15 answers):** the iPhone app only — the website stays on the server for the Mac
+app (the website in a window) and browsers. In the app the only web pages left: Cloudflare's sign-in / sign-out, and App
+Review's own sign-in (`/review/`, kept for now). Yes to cutting the dead website code inside the locked pages (look and
+behaviour unchanged, the self-test checks each) and to Home's background behind Home's, My Tasks' and the Inbox's lists. Order:
+the main self-test's checks into the no-website run first, Me's 12 hand-offs say "try again", the cut page by page, then after
+Cloudflare a tiny server address instead of `/`. Stays (not the website): the shared engine, Svg.swift's hidden logo drawer.
+Audit: project doc `claude/ios-website-dependencies-audit.md`.
 **Remind Haris once every page is done page by page (Haris 2026-11-10 17:39):** (B) take out the leftover website code from
 the Apple pages (about 60 `pageReady` branches — dead on the phone, which runs without the website), moving the main
 self-test's checks into the no-website run (`walktest.py --apple`) page by page first; and the smoothness check — the
