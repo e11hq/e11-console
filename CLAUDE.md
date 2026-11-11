@@ -116,6 +116,8 @@ Chat section of E11 Console (not on the website — Haris, 2026-11-05). (Plan: p
 E11 Talk is built on the **test server** first (talk-test.e11hq.com), with its own sign-in for now; **before the App
 Store, the shared sign-in goes into both apps and both are sent for review together** (Haris, 2026-11-06).
 
+**E11 Talk design — APPROVED (Haris 2026-11-11 23:49: "Ok all approved"):** the whole canvas "E11 Talk — design" (59
+screens dark, the main five light); the startup logo animation stays as Talk has it today (talk/App/Splash.swift).
 **E11 Talk is built exactly as its mock-ups (Haris 2026-11-11 23:41):** the canvas "E11 Talk — design" is followed strictly —
 every gap, size, colour, placement and every animation, done the Apple way (Apple's parts and Apple's animations set to
 match, never our own drawing). Light and dark follow the iPhone. Decisions: project doc `claude/talk-design-reference.md`.
