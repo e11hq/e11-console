@@ -10,7 +10,7 @@ func picsKey(_ p: [String: [String: Any]]) -> String { p.keys.sorted().map { $0 
    boxes, the groups and their task cards, and the colours of its own Home drawn under this one (light / dark) — with
    the "home" command whenever something changes (NativeHome in phone.js), and the taps go back to it
    (window.__e11Home: open a task, Search, Me, New task). */
-final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate, UITextFieldDelegate {
+final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate {
   var onEvent: (([String: Any]) -> Void)?
   var present: ((UIViewController) -> Void)?
   private var canDelete = false
@@ -26,17 +26,16 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
      line under it 12 regular; the big title 34 bold, 16 from the left, the line under it 15 regular; system colours */
   private let R: CGFloat = 16, BTN: CGFloat = 44
   private let sub = UILabel(), title = UILabel(), smallTitle = UILabel(), smallSub = UILabel()
-  private let searchCircle = HomeGlass(), me = UIButton(type: .custom), closeCircle = HomeGlass()
-  private let searchBar = HomeGlass(), field = UITextField(), lens = UIImageView()
+  private let me = UIButton(type: .custom)
+  // (what's searched for — Apple's search bar's words, told by its screen)
+  private(set) var findText = ""
   private let results = UIScrollView(), hint = UILabel()
   private var resultViews: [UIView] = [], resultCards: [String: HomeCard] = [:], resultFiles: [String: FileListRow] = [:]
   private(set) var searching = false
-  private(set) var closingSearch = false        // (✕ tapped: the bar shrinking back into 🔍 — your photo is already coming back)
-  private(set) var searchClosedAt: Date?
   /* The corner button (shell 30, Haris 2026-11-01): Search here, Mark all read / unread on the Inbox and ••• on a
      task page are one glass button of the app's (CornerButton, Main): this screen's own ones then stay invisible and
      only say where the button goes and what it is. */
-  var cornerShared = false { didSet { searchCircle.alpha = cornerShared || searching ? 0 : 1; markAll.alpha = cornerShared ? 0 : 1; me.isHidden = cornerShared; if cornerShared { closeCircle.isHidden = true } } }
+  var cornerShared = false { didSet { markAll.alpha = cornerShared ? 0 : 1; me.isHidden = cornerShared } }
   // (the shared top buttons: your photo — where, what, and its tap)
   // (its place at full size — while searching it's shrunk away, and the ✕ that takes its place came out shrunk too)
   var meFrame: CGRect { CGRect(x: me.center.x - me.bounds.width / 2, y: me.center.y - me.bounds.height / 2, width: me.bounds.width, height: me.bounds.height) }
@@ -48,8 +47,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var onShown: (() -> Void)?   // (shown again: what changed while it was hidden is drawn — Main's Home)
   // what the corner is here: "search", "read", "unread" or "none", and where (its right edge left of your photo)
   func corner() -> (kind: String, text: String, frame: CGRect) {
-    let f = searchCircle.frame
-    if searching || closingSearch || isHidden { return ("none", "", f) }
+    let f = CGRect.zero
+    if searching || isHidden { return ("none", "", f) }
     guard isInbox else { return ("search", "", f) }
     if !markAll.isHidden { return ("read", "Mark all read", f) }
     let rows = content.compactMap { $0 as? InboxRow }
@@ -58,7 +57,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // the corner button tapped
   func cornerTap(_ kind: String) {
     switch kind {
-    case "search": UIImpactFeedbackGenerator(style: .light).impactOccurred(); openSearch()
     case "read": UIImpactFeedbackGenerator(style: .light).impactOccurred(); send(["ev": "readAll"])
     case "unread":
       // only the ones in the list on screen — and asked first (Haris, 2026-11-01)
@@ -117,7 +115,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if #available(iOS 26.0, *) {
       scroll.topEdgeEffect.style = .automatic; results.topEdgeEffect.style = .automatic
     }
-    [topBar, title, sub, smallTitle, smallSub, searchCircle, me, searchBar, closeCircle].forEach { $0.isHidden = true }
+    [topBar, title, sub, smallTitle, smallSub, me].forEach { $0.isHidden = true }
     onAppleTitle?(title.attributedText?.string ?? "", sub.text ?? "")
     onAppleMe?(me.image(for: .normal))
     if assets == nil || assets == "client" || assets == "folder" || assets == "all" || isMeList { makeAppleList() }   // (Me and its pages too — AppleMe.swift)   // (the Clients tab's pages and Client Assets' too — AppleClients.swift)
@@ -555,25 +553,25 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // (the list's top and bottom as iPhone has them — under Apple's bar — or as this screen sets them)
   private var inTop: CGFloat { appleTop ? sv.adjustedContentInset.top : scroll.contentInset.top }
   private var inBottom: CGFloat { appleTop ? sv.adjustedContentInset.bottom : scroll.contentInset.bottom }
-  private func resignSearch() { field.resignFirstResponder(); onAppleResign?() }
+  private func resignSearch() { onAppleResign?() }
   // Apple's search bar: it opened, its words changed, it closed — the results in Home's own list, on Home's own page (as
   // E11 Talk's lists: one list, Apple's bar following it; a second results page kept the big title's room above them)
   func appleSearchBegin() {
     guard appleTop, !searching else { return }
     searching = true
     showMotto()
-    field.text = ""; showResults(nil)
+    findText = ""; showResults(nil)
   }
   func appleSearchText(_ q: String) {
-    guard appleTop, searching, q != (field.text ?? "") else { return }
-    field.text = q; typed()
+    guard appleTop, searching, q != findText else { return }
+    findText = q; typed()
   }
   func appleSearchEnd() {
     guard appleTop, searching else { return }
     findTimer?.invalidate()
     searching = false
     showMotto()
-    field.text = ""; showResults(nil)
+    findText = ""; showResults(nil)
   }
   private let fab = UIButton(type: .system)
   // (a second, round button left of it — Client Assets' Delete while files are selected: Haris 2026-11-04)
@@ -622,27 +620,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // (the big date and title are the list's own first lines: they scroll with it, under the frosted edge)
     scroll.addSubview(sub); scroll.addSubview(title)
     [smallTitle, smallSub].forEach { topBar.addSubview($0) }
-    searchCircle.setIcon("magnifyingglass", 18)
-    searchCircle.accessibilityLabel = "Search"
-    searchCircle.onTap = { [weak self] in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.openSearch() }
     me.clipsToBounds = true
     me.accessibilityLabel = "Me"
     me.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.send(["ev": "me"]) }, for: .touchUpInside)
-    closeCircle.setIcon("xmark", 17)
-    closeCircle.accessibilityLabel = "Close search"
-    closeCircle.onTap = { [weak self] in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.closeSearch() }
-    closeCircle.alpha = 0; closeCircle.isHidden = true
-    // the search bar: a glass capsule with the lens and the text field
-    lens.image = UIImage(systemName: "magnifyingglass", withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .medium))
-    lens.contentMode = .center
-    field.font = .systemFont(ofSize: 17)
-    field.delegate = self
-    field.returnKeyType = .search; field.autocorrectionType = .no; field.clearButtonMode = .whileEditing
-    field.addAction(UIAction { [weak self] _ in self?.typed() }, for: .editingChanged)
-    field.addAction(UIAction { [weak self] _ in self?.field.resignFirstResponder() }, for: .editingDidEndOnExit)
-    searchBar.content.addSubview(lens); searchBar.content.addSubview(field)
-    searchBar.isHidden = true
-    [searchCircle, me, searchBar, closeCircle].forEach { addSubview($0) }
+    addSubview(me)
     let nc = NotificationCenter.default
     nc.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] n in
       guard let self = self, let end = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue else { return }
@@ -713,9 +694,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if appleTop { onAppleTitle?(model["title"] as? String ?? "", model["date"] as? String ?? "") }
     smallTitle.text = model["title"] as? String; smallTitle.textColor = .label
     HomeView.fadeText(smallSub, model["date"] as? String); smallSub.textColor = .secondaryLabel
-    [searchCircle, closeCircle, searchBar].forEach { $0.setLook(tint: L.roundIc) }
-    lens.tintColor = L.sub; field.textColor = L.h1; field.tintColor = L.tag
-    field.attributedPlaceholder = NSAttributedString(string: assets == "plansTab" || assets == "plansPage" || assets == "me.plan" ? "Search plans — a client or a post" : assets == "reviewsTab" ? "Search requests" : assets == "claimsTab" ? "Search claims" : assets == "expensesTab" ? "Search expenses" : assets != nil ? "Search every client’s files" : "Search tasks, clients, people", attributes: [.foregroundColor: L.sub])
     hint.textColor = L.empty
     meId = model["me"] as? String ?? ""; watchMe(); meChanged()
     if var fc = fab.configuration {
@@ -1091,8 +1069,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var isMeSub: Bool { assets?.hasPrefix("me.") == true }
   // (where 🔍 is on this page: left of your photo — or, on a page opened from somewhere (no photo), in the photo's own
   //  place; search grows out of it and shrinks back into it there — a second 🔍 showed on closing: Haris 2026-11-04)
-  var searchInPhotoSpot: Bool { assets == "plansPage" || assets == "me.plan" || (backable && !pageBar) }
-  var searchHome: CGRect { searchInPhotoSpot ? meFrame : searchCircle.frame }
   // where the list starts and the room above "+ New task", on screen with the list at its top (a box that fills the
   // page — About's What's new — ends there)
   var listTop: CGFloat { bigHead + 10 }
@@ -1428,15 +1404,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if scroll.frame != bounds { scroll.frame = bounds }
     if !appleTop, scroll.contentInset.top != bigH { let s0 = scroll.contentOffset.y + scroll.contentInset.top; scroll.contentInset.top = bigH; scroll.contentOffset.y = s0 - bigH }
     layoutHeader()
-    if appleTop {
-      // (under Apple's bar and its search bar: iPhone keeps the results clear of them, and of the keyboard)
-      if results.frame != bounds { results.frame = bounds }
-      results.contentInset.top = 12; results.contentInset.bottom = max(0, keyboardH - safeAreaInsets.bottom, bottomRoom - 60 - safeAreaInsets.bottom)
-    } else {
-    results.frame = CGRect(x: 0, y: searchBar.frame.maxY + 8, width: W, height: H - searchBar.frame.maxY - 8)
-    results.contentInset.bottom = max(keyboardH, bottomRoom - 60)
-    results.contentInset.top = 12   // (clear of the blur under the search bar)
-    }
+    // (under Apple's bar and its search bar: iPhone keeps the results clear of them, and of the keyboard)
+    if results.frame != bounds { results.frame = bounds }
+    results.contentInset.top = 12; results.contentInset.bottom = max(0, keyboardH - safeAreaInsets.bottom, bottomRoom - 60 - safeAreaInsets.bottom)
     if !listOn { layoutResults() }   // (Apple's list: the results are in it — applyList)
     if let cv = list {
       // (Apple's list: its cells place the boxes, headings and cards; the room under the last card kept as before)
@@ -1751,85 +1721,15 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let cy = smallCY
     if !searching {
       me.bounds = CGRect(x: 0, y: 0, width: BTN, height: BTN); me.center = CGPoint(x: W - R - BTN / 2, y: cy); me.layer.cornerRadius = BTN / 2
-      searchCircle.frame = CGRect(x: W - R - BTN - 12 - BTN, y: cy - BTN / 2, width: BTN, height: BTN)
       if isInbox {
-        searchCircle.isHidden = true
         let mw = ceil(markAll.sizeThatFits(CGSize(width: 300, height: BTN)).width)
         markAll.frame = CGRect(x: W - R - BTN - 12 - mw, y: cy - BTN / 2, width: mw, height: BTN)
       }
-    } else {
-      // (the bar in the row the buttons are in; the ✕ where your photo was)
-      searchBar.frame = CGRect(x: 16, y: cy - BTN / 2, width: W - 16 - BTN - 12 - R, height: BTN)
-      closeCircle.frame = CGRect(x: W - R - BTN, y: cy - BTN / 2, width: BTN, height: BTN)
     }
-    lens.frame = CGRect(x: 12, y: 0, width: 22, height: searchBar.bounds.height)
-    field.frame = CGRect(x: 40, y: 0, width: max(0, searchBar.bounds.width - 40 - 10), height: searchBar.bounds.height)
   }
-  // the field's own ✕: clears what's typed (and the results)
-  func textFieldShouldClear(_ textField: UITextField) -> Bool { DispatchQueue.main.async { self.typed() }; return true }
 
-  // ---------- search: the glass circle stretches into a search bar, your photo becomes a glass ✕ ----------
-  func openSearch() {
-    if searching { field.becomeFirstResponder(); return }
-    let start = searchHome, meF = me.frame
-    searching = true
-    onCorner?()
-    showMotto()
-    searchBar.frame = start; searchBar.isHidden = false; searchBar.alpha = 1
-    searchBar.layer.cornerRadius = start.height / 2
-    // (its glass starts as the circle too — it was laid out at full width at once, so the bar seemed to come in from
-    //  the right; now the glass and the field stretch out of 🔍 together, inside the spring)
-    lens.frame = CGRect(x: 12, y: 0, width: 22, height: start.height); field.frame = CGRect(x: 40, y: 0, width: 0, height: start.height)
-    searchBar.layoutIfNeeded()
-    closeCircle.frame = meF; closeCircle.isHidden = cornerShared; closeCircle.alpha = 0
-    closeCircle.transform = CGAffineTransform(scaleX: 0.6, y: 0.6)
-    searchCircle.alpha = 0
-    results.isHidden = false
-    field.text = ""; if assets != nil { onEvent?(["ev": "find", "q": ""]) } else { showResults(nil) }
-    UIView.animate(withDuration: 0.55, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0.4, options: [.allowUserInteraction]) {
-      self.layoutHeader()
-      self.searchBar.layer.cornerRadius = self.BTN / 2
-      self.searchBar.layoutIfNeeded()
-      self.me.alpha = 0; self.me.transform = CGAffineTransform(scaleX: 0.6, y: 0.6)
-      self.barTitle.alpha = 0   // (a page's name in the middle goes while you search — Haris 2026-11-04: it showed through)
-      self.closeCircle.alpha = 1; self.closeCircle.transform = .identity
-      self.scroll.alpha = 0; self.results.alpha = 1; self.fab.alpha = 0
-      self.results.frame.origin.y = self.searchBar.frame.maxY + 8
-    }
-    field.becomeFirstResponder()
-  }
-  func closeSearch() {
-    guard searching else { return }
-    field.resignFirstResponder()
-    findTimer?.invalidate()
-    searching = false
-    // (your photo comes back at once, as the bar starts shrinking — it used to wait for the bar: Haris, 2026-11-02)
-    closingSearch = true
-    onCorner?()
-    showMotto()
-    setNeedsLayout(); layoutIfNeeded()
-    let back = searchHome
-    if searchBar.transform != .identity { searchBar.transform = .identity }   // (closed while still settling)
-    UIView.animate(withDuration: 0.5, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0.3, options: [.allowUserInteraction]) {
-      self.searchBar.frame = back; self.searchBar.layer.cornerRadius = back.height / 2
-      self.lens.frame = CGRect(x: 12, y: 0, width: 22, height: back.height)
-      self.field.alpha = 0
-      self.closeCircle.alpha = 0; self.closeCircle.transform = CGAffineTransform(scaleX: 0.6, y: 0.6)
-      self.me.alpha = 1; self.me.transform = .identity
-      self.barTitle.alpha = 1
-      self.scroll.alpha = 1; self.results.alpha = 0; self.fab.alpha = 1
-      self.layoutHeader()
-      self.searchBar.frame = back; self.searchBar.layoutIfNeeded()   // (its glass shrinks back into 🔍 with it)
-    } completion: { _ in
-      self.closingSearch = false
-      if self.searching { return }
-      self.searchClosedAt = Date()
-      self.searchBar.isHidden = true; self.closeCircle.isHidden = true; self.field.alpha = 1
-      self.searchCircle.alpha = self.cornerShared ? 0 : 1; self.results.isHidden = true
-      self.onCorner?()
-      self.field.text = ""; self.showResults(nil)
-    }
-  }
+  // (search closed from the page — a plan found and opened: Apple's search bar, closed by its screen)
+  func closeSearch() { onAppleFind?(nil) }
   // (a search result changed — done, due, deleted: the results again, a moment later, as they are now)
   private func findAgain() {
     guard searching else { return }
@@ -1837,7 +1737,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   private func typed() {
     findTimer?.invalidate()
-    let q = field.text ?? ""
+    let q = findText
     // (All Client Assets: its own files, found on the phone — Assets.swift)
     if assets != nil { onEvent?(["ev": "find", "q": q]); return }
     if q.trimmingCharacters(in: .whitespaces).isEmpty { showResults(nil); return }
@@ -1845,7 +1745,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   // what the page found for the bar (the search command): clients, then tasks — in the cards of Home
   func searchResults(_ r: [String: Any]) {
-    guard searching, (r["q"] as? String) == field.text else { return }
+    guard searching, (r["q"] as? String) == findText else { return }
     showResults(r)
   }
   private func showResults(_ r: [String: Any]?) {
@@ -1855,7 +1755,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if !listOn { resultViews.forEach { $0.removeFromSuperview() } }
     resultViews = []
     var seen = Set<String>(), seenFiles = Set<String>()
-    let q = (field.text ?? "").trimmingCharacters(in: .whitespaces)
+    let q = findText.trimmingCharacters(in: .whitespaces)
     if let r = r {
       let marks = (r["marks"] as? [String]) ?? []
       let clients = (r["clients"] as? [[String: Any]] ?? []).map { var x = $0; x["marks"] = marks; return x }, tasks = (r["tasks"] as? [[String: Any]] ?? []).map { var x = $0; x["marks"] = marks; return x }
@@ -1942,7 +1842,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     views.forEach { results.addSubview($0) }
     setNeedsLayout()
   }
-  var findText: String { field.text ?? "" }
   var onAssetsDraw: ((HomeView, [String: Any]) -> Void)?
   // (Client Assets' and Me's screens — drawn again by their own controllers, never through update)
   var isAssetsScreen: Bool { onAssetsDraw != nil }
@@ -2059,7 +1958,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func selfScroll(_ y: CGFloat) { userScrolled = y > 0; sv.setContentOffset(CGPoint(x: 0, y: y - inTop), animated: false); layoutHeader(); if !appleTop { setBar(barIn, now: true) } }
   // (Apple's search on Home's own screen — HomeVC: the self-test types into it as a finger would)
   var onAppleFind: ((String?) -> Void)?
-  func selfFind(_ q: String) { if appleTop, let f = onAppleFind { f(q); return }; openSearch(); field.text = q; typed() }
+  func selfFind(_ q: String) { onAppleFind?(q) }
   // (the self-test: the first task's first word, to search for; and whether its title on screen carries search's wash)
   var selfUnavailable: Bool { if let v = list?.backgroundView { return !v.isHidden } else { return false } }
   func selfFirstWord() -> String { ((content.compactMap { $0 as? HomeCard }.first?.taskTitle ?? "").split(separator: " ").first).map(String.init) ?? "" }
@@ -2127,12 +2026,12 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if let y = y { cv.setContentOffset(CGPoint(x: 0, y: max(top, min(top + y, cv.contentSize.height + cv.adjustedContentInset.bottom - cv.bounds.height))), animated: false) }
     else { cv.setContentOffset(CGPoint(x: 0, y: top), animated: true) }
   }
-  func selfFindDone() { if appleTop, let f = onAppleFind { f(nil); return }; closeSearch() }
+  func selfFindDone() { onAppleFind?(nil) }
   // (the walk-through: the first task and client in the results, and a tap on one — as a finger would)
   var walkFirst: (task: String?, client: String?) = (nil, nil)
   func selfTapResult(client: Bool) -> String {
-    if client, let c = walkFirst.client { field.resignFirstResponder(); send(["ev": "client", "id": c]); return "client " + c }
-    if let t = walkFirst.task { field.resignFirstResponder(); send(["ev": "open", "id": t]); return "task " + t }
+    if client, let c = walkFirst.client { resignSearch(); send(["ev": "client", "id": c]); return "client " + c }
+    if let t = walkFirst.task { resignSearch(); send(["ev": "open", "id": t]); return "task " + t }
     return "no result"
   }
   // (the walk-through: the floating button tapped, when there is one)
@@ -2142,7 +2041,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
      "title": title.text ?? "", "date": sub.text ?? "", "stats": stats.map { ($0.viewWithTag(1) as? UILabel)?.text ?? "" },
      "groups": content.filter { $0.tag == 7 }.map { ($0 as? UILabel)?.text ?? "" }, "cards": cards.count, "fab": !fab.isHidden,
      "shrink": shrink, "smallTitle": smallTitle.alpha, "searching": searching,
-     "searchBarW": searchBar.isHidden ? 0 : searchBar.frame.width, "results": resultViews.count,
+     "results": resultViews.count,
      "apple": appleTop, "appleList": listOn, "appleBarH": appleBarHeight?() ?? 0, "listCells": list?.visibleCells.count ?? 0, "scrolledY": sv.contentOffset.y + inTop,
      "headGap": headGap()]
   }
@@ -2506,48 +2405,6 @@ final class HomeBlurFade {
   func clear() { a.isHidden = true; b.isHidden = true; label?.transform = .identity }
 }
 
-// a Liquid Glass circle or capsule (iOS 26+: iPhone's own glass; before: a thin blur with a light edge)
-final class HomeGlass: UIView {
-  var onTap: (() -> Void)?
-  let content = UIView()
-  private let fx = UIVisualEffectView(effect: nil), icon = UIImageView()
-  override init(frame: CGRect) {
-    super.init(frame: frame)
-    fx.isUserInteractionEnabled = true   // (the search bar's field, inside it, gets its taps — its ✕ too)
-    addSubview(fx)
-    content.isUserInteractionEnabled = true
-    fx.contentView.addSubview(content)
-    icon.contentMode = .center; addSubview(icon)
-    addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tap)))
-    isAccessibilityElement = true; accessibilityTraits = .button
-    fx.clipsToBounds = true
-    if #available(iOS 26.0, *) {
-      let g = UIGlassEffect(style: .regular); g.isInteractive = true
-      fx.effect = g
-    }
-  }
-  required init?(coder: NSCoder) { fatalError() }
-  @objc private func tap() { onTap?() }
-  override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool { g is UITapGestureRecognizer ? onTap != nil : true }
-  func setIcon(_ sym: String, _ size: CGFloat) { icon.image = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: size, weight: .medium)) }
-  func setLook(tint: UIColor) {
-    icon.tintColor = tint
-    if #available(iOS 26.0, *) { return }
-    fx.effect = UIBlurEffect(style: .systemUltraThinMaterial)
-    fx.layer.borderWidth = 1; fx.followLook("border") { [weak fx] tc in fx?.layer.setBorder(Look.c(UIColor.white.withAlphaComponent(0.18), UIColor.white.withAlphaComponent(0.6)), tc) }
-  }
-  override func layoutSubviews() {
-    super.layoutSubviews()
-    fx.frame = bounds; content.frame = fx.contentView.bounds; icon.frame = bounds
-    fx.layer.cornerRadius = min(bounds.height, bounds.width) / 2
-  }
-  // (the search bar's field gets the taps inside it; the glass itself only when there's no field)
-  override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-    let v = super.hitTest(point, with: event)
-    if let v = v, v !== self, v.isDescendant(of: content), v !== content { return v }
-    return v == nil ? nil : self
-  }
-}
 
 // a client in the search results (phone.js search(): the coloured square with its initials, the name, its open tasks)
 // a client found by search: Apple's own list cell (Haris 2026-11-09: "yes") — its coloured square in the cell's image spot,

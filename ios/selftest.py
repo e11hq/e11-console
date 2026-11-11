@@ -137,9 +137,6 @@ try:
       # (the bar holds Apple's search box under the title too, as E11 Talk's: scrolled, it's the big title's height less)
       check(0 < (hsc.get('appleBarH') or 0) < (hn.get('appleBarH') or 0) - 40, f"scrolled, Apple's big title gone up into its small bar ({hn.get('appleBarH')} → {hsc.get('appleBarH')} pt)")
       check(hf.get('searching') is True and (hf.get('results') or 0) > 0, f'Search finds "Ford" {hf}')
-    else:
-      check((hsc.get('shrink') or 0) >= 0.99 and (hsc.get('smallTitle') or 0) > 0.9, f'scrolled, Home\'s title shrinks into the small bar {hsc}')
-      check(hf.get('searching') is True and (hf.get('searchBarW') or 0) > 250 and (hf.get('results') or 0) > 0, f'Search stretches into a bar with results for "Ford" {hf}')
     check(hfd.get('searching') is False, f'the ✕ closes the search {hfd}')
     fv = res.get('focusView') or {}
     check(fv.get('none') is True or fv.get('inView') is True, f"a comment opened as from the Inbox stays in view once everything has come {fv}")
