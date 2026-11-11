@@ -116,6 +116,8 @@ final class MeTabVC: UIViewController, TabRoot, UISearchResultsUpdating, UISearc
     meItem = me
     navigationItem.rightBarButtonItems = [me]
     if #available(iOS 17.0, *) { registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (vc: MeTabVC, _: UITraitCollection) in vc.paintMe() } }
+    // (your photo coming after the tab was shown — an Office Admin's tabs kept your initials until a restart: Haris 2026-11-11)
+    MePhoto.shared.watch { [weak self] in self?.paintMe() }
     let s = UISearchController(searchResultsController: nil)
     s.obscuresBackgroundDuringPresentation = false
     s.searchResultsUpdater = self; s.delegate = self

@@ -3160,10 +3160,18 @@ extension HomeView: UICollectionViewDelegate {
     let p = UIPreviewParameters(); p.backgroundColor = .clear
     // (a folder: Apple's folder has its strip cut out — on the page the page shows through it; lifted, the dimmed screen
     //  did, a dark band across it. Behind it, lifted, the same colour it sits on: Haris 2026-11-11 11:00)
-    if t.isFolder { var s: UIView? = t; while let x = s, (x.backgroundColor?.cgColor.alpha ?? 0) < 0.99 { s = x.superview }; p.backgroundColor = s?.backgroundColor ?? HomeLook(nil).bg }
     // (the picture in its own shape, the folder's read off Apple's folder itself — its whole tab and slope, no box around it
     //  in light or dark: Haris 2026-11-10 17:54, 2026-11-11 07:43)
     p.visiblePath = t.liftPath; p.shadowPath = t.liftPath
+    if t.isFolder {
+      // (the lifted folder is a picture of it on the colour it sits on, inside its own shape only — the colour set as the
+      //  preview's background filled a box round it: Haris 2026-11-11 13:40)
+      var s: UIView? = t; while let x = s, (x.backgroundColor?.cgColor.alpha ?? 0) < 0.99 { s = x.superview }
+      let bg = s?.backgroundColor ?? HomeLook(nil).bg, b = v.bounds, path = t.liftPath
+      let img = UIGraphicsImageRenderer(bounds: b).image { _ in bg.resolvedColor(with: v.traitCollection).setFill(); path.fill(); v.drawHierarchy(in: b, afterScreenUpdates: false) }
+      let iv = UIImageView(image: img); iv.frame = b
+      return UITargetedPreview(view: iv, parameters: p, target: UIPreviewTarget(container: v, center: CGPoint(x: b.midX, y: b.midY)))
+    }
     return UITargetedPreview(view: v, parameters: p)
   }
   func collectionView(_ cv: UICollectionView, contextMenuConfiguration c: UIContextMenuConfiguration, highlightPreviewForItemAt ip: IndexPath) -> UITargetedPreview? { tileLift(ip) }
@@ -3246,7 +3254,9 @@ extension HomeView: UICollectionViewDelegate {
 // blocks (Appearance's phones, About's cards…), each in a cell of Apple's list as before.
 struct MeSec { var grouped = false; var head = ""; var foot: NSAttributedString? = nil; var footCentred = false }
 extension HomeView {
-  var isMeList: Bool { isMe || assets == "plansPage" }
+  // (an Office Admin's own tabs — Overview, Team, Claims, Expenses — are Apple's list as their pages pushed from Me: they were
+  //  drawn as our own rows, so Apple's swipes and holds never reached them — Haris 2026-11-11)
+  var isMeList: Bool { isMe || assets == "plansPage" || ["overviewTab", "teamTab", "claimsTab", "expensesTab"].contains(assets ?? "") }
   // (a page pushed on a tab, not a tab's first screen)
   var pushedList: Bool { pageBar || (assets == "all" && assetsBack) || assets == "plansPage" }
   func meSection(_ i: Int) -> MeSec? {
