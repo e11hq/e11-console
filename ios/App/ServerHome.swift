@@ -35,7 +35,15 @@ final class ServerHome {
     self.kind = kind
     if let d = defaults.data(forKey: QUEUE), let q = try? JSONDecoder().decode([Op].self, from: d) { queue = q }
     if let m = loadCache() { model = m }
+    // (a photo fetched for another list — Home's, the Inbox's — shown here too, from the phone)
+    NotificationCenter.default.addObserver(forName: ServerHome.photoCame, object: nil, queue: .main) { [weak self] n in
+      guard let self = self, (n.object as AnyObject?) !== self, let u = n.userInfo?["u"] as? String, self.pics[u] == nil,
+            self.asks.values.contains(where: { $0.urls.contains(u) }), let d = DiskPics.get("photo72:" + u) else { return }
+      self.pics[u] = "data:image/jpeg;base64," + d.base64EncodedString()
+      for (_, a) in self.asks where a.urls.contains(u) { a.tell() }
+    }
   }
+  static let photoCame = Notification.Name("E11PhotoCame")
   var on: Bool { !off && model != nil && server == serverURL() }
   var me: String? { model?["me"] as? String }
   // another server chosen (Settings, the App Review copy): that one's own Home and nothing of the other's
@@ -319,7 +327,11 @@ final class ServerHome {
   // (a screen's people asked again — another draw, or back to yourself after View as… — the photos coming for its older
   //  asking aren't told to it: each laid an older list over the new one, the AMs' photos turning back to initials one by one —
   //  Haris 2026-11-11 14:03)
+  // (a photo that didn't come — the server busy, the sign-in a moment late — is tried again by itself, a few times, and every
+  //  screen showing that person is told when it comes: Lana's photo came only once the Clients tab was left and opened
+  //  again, its rows set anew then — the self-test, Haris 2026-11-11 19:37)
   private var pics: [String: String] = [:], waiting: [String: [() -> Void]] = [:], latest: [String: Int] = [:]
+  private var asks: [String: (urls: Set<String>, tell: () -> Void)] = [:]
   func photos(_ people: [String: [String: Any]], for screen: String? = nil, _ done: @escaping ([String: [String: Any]]) -> Void) {
     var out = people, told = Set<String>()
     var gen = 0
@@ -329,6 +341,7 @@ final class ServerHome {
       if let k = screen, self.latest[k] != gen { return }
       done(people.mapValues { q in var q = q; if let s = q["photo"] as? String, s.hasPrefix("/") { q["photo"] = self.pics[s] }; return q })
     }
+    if let k = screen { asks[k] = (Set(people.values.compactMap { ($0["photo"] as? String).flatMap { $0.hasPrefix("/") ? $0 : nil } }), tell) }
     for (id, p) in people {
       guard let u = p["photo"] as? String, u.hasPrefix("/") else { continue }
       if pics[u] == nil, let d = DiskPics.get("photo72:" + u) { pics[u] = "data:image/jpeg;base64," + d.base64EncodedString() }   // (kept on the phone)
@@ -337,28 +350,41 @@ final class ServerHome {
       guard told.insert(u).inserted else { continue }
       if waiting[u] != nil { waiting[u]?.append(tell); continue }
       waiting[u] = [tell]
-      cookies { cookie in
-        guard let url = URL(string: serverURL() + u) else { return }
-        var r = URLRequest(url: url); if !cookie.isEmpty { r.setValue(cookie, forHTTPHeaderField: "Cookie") }
-        URLSession.shared.dataTask(with: r) { [weak self] d, _, _ in
-          guard let d = d, let img = UIImage(data: d), img.size.width > 0, img.size.height > 0 else { DispatchQueue.main.async { self?.waiting[u] = nil }; return }   // (tried again next time)
-          let side: CGFloat = 72, k = min(img.size.width, img.size.height)
-          // (white under it: a see-through picture kept as JPEG was black)
-          let fmt = UIGraphicsImageRendererFormat.preferred(); fmt.opaque = true
-          let small = UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: fmt).image { _ in
-            UIColor.white.setFill(); UIRectFill(CGRect(x: 0, y: 0, width: side, height: side))
-            img.draw(in: CGRect(x: -(img.size.width - k) / 2 * side / k, y: -(img.size.height - k) / 2 * side / k, width: img.size.width * side / k, height: img.size.height * side / k))
-          }
-          guard let jpg = small.jpegData(compressionQuality: 0.85) else { DispatchQueue.main.async { self?.waiting[u] = nil }; return }
-          DispatchQueue.main.async {
-            guard let self = self else { return }
-            self.pics[u] = "data:image/jpeg;base64," + jpg.base64EncodedString()
-            DiskPics.put("photo72:" + u, jpg)
-            (self.waiting.removeValue(forKey: u) ?? []).forEach { $0() }
-          }
-        }.resume()
-      }
+      fetch(u, tries: 3)
     }
     done(out)
+  }
+  private func fetch(_ u: String, tries: Int) {
+    let failed = { [weak self] in
+      DispatchQueue.main.async {
+        guard let self = self else { return }
+        if tries > 1 { DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.fetch(u, tries: tries - 1) } }
+        else { self.waiting[u] = nil }   // (asked for again next time)
+      }
+    }
+    cookies { cookie in
+      guard let url = URL(string: serverURL() + u) else { return }
+      var r = URLRequest(url: url); if !cookie.isEmpty { r.setValue(cookie, forHTTPHeaderField: "Cookie") }
+      URLSession.shared.dataTask(with: r) { [weak self] d, _, _ in
+        guard let d = d, let img = UIImage(data: d), img.size.width > 0, img.size.height > 0 else { failed(); return }
+        let side: CGFloat = 72, k = min(img.size.width, img.size.height)
+        // (white under it: a see-through picture kept as JPEG was black)
+        let fmt = UIGraphicsImageRendererFormat.preferred(); fmt.opaque = true
+        let small = UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: fmt).image { _ in
+          UIColor.white.setFill(); UIRectFill(CGRect(x: 0, y: 0, width: side, height: side))
+          img.draw(in: CGRect(x: -(img.size.width - k) / 2 * side / k, y: -(img.size.height - k) / 2 * side / k, width: img.size.width * side / k, height: img.size.height * side / k))
+        }
+        guard let jpg = small.jpegData(compressionQuality: 0.85) else { failed(); return }
+        DispatchQueue.main.async {
+          guard let self = self else { return }
+          self.pics[u] = "data:image/jpeg;base64," + jpg.base64EncodedString()
+          DiskPics.put("photo72:" + u, jpg)
+          (self.waiting.removeValue(forKey: u) ?? []).forEach { $0() }
+          // (every other screen showing this person — its latest asking; drawn again only if its faces really changed)
+          for (_, a) in self.asks where a.urls.contains(u) { a.tell() }
+          NotificationCenter.default.post(name: ServerHome.photoCame, object: self, userInfo: ["u": u])
+        }
+      }.resume()
+    }
   }
 }
