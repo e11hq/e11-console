@@ -7,6 +7,8 @@ import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { openStore } from './store.js';
 import { createAuth } from './auth.js';
+import { createSignin } from './signin.js';
+import { signinPage } from './signin-page.js';
 import { createAccess } from './access.js';
 import { createFiles, mimeOf, httpError, IMAGES } from './files.js';
 import { createCfSync } from './cfsync.js';
@@ -49,6 +51,12 @@ export function createServer(cfg) {
   const talkHost = (req) => /^talk(-test)?\./.test(String(req.headers.host || ''));
   const access = createAccess(store, { ownerEmail: cfg.adminEmail, plans: true, now: cfg.now });   // (content plans: on everywhere since 2026-10-28)
   const files = createFiles(dataDir);
+  // Our own sign-in (signin.js, Haris 2026-11-11): only where SIGNIN_ISSUER is set — the test copy first
+  const signin = cfg.signinIssuer ? createSignin({
+    db: store.db, now: cfg.now, ownerEmail: cfg.adminEmail, ownerCodeHash: cfg.ownerCodeHash, issuer: cfg.signinIssuer.replace(/\/$/, ''),
+    clients: cfg.signinClients || [], keyFile: path.join(dataDir, 'signin-key.pem'),
+    findUser: (e) => access.userByEmail(e), onCodeUsed: (x) => codeUsedNotice(x),
+  }) : null;
   // The App Review copy (review.js): only when REVIEW_PASSWORD is set — never on the live or test copy
   const review = cfg.reviewPassword ? createReview({ store, password: cfg.reviewPassword, email: cfg.reviewEmail || undefined }) : null;
   const version = cfg.version || '0.0.0-dev';
@@ -242,6 +250,12 @@ export function createServer(cfg) {
       if (review && wantsHtml(req)) { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(review.page()); }
       else if (wantsHtml(req)) page(res, 401, 'Please sign in', esc(e.message));
       else json(res, 401, { ok: false, error: e.message });
+      return null;
+    }
+    // (a password set with a sign-in code ends every sign-in made before it — silently: signin.js)
+    if (signin && id.iat && id.iat * 1000 < signin.revokedBefore(id.email)) {
+      if (wantsHtml(req)) page(res, 401, 'Please sign in again', 'Your password was changed. Sign in again with the new one.');
+      else json(res, 401, { ok: false, error: 'Please sign in again' });
       return null;
     }
     let u = access.userByEmail(id.email);
@@ -597,11 +611,84 @@ export function createServer(cfg) {
   }
 
   /* ---------- routes ---------- */
+  // ---------- our own sign-in (signin.js) ----------
+  let markSvg = null;
+  const mark = () => {
+    if (markSvg === null) { try { markSvg = '<span>' + fs.readFileSync(path.join(webDir, 'brand', 'e11-mark.svg'), 'utf8').replace(/<title>.*?<\/title>/, '').replace(/fill="#000000"/g, 'fill="currentColor"') + '</span>'; } catch { markSvg = '<span style="font-size:40px;font-weight:800">E11</span>'; } }
+    return markSvg;
+  };
+  // (Cloudflare's sign-in request, checked each time: our one client, and its own callback address)
+  const signinReq = (o) => {
+    const r = { client_id: String(o.client_id || ''), redirect_uri: String(o.redirect_uri || ''), state: String(o.state || ''), nonce: String(o.nonce || '') };
+    return signin.redirectOk(signin.client(r.client_id), r.redirect_uri) ? r : null;
+  };
+  const finish = (res, email, r) => {
+    const code = signin.authCode(email, { clientId: r.client_id, redirectUri: r.redirect_uri, nonce: r.nonce });
+    const to = new URL(r.redirect_uri); to.searchParams.set('code', code); if (r.state) to.searchParams.set('state', r.state);
+    return json(res, 200, { ok: true, redirect: to.toString() });
+  };
+  async function signinRoute(req, res, p, url) {
+    const noStore = { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' };
+    if (p === '/.well-known/openid-configuration') return json(res, 200, signin.discovery());
+    if (p === '/oidc/jwks') return json(res, 200, signin.jwks());
+    if (p === '/oidc/authorize' && req.method === 'GET') {
+      const r = signinReq(Object.fromEntries(url.searchParams));
+      if (!r || url.searchParams.get('response_type') !== 'code') return page(res, 400, 'Sign-in link not valid', 'Open E11 Console again to sign in.');
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', ...noStore, 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'" });
+      return res.end(signinPage({ mark: mark(), req: r }));
+    }
+    if (p === '/oidc/token' && req.method === 'POST') {
+      const raw = await readRaw(req, 64 * 1024).catch(() => Buffer.alloc(0));
+      const f = Object.fromEntries(new URLSearchParams(raw.toString('utf8')));
+      let id = f.client_id, secret = f.client_secret;
+      const basic = String(req.headers.authorization || '').match(/^Basic (.+)$/i);
+      if (basic) { const [a, b] = Buffer.from(basic[1], 'base64').toString('utf8').split(':'); id = decodeURIComponent(a || ''); secret = decodeURIComponent(b || ''); }
+      if (f.grant_type !== 'authorization_code') return json(res, 400, { error: 'unsupported_grant_type' });
+      const out = signin.exchange({ code: f.code, clientId: id, clientSecret: secret, redirectUri: f.redirect_uri });
+      return json(res, out.error ? 400 : 200, out);
+    }
+    if (p === '/oidc/userinfo') {
+      const m = String(req.headers.authorization || '').match(/^Bearer (.+)$/i);
+      const u = m ? signin.userinfo(m[1]) : null;
+      return u ? json(res, 200, u) : json(res, 401, { error: 'invalid_token' });
+    }
+    if (p.startsWith('/oidc/api/') && req.method === 'POST') {
+      const body = await readBody(req, 16 * 1024).catch(() => ({}));
+      const r = signinReq(body.req || {});
+      if (!r) return json(res, 400, { ok: false, error: 'Open E11 Console again to sign in.' });
+      const what = p.slice('/oidc/api/'.length);
+      if (what === 'start') return json(res, 200, signin.start(body.email));
+      if (what === 'password') { const x = signin.signInPassword(body.email, body.password); return x.ok ? finish(res, x.email, r) : json(res, 200, x); }
+      if (what === 'code') return json(res, 200, signin.useCode(body.email, body.code));
+      if (what === 'owner') return json(res, 200, signin.useOwnerCode(body.email, body.code));
+      if (what === 'setpw') { const x = signin.setPassword(body.ticket, body.password); return x.ok ? finish(res, x.email, r) : json(res, 200, x); }
+    }
+    return json(res, 404, { ok: false, error: 'Not found' });
+  }
+  // (a password set with an admin's code: every other Super Admin and Office Admin told — Inbox and a push; not the admin
+  //  who made it, not the person. The owner's codes tell no one — signin.js never calls this for them)
+  function codeUsedNotice({ email, madeBy }) {
+    const person = access.userByEmail(email), maker = access.userByEmail(madeBy);
+    if (!person) return;
+    const first = String(person.name || person.email).split(' ')[0];
+    const text = `${maker ? (maker.name || maker.email) : 'An admin'} made a sign-in code for ${person.name || person.email}, and ${first}’s password was changed`;
+    const at = new Date().toISOString();
+    const to = store.list('users').filter((x) => access.isAdm(x) && x.active !== false && !x.removed && x.id !== person.id && (!maker || x.id !== maker.id));
+    const notes = to.map((x) => ({ id: 'n-' + crypto.randomBytes(6).toString('hex'), to: x.id, from: maker ? maker.id : null, taskId: null, kind: 'signin', text, snippet: '', commentId: null, at, read: false }));
+    if (!notes.length) return;
+    const out = store.apply(notes.map((n) => ({ kind: 'notifications', id: n.id, data: n })), 'signin');
+    broadcast(out.rev, out.results, null, null);
+    notes.forEach((n) => webPush.sendTo(n.to, { title: 'Sign-in code used', body: text, tag: 'signin-' + person.id, nid: n.id }).catch(() => {}));
+  }
+
   async function handle(req, res) {
     const url = new URL(req.url, 'http://local');
     const p = decodeURIComponent(url.pathname);
 
     if (p === '/api/health') return json(res, 200, { ok: true, version, rev: store.rev() });
+
+    // Our own sign-in (signin.js): its page and the OpenID Connect answers Cloudflare asks for — no sign-in needed to reach them
+    if (signin && (p.startsWith('/oidc/') || p === '/.well-known/openid-configuration')) return signinRoute(req, res, p, url);
 
     // The privacy policy and support page (web/legal): public, no sign-in, no data — the App Store links to them
     if ((p === '/privacy' || p === '/support') && webDir) {
@@ -729,6 +816,22 @@ export function createServer(cfg) {
       return res.end(out);
     }
 
+    // Sign-in codes (signin.js): any Super Admin or Office Admin makes one for anyone; the owner, through the owner's view,
+    // too — kept out of the admins' record and telling no one
+    if (signin && p === '/api/signin/code' && req.method === 'POST') {
+      const real = req.realUser || u, byOwner = isOwner(real);
+      if (!byOwner && !access.isAdm(real)) return json(res, 403, { ok: false, error: 'Only Super Admins and Office Admins make sign-in codes' });
+      const body = await readBody(req, 4096);
+      const t = store.get('users', String(body.userId || ''));
+      if (!t || t.removed || t.active === false) return json(res, 404, { ok: false, error: 'Not on the team' });
+      const r = signin.makeCode(t.email, real.email, { byOwner });
+      return json(res, r.ok ? 200 : 400, r.ok ? { ...r, name: t.name || t.email, by: real.name || real.email, newUser: !r.hasPassword } : r);
+    }
+    if (signin && p === '/api/signin/codes') {
+      const real = req.realUser || u, owner = isOwner(real);
+      if (!owner && !access.isAdm(real)) return json(res, 403, { ok: false, error: 'Only Super Admins and Office Admins' });
+      return json(res, 200, { ok: true, codes: signin.codesRecord({ owner }) });
+    }
     if (p === '/api/me') return json(res, 200, { ok: true, user: access.shape(u, 'users', u), owner: isOwner(u), review: !!review, appIcon: appIcon.info(), macShell, version, rev: store.rev(), office: office.info(req),
       // (E11 Talk in the Mac app's sidebar: on the test site while it's built — Haris 2026-11-06; live when E11 Talk goes live)
       talk: isTestSite && !review,

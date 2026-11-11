@@ -263,7 +263,7 @@ test('Cloudflare token check: valid token accepted, wrong app / expired / forged
   };
   const now = Math.floor(Date.now() / 1000);
   const good = { iss: 'https://e11hq.cloudflareaccess.com', aud: ['AUD123'], email: 'Areej@e11-digital.com', exp: now + 600, iat: now };
-  assert.deepEqual(await auth.identify({ headers: { 'cf-access-jwt-assertion': sign(good) }, url: '/' }), { email: 'areej@e11-digital.com', sub: null });
+  assert.deepEqual(await auth.identify({ headers: { 'cf-access-jwt-assertion': sign(good) }, url: '/' }), { email: 'areej@e11-digital.com', sub: null, iat: now });
   assert.equal((await auth.identify({ headers: { cookie: 'a=b; CF_Authorization=' + sign(good) }, url: '/' })).email, 'areej@e11-digital.com');
   await assert.rejects(auth.identify({ headers: { 'cf-access-jwt-assertion': sign({ ...good, aud: ['OTHER'] }) }, url: '/' }), /Wrong application/);
   await assert.rejects(auth.identify({ headers: { 'cf-access-jwt-assertion': sign({ ...good, exp: now - 3600 }) }, url: '/' }), /expired/);

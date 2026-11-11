@@ -37,6 +37,12 @@ const cfg = {
   // The App Review copy only (review.js): the demo account's password — set on the NAS's "review" app, never elsewhere
   reviewPassword: env.REVIEW_PASSWORD || '',
   reviewEmail: env.REVIEW_EMAIL || '',
+  // Our own sign-in (signin.js — Haris 2026-11-11): on only where SIGNIN_ISSUER is set (the test copy first). Cloudflare
+  // Access's "Generic OIDC" login method is the one client: its id, secret and callback address. The owner's standing code
+  // only as a hash (OWNER_CODE_HASH — made with `node server/src/signin-hash.js`, never the digits themselves).
+  signinIssuer: env.SIGNIN_ISSUER || '',
+  ownerCodeHash: env.OWNER_CODE_HASH || '',
+  signinClients: env.OIDC_CLIENT_ID ? [{ id: env.OIDC_CLIENT_ID, secret: env.OIDC_CLIENT_SECRET || '', redirects: String(env.OIDC_REDIRECTS || '').split(',').map((x) => x.trim()).filter(Boolean) }] : [],
 };
 function readVersion() {
   try { return fs.readFileSync(path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../VERSION'), 'utf8').trim(); } catch { return '0.0.0-dev'; }

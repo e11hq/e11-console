@@ -40,7 +40,7 @@ export function createAuth({ team, aud, dev = false, fetchImpl = fetch, now = ()
     const auds = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
     if (!aud || !auds.includes(aud)) throw new Error('Wrong application');
     if (!payload.email) throw new Error('No email in token');
-    return { email: String(payload.email).toLowerCase(), sub: payload.sub || null };
+    return { email: String(payload.email).toLowerCase(), sub: payload.sub || null, iat: Number(payload.iat) || 0 };
   }
 
   const cookie = (req, name) => {
