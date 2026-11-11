@@ -1867,13 +1867,20 @@ final class MeCtl {
       }
     }
     if let x = model["expenses"] as? [String: Any] { o["subs"] = ((x["subs"] as? [Any]) ?? []).count; o["ended"] = ((x["ended"] as? [Any]) ?? []).count }
-    if let ov = model["overview"] as? [String: Any] { o["fin"] = ov["fin"] ?? false; o["numbers"] = s.h.meKeys.contains("Claims submitted") }
+    if let ov = model["overview"] as? [String: Any] { o["fin"] = ov["fin"] ?? false; o["numbers"] = MeCtl.shows(AppleTabs.shared?.roleNavs[tab]?.view ?? s.h, "Claims submitted") }
     if s.kind == "trash", let t = model["trash"] as? [String: Any], let x = ((t["groups"] as? [[String: Any]])?.first?["items"] as? [[String: Any]])?.first {
       let it = trashRow(s.h, x)
       o["items"] = t["n"] ?? 0; o["menu"] = titles(it.menu?()); o["lead"] = it.lead.map { $0.title }; o["trail"] = it.trail.map { $0.title }
     }
     if let vc = pageVCs[ObjectIdentifier(s.h)] { o["tools"] = (vc.toolbarItems ?? []).compactMap { $0.title } }
     return o
+  }
+  // (the self-test: a row with these words on screen — Apple's list cell or a label — wherever it's drawn)
+  static func shows(_ v: UIView, _ t: String) -> Bool {
+    if let c = v as? UICollectionViewCell, (c.contentConfiguration as? UIListContentConfiguration)?.text == t { return true }
+    if let c = v as? UITableViewCell, (c.contentConfiguration as? UIListContentConfiguration)?.text == t { return true }
+    if let l = v as? UILabel, l.text == t { return true }
+    return v.subviews.contains { shows($0, t) }
   }
   func selfOpenClaim() -> String? {
     guard let id = (((model["claims"] as? [String: Any])?["all"] as? [[String: Any]])?.first(where: { ($0["legacy"] as? Bool) != true })?["id"] as? String) else { return nil }

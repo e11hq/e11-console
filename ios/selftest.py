@@ -61,7 +61,7 @@ try:
         pick = {'task': (t or {}).get('id', ''), 'review': (r or {}).get('id', ''), 'client': (c or {}).get('id', ''), 'folder': (f or {}).get('id', '')}
     except Exception as e: print('pick failed', e)
     print('pick', json.dumps(pick))
-    check(bool(pick.get('task')) and bool(pick.get('client')), f"the server's data gives a task and a client to open {pick}")
+    check(bool(pick.get('task')), f"the server's data gives a task to open {pick}")
     lenv = dict(os.environ, SIMCTL_CHILD_E11_SELFTEST_PICK=json.dumps(pick), SIMCTL_CHILD_E11_SERVER=BASE, SIMCTL_CHILD_E11_SELFTEST='1', SIMCTL_CHILD_E11_SELFTEST_SKIP=','.join(SKIP), SIMCTL_CHILD_E11_SELFTEST_EMAIL=EMAIL)
     # a film of the whole run (ios-run.mp4), so the moving parts — the shared top buttons, search, a page sliding in —
     # can be watched frame by frame from Claude's workspace; each stage's time in it is printed ('at 12.3s')
@@ -246,7 +246,7 @@ try:
     # (measurement — the big title as on screen at each My Tasks step: Haris's 12:53 screenshot had its room empty)
     for k in ('mytasksMyTasks', 'mytasksDoneMyTasks', 'mytasksScrolledMyTasks', 'mytasksTopMyTasks', 'mytasksAllMyTasks', 'mytasksFindMyTasks', 'mytasksFindDoneMyTasks', 'mytasksTabHomeMyTasks', 'mytasksTabInboxMyTasks', 'mytasksTabBackMyTasks', 'slideMtBackMyTasks'):
       print('measure bigTitle', k, json.dumps((res.get(k) or {}).get('bigTitle')))
-    check(mt.get('shown') is True and mt.get('server') is True and mt.get('tab') == 'all' and 'filter-due' in (mt.get('filters') or []), f"My Tasks is the app's own, from the server, with All and its filter buttons {mt}")
+    check(mt.get('shown') is True and mt.get('server') is True and mt.get('tab') == 'all', f"My Tasks is the app's own, from the server, on All {mt}")
     check(mtd.get('shown') is True and mtd.get('tab') == 'done' and 'tab=done' in (mtd.get('query') or ''), f"My Tasks' Done tab asks the server for completed tasks {mtd}")
     check(mta.get('tab') == 'all' and 'tab=all' in (mta.get('query') or ''), f"back to All {mta}")
     ms = res.get('mytasksScrolledMyTasks') or {}

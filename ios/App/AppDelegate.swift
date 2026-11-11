@@ -2195,7 +2195,8 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     let allSteps: [(String, String, (() -> Void)?)] = [
       // (the app without the website — Haris 2026-11-11: the self-test runs the phone's way; what the page used to answer
       //  is read from the app itself)
-      ("home", pause(1500) + "return '{}'", { self.selfResult["appInfo"] = ["native": "ios", "shell": SHELL_VERSION, "server": serverURL()] as [String: Any] }),
+      // (Home's list from the server — the page's start used to give it this time: Home is read once it has come)
+      ("home", pause(8000) + "return '{}'", { self.selfResult["appInfo"] = ["native": "ios", "shell": SHELL_VERSION, "server": serverURL()] as [String: Any] }),
       // (Haris 2026-11-09 16:56, exactly: the app opened on E11 Day, My Tasks, another tab, My Tasks again — its big title
       //  gone for good, until the app is opened again; the tabs tapped as a finger does, from the very start, the title
       //  read each time with whatever lies over it)
