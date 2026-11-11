@@ -211,7 +211,7 @@ try:
     check((res.get('tpageSheetNative') or {}).get('sheet') == 'NativeSheetVC', f"Assignees opens iPhone's own people sheet (changed by role again) {res.get('tpageSheetNative')}")
     check(tps.get('content', 0) > 300, f"the task page has its rows {tps}")
     check(tpc.get('feed', -1) > 0, f"the comments are the app's own (drawn from the server) {tpc}")
-    check(tpc.get('tab') == 'comments' and tpc.get('compose') is True and tpc.get('box') is False, f"its Comments tab has the app's own comment box (not the old one) {tpc}")
+    check(tpc.get('tab') == 'comments' and tpc.get('compose') is True, f"its Comments tab has the app's own comment box {tpc}")
     check(tpb.get('pages') == 0 and tpb.get('tabBar') is True, f"back: the page goes, the tab bar is back {tpb}")
     check((res.get('dailyNative') or {}).get('sheet') == 'DailySheetVC', f"the morning round-up opens as iPhone's own sheet {res.get('dailyNative')}", need=('daily',))
     mt = res.get('mytasksMyTasks') or {}; mtd = res.get('mytasksDoneMyTasks') or {}; mta = res.get('mytasksAllMyTasks') or {}

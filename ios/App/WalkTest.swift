@@ -522,7 +522,7 @@ extension Main {
       let presented = self.presentedViewController != nil
       let top: UIView? = self.taskPages.last ?? self.shownScreen
       for v in self.view.subviews {
-        let keep = !presented && (v === top || v === self.tabsMark || v === self.corner || v === self.composeIfMade || v === self.cbarIfMade || v is CornerButton)
+        let keep = !presented && (v === top || v === self.tabsMark || v === self.corner || v === self.composeIfMade || v is CornerButton)
         if v.accessibilityElementsHidden == keep { v.accessibilityElementsHidden = !keep }
       }
     }

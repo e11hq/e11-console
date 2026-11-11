@@ -51,8 +51,6 @@ extension Main {
     //  out, so the task is there under it; Haris 2026-11-05)
     if let s = splash { s.superview?.bringSubviewToFront(s); splashGone() }
     // (the comment box and its jump spot stay above the page)
-    if let b = cbarIfMade { layerOf(p).insertSubview(b, aboveSubview: p) }
-    if jumpHitMade { layerOf(p).insertSubview(jumpHit, aboveSubview: cbarIfMade ?? p) }
     taskPages.append(p)
     wire(p)
     p.people = serverHome.shown.flatMap { $0["people"] as? [String: [String: Any]] } ?? [:]
@@ -70,7 +68,7 @@ extension Main {
     //  so they slide in with the page — they came only once it had arrived, a black page meanwhile: Haris 2026-11-05)
     // (and the comment box with them: it slides in with the page, ready at once — it only came once the page had
     //  arrived, so from the Inbox the box and its keyboard felt slow: Haris 2026-11-05)
-    if p.tab == "comments", !defaults.bool(forKey: "e11_feed_off") {
+    if p.tab == "comments" {
       prepFeed(p)
       let c = compose
       UIView.performWithoutAnimation {
@@ -480,37 +478,17 @@ extension Main {
     return c
   }
   func taskShowComments(_ p: TaskPage, focus: String) {
-    if !defaults.bool(forKey: "e11_feed_off") {
-      // the comments and the box, both the app's own: nothing of the website's behind them
-      taskComments = focus.isEmpty ? p.taskId : focus
-      p.bringSubviewToFront(p.commentsHost)
-      let c = compose
-      c.switchTo(task: p.taskId, parent: p.threadFeed?.thread)
-      placeCompose(c, above: (APPLE_NAV ? p.threadFeed : nil) ?? p)   // (a reply page open: the box stays on it)
-      c.transform = .identity   // (never left moved aside by a swipe back)
-      if c.isHidden { c.alpha = 0; c.isHidden = false; UIView.animate(withDuration: 0.12) { c.alpha = 1 } }
-      showFeed(p, focus: focus)
-      return
-    }
-    makeCommentsWeb()
+    // the comments and the box, both the app's own: nothing of the website's behind them
     taskComments = focus.isEmpty ? p.taskId : focus
-    // (the comments screen goes inside the page, below its bar; the box and its jump spot above the page)
-    if cbox.superview !== p.commentsHost { p.commentsHost.addSubview(cbox) }
     p.bringSubviewToFront(p.commentsHost)
-    if let b = cbarIfMade { layerOf(p).insertSubview(b, aboveSubview: p) }
-    cbarTask = taskComments
-    cbarShow = true; cbarOnComments = true
-    cbarFeed = CGRect(x: 0, y: p.barBottom, width: view.bounds.width, height: view.bounds.height - p.barBottom)
-    cwebUpdate()
-    // (the box: shown, as the page's own sync would; its contents are the comments screen's to say)
-    let b = cbar
-    if b.isHidden { b.isHidden = false; UIView.animate(withDuration: 0.1) { b.alpha = 1 } }
-    if let cp = cwebPanG, let tp = taskPan { cp.require(toFail: tp) }
-    // step 2: the comments drawn by the app (the comments screen stays behind it, unseen, for writing until step 3)
-    if !defaults.bool(forKey: "e11_feed_off") { showFeed(p, focus: focus) }
+    let c = compose
+    c.switchTo(task: p.taskId, parent: p.threadFeed?.thread)
+    placeCompose(c, above: (APPLE_NAV ? p.threadFeed : nil) ?? p)   // (a reply page open: the box stays on it)
+    c.transform = .identity   // (never left moved aside by a swipe back)
+    if c.isHidden { c.alpha = 0; c.isHidden = false; UIView.animate(withDuration: 0.12) { c.alpha = 1 } }
+    showFeed(p, focus: focus)
   }
   private func showFeed(_ p: TaskPage, focus: String) {
-    if cwebShown { cbox.isHidden = true }; if jumpHitMade { jumpHit.isHidden = true }
     FeedLoader.shared.cookies = serverHome.cookies
     let f: CommentsFeed
     if let old = p.feed { f = old } else {
@@ -657,20 +635,6 @@ extension Main {
       c.text.resignFirstResponder()
       c.switchTo(task: c.taskId, parent: c.parentId)   // (keeps what's written)
       UIView.animate(withDuration: 0.12, animations: { c.alpha = 0 }) { _ in if c.alpha == 0 { c.isHidden = true } }
-    }
-    // (the app's own comments: nothing of the old website comments screen to put away — going on into it slid the
-    //  page's comments in over Details for a moment, Haris 2026-11-01, seen in the self-test film)
-    if defaults.bool(forKey: "e11_feed_off") == false { return }
-    cbarOnComments = false; cbarShow = false; cbarTask = nil
-    cwebUpdate()
-    let b = cbar
-    if b.text.isFirstResponder { b.text.resignFirstResponder() }
-    UIView.animate(withDuration: 0.12, animations: { b.alpha = 0 }) { _ in if b.alpha == 0 { b.isHidden = true } }
-    jumpHit.isHidden = true
-    // (back on the app's screen once it's hidden, for the page's own task page)
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-      guard let self = self, self.taskComments == nil, self.cbox.isHidden else { return }
-      if self.cbox.superview !== self.view, let w = self.web { self.view.insertSubview(self.cbox, aboveSubview: w) }
     }
   }
   func endEditing() { view.endEditing(true) }
