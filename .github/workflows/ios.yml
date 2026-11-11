@@ -28,6 +28,10 @@ jobs:
     timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
+      - name: The live server's code for the self-tests
+        # (the phone talks to the server on main — the self-tests' local server runs main's server and shared rules, not this
+        #  branch's older copy: the Office Admin's pages failed against ios-nav's old engine, build 1663 — Haris 2026-11-11)
+        run: git fetch -q --depth=1 origin main && git checkout FETCH_HEAD -- server web && git log -1 --format='server and web from main %h %s' FETCH_HEAD
       - name: Homebrew's tools on this Mac
         run: for d in /opt/homebrew/bin /usr/local/bin; do [ -d "$d" ] && echo "$d" >> "$GITHUB_PATH"; done; true
       - uses: actions/setup-node@v4
