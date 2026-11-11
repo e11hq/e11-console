@@ -426,6 +426,8 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
       if defaults.string(forKey: "e11_server") == "review", action.targetFrame?.isMainFrame != false, u.host == URL(string: LIVE_URL)?.host {
         defaults.set("live", forKey: "e11_server"); loadHome(); return decisionHandler(.cancel)
       }
+      // (our sign-in page, with this phone's key: Face ID signs it back in instead — the page only if that doesn't work)
+      if action.targetFrame?.isMainFrame != false, isSigninHost(u.host?.lowercased() ?? ""), DeviceKey.takeOver(u, web: webView) { return decisionHandler(.cancel) }
       if action.targetFrame?.isMainFrame == false || allowedHere(u) { return decisionHandler(.allow) }
       UIApplication.shared.open(u)
       return decisionHandler(.cancel)

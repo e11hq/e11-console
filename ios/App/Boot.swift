@@ -68,6 +68,7 @@ extension Main {
     // (kept for Me's own rows — the owner, the Test site rows, the version — also offline: step 9)
     var keep = j; keep["days"] = nil
     if JSONSerialization.isValidJSONObject(keep), let d = try? JSONSerialization.data(withJSONObject: keep) { defaults.set(d, forKey: "e11_start") }
+    DeviceKey.refresh(self)   // (signed in for good on this phone: its device key — our own sign-in)
     // (the startup screen: reached — and nothing of this person on the phone yet: setting up, until their copy is in)
     splashHeard = true
     if let s = splash, !s.leaving { s.offline(false); if !quickBooted && !AppData.shared.hasSaved(me) { s.setup(true) } }
@@ -175,6 +176,7 @@ extension Main {
   // Sign out (Me › Sign out — the page's signOut): this person's screens and copy put away, then Cloudflare's sign-out
   // (the App Review copy's own); the sign-in page follows, and the app asks again once it's back on our site
   func signOutNative() {
+    DeviceKey.drop(self)   // (this phone's key for our sign-in: let go — signing back in needs the password)
     bootState.state = .signedOut; bootState.me = nil; bootState.owned = false
     putAwayForSwitch()
     AppData.shared.forgetCopies(except: nil)   // (signing out: nothing of theirs left on the phone)
