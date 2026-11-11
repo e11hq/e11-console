@@ -3159,6 +3159,9 @@ extension HomeView: UICollectionViewDelegate {
     guard let key = listDS?.itemIdentifier(for: ip), let t = listViews[key] as? FileTile, t.window != nil else { return nil }
     let v = t.liftView
     let p = UIPreviewParameters(); p.backgroundColor = .clear
+    // (a folder: Apple's folder has its strip cut out — on the page the page shows through it; lifted, the dimmed screen
+    //  did, a dark band across it. Behind it, lifted, the same colour it sits on: Haris 2026-11-11 11:00)
+    if t.isFolder { var s: UIView? = t; while let x = s, (x.backgroundColor?.cgColor.alpha ?? 0) < 0.99 { s = x.superview }; p.backgroundColor = s?.backgroundColor ?? HomeLook(nil).bg }
     // (the picture in its own shape, the folder's read off Apple's folder itself — its whole tab and slope, no box around it
     //  in light or dark: Haris 2026-11-10 17:54, 2026-11-11 07:43)
     p.visiblePath = t.liftPath; p.shadowPath = t.liftPath
