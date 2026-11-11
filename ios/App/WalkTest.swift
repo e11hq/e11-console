@@ -10,15 +10,6 @@ import UIKit
    takes a screenshot at each step and lists what failed. */
 
 extension Main {
-  // ---- taps that went to the website while there's none ----
-  static var lost: [String] = []
-  static func noteLost(_ js: String) {
-    let benign = ["--ios-tabs-h", "\"ev\":\"back\"", "\"ev\":\"list\"", "__e11Kb", "__e11FeedKb", "KbStep", "Resend", "Own &&", "Theme.setMode", "ev:'closed'", "__e11Tab", "ev:'list'", "ev:'back'", "__e11ApnsToken"]
-    if benign.contains(where: { js.contains($0) }) { return }
-    let s = String(js.prefix(140))
-    if !lost.contains(s) { lost.append(s); if lost.count > 60 { lost.removeFirst() } }
-  }
-
   // ---- what's showing now ----
   func walkKindPublic(_ h: HomeView) -> String { walkKind(h) }
   private func walkKind(_ h: HomeView) -> String {
@@ -69,19 +60,17 @@ extension Main {
     if !(quickBooted && AppData.shared.ready && splash == nil && shownScreen != nil) && n < 240 {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self.walkWhenReady(n + 1) }; return
     }
-    selfResult["walkBooted"] = ["after": Double(n) / 4, "quick": quickBooted, "copy": AppData.shared.ready, "pageReady": pageReady]
+    selfResult["walkBooted"] = ["after": Double(n) / 4, "quick": quickBooted, "copy": AppData.shared.ready, "pageReady": false]
     // (the main self-test, the phone's way — Haris 2026-11-11: no website loaded; it starts once the app's own screens are up)
     if SELFTEST == "1" { if !started { started = true; selfTest() }; return }
     walkRun(SELFTEST == "apple" ? appleSteps() : walkSteps(), 0)
   }
   private func walkRun(_ steps: [(String, () -> Void)], _ i: Int) {
-    if i >= steps.count { selfResult["walkLost"] = Main.lost; writeSelf("done"); return }
+    if i >= steps.count { writeSelf("done"); return }
     let (name, act) = steps[i]
-    let lostBefore = Main.lost.count
     act()
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.7) {
       var st = self.walkState()
-      st["lost"] = Array(Main.lost.suffix(from: min(lostBefore, Main.lost.count)))
       var list = (self.selfResult["walk"] as? [[String: Any]]) ?? []
       st["step"] = name; list.append(st)
       self.selfResult["walk"] = list
@@ -106,7 +95,7 @@ extension Main {
     let roles = { (l: [[String: Any]]) -> [String] in l.prefix(8).map { "\($0["name"] ?? "?"): \(($0["role"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "<none>")" } }
     let p = { self.taskPages.last }
     return [
-      ("aStart", { self.apple("start", ["cards": cards.count, "task": best?.0 ?? cards.first ?? "", "comments": best?.2 ?? 0, "pageReady": self.pageReady]) }),
+      ("aStart", { self.apple("start", ["cards": cards.count, "task": best?.0 ?? cards.first ?? "", "comments": best?.2 ?? 0, "pageReady": false]) }),
       // Home's In review box: My Tasks, Waiting for CD review on
       ("aReview", { self.tab(self.tabKeys.first ?? "today"); DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.homeView.onEvent?(["ev": "review"]) } }),
       ("aReviewRead", {

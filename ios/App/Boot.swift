@@ -30,16 +30,6 @@ final class BootState {
 
 extension Main {
   static let boot = BootState()
-  // the step 9 trial (test site, Me › Test site): the app on its own — the website isn't loaded at all (only to sign in)
-  // (step 9 part 2: on for everyone — the test site's Me › Test site switch can still turn the website back on; the
-  //  build machine's self-test still runs with it, as it drives the page)
-  static var noPage: Bool { (defaults.object(forKey: "e11_nopage") as? Bool) ?? true }   // (the main self-test too — Haris 2026-11-11)
-  func setNoPage(_ on: Bool) {
-    defaults.set(on, forKey: "e11_nopage")
-    if on { pageReady = false; web.loadHTMLString("<html><body style='background:#0c0d0f'></body></html>", baseURL: nil) }
-    restartApp()
-    if !on { loadHome() }
-  }
   // what the server said at the last start (/api/app/start), for this person
   var startInfo: [String: Any] { (defaults.data(forKey: "e11_start").flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }) ?? [:] }
   var bootState: BootState { Main.boot }
@@ -101,10 +91,9 @@ extension Main {
   private func bootWhenReady(_ me: String, _ n: Int) {
     guard bootState.me == me, !quickBooted else { return }
     guard AppData.shared.ready, AppData.shared.me == me, let tabs = ownTabsNow() else {
-      // (with the website behind — the self-test: after 20 s the page's way, as before. Without it: still waiting —
-      //  the copy tries again by itself; every 20 s without it, Can't reach with Try again over the startup screen)
-      if !Main.noPage && n >= 100 { bootState.owned = false; splashGone(); return }
-      if Main.noPage && n > 0 && n % 100 == 0, let s = splash, !s.leaving { s.offline(true) }
+      // (still waiting — the copy tries again by itself; every 20 s without it, Can't reach with Try again over the
+      //  startup screen)
+      if n > 0 && n % 100 == 0, let s = splash, !s.leaving { s.offline(true) }
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.bootWhenReady(me, n + 1) }
       return
     }
@@ -113,13 +102,12 @@ extension Main {
     var t = tabs
     var list = (t["tabs"] as? [[String: Any]]) ?? []
     // (the first tab on — Home, or an Office Admin's Overview; the page already there and its tabs drawn: as it has them)
-    if pageReady, lastTabs != nil { refreshOwnTabs() }
-    else { for i in list.indices { list[i]["on"] = i == 0 }; t["tabs"] = list; t["hidden"] = false; setTabs(t) }
+    for i in list.indices { list[i]["on"] = i == 0 }; t["tabs"] = list; t["hidden"] = false; setTabs(t)
     ownAppearanceWatch(); ownAppearanceTick()
     let office = list.contains(where: { ["fin-reimb", "fin-expenses", "team"].contains($0["v"] as? String ?? "") })
     // (no website — step 9: an Office Admin's Overview drawn by the app itself)
-    if office, !pageReady, let k = list.first?["v"] as? String { _ = offlineTab(k) }
-    if !office, (list.first?["v"] as? String) == "today", !pageReady || selectedTabKey == "today" {
+    if office, let k = list.first?["v"] as? String { _ = offlineTab(k) }
+    if !office, (list.first?["v"] as? String) == "today" {
       view.layoutIfNeeded()
       homePageMe = me
       let h = homeView
@@ -137,7 +125,7 @@ extension Main {
   }
   private func ownTabsNow() -> [String: Any]? {
     guard AppData.shared.tabsOn, let m = AppData.shared.screen("tabs").model, let list = m["tabs"] as? [[String: Any]], !list.isEmpty else { return nil }
-    if !pageReady { Main.isAdmin = (m["admin"] as? Bool) == true }   // (Admins turn links off and on — without the website, from the copy: Haris 2026-11-06)
+    Main.isAdmin = (m["admin"] as? Bool) == true   // (Admins turn links off and on — from the copy: Haris 2026-11-06)
     // (the Me tab: whose photo and where it is — from the copy, as the website said it: Haris 2026-11-06)
     var l = list
     for i in l.indices where (l[i]["v"] as? String) == "me" {
@@ -150,8 +138,6 @@ extension Main {
 
   private func signedOut() {
     let b = bootState
-    // (the website itself is in, on our site: it's the one to know — asked again later, nothing put away)
-    if pageReady, web.url?.host == serverHost { return unreachable() }
     let was = b.state
     b.state = .signedOut; b.me = nil; b.owned = false
     // (nothing of the person before: their screens, their copy, a quick start next time)
@@ -162,9 +148,8 @@ extension Main {
     var q = (defaults.data(forKey: "e11_quick").flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }) ?? [:]
     q["me"] = nil
     if let d = try? JSONSerialization.data(withJSONObject: q) { defaults.set(d, forKey: "e11_quick") }
-    // (the sign-in page: the web view is on its way there already — Cloudflare's answer to our address; without the
-    //  website (the step 9 trial) it's loaded now, for signing in only)
-    if Main.noPage, web.url == nil || web.url?.scheme == "about" { loadHome() }
+    // (the sign-in page — Cloudflare's, or App Review's own: loaded now, for signing in only)
+    if web.url == nil || web.url?.scheme == "about" { loadHome() }
   }
 
   private func unreachable() {
@@ -180,13 +165,11 @@ extension Main {
     DispatchQueue.main.asyncAfter(deadline: .now() + (quickBooted ? 15 : 5), execute: w)
   }
 
-  // Try again on the startup screen: asked again at once, and the copy too (the page loaded again only when there is one
-  // behind — the self-test)
+  // Try again on the startup screen: asked again at once, and the copy too
   func bootRetry() {
     splash?.trying()
     bootCheck()
     AppData.shared.tryNow()
-    if !Main.noPage && !pageReady { retrying = false; loadHome() }
   }
 
   // Sign out (Me › Sign out — the page's signOut): this person's screens and copy put away, then Cloudflare's sign-out
@@ -201,8 +184,6 @@ extension Main {
     q["me"] = nil
     if let d = try? JSONSerialization.data(withJSONObject: q) { defaults.set(d, forKey: "e11_quick") }
     let review = defaults.string(forKey: "e11_server") == "review"
-    // (anything the page still had to send goes first — its own sign out waited 0.3 s the same way)
-    pageJS("try { Sync.push() } catch (e) {}")
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.loadHome(review ? "/review/sign-out" : "/cdn-cgi/access/logout") }
   }
 
@@ -214,28 +195,24 @@ extension Main {
     // (not the sign-out itself — Cloudflare's /cdn-cgi/… and the App Review copy's sign-out page are on our site too)
     let path = web.url?.path ?? ""
     if path.hasPrefix("/cdn-cgi/") || path.hasPrefix("/review/") { return }
-    // (the App Review copy signs in on a page of our own site: no startup screen over it)
-    if defaults.string(forKey: "e11_server") == "review" { return }
     signingIn = true
     if splash == nil { showSplash(); splashHeard = true; if splash != nil { bootState.owned = true } }
-    // (without the website: signed in — the site isn't loaded behind the app; asked at once who it is)
-    if Main.noPage {
-      web.stopLoading(); pageReady = false
-      web.loadHTMLString("<html><body style='background:#0c0d0f'></body></html>", baseURL: nil)
-      bootCheck()
-    }
+    // (signed in — the website is never loaded behind the app: stopped as it arrives; asked at once who it is)
+    web.stopLoading()
+    web.loadHTMLString("<html><body style='background:#0c0d0f'></body></html>", baseURL: nil)
+    bootCheck()
   }
   /* what the page did once it had loaded, done by the app itself without it (step 9 part 2): this phone's notification
      address to the server, the widget's sign-in, a notification tapped before the app's screens were there */
   func pagelessFlush(_ n: Int = 0) {
-    guard !pageReady, bootState.state == .signedIn else { return }
+    guard bootState.state == .signedIn else { return }
     if n == 0 {
       if let t = pendingToken { pendingToken = nil; sendToken(t) }
       else { pushState { st in if st == "on" { UIApplication.shared.registerForRemoteNotifications() } } }
       shareSignIn()
     }
     guard let d = pendingPush else { return }
-    if AppData.shared.ready && quickBooted { pendingPush = nil; openPush(["e11": d]); if !pageReady { pendingPush = nil } }
+    if AppData.shared.ready && quickBooted { pendingPush = nil; openPush(["e11": d]); pendingPush = nil }
     else if n < 80 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in self?.pagelessFlush(n + 1) } }
   }
   // the web view reached our site (after signing in, or the page loaded again): asked again if we weren't signed in
@@ -247,7 +224,7 @@ extension Main {
   // Clients, Me and every Me-made tab (Haris 2026-11-05: offline only Home opened, then Me took the tab bar away) —
   // and with no website at all (step 9). The page, if it comes, is told the tab once it's there.
   func offlineTab(_ key: String) -> Bool {
-    guard !pageReady, quickBooted, AppData.shared.ready, let me = AppData.shared.me else { return false }
+    guard quickBooted, AppData.shared.ready, let me = AppData.shared.me else { return false }
     // (the shared top buttons for the screen now on top, once the screens have changed — the Inbox's Mark all unread and
     //  your photo stayed over Me after the photo was tapped there: the crawl, 2026-11-06)
     defer { updateCorner(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.updateCorner() } }
@@ -299,14 +276,13 @@ extension Main {
     bootState.state = .unknown; bootState.me = nil; bootState.owned = false
     if splash == nil { showSplash(); splashHeard = true }
     bootCheck()
-    if pageReady { web.reload() }
   }
 
   // ---------- Step 9: the pop-ups, decided by the app (the brain's pops — as the page did after the startup screen and
   // every 30 s): your birthday, the birthday / city nudge, an announcement, the claims reminder. Only without the website
   // (it decides them itself while it's there), one at a time, never over something open. ----------
   func ownPops() {
-    guard !pageReady, quickBooted, splash == nil, lockView == nil, AppData.shared.ready, !popBusy, presentedViewController == nil,
+    guard quickBooted, splash == nil, lockView == nil, AppData.shared.ready, !popBusy, presentedViewController == nil,
           let p = AppData.shared.meModel("tasks", "pops") else { return }
     let seen = { [weak self] (k: String, v: String) in
       self?.serverTask.request("/api/app/act", body: ["ev": "pfSet", "field": "seen", "k": k, "value": v, "op": UUID().uuidString]) { j in
@@ -362,14 +338,13 @@ extension Main {
   // What's new after an update (app.js maybeShowWhatsNew), and the View as… bar (viewas.js) — the app's own, without
   // the website
   func ownAfterStart() {
-    guard !pageReady else { return }
     let st = startInfo
     if let v = st["version"] as? String, !v.isEmpty {
       let seen = defaults.string(forKey: "e11-seen-version")
       defaults.set(v, forKey: "e11-seen-version")
       if let s = seen, s != v {
         serverTask.request("/api/whatsnew", body: nil) { [weak self] r in
-          guard let self = self, !self.pageReady, let r = r, let notes = r["notes"] as? String, !notes.isEmpty else { return }
+          guard let self = self, let r = r, let notes = r["notes"] as? String, !notes.isEmpty else { return }
           DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
             self.popCommand(["kind": "whatsNew", "version": r["name"] ?? r["version"] ?? v, "when": (r["publishedAt"] as? String).map { Main.dateTimeText($0) } ?? "", "sections": Main.noteSections(notes)]) { _ in }
           }
@@ -411,18 +386,18 @@ extension Main {
     switch ev["ev"] as? String ?? "" {
     case "copy": guard !id.isEmpty else { return false }; copyTaskLink(id); return true
     case "open":
-      guard !pageReady, !id.isEmpty, AppData.shared.ready else { return false }
+      guard !id.isEmpty, AppData.shared.ready else { return false }
       openTaskPage(id, tab: "details", focus: ""); return true
     // (a card's Attach Files: iPhone's picker at once, the files go into the task while the list stays — Haris
     //  2026-11-07, B; it opened the task instead)
     case "attach":
-      guard !pageReady, !id.isEmpty, AppData.shared.ready else { return false }
+      guard !id.isEmpty, AppData.shared.ready else { return false }
       attachFromList(id, source: ev["source"] as? String); return true
-    case "me": guard !pageReady else { return false }; selectTab("me"); return true
+    case "me": selectTab("me"); return true
     // (a client in search results: its page comes in over this screen, ‹ back to the search — Haris 2026-11-05: without
     //  the website the tap did nothing)
     case "client":
-      guard !pageReady, !id.isEmpty, AppData.shared.ready, let me = AppData.shared.me else { return false }
+      guard !id.isEmpty, AppData.shared.ready, let me = AppData.shared.me else { return false }
       let k = selectedTabKey
       clientsCommand(["show": true, "view": "client", "id": id, "me": me, "from": k == "today" ? "home" : k == "projects" ? "" : k])
       return true
@@ -439,7 +414,7 @@ extension Main {
       myTasksAgain()
       selectTab("mytasks"); return true
     case "from":
-      guard !pageReady, !id.isEmpty else { return false }
+      guard !id.isEmpty else { return false }
       let name = (AppData.shared.screen("task", id).model?["title"] as? String) ?? ""
       meCtl.ask(["kind": "alert", "title": "New task from this", "body": "The same client, people, tags and description.", "input": ["value": name, "placeholder": "Task name"], "okText": "Create", "cancelText": "Cancel"]) { [weak self] r in
         guard let self = self, (r["ok"] as? Bool) == true else { return }

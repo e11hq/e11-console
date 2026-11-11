@@ -876,7 +876,7 @@ final class MeCtl {
     if (ev["ev"] as? String) == "trRestore" { send(ev); return }
     // (no website: the searches answered from the app's own copy — Overview's files, Content plans; they waited 15 s for a
     //  page that isn't there: Haris 2026-11-06)
-    if !main.pageReady, let r = ownAnswer(ev) { done(r); return }
+    if let r = ownAnswer(ev) { done(r); return }
     let rid = UUID().uuidString
     var e = ev; e["rid"] = rid
     asks[rid] = done
@@ -1320,13 +1320,12 @@ final class MeCtl {
         self.redraw()
       }
       if let w = self.main.view.window { UIView.transition(with: w, duration: 0.35, options: [.transitionCrossDissolve, .allowUserInteraction], animations: { UIView.performWithoutAnimation(apply) }) } else { apply() }
-      self.main.pageJS("typeof Theme !== 'undefined' && Theme.setMode('\(v)')")
     }
   }
   // View as (test site only): the team in the app's own sheet; a tap switches — the server remembers it, and the app
   // starts again as them
   func viewAsPick() {
-    let pageWay = { [weak self] in self?.main.pageJS("typeof ViewAs !== 'undefined' && ViewAs.pick()"); return }
+    let pageWay = { [weak self] in (self?.top ?? self?.shown)?.toast(["t": "Couldn’t load the team — try again"]); return }
     main.serverTask.request("/api/me", body: nil) { [weak self] j in
       guard let self = self, let va = j?["viewAs"] as? [String: Any], let real = (va["real"] as? [String: Any])?["id"] as? String,
             let list = self.brain("me", "viewAsPeople", [real, self.envNow])?["people"] as? [[String: Any]] else { pageWay(); return }
@@ -1344,15 +1343,13 @@ final class MeCtl {
     let b: [String: Any] = ["userId": id.map { $0 as Any } ?? NSNull()]
     main.serverTask.request("/api/view-as", body: b) { [weak self] j in
       guard let self = self else { return }
-      guard j != nil else { self.main.pageJS("typeof ViewAs !== 'undefined' && " + (id == nil ? "ViewAs.back()" : "ViewAs.pick()")); return }
+      guard j != nil else { (self.top ?? self.shown)?.toast(["t": "No connection — try again"]); return }
       // (what's on screen now is the other person's: put away at once — task pages, Client Assets, Me's screens, the other
       //  lists — so the new person's first tab shows, never the old one's page under their tab: Back to me left an
       //  Office Admin's page showing under Home's tab, Haris 2026-11-05)
       self.main.putAwayForSwitch()
-      // (without the website — step 9: the app starts again itself as the chosen person; only the bar changed before)
-      if !self.main.pageReady { self.main.restartApp(); return }
-      // (what the page hasn't sent yet first, then everything starts again as the chosen person)
-      self.main.pageJS("(typeof Sync !== 'undefined' ? Sync.push().catch(() => {}) : Promise.resolve()).then(() => location.reload())")
+      // (the app starts again itself as the chosen person)
+      self.main.restartApp()
     }
   }
   // the Trash, searched for something (a deleted task's update tapped — step 9)
@@ -1448,9 +1445,7 @@ final class MeCtl {
   var kind: String { stack.last?.kind ?? "" }
 
   private func send(_ ev: [String: Any]) {
-    // (no website — step 9, or offline: the app does it itself)
-    if !main.pageReady { nativeEv(ev); return }
-    main.pageJS("window.__e11Me && window.__e11Me(\(jsonString(ev)))")
+    nativeEv(ev)   // (the app does it itself — no website)
   }
   // ---------- Step 9: what the page did for Me, done by the app (phone.js NativeMe __e11Me) ----------
   private func nativeEv(_ ev: [String: Any]) {
@@ -1511,7 +1506,6 @@ final class MeCtl {
 
   // ---------- from the page ----------
   func command(_ a: [String: Any]) {
-    if let rid = a["rid"] as? String { asks.removeValue(forKey: rid)?(a); return }
     // (a Content plan opened on the page — an Inbox update, a notification: the app's own page for it)
     // (a review request opened on the page — an Inbox update: the Reviews tab's own page for it)
     if let o = a["open"] as? [String: Any], (o["kind"] as? String) == "review", let rid = o["id"] as? String {
@@ -1917,7 +1911,7 @@ final class MeCtl {
     // (apple: Me in its own Apple navigation — its pages have Apple's ‹, not the shared one)
     return ["open": isOpen, "screens": stack.count, "kind": kind, "parts": parts, "shown": shown != nil, "corner": corner, "people": people, "rows": rows, "card": card, "profile": profile, "apple": apple]
   }
-  func refresh() { if isOpen { main.pageJS("window.__e11MeResend && window.__e11MeResend()"); if stack.contains(where: { $0.kind == "about" }) { loadAbout(false) } } }
+  func refresh() { if isOpen, stack.contains(where: { $0.kind == "about" }) { loadAbout(false) } }
 
   // ---------- what's on each ----------
   private func redrawRoot() { if let s = stack.first(where: { $0.kind == "me" }) { draw(s) } }
@@ -1999,8 +1993,6 @@ final class MeCtl {
           test.append(SetItem(key: "viewAs", title: "View as…", sub: (t["viewing"] as? String).map { "Viewing as \($0)" } ?? "Test site only — use the app as a team member", sym: "person.2.fill", col: .systemTeal, tap: { [weak self] in self?.viewAsPick() }))
           if t["viewing"] is String { test.append(SetItem(key: "backToMe", title: "Back to me", sym: "arrow.uturn.backward", col: .systemTeal, chevron: false, tap: { [weak self] in self?.viewAsSet(nil) })) }
         }
-        // (the step 9 trial: the app without the website — Haris checks it before the website goes for good)
-        test.append(SetItem(key: "noPage", title: "Without the website", sub: "On for everyone now — off only to compare with the website behind", sym: "bolt.horizontal.fill", col: .systemOrange, toggle: Main.noPage, flip: { [weak self] on in self?.main.setNoPage(on) }))
         if (t["sample"] as? Bool) == true { test.append(SetItem(key: "sample", title: "Start fresh with sample data", sub: "Test site only: wipes everything except you", chevron: false, danger: true, tap: { [weak self] in self?.send(["ev": "sample"]) })) }
         if !test.isEmpty { out.append(head(h, "test", "Test site")); out.append(group(h, "test", test)) }
       }

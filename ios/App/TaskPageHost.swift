@@ -89,9 +89,7 @@ extension Main {
     updateCornerNow()
     let finish = {
       p.removeFromSuperview()
-      // (and the screen under it drawn again as it is now: the page says what's showing — Home, My Tasks, the Inbox)
-      if last { self.pageJS("window.__e11HomeResend && __e11HomeResend(); window.__e11MyTasksResend && __e11MyTasksResend(); window.__e11InboxResend && __e11InboxResend(); window.__e11ClientsResend && __e11ClientsResend()"); self.updateCorner() }
-      if last { self.pageJS("window.__e11Task && window.__e11Task({ev:'closed'})") }
+      if last { self.updateCorner() }
       else if let top = self.taskPages.last, top.tab == "comments" { self.taskShowComments(top, focus: "") }
     }
     let barTo: CGFloat = tabsHidden || formTucked ? 0 : 1
@@ -241,7 +239,6 @@ extension Main {
         clientsOn = "list"
         fromTabSelected()
         clientLeavingBySwipe(p, l)
-        pageJS("window.__e11Clients && window.__e11Clients({ev:'back'})")
         clientBackPageless()
       } else {
         UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
@@ -322,8 +319,7 @@ extension Main {
     p.onTab = { [weak self, weak p] t in guard let self = self, let p = p else { return }; if t == "comments" { self.taskShowComments(p, focus: "") } else { self.taskHideComments() } }
     p.onEvent = { [weak self] ev in
       // (step 9: Copy link always the app's own; New task from this without the website)
-      if let k = ev["ev"] as? String, k == "copy" || k == "from", self?.pagelessEvent(ev) == true { return }
-      self?.pageJS("window.__e11Task && window.__e11Task(\(jsonString(ev)))")
+      if let k = ev["ev"] as? String, k == "copy" || k == "from" { _ = self?.pagelessEvent(ev) }
     }
     p.onAct = { [weak self, weak p] body in guard let self = self, let p = p else { return }; self.taskAct(p, body) }
     p.onComplete = { [weak self, weak p] in
@@ -361,7 +357,7 @@ extension Main {
     }
     serverTask.fetch(p.taskId) { [weak self, weak p] m, off in
       guard let self = self, let p = p, self.taskPages.contains(where: { $0 === p }) else { return }
-      if off { self.taskPageToWeb(p); return }
+      if off { self.closeTaskPage(p, animated: false); return }   // (switched off on the server: nothing to show)
       guard let m = m else {
         if p.model == nil { p.toast("This task is no longer here"); DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self.closeTaskPage(p) } }
         return
@@ -376,13 +372,6 @@ extension Main {
       serverHome.photos(pp) { [weak p] got in p?.peopleChanged(got.filter { ($0.value["photo"] as? String)?.hasPrefix("data:") == true }) }
     }
   }
-  // the server switched the app's task page off: the website's own task page instead
-  private func taskPageToWeb(_ p: TaskPage) {
-    let id = p.taskId, tab = p.tab
-    closeTaskPage(p, animated: false)
-    pageJS("window.__e11Task && window.__e11Task(\(jsonString(["ev": "web", "id": id, "tab": tab])))")
-  }
-
   func taskAct(_ p: TaskPage, _ body: [String: Any]) {
     var b = body
     if (b["id"] as? String) != p.taskId { b["page"] = p.taskId }
@@ -976,7 +965,6 @@ extension Main {
         if c.ready && c.model == nil {
           self.clientFrom = nil; self.clientsOn = "list"
           self.clientPageOut()
-          self.pageJS("window.__e11Clients && window.__e11Clients({ev:'list'})")
           DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.clientsListIfMade?.toast(["t": "That client has been removed"]) }
         }
       }

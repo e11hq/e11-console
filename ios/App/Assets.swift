@@ -152,7 +152,6 @@ final class AssetsCtl {
     get { (meSaid?.isEmpty == false ? meSaid : nil) ?? AppData.shared.me }
     set { meSaid = newValue }
   }
-  private var pending: [String: ([String: Any]) -> Void] = [:]
   private(set) var leaving = false
   private var upBusy = false
 
@@ -199,36 +198,21 @@ final class AssetsCtl {
       take(m)
       // (no website — step 9, offline: the copy's is the answer; and the logo catch-up asked of the server, once a run,
       //  as the page's autoLogosAll did when Client Assets opened)
-      if !main.pageReady {
-        if !AssetsCtl.logosAsked { AssetsCtl.logosAsked = true; main.serverTask.request("/api/app/act", body: ["ev": "caLogosAll", "op": UUID().uuidString]) { _ in } }
-        done(["ok": true]); return
-      }
+      if !AssetsCtl.logosAsked { AssetsCtl.logosAsked = true; main.serverTask.request("/api/app/act", body: ["ev": "caLogosAll", "op": UUID().uuidString]) { _ in } }
+      done(["ok": true]); return
     }
     // (no website and nothing in the copy for it — a client whose Client Assets aren't there for this person: said, and
     //  its empty screen taken away, not left on Loading… — the walk-through, 2026-11-05)
-    if !main.pageReady, (ev["ev"] as? String) == "want" {
+    if (ev["ev"] as? String) == "want" {
       done(["ok": false, "error": "These files aren’t here"])
       if let c = ev["client"] as? String, models[c] == nil, top != nil, stack.last?.client == c { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.pop() } }
       return
     }
-    // (no website, and the server didn't take it: said at once — not 20 s of nothing)
-    if !main.pageReady { done(["ok": false, "error": "Couldn’t reach the server — try again"]); return }
-    let rid = UUID().uuidString
-    var e = ev; e["rid"] = rid
-    pending[rid] = done
-    main.pageJS("window.__e11Assets && window.__e11Assets(\(jsonString(e)))")
-    DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
-      guard let self = self, let d = self.pending.removeValue(forKey: rid) else { return }
-      d(["ok": false, "error": "No answer — try again"])
-    }
+    // (the server didn't take it: said at once)
+    done(["ok": false, "error": "Couldn’t reach the server — try again"])
   }
-  // from the page: an answer, or show / hide (opened on the page itself)
+  // show / hide, and what's shown changed (opened by the app's own screens)
   func command(_ a: [String: Any]) {
-    if let rid = a["rid"] as? String {
-      if let m = a["model"] as? [String: Any] { take(m) }
-      pending.removeValue(forKey: rid)?(a)
-      return
-    }
     // (live: what's shown changed on the page — someone else's change, another device's)
     if (a["push"] as? Bool) == true {
       if let m = a["model"] as? [String: Any] { take(m); return }
@@ -360,7 +344,7 @@ final class AssetsCtl {
   private func watchCopyLive() {
     guard copyWatch == nil else { return }
     copyWatch = AppData.shared.listen { [weak self] in
-      guard let self = self, !self.stack.isEmpty, !self.main.pageReady else { return }
+      guard let self = self, !self.stack.isEmpty else { return }
       var whose: [Any] = []
       if self.stack.contains(where: { $0.kind == "all" }) { whose.append(NSNull()) }
       for c in Set(self.stack.compactMap { $0.client }) { whose.append(c) }
@@ -427,13 +411,11 @@ final class AssetsCtl {
       if let i = self.stack.firstIndex(where: { $0.h === s.h }) { self.stack.remove(at: i) } else { self.leaving = false; return }
       self.leaving = false
       if self.stack.isEmpty { self.base = nil }
-      if self.stack.isEmpty && self.fromPage {
-        self.fromPage = false; self.main.pageJS("window.__e11Assets && window.__e11Assets({ev:'back'})")
-      }
+      if self.stack.isEmpty { self.fromPage = false }
       else if let t = self.stack.last { self.refreshScreen(t) }
       // (without the website — step 9: emptied on the Me tab, Me again — however it was opened; the walk-through found a
       //  black screen after Client Assets opened from Me went back to nothing, 2026-11-05)
-      if self.stack.isEmpty, !self.main.pageReady, self.main.selectedTabKey == "me" { self.main.meCtl.reveal() }
+      if self.stack.isEmpty, self.main.selectedTabKey == "me" { self.main.meCtl.reveal() }
       self.main.edgePanOn(); self.main.updateCorner()
     }
     if animated {
@@ -448,7 +430,7 @@ final class AssetsCtl {
     stack.remove(at: i)
     if stack.isEmpty {
       base = nil; appleNav = nil
-      if fromPage { fromPage = false; main.pageJS("window.__e11Assets && window.__e11Assets({ev:'back'})") }
+      fromPage = false
     } else if let t = stack.last { refreshScreen(t) }
     main.updateCorner()
   }
@@ -775,7 +757,7 @@ final class AssetsCtl {
   private func event(_ h: HomeView, _ ev: [String: Any]) {
     switch ev["ev"] as? String ?? "" {
     case "back": if h === top { pop() }
-    case "me": close(animated: false); main.pageJS("window.__e11Assets && window.__e11Assets({ev:'me'})"); if !main.pageReady { main.selectTab("me") }
+    case "me": close(animated: false); main.selectTab("me")
     case "find":
       // 🔍 on All Client Assets: every client's files, found here
       let q = (ev["q"] as? String ?? "").trimmingCharacters(in: .whitespaces)

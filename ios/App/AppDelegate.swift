@@ -127,7 +127,6 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   let tabsMark: UIView = { let v = UIView(); v.isHidden = true; v.isUserInteractionEnabled = false; return v }()
   var tabKeys: [String] = []
   var tabsHidden = true { didSet { if oldValue != tabsHidden { AppleTabs.shared?.mirrorShown() } } }
-  var pageReady = false
   var pendingPush: [String: Any]?
   var pendingToken: String?
   var lastToken: String?
@@ -192,25 +191,11 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     web.scrollView.contentInsetAdjustmentBehavior = .never
     web.scrollView.isScrollEnabled = false
     web.scrollView.bounces = false
-    offsetWatch = web.scrollView.observe(\.contentOffset, options: [.new]) { [weak self] sv, _ in
-      guard let self = self, self.pageReady, sv.contentOffset != .zero, !self.resetting else { return }
-      self.resetting = true; sv.setContentOffset(.zero, animated: false); self.resetting = false
-    }
-    // like Messages: drag your finger down onto the top of the keyboard and it goes away. (Only attached while the
-    // keyboard is up: on the web view all the time it got in the way of ordinary taps, which then lagged.)
-    pull.cancelsTouchesInView = false
-    pull.delaysTouchesBegan = false
-    pull.delaysTouchesEnded = false
-    pull.delegate = self
-    let nc = NotificationCenter.default
-    nc.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] n in self?.keyboardMoves(n) }
-    nc.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] n in self?.keyboardMoves(n, gone: true) }
     tabBar.isHidden = true
     view.addSubview(tabsMark)
     view.addSubview(reviewLink)
     showSplash()
     quickStart()
-    if !Main.noPage { loadHome() }
     // (Part B step 8: who's signed in, asked by the app itself — Boot.swift; the self-test's sign-in is set as the page
     //  loads: asked once it has)
     if SELFTEST.isEmpty { bootCheck() } else { walkTest() }   // (the walk-through: WalkTest.swift)
@@ -219,7 +204,6 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
      phone, the app opens on its own Home and tab bar at once, drawn from that copy; the website loads quietly behind,
      only for the screens that are still its own. Taps meant for it before it's there wait, and go once it is. ---------- */
   var quickBooted = false
-  var earlyJS: [String] = []
   func saveQuick(_ add: [String: Any]) {
     var q = (defaults.data(forKey: "e11_quick").flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }) ?? [:]
     if (q["server"] as? String) != serverURL() { q = ["server": serverURL()] }
@@ -268,8 +252,6 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     let age = CACurrentMediaTime() - s.t0
     DispatchQueue.main.asyncAfter(deadline: .now() + max(0, icon - age)) { [weak self] in if self?.splash === s { self?.splashGone() } }
   }
-  // for the website behind: now, or as soon as it's there (a quick start's early taps)
-  func pageJSSoon(_ js: String) { if pageReady || !quickBooted { pageJS(js) } else { if Main.noPage { Main.noteLost(js) }; earlyJS.append(js) } }
   // the phone's light / dark, as the app last heard it (Apple's trait change — followPhoneLook): nothing is forced with
   // it; only what Apple can't switch by itself reads it (the tab bar's drawn icons, the task page's pictures)
   var appStyle: UIUserInterfaceStyle = LAST_LIGHT ? .light : .dark
@@ -300,7 +282,6 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     defaults.set(light ? "light" : "dark", forKey: "e11_look")
     taskPages.forEach { $0.light = light }
     tabBadgeKey = [:]; redrawTabs()
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.syncBackground() }
   }
   // (iPhone's own navigation: a sheet from the app goes on whatever page is on top — the app itself may be under a page)
   // (Home's own screen asks the app for the status bar too — AppleHome.swift)
@@ -329,7 +310,6 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     // (with the website behind — the self-test: the page never took it over — it couldn't load, or it's the sign-in page:
     //  it goes, whatever is under it shows. Without it the app's own start always answers: signed in, signed out, or
     //  can't reach)
-    if !Main.noPage { DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in if self?.splashHeard == false { self?.splashGone() } } }
     if !SELFTEST.isEmpty { DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak self] in
       guard let self = self, let s = self.splash else { return }
       self.selfResult["splashGeo"] = s.geo(); self.writeSelf("splash") } }
@@ -381,7 +361,6 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     var seen = h
     if #available(iOS 26, *) { seen = min(h, bottomSafe + 46) }
     let cover = tabBar.isHidden ? 0 : Int(seen.rounded())
-    if cover != tabCover { tabCover = cover; pageJS("document.documentElement.style.setProperty('--ios-tabs-h','\(cover)px')") }
     lockView?.frame = b
     reviewLink.frame = CGRect(x: 0, y: b.height - bottomSafe - 44, width: b.width, height: 44)
     if AppleTabs.shared == nil {
@@ -416,100 +395,17 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     let name = jobs.count == 1 ? jobs[0].name : "\(jobs.count) files"
     upHud?.show(title: "Uploading \(name)", detail: total > 0 ? "\(mb(sent)) of \(mb(total))" : "Starting…", progress: total > 0 ? Float(sent) / Float(total) : -1)
   }
-  func loadHome(_ path: String = "/") {
-    guard let u = URL(string: serverURL() + path) else { return }
+  // the web view's only page: the sign-in — Cloudflare's (our address answered with it), or App Review's own sign-in page
+  // (straight to it: our "/" answers it too, but there a sign-in can't be told from coming back signed in)
+  func loadHome(_ path: String? = nil) {
+    let to = path ?? (defaults.string(forKey: "e11_server") == "review" ? "/review/sign-in" : "/")
+    guard let u = URL(string: serverURL() + to) else { return }
     if !SELFTEST.isEmpty, let host = u.host, let email = procEnv["E11_SELFTEST_EMAIL"],
        let c = HTTPCookie(properties: [.domain: host, .path: "/", .name: "e11_dev_email", .value: email]) {
       web.configuration.websiteDataStore.httpCookieStore.setCookie(c) { self.web.load(URLRequest(url: u)) }
     } else { web.load(URLRequest(url: u)) }
   }
   var tabCover = -1
-  var keyboardUp = false
-  // the app's own background (seen around the keyboard's rounded corners, and while the page resizes) takes the
-  // page's colour, light or dark — not a black band
-  func syncBackground() {
-    guard pageReady else { return }
-    web.evaluateJavaScript("getComputedStyle(document.body).backgroundColor") { v, _ in
-      guard let str = v as? String else { return }
-      let n = str.components(separatedBy: CharacterSet(charactersIn: "0123456789.").inverted).filter { !$0.isEmpty }.compactMap { Double($0) }
-      guard n.count >= 3, n.count < 4 || n[3] > 0.5 else { return }
-      let c = UIColor(red: n[0] / 255, green: n[1] / 255, blue: n[2] / 255, alpha: 1)
-      self.view.backgroundColor = c; self.web.backgroundColor = c; self.web.scrollView.backgroundColor = c
-    }
-  }
-  var keyboardCover: CGFloat = 0
-  lazy var pull = UIPanGestureRecognizer(target: self, action: #selector(pullKeyboard(_:)))
-  @objc func pullKeyboard(_ g: UIPanGestureRecognizer) {
-    guard keyboardUp, keyboardCover > 0, g.state == .changed, g.velocity(in: view).y > 0 else { return }
-    let edge = view.bounds.height - keyboardCover
-    if g.location(in: view).y >= edge - 8 {
-      pageJS("document.activeElement && document.activeElement.blur && document.activeElement.blur()")
-      view.endEditing(true)
-    }
-  }
-  func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
-  func keyboardMoves(_ n: Notification, gone: Bool = false) {
-    if !gone { syncBackground() }
-    var cover: CGFloat = 0
-    if !gone, let end = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue {
-      let r = view.convert(end, from: nil)
-      cover = max(0, view.bounds.maxY - r.minY)
-    }
-    keyboardUp = cover > 0
-    if keyboardUp { if pull.view == nil { web.addGestureRecognizer(pull) } } else if pull.view != nil { web.removeGestureRecognizer(pull) }
-    if cover == keyboardCover { return }
-    keyboardCover = cover
-    let dur = (n.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
-    let curve = (n.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt) ?? 7
-    // (the comments screen's own web view also shifts itself for the keyboard — WebKit's automatic keyboard avoidance
-    //  on its scroll view, which ran after ours and left the list short of the latest comment: ours goes after it)
-    // (the keyboard coming up: to the latest comment, wherever the list was — Haris, 2026-10-31)
-    pageJS("window.__e11Kb && window.__e11Kb(\(Int(cover.rounded())), \(Int(dur * 1000)), 1)")
-    rideKeyboard(to: cover, duration: dur, curve: curve)
-    if web.scrollView.contentOffset != .zero { web.scrollView.setContentOffset(.zero, animated: false) }
-  }
-  // The comment box moves with the keyboard, not ahead of it: an invisible view is animated with the keyboard's own
-  // duration and curve (the same animation iOS gives the keyboard), and every screen frame the page is told where
-  // the keyboard's top is now (--ios-kb). A CSS curve of the page's own raced ahead and the box slammed down.
-  let kbProbe: UIView = { let v = UIView(); v.alpha = 0; v.isUserInteractionEnabled = false; return v }()
-  var kbLink: CADisplayLink?
-  var kbUntil: CFTimeInterval = 0
-  var kbTarget = 0
-  var kbSent = -1
-  func probeCover() -> CGFloat {
-    let y = kbProbe.layer.presentation()?.frame.minY ?? kbProbe.frame.minY
-    return max(0, view.bounds.maxY - y)
-  }
-  func rideKeyboard(to cover: CGFloat, duration: Double, curve: UInt) {
-    if kbProbe.superview == nil { view.insertSubview(kbProbe, at: 0); kbProbe.frame = CGRect(x: 0, y: view.bounds.maxY, width: 1, height: 1) }
-    let now = probeCover()                                   // (from where it is now, if the last move hasn't finished)
-    kbProbe.layer.removeAllAnimations()
-    kbProbe.frame = CGRect(x: 0, y: view.bounds.maxY - now, width: 1, height: 1)
-    kbTarget = Int(cover.rounded())
-    guard duration > 0.01 else { kbProbe.frame.origin.y = view.bounds.maxY - cover; sendKb(kbTarget); return }
-    UIView.animate(withDuration: duration, delay: 0, options: [UIView.AnimationOptions(rawValue: curve << 16), .beginFromCurrentState]) {
-      self.kbProbe.frame.origin.y = self.view.bounds.maxY - cover
-    }
-    kbUntil = CACurrentMediaTime() + duration + 0.12
-    if kbLink == nil {
-      let l = CADisplayLink(target: self, selector: #selector(kbTick))
-      if #available(iOS 15.0, *) { l.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120) }
-      l.add(to: .main, forMode: .common)
-      kbLink = l
-    }
-  }
-  @objc func kbTick() {
-    if CACurrentMediaTime() >= kbUntil { kbLink?.invalidate(); kbLink = nil; sendKb(kbTarget); return }
-    sendKb(Int(probeCover().rounded()))
-  }
-  func sendKb(_ px: Int) {
-    if px == kbSent { return }
-    kbSent = px
-    pageJS("window.__e11KbStep ? window.__e11KbStep(\(px)) : (window.__e11Kb && window.__e11Kb(\(px), 0))")
-  }
-  var offsetWatch: NSKeyValueObservation?
-  var resetting = false
-  func pageJS(_ js: String) { if Main.noPage && !pageReady { Main.noteLost(js); return }; web?.evaluateJavaScript(js, completionHandler: nil) }
   var serverHost: String { URL(string: serverURL())?.host ?? "" }
 
   /* ---------- navigation: our server and its sign-in stay here; other sites open in Safari ---------- */
@@ -554,16 +450,13 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   }
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
     let onServer = webView.url?.host == serverHost
-    pageReady = onServer
     reviewLink.isHidden = !(webView.url?.host ?? "").hasSuffix(".cloudflareaccess.com")
     webView.hideKeyboardBar()
-    if onServer { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.syncBackground() } }
     if onServer { shareSignIn(); bootPageArrived() }
-    if onServer, !earlyJS.isEmpty { let js = earlyJS; earlyJS = []; DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { js.forEach { self.pageJS($0) } } }
-    if onServer { tabCover = -1; view.setNeedsLayout(); flushPending(); if !SELFTEST.isEmpty && !started { started = true; DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.selfTest() } } }
+    if onServer { tabCover = -1; view.setNeedsLayout(); flushPending() }
     // (the sign-in page: no tabs, no startup screen — not the "can't reach" page under the app's own screens offline: the
     //  tab bar went, Haris 2026-11-05)
-    else if !((quickBooted || Main.noPage) && webView.url?.scheme == "about") { tabBar.isHidden = true; tabsHidden = true; view.setNeedsLayout(); splashGone(fast: true) }
+    else if webView.url?.scheme != "about" { tabBar.isHidden = true; tabsHidden = true; view.setNeedsLayout(); splashGone(fast: true) }
   }
   func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { failed(error) }
   func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { failed(error) }
@@ -579,13 +472,12 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     else if !quickBooted { splashGone(fast: true) }
     if retrying { return }
     retrying = true
-    pageReady = false
     // (a quick start — the app's own screens from its copy: its tab bar and startup screen stay as they are; only the
     //  website behind tries again. They were taken away offline — the startup screen cut off mid-way, the tab bar gone
     //  after a few seconds: Haris 2026-11-05)
     if !quickBooted { tabBar.isHidden = true; tabsHidden = true; view.setNeedsLayout() }
-    // (the app's own screens up — a quick start: nothing to show behind them, only the trying again)
-    if quickBooted { DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.retrying = false; self.loadHome() }; return }
+    // (the app's own screens up — a quick start: no website behind them to try again; they're the app's, from its copy)
+    if quickBooted { retrying = false; return }
     let html = "<html><head><meta name=viewport content='width=device-width'></head><body style=\"background:#0c0d0f;color:#bbb;font:16px -apple-system;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center\"><div><b style=\"color:#fff\">Can’t reach E11 Console</b><br><br>Check your internet connection.<br>Trying again…</div></body></html>"
     web.loadHTMLString(html, baseURL: nil)
     DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.retrying = false; self.loadHome() }
@@ -609,6 +501,8 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     topMost().present(a, animated: true)
   }
 
+  // a line of the app's own toast, on the task page open or the screen on show (the website's toast is gone)
+  func appToast(_ t: String) { if let p = taskPages.last { p.toast(t) } else { shownScreen?.toast(["t": t]) } }
   /* ---------- downloads: saved, then the share sheet (Save to Files, Save Image, AirDrop…) ---------- */
   func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) { adopt(download) }
   func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) { adopt(download) }
@@ -616,9 +510,9 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   //  the phone locked: Haris 2026-11-10 — the same bar with Cancel, then the Save / Share sheet)
   func adopt(_ d: WKDownload) {
     d.cancel { _ in }
-    guard let req = d.originalRequest, let url = req.url, ["http", "https"].contains(url.scheme ?? "") else { pageJS("window.toast && toast('Download failed — try again')"); return }
+    guard let req = d.originalRequest, let url = req.url, ["http", "https"].contains(url.scheme ?? "") else { appToast("Download failed — try again"); return }
     let from = url.absoluteString
-    if dl.values.contains(where: { $0.from == from }) { pageJS("window.toast && toast('Already downloading')"); return }
+    if dl.values.contains(where: { $0.from == from }) { appToast("Already downloading"); return }
     PreviewLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) { [weak self] in
       guard let self = self else { return }
       var r = req
@@ -631,7 +525,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
         guard let self = self else { return }
         let was = self.dl.removeValue(forKey: me)
         self.paintHUD()
-        guard let file = file else { if was?.cancelled == false { self.pageJS("window.toast && toast('Download failed — try again')") }; return }
+        guard let file = file else { if was?.cancelled == false { self.appToast("Download failed — try again") }; return }
         let sheet = UIActivityViewController(activityItems: [file], applicationActivities: nil)
         sheet.popoverPresentationController?.sourceView = self.view
         self.topMost().present(sheet, animated: true)
@@ -744,7 +638,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   private func ownTabs(_ moved: String?) -> [String: Any]? {
     guard AppData.shared.tabsOn, AppData.shared.ready, let m = AppData.shared.screen("tabs").model,
           var list = m["tabs"] as? [[String: Any]], !list.isEmpty else { return nil }
-    if !pageReady { Main.isAdmin = (m["admin"] as? Bool) == true }   // (Admins turn links off and on — without the website, from the copy)
+    Main.isAdmin = (m["admin"] as? Bool) == true   // (Admins turn links off and on — from the copy)
     let page = (pageTabs?["tabs"] as? [[String: Any]]) ?? (lastTabs?["tabs"] as? [[String: Any]]) ?? []
     let keys = list.map { $0["v"] as? String ?? "" }
     let cur = selectedTabKey
@@ -759,7 +653,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
         // (your photo's address from the app's own copy — without the website nobody said it, and your photo went from
         //  the top corner and the Me tab: Haris 2026-11-06)
         if list[i]["photoUrl"] == nil, let ph = m["photo"] as? String, !ph.isEmpty { list[i]["photoUrl"] = serverURL().trimmingCharacters(in: CharacterSet(charactersIn: "/")) + ph }
-        if !pageReady, m.keys.contains("photo"), !(m["photo"] is String) { list[i]["photoNone"] = true }
+        if m.keys.contains("photo"), !(m["photo"] is String) { list[i]["photoNone"] = true }
       }
       list[i]["on"] = v == on
     }
@@ -969,21 +863,17 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
       clientsCommand(["show": false])
     }
     // (offline — the website not there: the app's own lists from its copy; the page told the tab once it's there)
-    if !again, offlineTab(tabKeys[item.tag]) {
-      earlyJS.removeAll { $0.hasPrefix("window.__e11Tab ") }
-      pageJSSoon("window.__e11Tab && window.__e11Tab(\(jsonString([tabKeys[item.tag]]).dropFirst().dropLast()))")
-      return
-    }
+    if !again, offlineTab(tabKeys[item.tag]) { return }
     // (Me, the app's own: again from a page under it — back to Me with the back slide; on Me — to the top)
     // (Content plans, a Social's own tab, is the same app's own pages — Haris 2026-11-04)
     // (the tab the app's own Me pages are showing now — Me, Content plans, an Office Admin's Overview / Team; another of
     //  them: hidden, and the page sends that one's first page — Me showed Overview, Haris 2026-11-04)
     let meLike = tabKeys[item.tag] == meCtl.tab
     // (Me again from Client Assets opened over it, without the website: back to Me — Haris 2026-11-06: nothing happened)
-    if again, !pageReady, assetsCtl.isOpen, selectedTabKey == "me" { assetsBackToMe(); return }
+    if again, assetsCtl.isOpen, selectedTabKey == "me" { assetsBackToMe(); return }
     if again, meLike, meCtl.isOpen { if meCtl.depth > 1 { meCtl.backToRoot() } else { meCtl.top?.scrollToTop() }; return }
     // (another tab: the app's own Me goes at once for the app's own tabs; back on Me, it's there at once as it was)
-    if meLike { if !meCtl.screens.isEmpty, pageReady { meCtl.reveal() } }
+    if meLike { }
     // (another of the app's own Me-made tabs — an Office Admin's Overview / Claims / Expenses / Team / Me, Social's Plans:
     //  the screen on now stays until the page sends the other one's first page, so the website's Home ("E11 Day") never
     //  shows in between — Haris 2026-11-04; at most 1.5 s)
@@ -998,14 +888,6 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     // (the page's own tabs — Me, Plans, Reviews, Client Assets: from a deeper page, back to the tab's first with the back
     //  slide; Haris 2026-11-03)
     let key = tabKeys[item.tag]
-    if again, !["today", "mytasks", "inbox", "projects"].contains(key), pageReady {
-      web.evaluateJavaScript("window.__e11TabDeep ? window.__e11TabDeep(\(jsonString([key]).dropFirst().dropLast())) : false") { [weak self] r, _ in
-        guard let self = self else { return }
-        if (r as? Bool) == true || self.assetsCtl.isOpen { self.tabBackSlide(key) }
-        else { self.pageJSSoon("window.__e11Tab && window.__e11Tab(\(jsonString([key]).dropFirst().dropLast()))") }
-      }
-      return
-    }
     // (23+: Home is the app's own — another tab: it goes at once; Home again while on it: back to the top)
     // (the page's own Home must never show in between — Haris, 2026-10-31: leaving Home, it stays until the page has
     //  drawn the other tab and says so (show: false), at most 1.2 s; coming back, it's there at once with what it had,
@@ -1016,10 +898,6 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
         else if homeHadModel { h.isHidden = false }
       } else if !h.isHidden, !APPLE_HOME {   // (Home its own Apple screen in its own tab: kept as it is — hidden, it came back blank, its big title cut: Haris 2026-11-08)
         h.endEditing(true)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-          guard let self = self, self.pageReady, let sel = self.tabBar.selectedItem, sel.tag < self.tabKeys.count, self.tabKeys[sel.tag] != "today" else { return }
-          self.homeIfMade?.isHidden = true
-        }
       }
     }
     // (the Inbox, 28+: the same)
@@ -1047,9 +925,6 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
         }
       }
     }
-    // (a quick start, the website not there yet: only the last tab asked for goes, once it is)
-    if !pageReady && quickBooted { earlyJS.removeAll { $0.hasPrefix("window.__e11Tab ") } }
-    pageJSSoon("window.__e11Tab && window.__e11Tab(\(jsonString([tabKeys[item.tag]]).dropFirst().dropLast()))")
   }
   /* ---------- Home (23+): the app's own, under the tab bar; the page says what's on it (NativeHome in phone.js) ---------- */
   var homeIfMade: HomeView?
@@ -1080,11 +955,10 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
       // (a task opening: Home only goes if the website's own task page is the one coming — the app's own slides over it;
       //  hiding at once and showing again as the app's page came made Home flash blank, Haris 2026-11-02)
       // (a quick start, the website not there yet: the app's own task page at once)
-      if let self = self, !self.pageReady, self.quickBooted, (ev["ev"] as? String) == "open", let id = ev["id"] as? String, !id.isEmpty, AppData.shared.ready {
+      if let self = self, self.quickBooted, (ev["ev"] as? String) == "open", let id = ev["id"] as? String, !id.isEmpty, AppData.shared.ready {
         self.openTaskPage(id, tab: "details", focus: ""); return
       }
       if (ev["ev"] as? String) == "open" { DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in if self?.taskPages.isEmpty == true { self?.homeIfMade?.isHidden = true } } }
-      self?.pageJSSoon("window.__e11Home && window.__e11Home(\(jsonString(ev)))")
     }
     h.present = { [weak self] vc in self?.topMost().present(vc, animated: true) }
     h.onShown = { [weak self] in if let m = self?.homeMissed { self?.drawServerHome(m) } }
@@ -1263,7 +1137,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     // switched off on the server (or no Home for this person): the page's Home again, drawn at once
     // (My Tasks: the page's own list, under it)
     s.onOff = { [weak self] in
-      if kind == "home" { self?.pageJS("window.__e11HomeResend && window.__e11HomeResend()") }
+      if kind == "home" { }
       else if kind == "inbox" { self?.inboxIfMade?.isHidden = true; self?.inboxOwn(true) }
       else if kind == "clients" { self?.clientsListIfMade?.isHidden = true; self?.clientPageIfMade?.isHidden = true; self?.clientsOwn(true) }
       else { self?.myTasksIfMade?.isHidden = true; self?.myTasksOwn(true) }
@@ -1372,7 +1246,6 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
       if self.myTasksFilterEvent(ev) { return }   // (Part B step 6: the filters are the app's own)
       if self.pagelessEvent(ev) { return }   // (step 9)
       if (ev["ev"] as? String) == "open" { DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in if self?.taskPages.isEmpty == true { self?.myTasksIfMade?.isHidden = true } } }
-      self.pageJS("window.__e11MyTasks && window.__e11MyTasks(\(jsonString(ev)))")
     }
     h.present = { [weak self] vc in self?.topMost().present(vc, animated: true) }
     myTasksIfMade = h
@@ -1404,7 +1277,6 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   func myTasksOwn(_ v: Bool) {
     guard v != myTasksPageOwn else { return }
     myTasksPageOwn = v
-    pageJS("window.__e11MyTasksOwn && window.__e11MyTasksOwn(\(v))")
   }
   var myTasksWanted = false
   var myTasksPageSignal: [String: Any]?   // (the page's last "My Tasks shows" — who, light / dark)
@@ -1464,7 +1336,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
       case "read", "unread":
         if s.on, s.me == self.inboxPageMe, let id = ev["id"] as? String { s.act(ev["ev"] as! String, id) }
       case "readAll":
-        if s.on, s.me == self.inboxPageMe || !self.pageReady { s.act("readAll", "") } else { self.pageJS("window.__e11Inbox && window.__e11Inbox({ev:'readAll'})") }
+        if s.on { s.act("readAll", "") }
       case "unreadList":
         let ids = (ev["ids"] as? [String]) ?? []
         if s.on, s.me == self.inboxPageMe, !ids.isEmpty { s.act("unreadList", ids.joined(separator: ",")) }
@@ -1476,12 +1348,9 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
       // (the "Created … · Open" message's Open: the new task — on the Inbox it went to the website, Haris 2026-11-06)
       case "toast" where self.homeToastRun != nil:
         let run = self.homeToastRun; self.homeToastRun = nil; run?()
-      case "me" where !self.pageReady:
+      case "me":
         self.selectTab("me")
-      default:
-        // (not hidden here: the page hides it the moment what's tapped opens a page — a round-up or a sheet opens over
-        //  the Inbox, which stays; hiding it first flashed the page behind — Haris, 2026-11-01)
-        self.pageJS("window.__e11Inbox && window.__e11Inbox(\(jsonString(ev)))")
+      default: break
       }
     }
     h.present = { [weak self] vc in self?.topMost().present(vc, animated: true) }
@@ -1509,7 +1378,6 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   func inboxOwn(_ v: Bool) {
     guard v != inboxPageOwn else { return }
     inboxPageOwn = v
-    pageJS("window.__e11InboxOwn && window.__e11InboxOwn(\(v))")
   }
   func inboxCommand(_ a: [String: Any]) {
     defer { updateCorner() }
@@ -1555,7 +1423,6 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
       r.transform = CGAffineTransform(translationX: -W * 0.3, y: 0)
       UIView.animate(withDuration: 0.36, delay: 0.08, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { r.transform = .identity }
     }
-    pageJS("window.__e11Tab && window.__e11Tab(\(jsonString([key]).dropFirst().dropLast()))")
     web.transform = CGAffineTransform(translationX: -W * 0.3, y: 0)
     updateCorner()
     // (a moment for the page to draw its first screen, then the slide)
@@ -1607,7 +1474,6 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     UIView.animate(withDuration: 0.36, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
       snap?.transform = CGAffineTransform(translationX: W, y: 0); l.transform = .identity
     } completion: { _ in snap?.removeFromSuperview() }
-    if wasPage { pageJS("window.__e11Clients && window.__e11Clients({ev:'list'})") }
     return true
   }
   lazy var assetsCtl = AssetsCtl(self)   // (Client Assets, the app's own — Assets.swift, shell 32)
@@ -1639,7 +1505,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
       if !page, (ev["ev"] as? String) == "back", self.clientsListIfMade?.backFromMe == true { self.clientsBackToMe(); return }
       if page, (ev["ev"] as? String) == "back" { self.clientPageOut(); self.clientBackPageless() }
       // (Show completed on a client's page — without the website it went nowhere)
-      if page, !self.pageReady, (ev["ev"] as? String) == "showDone", let id = self.clientsShownId, let me = AppData.shared.me {
+      if page, (ev["ev"] as? String) == "showDone", let id = self.clientsShownId, let me = AppData.shared.me {
         let done = ServerHome.param(self.serverClients.query, "done") == "1"
         self.clientsCommand(["show": true, "view": "client", "id": id, "done": !done, "me": me, "from": self.clientFrom ?? ""]); return
       }
@@ -1653,9 +1519,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
         self.clientsOn = "client"
         self.serverClients.query = "view=client&id=\(id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")&done=0"
         self.serverClients.refresh()
-        if !self.pageReady { return }   // (no website to tell)
       }
-      self.pageJS("window.__e11Clients && window.__e11Clients(\(jsonString(ev)))")
     }
     h.present = { [weak self] vc in self?.topMost().present(vc, animated: true) }
     if page { clientPageIfMade = h } else { clientsListIfMade = h }
@@ -1740,14 +1604,12 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     clientPageIfMade?.isHidden = true
     guard clientsOn == "client" else { updateCorner(); return }
     clientsOn = "list"; serverClients.query = "view=list"; clientFrom = nil
-    if pageReady { pageJS("window.__e11Clients && window.__e11Clients({ev:'back'})") }
-    else if clientsWanted { DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in guard let self = self, self.clientsOn == "list" else { return }; self.serverClients.refresh() } }
+    if clientsWanted { DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in guard let self = self, self.clientsOn == "list" else { return }; self.serverClients.refresh() } }
     updateCorner()
   }
   // (without the website — step 9: what the page said after a client's page went back: the list, or the screen it came
   //  from with Clients no longer showing)
   func clientBackPageless() {
-    guard !pageReady else { return }
     clientsOn = "list"; serverClients.query = "view=list"
     if clientFrom != nil { clientsWanted = false }
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
@@ -1898,7 +1760,6 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   func clientsOwn(_ v: Bool) {
     guard v != clientsPageOwn else { return }
     clientsPageOwn = v
-    pageJS("window.__e11ClientsOwn && window.__e11ClientsOwn(\(v))")
   }
   func clientsCommand(_ a0: [String: Any]) {
     defer { updateCorner() }
@@ -1969,7 +1830,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   }
   func gotToken(_ hex: String) {
     lastToken = hex
-    if pageReady || Main.boot.state == .signedIn { sendToken(hex) } else { pendingToken = hex }
+    if Main.boot.state == .signedIn { sendToken(hex) } else { pendingToken = hex }
     let w = pushWaiters; pushWaiters = []
     w.forEach { $0(["ok": true, "state": "on"]) }
   }
@@ -1993,15 +1854,9 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     // (the Notification Service Extension confirms each notification with this address — ack: the server sends again
     //  the ones that didn't arrive)
     WidgetShare.write("apnsToken", Data(hex.utf8))
-    // (straight to the server — Part B step 7; the page only if that didn't work)
+    // (straight to the server — Part B step 7; not taken: sent again the next time the app comes back)
     let body: [String: Any] = ["token": hex, "env": APNS_ENV, "ack": true, "platform": "ios"]
-    serverTask.request("/api/apns/register", body: body) { [weak self] j in
-      if (j?["ok"] as? Bool) != true { self?.pageJS(self?.waitForApp("window.__e11ApnsToken && window.__e11ApnsToken(\(jsonString(body)))") ?? "") }
-    }
-  }
-  // run something once the web app has its data (it may still be starting when the app opens from a notification)
-  func waitForApp(_ js: String) -> String {
-    "(function f(n){ if ((typeof db !== 'undefined' && db) && typeof currentUserId !== 'undefined' && currentUserId) { \(js) } else if (n < 80) setTimeout(function(){ f(n+1) }, 250); })(0)"
+    serverTask.request("/api/apns/register", body: body) { _ in }
   }
   func openPush(_ userInfo: [AnyHashable: Any]) {
     let d = userInfo["e11"] as? [String: Any] ?? [:]
@@ -2010,14 +1865,13 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     //  tapped it did nothing)
     if let v = d["view"] as? String, AppData.shared.ready { if v == "calendar" { meCtl.openPlans(); return }; if tabKeys.contains(v) { selectTab(v); return } }
     else if d["view"] == nil, openNotifNative(d["nid"] as? String, hint: d) { return }
-    if pageReady { pageJS(waitForApp("window.__e11PushTap && window.__e11PushTap(\(jsonString(d)))")) } else { pendingPush = d; if Main.noPage, !(AppData.shared.ready && quickBooted) { pagelessFlush(1) } }
+    pendingPush = d; if !(AppData.shared.ready && quickBooted) { pagelessFlush(1) }
   }
   func flushPending() {
     if let t = pendingToken { pendingToken = nil; sendToken(t) }
     // (every time the page loads: this phone's address again — the page wasn't told it after a fresh start, so the site
     //  might not have it, and "Send test" couldn't say how this phone did)
     else { pushState { st in if st == "on" { UIApplication.shared.registerForRemoteNotifications() } } }
-    if let d = pendingPush { pendingPush = nil; pageJS(waitForApp("window.__e11PushTap && window.__e11PushTap(\(jsonString(d)))")) }
   }
 
   /* ---------- Face ID lock (optional, Me › Lock with Face ID) ---------- */
@@ -2034,15 +1888,9 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     else if lockView != nil, !authing { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.unlock() } }   // (asked again on coming back)
     launchLock = false
     awayAt = nil
-    if pageReady { serverHome.refresh() }   // (Home as it is now; anything still waiting goes)
-    if pageReady, myTasksWanted { serverMyTasksIfMade?.refresh() } else if pageReady { myTasksWaiting()?.send() }
-    if pageReady, inboxWanted { serverInboxIfMade?.refresh() } else if pageReady { inboxWaiting()?.send() }
-    if pageReady, clientsWanted { serverClientsIfMade?.refresh() }
-    if pageReady, assetsCtl.isOpen { assetsCtl.refresh() }
-    if pageReady, meCtl.isOpen { meCtl.refresh() }
-    if pageReady || Main.boot.state == .signedIn { pushState { st in if st == "on" { UIApplication.shared.registerForRemoteNotifications() } } }
+    if Main.boot.state == .signedIn { pushState { st in if st == "on" { UIApplication.shared.registerForRemoteNotifications() } } }
   }
-  func wentAway() { if !authing { awayAt = Date() }; if pageReady || Main.boot.state == .signedIn { shareSignIn() } }
+  func wentAway() { if !authing { awayAt = Date() }; if Main.boot.state == .signedIn { shareSignIn() } }
 
   /* ---------- the widget (widget/E11Widget.swift) ---------- */
   // it asks the server with this app's own sign-in: the server and its cookies go to the shared Keychain
@@ -2065,16 +1913,14 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     // a file link (files.e11hq.com/f/<token>, the test copy's files-test…): the page opens the file where it is
     if let r = u.path.range(of: "^/[fd]/[A-Za-z0-9]{6,16}", options: .regularExpression) {
       let tok = String(String(u.path[r]).dropFirst(3))
-      if fileLinkNative(tok) { return }
-      pageJSSoon("window.__e11FileLink && window.__e11FileLink(\(jsonString([tok]).dropFirst().dropLast()))")
+      _ = fileLinkNative(tok)
       return
     }
     // (… or the link page's "Open in E11 Console": e11console://f/<token>)
     if u.scheme?.hasPrefix("e11console") == true, u.host == "f" || u.host == "d",
        let r = u.path.range(of: "^/[A-Za-z0-9]{6,16}", options: .regularExpression) {
       let tok = String(String(u.path[r]).dropFirst())
-      if fileLinkNative(tok) { return }
-      pageJSSoon("window.__e11FileLink && window.__e11FileLink(\(jsonString([tok]).dropFirst().dropLast()))")
+      _ = fileLinkNative(tok)
       return
     }
     let q = URLComponents(url: u, resolvingAgainstBaseURL: false)?.queryItems ?? []
@@ -2171,7 +2017,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   }
   func probe(_ key: String, _ js: String, _ then: @escaping () -> Void) {
     // (no website in the app — Haris 2026-11-11: only the sign-in page is ever a page; elsewhere the step's own wait, nothing asked)
-    if Main.noPage && (web.url == nil || web.url?.scheme == "about" || web.url?.host == serverHost) {
+    if web.url == nil || web.url?.scheme == "about" || web.url?.host == serverHost {
       let ms = js.components(separatedBy: "setTimeout(r, ").dropFirst().compactMap { Int($0.prefix { $0.isNumber }) }.reduce(0, +)
       DispatchQueue.main.asyncAfter(deadline: .now() + Double(ms) / 1000) { self.selfResult[key] = [String: Any](); then() }
       return
@@ -2342,13 +2188,6 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
       frames.append(sample())
       if CACurrentMediaTime() > end { link?.invalidate(); link = nil; done(frames); SelfFrames.running.removeAll { $0 === self } }
     }
-  }
-  // the comments list as the page sees it: where it's scrolled, whether the latest comment shows, the room kept
-  func fakeKeyboard(_ h: CGFloat) {
-    let b = view.bounds
-    let end = view.convert(CGRect(x: 0, y: h > 0 ? b.height - h : b.height, width: b.width, height: max(h, 1)), to: nil)
-    NotificationCenter.default.post(name: UIResponder.keyboardWillChangeFrameNotification, object: nil, userInfo: [
-      UIResponder.keyboardFrameEndUserInfoKey: NSValue(cgRect: end), UIResponder.keyboardAnimationDurationUserInfoKey: 0.35, UIResponder.keyboardAnimationCurveUserInfoKey: UInt(7)])
   }
   func selfTest() {
     // (what to open, picked by the build machine from the server's own data: a task, one in CD review, a client's folder)
