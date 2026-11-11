@@ -8,7 +8,7 @@ import { execFile } from 'node:child_process';
 import { openStore } from './store.js';
 import { createAuth } from './auth.js';
 import { createAccess } from './access.js';
-import { createFiles, mimeOf, httpError } from './files.js';
+import { createFiles, mimeOf, httpError, IMAGES } from './files.js';
 import { createCfSync } from './cfsync.js';
 import { createWebPush, notifMessage } from './webpush.js';
 import { createDigest } from './digest.js';
@@ -373,9 +373,38 @@ export function createServer(cfg) {
   };
 
   // Tell every open app about changes (each person only receives what they're allowed to see)
+  // Files sent for review: their previews made the moment they're sent (Haris 2026-11-11 07:08: "You can do these 3") —
+  // the small and large pictures of a photo, a video's frame, a PDF's or a document's first page — so they're already
+  // there when the CD opens the request (and her phone fetches them before she does). The same pictures the app asks for
+  // (appme-money.js picOf: ?w=160 and ?w=1000, /api/fthumb), made once each, one after another, never in the way of a save.
+  const warmedReviews = new Set();
+  let warmChain = Promise.resolve();
+  function warmReviews(tasks) {
+    for (const t of tasks) {
+      if (!t || !t.needsCD) continue;
+      for (const r of t.reviews || []) {
+        if (r.state !== 'pending' || warmedReviews.has(r.id)) continue;
+        warmedReviews.add(r.id);
+        for (const id of r.files || []) {
+          const a = (t.attachments || []).find((x) => x.id === id);
+          if (!a || !a.path) continue;
+          const e = String(a.name || a.path).split('.').pop().toLowerCase();
+          if (!IMAGES.includes(e) && a.thumb) continue;   // (its picture made already)
+          warmChain = warmChain.then(async () => {
+            try {
+              if (IMAGES.includes(e)) { await files.makeSized(a.path, 160); await files.makeSized(a.path, 1000); }
+              else if (/^(pdf|mp4|mov|m4v|webm|avi|mkv|doc|docx|ppt|pptx|xls|xlsx)$/.test(e)) await files.commands.thumb({ id: a.id, path: a.path });
+            } catch (err) { console.error('Review preview:', err.message); }
+          });
+        }
+      }
+    }
+  }
+  if (cfg.warmReviews !== false) setTimeout(() => warmReviews(store.list('tasks')), 30_000).unref?.();
   function broadcast(rev, results, fromClient, byUser) {
     const changed = results.filter((r) => !r.refused && !r.unchanged);
     if (!changed.length) return;
+    if (cfg.warmReviews !== false) warmReviews(changed.filter((r) => r.kind === 'tasks' && !r.del).map((r) => store.get('tasks', String(r.id))));
     for (const s of streams) {
       const u = streamUser(s);
       // What someone can see changed (a freelancer's clients, which Client Assets a client uses, or a client switched
