@@ -116,6 +116,11 @@ Chat section of E11 Console (not on the website — Haris, 2026-11-05). (Plan: p
 E11 Talk is built on the **test server** first (talk-test.e11hq.com), with its own sign-in for now; **before the App
 Store, the shared sign-in goes into both apps and both are sent for review together** (Haris, 2026-11-06).
 
+**Remind Haris when E11 Talk work starts (Haris 2026-11-11 17:04):** "View as…" in E11 Console switched E11 Talk to that
+person (expected), and "Back to me" switched it back (expected) — but Haris's own chats and data were gone from the phone,
+and though his iCloud backup has them, Talk offered no way to restore them (restore is only offered on a new phone before
+anything syncs). Find the cause and a fix: View as must never cost the owner's own chats (keep them, or restore them by
+itself on coming back), and a backup must always be restorable from Settings → Chat backup.
 **Initials skip a middle "Al" (Haris, 2026-11-08):** a picture's initials use the first name and the name after a middle
 "Al" — Yousef Al Hwij → YH, Lana Al Ramli (or Al-Ramli) → LR. Done in E11 Console (website, Mac and iPhone — every
 `initials` in web/ and server/claimsheet.js). **Remember when other apps start or resume (E11 Talk's `Talk.initials`,
