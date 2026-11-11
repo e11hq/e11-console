@@ -38,6 +38,8 @@ export function createSignin({ db, now = () => Date.now(), ownerEmail = '', owne
       by_owner INTEGER NOT NULL DEFAULT 0, made_at INTEGER NOT NULL, expires INTEGER NOT NULL, tries INTEGER NOT NULL DEFAULT 0,
       used_at INTEGER, cancelled INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS signin_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS signin_devices (id TEXT PRIMARY KEY, email TEXT NOT NULL, hash TEXT NOT NULL, name TEXT NOT NULL DEFAULT '',
+      made_at INTEGER NOT NULL, used_at INTEGER, gone INTEGER NOT NULL DEFAULT 0);
   `);
   const q = {
     pwGet: db.prepare(`SELECT hash, set_at FROM signin_passwords WHERE email = ?`),
@@ -49,6 +51,10 @@ export function createSignin({ db, now = () => Date.now(), ownerEmail = '', owne
     codeUsed: db.prepare(`UPDATE signin_codes SET used_at = ? WHERE id = ?`),
     codeGet: db.prepare(`SELECT * FROM signin_codes WHERE id = ?`),
     codesFor: db.prepare(`SELECT id, email, made_by, by_owner, made_at, expires, used_at, cancelled FROM signin_codes ORDER BY made_at DESC LIMIT ?`),
+    devAdd: db.prepare(`INSERT INTO signin_devices(id, email, hash, name, made_at) VALUES (?, ?, ?, ?, ?)`),
+    devGet: db.prepare(`SELECT * FROM signin_devices WHERE id = ?`),
+    devUsed: db.prepare(`UPDATE signin_devices SET used_at = ? WHERE id = ?`),
+    devGone: db.prepare(`UPDATE signin_devices SET gone = 1 WHERE id = ?`),
     stGet: db.prepare(`SELECT value FROM signin_state WHERE key = ?`),
     stSet: db.prepare(`INSERT INTO signin_state(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`),
   };
@@ -160,6 +166,36 @@ export function createSignin({ db, now = () => Date.now(), ownerEmail = '', owne
   // (removed from the team: every sign-in stops — the Team page calls this)
   const endAll = (email) => st.set('revoked:' + norm(email), now());
 
+  // ---------- device keys: the iPhone / Mac app signed in for good (Haris 2026-11-11) ----------
+  // A key made for a signed-in app, kept in its Keychain; with Face ID / Touch ID it signs that device back in on our page
+  // without a password. Stops on its own when the password is set again with a code, or the person leaves the team (a key
+  // made before their sign-ins were ended counts no more); a device signed out drops its own.
+  const DEVICE_SEP = '.';
+  function deviceRow(key) {
+    const [id, secret] = String(key || '').split(DEVICE_SEP);
+    if (!id || !secret) return null;
+    const d = q.devGet.get(id);
+    if (!d || d.gone || !checkSecret(secret, d.hash) || !member(d.email) || d.made_at < revokedBefore(d.email)) return null;
+    return d;
+  }
+  // (the app, signed in as email: its key still good — kept; else a new one)
+  function deviceKey(email, key, name = '') {
+    const e = norm(email);
+    const d = deviceRow(key);
+    if (d && d.email === e) return { ok: true, key, kept: true };
+    if (!member(e)) return { ok: false, error: 'Not on the team' };
+    const id = rand(12), secret = rand(32);
+    q.devAdd.run(id, e, hashSecret(secret), String(name || '').slice(0, 80), now());
+    return { ok: true, key: id + DEVICE_SEP + secret };
+  }
+  function useDevice(key) {
+    const d = deviceRow(key);
+    if (!d) return { ok: false, error: 'This device needs to sign in again.' };
+    q.devUsed.run(now(), d.id);
+    return { ok: true, email: d.email };
+  }
+  function dropDevice(key) { const d = deviceRow(key); if (d) q.devGone.run(d.id); return { ok: true }; }
+
   // ---------- OpenID Connect: what Cloudflare asks of its sign-in provider ----------
   // the signing key: made once, kept on the NAS (keyFile), never in chat or GitHub
   let keyPem = null;
@@ -215,5 +251,5 @@ export function createSignin({ db, now = () => Date.now(), ownerEmail = '', owne
     return u ? { sub: a.email, email: a.email, email_verified: true, name: u.name || a.email } : null;
   }
 
-  return { start, signInPassword, makeCode, useCode, useOwnerCode, setPassword, revokedBefore, codesRecord, endAll, discovery, jwks, client, redirectOk, authCode, exchange, userinfo, readTicket };
+  return { start, signInPassword, makeCode, useCode, useOwnerCode, setPassword, revokedBefore, codesRecord, endAll, deviceKey, useDevice, dropDevice, discovery, jwks, client, redirectOk, authCode, exchange, userinfo, readTicket };
 }

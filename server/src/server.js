@@ -668,6 +668,8 @@ export function createServer(cfg) {
       if (what === 'code') return json(res, 200, signin.useCode(body.email, body.code));
       if (what === 'owner') return json(res, 200, signin.useOwnerCode(body.email, body.code));
       if (what === 'setpw') { const x = signin.setPassword(body.ticket, body.password); return x.ok ? finish(res, x.email, r) : json(res, 200, x); }
+      // (the app, after Face ID / Touch ID: its device key instead of the password)
+      if (what === 'device') { const x = signin.useDevice(body.key); return x.ok ? finish(res, x.email, r) : json(res, 200, x); }
     }
     return json(res, 404, { ok: false, error: 'Not found' });
   }
@@ -677,14 +679,15 @@ export function createServer(cfg) {
     const person = access.userByEmail(email), maker = access.userByEmail(madeBy);
     if (!person) return;
     const first = String(person.name || person.email).split(' ')[0];
-    const text = `${maker ? (maker.name || maker.email) : 'An admin'} made a sign-in code for ${person.name || person.email}, and ${first}’s password was changed`;
+    // (the Inbox puts who did it in front, as every notification: the words after it, and what came of it as the snippet)
+    const text = `made a sign-in code for ${person.name || person.email}`, snippet = `${first}’s password was changed`;
     const at = new Date().toISOString();
     const to = store.list('users').filter((x) => access.isAdm(x) && x.active !== false && !x.removed && x.id !== person.id && (!maker || x.id !== maker.id));
-    const notes = to.map((x) => ({ id: 'n-' + crypto.randomBytes(6).toString('hex'), to: x.id, from: maker ? maker.id : null, taskId: null, kind: 'signin', text, snippet: '', commentId: null, at, read: false }));
+    const notes = to.map((x) => ({ id: 'n-' + crypto.randomBytes(6).toString('hex'), to: x.id, from: maker ? maker.id : null, taskId: null, kind: 'signin', text, snippet, commentId: null, at, read: false }));
     if (!notes.length) return;
     const out = store.apply(notes.map((n) => ({ kind: 'notifications', id: n.id, data: n })), 'signin');
     broadcast(out.rev, out.results, null, null);
-    notes.forEach((n) => webPush.sendTo(n.to, { title: 'Sign-in code used', body: text, tag: 'signin-' + person.id, nid: n.id }).catch(() => {}));
+    notes.forEach((n) => webPush.sendTo(n.to, notifMessage(store, n)).catch(() => {}));
   }
 
   async function handle(req, res) {
@@ -835,6 +838,12 @@ export function createServer(cfg) {
       const name = t.name || t.email, by = real.name || real.email, newUser = !r.hasPassword;
       const until = new Date(r.expires).toLocaleString('en-GB', { timeZone: process.env.TZ || 'Asia/Dubai', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true });
       return json(res, 200, { ...r, name, by, newUser, until, message: signinMessage({ first: String(name).split(/\s+/)[0], email: r.email, code: r.code, until, by, newUser, site: isTestSite ? 'test.e11hq.com' : 'console.e11hq.com' }) });
+    }
+    // (the iPhone / Mac app, signed in: its device key — kept while still good, else a new one; dropped on sign-out)
+    if (signin && p === '/api/signin/device' && req.method === 'POST') {
+      const body = await readBody(req, 4096);
+      if (body.drop) return json(res, 200, signin.dropDevice(body.key));
+      return json(res, 200, signin.deviceKey((req.realUser || u).email, body.key, body.name));
     }
     if (signin && p === '/api/signin/codes') {
       const real = req.realUser || u, owner = isOwner(real);

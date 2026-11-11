@@ -497,6 +497,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
       return out({ to: 'birthday', title: `${name.split(' ')[0]}’s birthday`, person: { id: n.from, name, ini: initials(name), color: avColor(n.from || 'x'), photo: b && b.avatar ? '/__file/' + String(b.avatar).split('/').map(encodeURIComponent).join('/') : null } });
     }
     if (n.kind === 'daily') { mark(n); return out({ to: 'daily' }); }
+    if (n.kind === 'signin') { mark(n); return out(null); }   // (a sign-in code used: read — nothing to open)
     if (n.kind === 'sched-cancel') { mark(n); return out({ to: 'schedCancel', id: n.schedId || null }); }
     if (/^claim/.test(n.kind)) { O.myNotifs().forEach((x) => { if (x.claimId && x.claimId === n.claimId) mark(x); }); return out(O.claim(n)); }
     if (n.planId) {

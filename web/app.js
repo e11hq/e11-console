@@ -8502,6 +8502,7 @@ function notifMsg(n, t) {
     return `${who} set CD Status to: <span class="ib-chip" style="background:${c};color:${textOn(c)}">${esc(val)}</span>`;
   }
   if (n.kind === 'birthday') return `Today is <b>${esc(firstName(n.from))}</b>’s birthday`;
+  if (n.kind === 'signin') return `${who} ${esc(n.text)} <span class="ib-dim">· ${esc(n.snippet)}</span>`;
   if (n.kind === 'daily') return String(n.text || '').replace(/<(?!\/?b>)/g, '&lt;');   // (built escaped by the server)
   if (n.kind === 'sched-cancel') return `${String(n.text || '').replace(/<(?!\/?b>)/g, '&lt;')}${n.snippet ? ` <span class="ib-dim">· “${esc(n.snippet)}”</span>` : ''}`;   // (built escaped by the server)
   if (/^claim/.test(n.kind)) return `${who} ${n.text}${n.snippet ? ` <span class="ib-dim">· ${esc(n.snippet)}</span>` : ''}`;
@@ -8542,7 +8543,7 @@ function viewInbox() {
     const target = ibTarget(items), shown = target;
     const lead = ['comment', 'mention', 'review-amend', 'review-ok', 'review', 'claim', 'claim-ok', 'claim-paid', 'asset', 'plan', 'plan-ok', 'plan-changes', 'plan-tasks', 'plan-client', 'birthday'].includes(shown.kind) ? avatarHTML(shown.from, 22) : `<span class="ib-kic">${icon(NOTIF_ICON[shown.kind] || 'bell')}</span>`;
     return `<div class="ib-row ${unread ? 'unread' : ''}" data-action="open-notif" data-id="${target.id}">
-      <span class="ib-title">${n.kind === 'sched-cancel' ? `<span class="st-ic ib-coin">${icon('clock')}</span><span class="ib-tname">Scheduled ${n.text && /scheduled reply/.test(n.text) ? 'reply' : 'comment'}</span>` : n.kind === 'birthday' ? `<span class="st-ic ib-coin">${icon('gift')}</span><span class="ib-tname">Birthday</span>` : n.kind === 'daily' ? `<span class="st-ic ib-coin">${icon('sun')}</span><span class="ib-tname">Morning round-up</span>` : /^plan/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('cal')}</span><span class="ib-tname">${esc(planTitle(n))}</span>` : n.kind === 'asset' ? `<span class="st-ic ib-coin">${icon('assets')}</span><span class="ib-tname">${esc(assetTitle(n))}</span>` : `${t ? statusIcon(t) : /^claim/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('coin')}</span>` : `<span class="st-ic">${statusIconSVG('#87909e', 'todo', 0)}</span>`}<span class="ib-tname">${t ? esc(t.title || 'Untitled task') : /^claim/.test(n.kind) ? 'Expense claims' : '<i>Deleted task</i>'}</span>`}</span>
+      <span class="ib-title">${n.kind === 'sched-cancel' ? `<span class="st-ic ib-coin">${icon('clock')}</span><span class="ib-tname">Scheduled ${n.text && /scheduled reply/.test(n.text) ? 'reply' : 'comment'}</span>` : n.kind === 'signin' ? `<span class="st-ic ib-coin">${icon('lock')}</span><span class="ib-tname">Sign-in</span>`: n.kind === 'birthday' ? `<span class="st-ic ib-coin">${icon('gift')}</span><span class="ib-tname">Birthday</span>` : n.kind === 'daily' ? `<span class="st-ic ib-coin">${icon('sun')}</span><span class="ib-tname">Morning round-up</span>` : /^plan/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('cal')}</span><span class="ib-tname">${esc(planTitle(n))}</span>` : n.kind === 'asset' ? `<span class="st-ic ib-coin">${icon('assets')}</span><span class="ib-tname">${esc(assetTitle(n))}</span>` : `${t ? statusIcon(t) : /^claim/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('coin')}</span>` : `<span class="st-ic">${statusIconSVG('#87909e', 'todo', 0)}</span>`}<span class="ib-tname">${t ? esc(t.title || 'Untitled task') : /^claim/.test(n.kind) ? 'Expense claims' : '<i>Deleted task</i>'}</span>`}</span>
       <span class="ib-lead">${lead}</span>
       <span class="ib-msg"><span class="ib-mi">${notifMsg(shown, t)}</span></span>
       <span class="ib-count">${items.length > 1 ? `<i>${items.length}</i>` : ''}</span>
@@ -8614,6 +8615,7 @@ function openNotif(id) {
   if (!n) return;
   // a birthday: marked as read, and their greeting (Haris 2026-11-08)
   if (n.kind === 'birthday') { n.read = true; persist(); renderSidebar(); if (ui.view === 'inbox') renderContent(); return OccasionHello.theirs(n.from); }
+  if (n.kind === 'signin') { n.read = true; persist(); renderSidebar(); if (ui.view === 'inbox') renderContent(); return; }   // (a sign-in code used: read — nothing to open)
   // the morning round-up: its card, with today's latest numbers
   if (n.kind === 'daily') { n.read = true; persist(); renderSidebar(); if (ui.view === 'inbox') renderContent(); return Daily.show(); }
   // a scheduled comment that wasn't sent: back into a draft, or (task deleted) the Trash or its text and files

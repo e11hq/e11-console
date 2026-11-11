@@ -107,6 +107,8 @@ export function notifMessage(store, n) {
   // (kind and place travel with it, so a tap opens the right page even before the update reaches the app)
   if (n.kind === 'sched-cancel') return { title: `Scheduled ${/scheduled reply/.test(String(n.text || '')) ? 'reply' : 'comment'} not sent`, body: (strip(n.text) + (n.snippet ? ' — ' + strip(n.snippet) : '')).slice(0, 300), taskId: n.taskId || null, nid: n.id, tag: n.id, badge: unread, kind: 'sched-cancel' };
   if (n.kind === 'daily') return { title: n.title || 'Good morning', body: strip(n.text).slice(0, 300), taskId: null, nid: n.id, tag: n.id, badge: unread, kind: 'daily' };
+  // (our own sign-in: an admin's code used — who, for whom, and that the password changed)
+  if (n.kind === 'signin') return { title: 'Sign-in code used', body: `${from ? name : 'An admin'} ${strip(n.text)}, and ${strip(n.snippet)}`.slice(0, 300), taskId: null, nid: n.id, tag: n.id, badge: unread, kind: 'signin' };
   if (n.kind === 'birthday') return { title: 'Birthday today', body: strip(n.text).slice(0, 300), taskId: null, nid: n.id, tag: n.id, badge: unread, kind: 'birthday' };
   return { title: name, body: body.slice(0, 300), taskId: n.taskId || null, nid: n.id, tag: n.taskId || n.id, badge: unread, kind: n.kind || null, clientId: n.clientId || null, folderId: n.folderId || null, commentId: n.commentId || null, planId: n.planId || null };
 }

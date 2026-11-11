@@ -124,3 +124,25 @@ test("OpenID Connect: Cloudflare's code for a signed token with the email", () =
   assert.equal(s.exchange({ code: code2, clientId: 'cf', clientSecret: 'shh-secret', redirectUri }).error, 'invalid_grant', 'one use');
   assert.equal(s.userinfo(r.access_token).email, 'sara@e11.test');
 });
+
+test('device keys: kept while good, a new one otherwise; stop when the password is set with a code, or the person leaves', () => {
+  const { s, tick } = make();
+  const a = s.deviceKey('sara@e11.test', null, 'iPhone');
+  assert.ok(a.ok && a.key && !a.kept);
+  assert.equal(s.deviceKey('sara@e11.test', a.key).kept, true);
+  assert.equal(s.useDevice(a.key).email, 'sara@e11.test');
+  assert.equal(s.useDevice(a.key.split('.')[0] + '.wrong').ok, false);
+  assert.equal(s.deviceKey('owner@e11.test', a.key).kept, undefined, "someone else's key isn't kept for them");
+  tick(1000);
+  s.setPassword(s.useCode('sara@e11.test', s.makeCode('sara@e11.test', 'admin@e11.test').code).ticket, 'a good long password');
+  assert.equal(s.useDevice(a.key).ok, false, 'the password set with a code ends it');
+  const b = s.deviceKey('sara@e11.test', a.key);
+  assert.ok(b.ok && b.key !== a.key);
+  assert.equal(s.useDevice(b.key).ok, true);
+  s.dropDevice(b.key);
+  assert.equal(s.useDevice(b.key).ok, false, 'signed out: dropped');
+  const c = s.deviceKey('sara@e11.test', null);
+  users['sara@e11.test'].removed = true;
+  assert.equal(s.useDevice(c.key).ok, false, 'left the team');
+  delete users['sara@e11.test'].removed;
+});

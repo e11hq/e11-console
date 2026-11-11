@@ -61,7 +61,10 @@ test("an admin's code → a new password → Cloudflare's token; the other admin
   assert.equal(JSON.parse(Buffer.from(tok.id_token.split('.')[1], 'base64url')).email, 'sara@e11.test');
   const notes = app.store.list('notifications').filter((n) => n.kind === 'signin');
   assert.deepEqual(notes.map((n) => n.to).sort(), ['u-adm2', 'u-own']);
-  assert.match(notes[0].text, /Omar Saleh made a sign-in code for Sara Khan, and Sara’s password was changed/);
+  assert.equal(notes[0].from, 'u-adm');
+  assert.equal(notes[0].text, 'made a sign-in code for Sara Khan'); assert.equal(notes[0].snippet, 'Sara’s password was changed');
+  const { notifMessage } = await import('../src/webpush.js');
+  assert.equal(notifMessage(app.store, notes[0]).body, 'Omar Saleh made a sign-in code for Sara Khan, and Sara’s password was changed');
   // next time: the password
   assert.equal((await api('start', { email: 'sara@e11.test' })).password, true);
   assert.ok((await api('password', { email: 'sara@e11.test', password: 'sara long password' })).redirect);
@@ -104,4 +107,14 @@ test('the page draws its first step in a browser (its data read back whole)', as
     await p.waitForSelector('#pw');
     assert.deepEqual(errs, []);
   } finally { await b.close(); }
+});
+
+test("the app's device key: issued when signed in, then signs it back in on our page", async () => {
+  const k = await post('/api/signin/device', { name: 'iPhone' }, { 'X-Dev-Email': 'lina@e11.test' });
+  assert.ok(k.ok && k.key);
+  const r = await api('device', { key: k.key });
+  assert.ok(r.ok && r.redirect && new URL(r.redirect).searchParams.get('code'));
+  assert.equal((await api('device', { key: 'nope.nope' })).ok, false);
+  await post('/api/signin/device', { drop: true, key: k.key }, { 'X-Dev-Email': 'lina@e11.test' });
+  assert.equal((await api('device', { key: k.key })).ok, false);
 });

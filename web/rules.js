@@ -377,7 +377,7 @@ var E11Rules = (() => {
       const said = cm ? plainOf(cm.html || cm.text) : plainOf(n.snippet);
       // what it is about: the task — or the morning round-up, a birthday, claims, a plan, a client's assets
       const about = n.kind === 'sched-cancel' ? `Scheduled ${/scheduled reply/.test(n.text || '') ? 'reply' : 'comment'}` : t ? (t.title || 'Untitled task')
-        : n.kind === 'birthday' ? 'Birthday' : n.kind === 'daily' ? 'Morning round-up' : /^claim/.test(n.kind) ? 'Expense claims' : n.kind === 'asset' ? 'Client Assets' : n.planId ? 'Content plan' : 'Deleted task';
+        : n.kind === 'birthday' ? 'Birthday' : n.kind === 'signin' ? 'Sign-in' : n.kind === 'daily' ? 'Morning round-up' : /^claim/.test(n.kind) ? 'Expense claims' : n.kind === 'asset' ? 'Client Assets' : n.planId ? 'Content plan' : 'Deleted task';
       // who did what: short, so it fits one line (the sentence's verb up to "to / on / for / from / :")
       const verb = text.replace(/\s*(?:—.*)?$/, '').split(/ (?:to|on|for|from|in|of)\b| —|:/)[0].replace(/\s+/g, ' ').trim();
       let head = `${who} ${verb}`, desc = val || '';
@@ -397,6 +397,7 @@ var E11Rules = (() => {
       else if (n.kind === 'part') { head = `${who} reopened your part`; desc = ''; }
       else if (n.kind === 'birthday') { head = `${who}’s birthday 🎂`; desc = `Today is ${who}’s birthday`; }
       else if (n.kind === 'daily') { head = 'Your morning round-up'; desc = text; }
+      else if (n.kind === 'signin') { head = `${who} made a sign-in code`; desc = `For ${text.replace(/^made a sign-in code for /, '')} · ${plainOf(n.snippet)}`; }
       else if (n.kind === 'sched-cancel') { head = 'Not sent'; desc = text + (n.snippet ? ` · “${plainOf(n.snippet)}”` : ''); }
       else if (/^claim|^plan|^asset/.test(n.kind)) { desc = plainOf(n.snippet) || val; }
       if (!desc && n.snippet) desc = plainOf(n.snippet);
