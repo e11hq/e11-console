@@ -352,8 +352,9 @@ Cloudflare a tiny server address instead of `/`. Stays (not the website): the sh
 Audit: project doc `claude/ios-website-dependencies-audit.md`.
 **Our own sign-in — DECIDED; mock-ups APPROVED (Haris 2026-11-11: "All approved", canvas "Sign-in — fully Apple": email ·
 password · sign-in code · set password · Face ID · an admin's code sheet · the other admins' alert · the owner's password and
-owner code); the server part made on main (signin.js, signin-page.js, /oidc/*, /api/signin/code(s) — tested, NOT released;
-plan: project doc `claude/own-sign-in-plan.md`):**
+owner code); server 1.9.36. **LIVE and TEST use only our sign-in since 2026-11-11 16:53 (Haris: "do it")** — Cloudflare's
+page skipped (instant authentication, our login method alone on the E11 Console and E11 Console Test Access apps; E11 Talk
+still the email code). Back to the email code: add One-time PIN again on that Access app. Plan: project doc `claude/own-sign-in-plan.md`):**
 E11 Console first (website, Mac and iPhone; test site first), E11 Talk the same when its work starts. No email, no SMS.
 - Cloudflare stays in front, our server its only sign-in provider (Generic OIDC); our page (the wordmark design).
 - The email is the username. A password once set; else a **4-digit sign-in code** from an admin: made by any Super Admin
