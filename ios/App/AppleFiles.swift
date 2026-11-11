@@ -15,6 +15,7 @@ final class FileTile: UIView {
   private(set) var info: [String: Any] = [:]
   private let pic = UIImageView(), badge = UILabel(), name = UILabel(), sub = UILabel(), tick = UIImageView()
   private var lines = 1, picPath: String?, aspect: CGFloat = 1
+  private var logoOn: String?   // (the client logo on it now)
   private(set) var isFolder = true, isClient = false
   var key: String { (isClient ? "fc:" : isFolder ? "fd:" : "ff:") + id }   // (its identity in the list)
   static let stripW: CGFloat = 92
@@ -96,7 +97,7 @@ final class FileTile: UIView {
     let n = f["files"] as? Int ?? 0, subs = f["subs"] as? Int ?? 0, fin = (f["final"] as? Bool) == true
     let s = "d|\(f["name"] ?? "")|\(n)|\(subs)|\(fin)|\(lines)"
     guard s != sig else { return }
-    sig = s; info = f; isFolder = true; isClient = false; self.lines = lines; id = f["id"] as? String ?? ""
+    sig = s; info = f; isFolder = true; isClient = false; self.lines = lines; id = f["id"] as? String ?? ""; logoOn = nil
     // (its colour drawn into the picture, as a file's picture: a tint goes grey while a sheet is up over the page — Apple
     //  greys tinted controls then, and a folder is content, not a control: Haris 2026-11-10 15:25)
     pic.contentMode = .scaleToFill; pic.tintColor = nil
@@ -114,7 +115,7 @@ final class FileTile: UIView {
   func file(_ f: [String: Any], lines: Int, sizeText: String) {
     let s = "f|\(f["id"] ?? "")|\(f["name"] ?? "")|\(sizeText)|\(CommentCell.picURL(f) ?? "")|\(lines)"
     guard s != sig else { return }
-    sig = s; info = f; isFolder = false; isClient = false; self.lines = lines; id = f["id"] as? String ?? ""
+    sig = s; info = f; isFolder = false; isClient = false; self.lines = lines; id = f["id"] as? String ?? ""; logoOn = nil
     let nm = f["name"] as? String ?? "File"
     let ext = (nm as NSString).pathExtension.uppercased()
     name.text = nm; name.numberOfLines = lines
@@ -147,21 +148,29 @@ final class FileTile: UIView {
     let s = "c|\(c["name"] ?? "")|\(c["sub"] ?? "")|\(c["logo"] ?? "")|\(String(describing: c["rgb"]))"
     guard s != sig else { return }
     sig = s; info = c; isFolder = false; isClient = true; lines = 1; id = c["id"] as? String ?? ""
-    pic.image = nil; pic.layer.cornerRadius = 16; pic.clipsToBounds = true; pic.layer.borderWidth = 0; pic.contentMode = .scaleAspectFit
-    pic.backgroundColor = NativeSheetVC.color(c["rgb"]) ?? .systemGray
-    badge.isHidden = false; badge.textColor = .white; badge.font = .systemFont(ofSize: 20, weight: .bold)
+    let p = c["logo"] as? String
+    // (its logo already on it — the same one: kept as it is. Set again, it went back to its colour and name and faded into
+    //  the logo once more — every tile flashing as All Client Assets came back: Haris's recording, 2026-11-11)
+    let keep = p != nil && p == logoOn
+    if keep { BarLog.note("tile \(id): logo kept") } else {
+      BarLog.note("tile \(id): set \(p == nil ? "no logo" : "logo")")
+      pic.image = nil; pic.layer.cornerRadius = 16; pic.clipsToBounds = true; pic.layer.borderWidth = 0; pic.contentMode = .scaleAspectFit
+      pic.backgroundColor = NativeSheetVC.color(c["rgb"]) ?? .systemGray
+      badge.isHidden = false; logoOn = nil
+    }
+    badge.textColor = .white; badge.font = .systemFont(ofSize: 20, weight: .bold)
     badge.adjustsFontSizeToFitWidth = true; badge.minimumScaleFactor = 0.5
     badge.text = (c["name"] as? String ?? "").uppercased()
     name.text = c["name"] as? String; name.numberOfLines = 1; name.font = .systemFont(ofSize: 15, weight: .semibold); name.lineBreakMode = .byTruncatingTail
     sub.text = c["sub"] as? String; sub.font = .systemFont(ofSize: 13)
-    let p = c["logo"] as? String
     picPath = p
-    if let p = p {
+    if let p = p, !keep {
       FeedLoader.shared.image(p) { [weak self] img in
         guard let self = self, self.picPath == p, let img = img else { return }
         UIView.transition(with: self.pic, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction]) {
           LogoLook.put(img, key: p, in: self.pic); self.badge.isHidden = true
         }
+        self.logoOn = p
       }
     }
     accessibilityLabel = "\(name.text ?? "Client"), \(sub.text ?? "")"
