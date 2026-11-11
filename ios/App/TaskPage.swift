@@ -1830,7 +1830,7 @@ extension TaskPage {
     for item in pb.items {
       guard let type = item.keys.first(where: { t in guard let u = UTType(t) else { return false }; return !u.conforms(to: .text) }) else { continue }
       var data: Data? = item[type] as? Data
-      if data == nil, let img = item[type] as? UIImage { data = img.jpegData(compressionQuality: 0.9) }
+      if data == nil, let img = item[type] as? UIImage { data = img.upright().jpegData(compressionQuality: 0.9) }
       guard let d = data else { continue }
       let ext = (item[type] is UIImage) ? "jpg" : (UTType(type)?.preferredFilenameExtension ?? "dat")
       let name = (UTType(type)?.conforms(to: .image) == true || item[type] is UIImage ? "Pasted image." : "Pasted file.") + ext

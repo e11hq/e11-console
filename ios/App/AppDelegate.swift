@@ -2667,7 +2667,9 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
     picker.dismiss(animated: true)
     let stamp = { () -> String in let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"; return f.string(from: Date()) }()
     if let url = info[.mediaURL] as? URL { return finish([keep(url, name: "Video \(stamp).\(url.pathExtension.isEmpty ? "mov" : url.pathExtension)")].compactMap { $0 }) }
-    if let img = info[.originalImage] as? UIImage, let data = img.jpegData(compressionQuality: 0.9) {
+    // (saved upright: the camera's picture is stored sideways with a "turn me" note, and Quick Look sized its opening from the
+    //  sideways size — a portrait photo opened as a landscape crop, then jumped to full: Haris 2026-11-11)
+    if let img = info[.originalImage] as? UIImage, let data = img.upright().jpegData(compressionQuality: 0.9) {
       let tmp = dir.appendingPathComponent(UUID().uuidString + ".jpg")
       if (try? data.write(to: tmp)) != nil { let r = keep(tmp, name: "Photo \(stamp).jpg"); try? FileManager.default.removeItem(at: tmp); return finish([r].compactMap { $0 }) }
     }
@@ -3797,4 +3799,13 @@ extension UIFont {
   @objc class func e11_systemFont(ofSize s: CGFloat) -> UIFont { Dirham.cascade(e11_systemFont(ofSize: s)) }
   @objc class func e11_boldSystemFont(ofSize s: CGFloat) -> UIFont { Dirham.cascade(e11_boldSystemFont(ofSize: s)) }
   @objc class func e11_monospacedDigitSystemFont(ofSize s: CGFloat, weight w: UIFont.Weight) -> UIFont { Dirham.cascade(e11_monospacedDigitSystemFont(ofSize: s, weight: w)) }
+}
+
+extension UIImage {
+  // the picture as it's seen, its pixels turned that way (no orientation note left for others to read — or not)
+  func upright() -> UIImage {
+    guard imageOrientation != .up else { return self }
+    let f = UIGraphicsImageRendererFormat.preferred(); f.scale = scale; f.opaque = true
+    return UIGraphicsImageRenderer(size: size, format: f).image { _ in draw(in: CGRect(origin: .zero, size: size)) }
+  }
 }
