@@ -345,6 +345,22 @@ behaviour unchanged, the self-test checks each) and to Home's background behind 
 the main self-test's checks into the no-website run first, Me's 12 hand-offs say "try again", the cut page by page, then after
 Cloudflare a tiny server address instead of `/`. Stays (not the website): the shared engine, Svg.swift's hidden logo drawer.
 Audit: project doc `claude/ios-website-dependencies-audit.md`.
+**Our own sign-in — DECIDED, not started (Haris 2026-11-11 09:35–10:05; plan: project doc `claude/own-sign-in-plan.md`):**
+E11 Console first (website, Mac and iPhone; test site first), E11 Talk the same when its work starts. No email, no SMS.
+- Cloudflare stays in front, our server its only sign-in provider (Generic OIDC); our page (the wordmark design).
+- The email is the username. A password once set; else a **4-digit sign-in code** from an admin: made by any Super Admin
+  or Office Admin, for anyone (admins too); one use, only for that email, **24 hours**; a new one cancels the old; 5 wrong
+  tries lock it. The first sign-in with a code lets nothing in until a new password is set.
+- After that: the apps signed in for good (device key), the website ~30 days; Face ID / Touch ID signs back in on that device.
+- A password set with a code: the old one stops at once and that account is **signed out everywhere, silently**. If an
+  admin made the code, **every other Super Admin and Office Admin** (not the one who made it, not the person) gets an
+  Inbox notification **and a push**: "<admin> made a sign-in code for <person>, and <person>'s password was changed". A
+  code that's never used: nothing.
+- Both admins locked out: the **owner, through the owner's view**, makes a code for anyone — **no notification to anyone**,
+  and the owner's codes stay out of the admins' record (only the owner's view shows them).
+- Passwords and codes kept only as hashes; every code recorded (who, for whom, when); removed from the Team page = every
+  sign-in stops. Live only after Haris has signed in with it on test (website, Mac, iPhone); the live site switches back to
+  Cloudflare's own sign-in with one setting.
 **Remind Haris once every page is done page by page (Haris 2026-11-10 17:39):** (B) take out the leftover website code from
 the Apple pages (about 60 `pageReady` branches — dead on the phone, which runs without the website), moving the main
 self-test's checks into the no-website run (`walktest.py --apple`) page by page first; and the smoothness check — the
