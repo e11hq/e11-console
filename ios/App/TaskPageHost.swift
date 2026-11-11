@@ -8,18 +8,6 @@ import QuickLook
    are the server's (ServerTask); the page behind only hears that it closed, and does what only it can do (Copy link,
    attaching files, New task from this). */
 extension Main {
-  func taskPageCommand(_ a: [String: Any]) {
-    if let id = a["open"] as? String, !id.isEmpty {
-      // (already the top page: just its tab)
-      if let top = taskPages.last, top.taskId == id { if let t = a["tab"] as? String, t != top.tab { top.setTab(t, tell: true) }; return }
-      openTaskPage(id, tab: a["tab"] as? String ?? "details", focus: a["focus"] as? String ?? "")
-    } else if let id = a["changed"] as? String {
-      for p in taskPages where p.taskId == id || ((p.model?["subtasks"] as? [[String: Any]]) ?? []).contains(where: { ($0["id"] as? String) == id }) { refreshTaskPage(p); p.feed?.load(); p.threadFeed?.load() }
-    } else if (a["closeAll"] as? Bool) == true {
-      while let p = taskPages.last { closeTaskPage(p, animated: false) }
-    }
-  }
-
   func openTaskPage(_ id: String, tab: String, focus: String, trash: String? = nil) {
     endEditing()
     LoopProbe.start()

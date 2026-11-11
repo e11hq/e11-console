@@ -117,14 +117,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
   func sceneDidEnterBackground(_ scene: UIScene) { Main.shared.wentAway() }
 }
 
-// (the page's message handler is held weakly, so the screen and the web view don't keep each other alive)
-final class WeakHandler: NSObject, WKScriptMessageHandler {
-  weak var target: WKScriptMessageHandler?
-  init(_ t: WKScriptMessageHandler) { target = t }
-  func userContentController(_ c: WKUserContentController, didReceive m: WKScriptMessage) { target?.userContentController(c, didReceive: m) }
-}
-
-final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate, UIGestureRecognizerDelegate {
+final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestureRecognizerDelegate {
   static let shared = Main()
   var web: WKWebView!
   // the tabs — what the app says about them goes straight to Apple's tab bar (AppleTabs.swift); no bar of the app's own
@@ -173,7 +166,6 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     config.websiteDataStore = .default()             // stay signed in between launches
     config.allowsInlineMediaPlayback = true
     config.applicationNameForUserAgent = "E11ConsoleiOS/\(SHELL_VERSION)"
-    config.userContentController.add(WeakHandler(self), name: "e11ios")
     // (this app follows the phone's own light / dark — the page too; older apps keep the account's choice)
     if FOLLOW_DEVICE { config.userContentController.addUserScript(WKUserScript(source: "window.__e11FollowPhone = true;", injectionTime: .atDocumentStart, forMainFrameOnly: true)) }
     web = WKWebView(frame: view.bounds, configuration: config)
@@ -349,18 +341,6 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     splashLeaving = true; AppleTabs.shared?.mirrorShown()
     s.leave(fast: fast) { [weak self] in if self?.splash === s { self?.splash = nil }; self?.splashLeaving = false; if APPLE_HOME { self?.appleHomeBar(animated: false) }; AppleTabs.shared?.mirrorShown() }
   }
-  // the page (the self-test's, the website behind): the startup screen is the app's own — the page only hears it's up, so
-  // it puts up none of its own, and says when its own start is done (only when the app isn't running it itself)
-  func splashCommand(_ a: [String: Any]) -> [String: Any] {
-    if a["hello"] != nil {
-      splashHeard = true
-      guard let s = splash, !s.leaving else { return ["ok": true, "shown": quickBooted || Main.boot.owned, "age": quickBooted ? 60000 : 0] }
-      return ["ok": true, "shown": true, "age": Int((CACurrentMediaTime() - s.t0) * 1000)]
-    }
-    guard let s = splash, !s.leaving else { return ["ok": true, "shown": false] }
-    if a["out"] != nil { splashHeard = true; if !quickBooted && !Main.boot.owned { splashGone() } }
-    return ["ok": true, "shown": true]
-  }
   weak var previewVC: PreviewVC?
   static var uploadedSound: SystemSoundID = 0
   static func playUploaded() {
@@ -369,7 +349,6 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     }
     if uploadedSound != 0 { AudioServicesPlaySystemSound(uploadedSound) }
   }
-  var cmdSource: WKWebView?
   // the app's own task pages (TaskPage.swift, shell 30): a stack — a subtask opened from one goes on top
   var taskPages: [TaskPage] = []
   lazy var serverTask: ServerTask = { let s = ServerTask(); s.cookies = serverHome.cookies; return s }()
@@ -726,24 +705,6 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   // update opening Reviews) — taken only when it changes. Off on the server (kv app-tabs): the page's tab bar, as before.
   private var pageTabs: [String: Any]?, pageOn: String?, quickMe: String?
   var lastTabTap: (key: String, at: Date)?
-  func pageTabsIn(_ a: [String: Any]) {
-    let on = (a["tabs"] as? [[String: Any]] ?? []).first(where: { ($0["on"] as? Bool) == true })?["v"] as? String
-    var moved: String? = nil
-    if on != pageOn {
-      pageOn = on
-      // (a tab tapped a moment ago: the page catching up with an earlier one isn't a move of its own)
-      if let t = lastTabTap, Date().timeIntervalSince(t.at) < 1.5, on != t.key { moved = nil } else { moved = on }
-    }
-    pageTabs = a
-    // (the person to open as next time: the page's now — an Office Admin has no Home to say it, so after View as… the
-    //  app came back as the person before, with their photo — Haris 2026-11-05)
-    if let w = pagePerson, !w.isEmpty, quickMe != w { quickMe = w; saveQuick(["me": w]) }
-    // (the person the page is now — View as… someone, back to me: the app's copy follows at once, and until it is that
-    //  person's, the page's tabs are shown — an Office Admin got the owner's tabs, Haris 2026-11-04)
-    pageIs(pagePerson)
-    if let own = ownTabs(moved) { setTabs(own) } else { setTabs(a) }
-  }
-  private var pagePerson: String? { ((pageTabs?["tabs"] as? [[String: Any]]) ?? []).first(where: { ($0["v"] as? String) == "me" })?["who"] as? String }
   // Automatic light / dark by the app's own clock: every minute (and on coming back), light from sunrise to sunset
   // (the day's times the page gave, moved to today), told to everything as the page's setAppearance would
   private var lookTimer: Timer?
@@ -762,7 +723,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let st = defaults.string(forKey: "e11_sun_set").flatMap({ isoDate($0) }) ?? cal.date(bySettingHour: 18, minute: 0, second: 0, of: now) ?? now
     let today = { (d: Date) -> Date in cal.date(bySettingHour: cal.component(.hour, from: d), minute: cal.component(.minute, from: d), second: 0, of: now) ?? d }
     let want = now >= today(r) && now < today(st) ? "light" : "dark"
-    if defaults.string(forKey: "e11_look") != want { run("setAppearance", ["mode": want]) { _ in } }
+    if defaults.string(forKey: "e11_look") != want { keepAppearance(nil) }
   }
   private func isoDate(_ s: String) -> Date? {
     let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -781,7 +742,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   func refreshOwnTabs() { if let own = ownTabs(nil) { setTabs(own) } }
   private func ownTabs(_ moved: String?) -> [String: Any]? {
-    guard AppData.shared.tabsOn, AppData.shared.ready, pagePerson == nil || pagePerson == AppData.shared.me, let m = AppData.shared.screen("tabs").model,
+    guard AppData.shared.tabsOn, AppData.shared.ready, let m = AppData.shared.screen("tabs").model,
           var list = m["tabs"] as? [[String: Any]], !list.isEmpty else { return nil }
     if !pageReady { Main.isAdmin = (m["admin"] as? Bool) == true }   // (Admins turn links off and on — without the website, from the copy)
     let page = (pageTabs?["tabs"] as? [[String: Any]]) ?? (lastTabs?["tabs"] as? [[String: Any]]) ?? []
@@ -1392,35 +1353,6 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     default: return false
     }
   }
-  func homeCommand(_ a: [String: Any]) {
-    defer { updateCorner() }
-    if let p = a["people"] as? [String: [String: Any]] {
-      homePagePeople = p
-      homeView.people = serverHome.on ? homeServerPeople.merging(p, uniquingKeysWith: { s, pg in pg["photo"] != nil || s["photo"] == nil ? pg : s }) : p
-      myTasksIfMade?.people = myTasksServerPeople.merging(p, uniquingKeysWith: { s, pg in pg["photo"] != nil || s["photo"] == nil ? pg : s })
-      return
-    }
-    if let t = a["toast"] as? [String: Any] { homeToastRun = nil; shownScreen?.toast(t); return }   // (its button is the page's)
-    if let r = a["search"] as? [String: Any] { (shownScreen ?? homeIfMade)?.searchResults(r); return }
-    guard let show = a["show"] as? Bool else { return }
-    if !show { homeIfMade?.endEditing(true); if !APPLE_HOME { homeIfMade?.isHidden = true }; return }   // (its own Apple tab keeps it — Haris 2026-11-08)
-    let h = homeView
-    h.bottomRoom = (tabBar.isHidden ? 40 : view.bounds.height - tabBar.frame.minY) + 96
-    h.tabTop = tabBar.isHidden ? nil : tabPillTop
-    keepLook(a["look"])
-    homePageMe = a["me"] as? String
-    pageIs(a["me"] as? String)
-    if let me = homePageMe { saveQuick(["me": me, "looks": looks]) }
-    // (the server's Home when it's on — the page's model is only a sign something changed: the server asked again)
-    if serverHome.on, let m = serverHome.shown, (m["me"] as? String) == (a["me"] as? String) {
-      h.isHidden = false
-      drawServerHome(m)
-    } else { h.update(a) }
-    homeHadModel = true
-    h.isHidden = false
-    serverHome.refresh()
-  }
-
   /* ---------- My Tasks (26+): Home's screen as a list (HomeView.isList), straight from the server (/api/mytasks with the
      page's filters); the page says when it's on screen, its tab and filters (NativeMyTasks in phone.js) and does the
      filter sheets; Done / Due / Delete as on Home ---------- */
@@ -2204,22 +2136,6 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   func unlocked() { lockView?.removeFromSuperview(); lockView = nil; AppleTabs.shared?.mirrorShown() }
 
-  /* ---------- commands from the page ---------- */
-  func userContentController(_ c: WKUserContentController, didReceive message: WKScriptMessage) {
-    guard let raw = message.body as? String, let d = raw.data(using: .utf8),
-          let msg = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any] else { return }
-    let id = msg["id"] ?? NSNull()
-    let from = message.webView ?? web
-    let reply: ([String: Any]) -> Void = { res in
-      from?.evaluateJavaScript("window.__e11NativeReply && window.__e11NativeReply(\(jsonString([id]).dropFirst().dropLast()),\(jsonString(res)))", completionHandler: nil)
-    }
-    let cmd = msg["cmd"] as? String ?? ""
-    // (the comments screen's page: only what comments need — the app's tabs, look, badge and notifications stay the
-    //  main page's)
-    cmdSource = from
-    run(cmd, msg["args"] as? [String: Any] ?? [:], reply)
-    cmdSource = nil
-  }
   // the screen shown on top of everything now (alerts, the share sheet and file pickers go there)
   func topMost() -> UIViewController {
     var v: UIViewController = self
@@ -2232,181 +2148,14 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     var v: UIViewController = self
     while let p = v.presentedViewController {
       if p.isBeingDismissed { return nil }
-      if p is FormSheetVC || p is TrashSheetVC || p is PreviewVC { v = p } else { return nil }
+      if p is FormSheetVC || p is PreviewVC { v = p } else { return nil }
     }
     return v
   }
-  func run(_ cmd: String, _ a: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
-    switch cmd {
-    case "appInfo":
-      var r: [String: Any] = ["ok": true, "shell": SHELL_VERSION, "native": "ios", "server": serverURL(),
-                              "version": info["CFBundleShortVersionString"] as? String ?? "1.0", "build": info["CFBundleVersion"] as? String ?? "1"]
-      r["faceID"] = biometry() ?? NSNull()
-      r["refocus"] = FocusAfterPicker.installed
-      done(r)
-    case "setTabs": pageTabsIn(a); done(["ok": true])
-    case "badge":
-      if ownsBadge { ownBadge(); return done(["ok": true]) }   // (the app's own count — step 7)
-      let n = (a["n"] as? NSNumber)?.intValue ?? Int(a["n"] as? String ?? "") ?? 0
-      UNUserNotificationCenter.current().setBadgeCount(max(0, n)) { _ in }
-      done(["ok": true])
-    // your own settings on this phone (the look, …): kept by the app too — the page's own storage can lose its last
-    // change when the app is closed soon after (Haris, 2026-10-31: dark came back as light on reopening)
-    case "prefs":
-      let key = "e11_prefs_\(a["id"].map { "\($0)" } ?? "")"
-      if let p = a["set"] as? [String: Any] {
-        if let d = try? JSONSerialization.data(withJSONObject: p) { defaults.set(d, forKey: key) }
-        return done(["ok": true])
-      }
-      if let d = defaults.data(forKey: key), let p = try? JSONSerialization.jsonObject(with: d) as? [String: Any] { return done(["ok": true, "prefs": p]) }
-      done(["ok": true])
-    case "setAppearance":
-      // (Automatic kept by the app itself — Part B step 1: the setting and the day's sunrise / sunset, for when the page
-      //  isn't there to say it's light now)
-      if let tm = a["themeMode"] as? String { defaults.set(tm, forKey: "e11_theme_mode") }
-      if let r = a["rise"] as? String, let st = a["set"] as? String { defaults.set(r, forKey: "e11_sun_rise"); defaults.set(st, forKey: "e11_sun_set") }
-      ownAppearanceWatch()
-      // (which look it is: the phone's own, read by the app — followPhoneLook; the website in the app says what it
-      //  shows, but decides nothing for the app's screens — Haris 2026-11-09, light / dark the Apple way)
-      done(["ok": true])
-    case "openURL":
-      let u = a["url"] as? String ?? ""
-      guard u.range(of: "^(https?|mailto|tel):", options: [.regularExpression, .caseInsensitive]) != nil, let url = URL(string: u) else { return done(["ok": false, "error": "Only web links can be opened"]) }
-      UIApplication.shared.open(url); done(["ok": true])
-    case "haptic":
-      // iOS's own taps: a light / medium knock, a tab-switch tick, or success / warning / error
-      switch a["kind"] as? String ?? "light" {
-      case "medium": UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-      case "selection": UISelectionFeedbackGenerator().selectionChanged()
-      case "success": UINotificationFeedbackGenerator().notificationOccurred(.success)
-      case "warning": UINotificationFeedbackGenerator().notificationOccurred(.warning)
-      case "error": UINotificationFeedbackGenerator().notificationOccurred(.error)
-      // an upload finished: the success tap and a soft double swoop, the comment sounds' family (uploaded.wav, Haris 2026-11-09; silent with the ring switch off)
-      case "uploaded":
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
-        Main.playUploaded()
-      default: UIImpactFeedbackGenerator(style: .light).impactOccurred()
-      }
-      done(["ok": true])
-    case "nativeSheet":
-      // a plain menu from the page as a real iPhone sheet (floating; iOS grows it as it's pulled); replies with the
-      // chosen row's index, or -1 when it's closed without a choice
-      guard let host = sheetHost() else { return done(["ok": false]) }
-      let src = cmdSource
-      let vc = NativeSheetVC(a, pick: { [weak self] i in
-        (src ?? self?.web)?.evaluateJavaScript("window.__e11SheetPick && window.__e11SheetPick(\(i))", completionHandler: nil)
-      }) { i, swatch in
-        if i >= 0 { FocusAfterPicker.allow() }   // (a text box the option opens still brings the keyboard)
-        var r: [String: Any] = ["ok": true, "index": i]
-        if i == -2, let typed = swatch { r["custom"] = typed }   // (a typed entry: "Use …")
-        else if let sw = swatch { r["swatch"] = sw }
-        done(r)
-      }
-      host.present(vc, animated: true)
-    case "pickDate":
-      // a date from the page, picked in a native sheet with iPhone's own calendar: a day tapped → that date;
-      // Today / Clear; closed any other way → nothing changes (iPhone's own date box set today when just closed)
-      guard let host = sheetHost() else { return done(["ok": false]) }
-      host.present(DateSheetVC(a) { r in done(r) }, animated: true)
-    case "formSheet":
-      // New task / Request amendments as iOS's own sheet with iPhone's own fields; replies when it's closed:
-      // closed = submit / cancel / discard (a tucked draft pulled away) / replaced (another form opened instead)
-      let key = a["key"] as? String ?? ""
-      if let open = FormSheetVC.current, open.isOpen {
-        if open.key == key { open.expand(); return done(["ok": true, "already": true]) }   // (its tucked draft, carried on)
-        open.finish("replaced") { [weak self] in self?.run(cmd, a, done) }
-        return
-      }
-      guard let host = sheetHost() else { return done(["ok": false]) }
-      let vc = FormSheetVC(a, event: { [weak self] ev in
-        self?.pageJS("window.__e11Form && window.__e11Form(\(jsonString(ev)))")
-      }) { r in done(r) }
-      vc.onTuck = { [weak self] t in
-        guard let self, self.formTucked != t else { return }
-        self.formTucked = t
-        self.tabBar.isUserInteractionEnabled = !t
-        UIView.animate(withDuration: 0.2) { self.tabBar.alpha = t || self.tabsHidden ? 0 : 1 }
-      }
-      host.present(vc, animated: true)
-    case "preview":
-      // the file preview (18+): files with their addresses on the server; fetched with the app's own cookies
-      guard !a.isEmpty else { return done(["ok": false]) }
-      let src = cmdSource
-      PreviewLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) { [weak self] in
-        guard let self else { return }
-        let vc = PreviewVC(a) { [weak self] ev in (src ?? self?.web)?.evaluateJavaScript("window.__e11Preview && window.__e11Preview(\(jsonString(ev)))", completionHandler: nil) }
-        self.previewVC = vc
-        self.topMost().present(vc, animated: true)
-        done(["ok": true])
-      }
-    case "previewSet":
-      previewVC?.set(a); done(["ok": true])
-    case "formSet":
-      // what was picked for a field (Client, Assign to), CD review on / off, or a message about what's wrong
-      if let f = FormSheetVC.current, f.isOpen, f.key == (a["key"] as? String ?? "") { f.set(a) }
-      done(["ok": true])
-    case "formClose":
-      if let f = FormSheetVC.current, f.isOpen, f.key == (a["key"] as? String ?? "") { f.finish("submit") }
-      done(["ok": true])
-    case "trashSheet":
-      // a task in the Trash, to look at: replies restore / preview (a file) / closed
-      guard let host = sheetHost() else { return done(["ok": false]) }
-      host.present(TrashSheetVC(a) { r in done(r) }, animated: true)
-    case "notify": done(["ok": true])   // (Apple's notifications come from the server)
-    case "pushStatus": pushState { done(["ok": true, "state": $0]) }
-    case "pushRegister":
-      pushState { st in if st == "on" { UIApplication.shared.registerForRemoteNotifications() }; done(["ok": true, "state": st]) }
-    case "pushEnable":
-      UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { ok, _ in
-        DispatchQueue.main.async {
-          if !ok { return self.pushState { done(["ok": true, "state": $0 == "on" ? "off" : $0]) } }
-          defaults.set(false, forKey: PUSH_OFF_KEY)
-          self.pushWaiters.append(done)
-          UIApplication.shared.registerForRemoteNotifications()
-        }
-      }
-    case "pushDisable":
-      defaults.set(true, forKey: PUSH_OFF_KEY)
-      done(["ok": true, "token": lastToken ?? NSNull()])
-    case "openSettings":
-      if let u = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(u) }
-      done(["ok": true])
-    case "setLock":
-      let on = (a["on"] as? Bool) == true
-      if !on { defaults.set(false, forKey: LOCK_KEY); return done(["ok": true, "on": false]) }
-      let ctx = LAContext(); var err: NSError?
-      guard ctx.canEvaluatePolicy(.deviceOwnerAuthentication, error: &err) else { return done(["ok": false, "error": "This iPhone has no Face ID or passcode set up"]) }
-      authing = true
-      ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Lock E11 Console with Face ID") { ok, _ in
-        DispatchQueue.main.async {
-          if ok { defaults.set(true, forKey: LOCK_KEY) }; done(["ok": true, "on": ok])
-          DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self.authing = false }
-        }
-      }
-    case "splash": done(splashCommand(a))
-    case "home": homeCommand(a); done(["ok": true])
-    case "mytasks": myTasksCommand(a); done(["ok": true])
-    case "inbox": inboxCommand(a); done(["ok": true])
-    case "clients": clientsCommand(a); done(["ok": true])
-    case "assets": assetsCtl.command(a); done(["ok": true])
-    case "me": meCtl.command(a); done(["ok": true])
-    // (33: Copy link from the page — a preview it opened, its own lists: the link put on the clipboard here)
-    case "role": Main.isAdmin = (a["admin"] as? Bool) == true; done(["ok": true])   // (Admins turn links off and on)
-    case "copyText": UIPasteboard.general.string = a["text"] as? String ?? ""; done(["ok": true])
-    case "copyLink":
-      let f: [String: Any] = ["file": a["path"] as? String ?? "", "name": a["name"] as? String ?? "File", "id": a["id"] as? String ?? "", "size": a["size"] as? Int ?? 0, "thumb": a["thumb"] as? String ?? ""]
-      copyFile(f) { [weak self] t in self?.previewVC?.set(["toast": t]); done(["ok": true, "toast": t]) }
-    case "meAsk": meCtl.ask(a) { r in done(r) }
-    case "pop": popCommand(a) { r in done(r) }
-    case "taskPage": taskPageCommand(a); done(["ok": true])
-    case "dailySheet":
-      // the morning round-up (DailySheet.swift): what's tapped goes back to the page
-      guard let host = sheetHost() else { return done(["ok": false]) }
-      host.present(DailySheetVC(a) { [weak self] ev in self?.pageJS("window.__e11Daily && window.__e11Daily(\(jsonString(ev)))") }, animated: true)
-      done(["ok": true])
-    case "readLocalChunk": done(Picker.shared.read(a))
-    default: done(["ok": false, "error": "Unknown command " + cmd])
-    }
+  // the look kept by the app (Me › Appearance): Automatic, Light or Dark
+  func keepAppearance(_ themeMode: String?) {
+    if let tm = themeMode { defaults.set(tm, forKey: "e11_theme_mode") }
+    ownAppearanceWatch()
   }
 
   /* ---------- self-test on the build machine (simulator; E11_SELFTEST=1) ---------- */
@@ -2437,7 +2186,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   // (a native sheet for the self-test, replacing any open one)
   func selfSheet(_ sections: [[String: Any]]) {
-    let show = { self.run("nativeSheet", ["sections": sections]) { _ in } }
+    let show = { self.sheetHost()?.present(NativeSheetVC(["sections": sections], pick: { _ in }) { _, _ in }, animated: true) }
     if let p = presentedViewController { p.dismiss(animated: false) { show() } } else { show() }
   }
   func pause(_ ms: Int) -> String { "await new Promise((r) => setTimeout(r, \(ms)));" }
@@ -2608,7 +2357,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let allSteps: [(String, String, (() -> Void)?)] = [
       // (the app without the website — Haris 2026-11-11: the self-test runs the phone's way; what the page used to answer
       //  is read from the app itself)
-      ("home", pause(1500) + "return '{}'", { self.run("appInfo", [:]) { r in self.selfResult["appInfo"] = r } }),
+      ("home", pause(1500) + "return '{}'", { self.selfResult["appInfo"] = ["native": "ios", "shell": SHELL_VERSION, "server": serverURL()] }),
       // (Haris 2026-11-09 16:56, exactly: the app opened on E11 Day, My Tasks, another tab, My Tasks again — its big title
       //  gone for good, until the app is opened again; the tabs tapped as a finger does, from the very start, the title
       //  read each time with whatever lies over it)
@@ -2858,12 +2607,13 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         ["rows": [["i": 11, "label": "No priority", "icon": "flag"]]]]) }),
       // New task as a native form: typed in, then tucked into the bar (title + Continue must show — Haris 2026-10-30)
       ("form", "return '{}'", {
-        let show = { self.run("formSheet", FormSheetVC.selfArgs()) { _ in } }
+        let show = { self.sheetHost()?.present(FormSheetVC(FormSheetVC.selfArgs(), event: { _ in }) { _ in }, animated: true) }
         if let p = self.presentedViewController { p.dismiss(animated: false) { show() } } else { show() } }),
       ("formTuck", "return '{}'", { FormSheetVC.current?.selfFill("Spring launch reel"); DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { FormSheetVC.current?.selfTuck() } }),
       ("preview", "return '{}'", {
         self.presentedViewController?.dismiss(animated: false)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.run("preview", PreviewVC.selfArgs()) { _ in } } }),
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+          PreviewLoad.refreshCookies(self.web.configuration.websiteDataStore.httpCookieStore) { let vc = PreviewVC(PreviewVC.selfArgs()) { _ in }; self.previewVC = vc; self.topMost().present(vc, animated: true) } } }),
       // (measurement — Haris 2026-11-09: what the app keeps on the phone, every build; the step's own name is taken by
       //  the page's answer, so it's kept as storageAt)
       ("storage", pause(2000) + "return '{}'", { self.selfResult["storageAt"] = self.selfStorage() }),
@@ -4081,208 +3831,6 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
     let done = { a(["ok": true, "closed": reason]); then?() }
     if let p = presentingViewController { p.dismiss(animated: true, completion: done) } else { done() }
   }
-}
-
-
-/* A task in the Trash, to look at (nothing can be changed there): iOS's own tall sheet — the Trash bar with Restore,
-   the task's details, its description, subtasks, checklist, files (tapped: the page previews it, then brings this
-   back) and comments. */
-final class TrashSheetVC: UIViewController, UISheetPresentationControllerDelegate {
-  private let a: [String: Any]
-  private var answer: (([String: Any]) -> Void)?
-  private let scroll = UIScrollView()
-  private let stack = UIStackView()
-  init(_ a: [String: Any], answer: @escaping ([String: Any]) -> Void) {
-    self.a = a; self.answer = answer
-    super.init(nibName: nil, bundle: nil)
-    modalPresentationStyle = .pageSheet
-    if let sh = sheetPresentationController { sh.detents = [.large()]; sh.prefersGrabberVisible = true; sh.delegate = self }
-  }
-  required init?(coder: NSCoder) { fatalError() }
-  private var cardColor: UIColor {
-    if #available(iOS 26, *) { return UIColor.secondarySystemGroupedBackground.withAlphaComponent(0.6) } else { return .secondarySystemGroupedBackground }
-  }
-  override func viewDidLoad() {
-    super.viewDidLoad()
-    if #available(iOS 26, *) { view.backgroundColor = .clear } else { view.backgroundColor = .systemGroupedBackground }
-    scroll.translatesAutoresizingMaskIntoConstraints = false; stack.translatesAutoresizingMaskIntoConstraints = false
-    stack.axis = .vertical; stack.spacing = 8
-    scroll.alwaysBounceVertical = true
-    view.addSubview(scroll); scroll.addSubview(stack)
-    NSLayoutConstraint.activate([
-      scroll.topAnchor.constraint(equalTo: view.topAnchor), scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-      scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor), scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-      stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: NativeSheetVC.TOP),
-      stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -24),
-      stack.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor, constant: 16),
-      stack.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor, constant: -16),
-    ])
-    build()
-  }
-  private func label(_ text: String, size: CGFloat, weight: UIFont.Weight = .regular, color: UIColor = .label, lines: Int = 0) -> UILabel {
-    let l = UILabel(); l.text = text; l.font = .systemFont(ofSize: size, weight: weight); l.textColor = color; l.numberOfLines = lines
-    return l
-  }
-  private func padded(_ v: UIView, _ i: UIEdgeInsets) -> UIView {
-    let w = UIView(); v.translatesAutoresizingMaskIntoConstraints = false; w.addSubview(v)
-    NSLayoutConstraint.activate([v.leadingAnchor.constraint(equalTo: w.leadingAnchor, constant: i.left), v.trailingAnchor.constraint(equalTo: w.trailingAnchor, constant: -i.right),
-                                 v.topAnchor.constraint(equalTo: w.topAnchor, constant: i.top), v.bottomAnchor.constraint(equalTo: w.bottomAnchor, constant: -i.bottom)])
-    return w
-  }
-  // a rounded card of rows, with hairlines between them
-  private func card(_ rows: [UIView]) -> UIView {
-    let c = UIStackView(); c.axis = .vertical
-    c.backgroundColor = cardColor; c.layer.cornerRadius = 16; c.layer.cornerCurve = .continuous; c.clipsToBounds = true
-    for (i, r) in rows.enumerated() {
-      if i > 0 {
-        let line = UIView(); line.backgroundColor = .separator; line.translatesAutoresizingMaskIntoConstraints = false
-        line.heightAnchor.constraint(equalToConstant: 1 / UIScreen.main.scale).isActive = true
-        c.addArrangedSubview(padded(line, UIEdgeInsets(top: 0, left: 16, bottom: 0, right: 0)))
-      }
-      c.addArrangedSubview(r)
-    }
-    return c
-  }
-  private func section(_ title: String, _ count: Int?, _ body: UIView) {
-    let t = NSMutableAttributedString(string: title, attributes: [.font: UIFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: UIColor.secondaryLabel])
-    if let n = count { t.append(NSAttributedString(string: "  \(n)", attributes: [.font: UIFont.systemFont(ofSize: 15), .foregroundColor: UIColor.tertiaryLabel])) }
-    let l = UILabel(); l.attributedText = t
-    let last = stack.arrangedSubviews.last
-    if let last { stack.setCustomSpacing(22, after: last) }
-    stack.addArrangedSubview(padded(l, UIEdgeInsets(top: 0, left: 4, bottom: 0, right: 0)))
-    stack.addArrangedSubview(body)
-  }
-  private func person(_ p: Any?, _ size: CGFloat) -> UIImage {
-    let d = p as? [String: Any]
-    return roundPic(NativeSheetVC.photo(d), initials: d?["initials"] as? String, color: NativeSheetVC.color(d?["color"]), size: size)
-  }
-  private func peopleText(_ list: [[String: Any]]) -> NSAttributedString {
-    let s = NSMutableAttributedString(), font = UIFont.systemFont(ofSize: 16)
-    for (i, p) in list.enumerated() {
-      // (each person on a line of their own — Haris 2026-11-04: they ran into each other)
-      if i > 0 { s.append(NSAttributedString(string: "\n", attributes: [.font: font, .paragraphStyle: { let ps = NSMutableParagraphStyle(); ps.paragraphSpacingBefore = 6; return ps }()])) }
-      let att = NSTextAttachment(); att.image = person(p["person"], 22)
-      att.bounds = CGRect(x: 0, y: (font.capHeight - 22) / 2, width: 22, height: 22)
-      s.append(NSAttributedString(attachment: att))
-      s.append(NSAttributedString(string: " " + (p["name"] as? String ?? ""), attributes: [.font: font, .foregroundColor: UIColor.label]))
-    }
-    return s
-  }
-  private func text(_ s: String) -> UITextView {
-    let t = UITextView(); t.text = s; t.font = .systemFont(ofSize: 16); t.isEditable = false; t.isScrollEnabled = false
-    t.backgroundColor = .clear; t.dataDetectorTypes = [.link]; t.textContainerInset = .zero; t.textContainer.lineFragmentPadding = 0
-    return t
-  }
-  // a file: its picture (or its type), its name under it; tapped → previewed
-  private func tile(_ f: [String: Any]) -> UIView {
-    let box = UIStackView(); box.axis = .vertical; box.spacing = 4; box.alignment = .leading
-    let b = UIButton(type: .custom)
-    b.translatesAutoresizingMaskIntoConstraints = false
-    b.widthAnchor.constraint(equalToConstant: 76).isActive = true; b.heightAnchor.constraint(equalToConstant: 76).isActive = true
-    b.layer.cornerRadius = 12; b.layer.cornerCurve = .continuous; b.clipsToBounds = true; b.backgroundColor = .tertiarySystemFill
-    if let img = NativeSheetVC.photo(f["thumb"].map { ["photo": $0] }) {
-      let iv = UIImageView(image: img); iv.contentMode = .scaleAspectFill; iv.isUserInteractionEnabled = false
-      iv.frame = CGRect(x: 0, y: 0, width: 76, height: 76); b.addSubview(iv)
-    } else {
-      b.setTitle((f["ext"] as? String ?? "file").uppercased(), for: .normal)
-      b.titleLabel?.font = .systemFont(ofSize: 13, weight: .bold); b.setTitleColor(.secondaryLabel, for: .normal)
-    }
-    let id = f["id"] as? String ?? ""
-    b.addAction(UIAction { [weak self] _ in self?.finish(["ok": true, "action": "preview", "file": id]) }, for: .touchUpInside)
-    let name = label(f["name"] as? String ?? "", size: 11, color: .secondaryLabel, lines: 1); name.lineBreakMode = .byTruncatingMiddle
-    name.translatesAutoresizingMaskIntoConstraints = false; name.widthAnchor.constraint(equalToConstant: 76).isActive = true
-    box.addArrangedSubview(b); box.addArrangedSubview(name)
-    return box
-  }
-  private func tiles(_ files: [[String: Any]]) -> UIView {
-    let sc = UIScrollView(); sc.showsHorizontalScrollIndicator = false
-    let row = UIStackView(); row.axis = .horizontal; row.spacing = 10; row.alignment = .top
-    files.forEach { row.addArrangedSubview(tile($0)) }
-    row.translatesAutoresizingMaskIntoConstraints = false; sc.addSubview(row)
-    sc.translatesAutoresizingMaskIntoConstraints = false
-    NSLayoutConstraint.activate([row.leadingAnchor.constraint(equalTo: sc.contentLayoutGuide.leadingAnchor), row.trailingAnchor.constraint(equalTo: sc.contentLayoutGuide.trailingAnchor),
-                                 row.topAnchor.constraint(equalTo: sc.contentLayoutGuide.topAnchor), row.bottomAnchor.constraint(equalTo: sc.contentLayoutGuide.bottomAnchor),
-                                 row.heightAnchor.constraint(equalTo: sc.frameLayoutGuide.heightAnchor), sc.heightAnchor.constraint(equalToConstant: 76 + 4 + 14)])
-    return sc
-  }
-  private func lines(_ list: [[String: Any]], strike: Bool) -> UIView {
-    card(list.map { l -> UIView in
-      let done = (l["done"] as? Bool) == true
-      let ic = UIImageView(image: UIImage(systemName: done ? "checkmark.circle.fill" : "circle"))
-      ic.tintColor = done ? .systemGreen : .tertiaryLabel; ic.setContentHuggingPriority(.required, for: .horizontal)
-      let t = label(l["t"] as? String ?? "", size: 16, color: done && strike ? .secondaryLabel : .label)
-      if done && strike { t.attributedText = NSAttributedString(string: t.text ?? "", attributes: [.strikethroughStyle: NSUnderlineStyle.single.rawValue, .font: UIFont.systemFont(ofSize: 16), .foregroundColor: UIColor.secondaryLabel]) }
-      let r = UIStackView(arrangedSubviews: [ic, t]); r.spacing = 10; r.alignment = .center
-      return padded(r, UIEdgeInsets(top: 13, left: 16, bottom: 13, right: 16))
-    })
-  }
-  private func build() {
-    // the task's name
-    stack.addArrangedSubview(padded(label(a["title"] as? String ?? "", size: 22, weight: .bold), UIEdgeInsets(top: 0, left: 4, bottom: 4, right: 4)))
-    // In the Trash · who · when · days left, and Restore
-    let orange = UIColor.systemOrange
-    let barL = label(a["bar"] as? String ?? "", size: 14, color: Look.c(orange, UIColor(red: 0.55, green: 0.33, blue: 0, alpha: 1)))
-    let barRow = UIStackView(arrangedSubviews: [UIImageView(image: UIImage(systemName: "trash")), barL]); barRow.spacing = 10; barRow.alignment = .center
-    (barRow.arrangedSubviews[0] as? UIImageView)?.tintColor = barL.textColor
-    barRow.arrangedSubviews[0].setContentHuggingPriority(.required, for: .horizontal)
-    if (a["canRestore"] as? Bool) == true {
-      var bc = UIButton.Configuration.filled(); bc.cornerStyle = .capsule; bc.image = UIImage(systemName: "arrow.uturn.backward"); bc.imagePadding = 6
-      bc.title = "Restore"; bc.buttonSize = .medium
-      bc.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 14, bottom: 8, trailing: 14)
-      let rb = UIButton(configuration: bc)
-      rb.setContentHuggingPriority(.required, for: .horizontal); rb.setContentCompressionResistancePriority(.required, for: .horizontal)
-      rb.addAction(UIAction { [weak self] _ in self?.finish(["ok": true, "action": "restore"]) }, for: .touchUpInside)
-      barRow.addArrangedSubview(rb)
-    }
-    let barBox = padded(barRow, UIEdgeInsets(top: 12, left: 14, bottom: 12, right: 12))
-    barBox.backgroundColor = orange.withAlphaComponent(0.14); barBox.layer.cornerRadius = 16; barBox.layer.cornerCurve = .continuous
-    stack.addArrangedSubview(barBox)
-    stack.setCustomSpacing(14, after: barBox)
-    // Client, Status, Assignees, Dates, Tags
-    let props = (a["props"] as? [[String: Any]] ?? []).map { p -> UIView in
-      let k = label(p["label"] as? String ?? "", size: 16, color: .secondaryLabel, lines: 1)
-      k.translatesAutoresizingMaskIntoConstraints = false; k.widthAnchor.constraint(equalToConstant: 96).isActive = true
-      let v: UIView
-      if let people = p["people"] as? [[String: Any]] {
-        let l = UILabel(); l.numberOfLines = 0; l.attributedText = people.isEmpty ? NSAttributedString(string: "Nobody", attributes: [.font: UIFont.systemFont(ofSize: 16), .foregroundColor: UIColor.secondaryLabel]) : peopleText(people); v = l
-      } else if let st = p["status"] as? [String: Any] {
-        let c = NativeSheetVC.color(st["color"]) ?? .systemBlue
-        let l = label(st["name"] as? String ?? "", size: 14, weight: .semibold, color: c, lines: 1)
-        let pill = padded(l, UIEdgeInsets(top: 3, left: 9, bottom: 3, right: 9)); pill.backgroundColor = c.withAlphaComponent(0.15); pill.layer.cornerRadius = 8
-        let w = UIStackView(arrangedSubviews: [pill, UIView()]); w.alignment = .center; v = w
-      } else { v = label(p["text"] as? String ?? "", size: 16) }
-      let r = UIStackView(arrangedSubviews: [k, v]); r.spacing = 8; r.alignment = .center
-      return padded(r, UIEdgeInsets(top: 13, left: 16, bottom: 13, right: 16))
-    }
-    if !props.isEmpty { stack.addArrangedSubview(card(props)) }
-    if let d = a["desc"] as? String, !d.isEmpty { section("Description", nil, card([padded(text(d), UIEdgeInsets(top: 13, left: 16, bottom: 13, right: 16))])) }
-    if let s = a["subtasks"] as? [[String: Any]], !s.isEmpty { section("Subtasks", s.count, lines(s, strike: false)) }
-    if let s = a["checklist"] as? [[String: Any]], !s.isEmpty { section("Checklist", nil, lines(s, strike: true)) }
-    if let f = a["files"] as? [[String: Any]], !f.isEmpty { section("Attachments", f.count, card([padded(tiles(f), UIEdgeInsets(top: 12, left: 12, bottom: 10, right: 12))])) }
-    let comments = a["comments"] as? [[String: Any]] ?? []
-    if comments.isEmpty {
-      section("Comments", 0, card([padded(label("No comments", size: 16, color: .secondaryLabel), UIEdgeInsets(top: 13, left: 16, bottom: 13, right: 16))]))
-      return
-    }
-    section("Comments", comments.count, card(comments.map { c -> UIView in
-        let pic = UIImageView(image: person(c["person"], 28)); pic.translatesAutoresizingMaskIntoConstraints = false
-        pic.widthAnchor.constraint(equalToConstant: 28).isActive = true; pic.heightAnchor.constraint(equalToConstant: 28).isActive = true
-        let meta = NSMutableAttributedString(string: c["name"] as? String ?? "", attributes: [.font: UIFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: UIColor.label])
-        meta.append(NSAttributedString(string: " · " + (c["when"] as? String ?? ""), attributes: [.font: UIFont.systemFont(ofSize: 13), .foregroundColor: UIColor.secondaryLabel]))
-        let m = UILabel(); m.attributedText = meta
-        let col = UIStackView(arrangedSubviews: [m]); col.axis = .vertical; col.spacing = 4
-        if let t = c["text"] as? String, !t.isEmpty { col.addArrangedSubview(text(t)) }
-        if let f = c["files"] as? [[String: Any]], !f.isEmpty { col.addArrangedSubview(tiles(f)) }
-        let r = UIStackView(arrangedSubviews: [pic, col]); r.spacing = 10; r.alignment = .top
-        return padded(r, UIEdgeInsets(top: 12, left: 14, bottom: 12, right: 14))
-    }))
-  }
-  private func finish(_ r: [String: Any]) {
-    guard let a = answer else { return }
-    answer = nil
-    if let p = presentingViewController { p.dismiss(animated: true) { a(r) } } else { a(r) }
-  }
-  func presentationControllerDidDismiss(_ presentationController: UIPresentationController) { let a = answer; answer = nil; a?(["ok": true, "closed": true]) }
 }
 
 

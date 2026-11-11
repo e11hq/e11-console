@@ -1316,7 +1316,7 @@ final class MeCtl {
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
       guard let self = self else { return }
       let apply = {
-        if v == "auto" { self.main.ownAppearanceTick() } else { self.main.run("setAppearance", ["mode": v, "themeMode": v]) { _ in } }
+        if v == "auto" { self.main.ownAppearanceTick() } else { self.main.keepAppearance(v) }
         self.redraw()
       }
       if let w = self.main.view.window { UIView.transition(with: w, duration: 0.35, options: [.transitionCrossDissolve, .allowUserInteraction], animations: { UIView.performWithoutAnimation(apply) }) } else { apply() }
