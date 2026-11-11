@@ -375,17 +375,32 @@ final class FilesLook: NSObject, QLPreviewControllerDataSource, QLPreviewControl
     let me = FilesLook()
     me.items = files.map(Item.init); me.first = i; me.from = source; source = nil
     try? FileManager.default.createDirectory(at: me.dir, withIntermediateDirectories: true)
-    // ("Opening…" only when it takes a moment — a file already on the phone opens at once)
-    var opened = false
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { if !opened { toast("Opening…") } }
+    // (Quick Look opens at once, out of what was tapped — a file not on the phone yet shows Apple's spinner in it until it's
+    //  there; never a toast of ours first: Haris 2026-11-11 07:47)
+    let q = QLPreviewController(); q.dataSource = me; q.delegate = me; q.currentPreviewItemIndex = i
+    me.q = q; shown = me
+    host.present(q, animated: true)
+    me.waiting(true)
     me.load(i) { ok in
-      opened = true
-      guard ok else { try? FileManager.default.removeItem(at: me.dir); return toast("Couldn’t open — try again") }
-      let q = QLPreviewController(); q.dataSource = me; q.delegate = me; q.currentPreviewItemIndex = i
-      me.q = q; shown = me
-      host.present(q, animated: true)
+      me.waiting(false)
+      guard ok else {
+        toast("Couldn’t open — try again")
+        q.dismiss(animated: true) { try? FileManager.default.removeItem(at: me.dir); if shown === me { shown = nil } }
+        return
+      }
       me.load(i - 1) { _ in }; me.load(i + 1) { _ in }
     }
+  }
+  // Apple's spinner in the middle of Quick Look while the file on show is on its way
+  private var spin: UIActivityIndicatorView?
+  private func waiting(_ on: Bool) {
+    guard on else { spin?.removeFromSuperview(); spin = nil; return }
+    guard let v = q?.view, spin == nil else { return }
+    let s = UIActivityIndicatorView(style: .large); s.hidesWhenStopped = true
+    s.translatesAutoresizingMaskIntoConstraints = false
+    v.addSubview(s)
+    NSLayoutConstraint.activate([s.centerXAnchor.constraint(equalTo: v.centerXAnchor), s.centerYAnchor.constraint(equalTo: v.centerYAnchor)])
+    s.startAnimating(); spin = s
   }
   private func load(_ i: Int, _ done: @escaping (Bool) -> Void) {
     guard i >= 0, i < items.count else { return done(false) }
@@ -402,14 +417,15 @@ final class FilesLook: NSObject, QLPreviewControllerDataSource, QLPreviewControl
       let u = sub.appendingPathComponent(name)
       guard (try? d.write(to: u)) != nil else { return done(false) }
       it.url = u
-      // (the one on show was waiting for it: shown now)
-      if let q = self.q, q.currentPreviewItemIndex == i { q.refreshCurrentPreviewItem() }
+      // (the one on show was waiting for it: shown now, the spinner gone)
+      if let q = self.q, q.currentPreviewItemIndex == i { self.waiting(false); q.refreshCurrentPreviewItem() }
       done(true)
     }
   }
   func numberOfPreviewItems(in c: QLPreviewController) -> Int { items.count }
   func previewController(_ c: QLPreviewController, previewItemAt i: Int) -> QLPreviewItem {
-    // (about to show: it, and the ones beside it, fetched)
+    // (about to show: it, and the ones beside it, fetched — Apple's spinner while the one on show is on its way)
+    if items[i].url == nil, c.currentPreviewItemIndex == i { waiting(true) }
     load(i) { _ in }; load(i - 1) { _ in }; load(i + 1) { _ in }
     return items[i]
   }
