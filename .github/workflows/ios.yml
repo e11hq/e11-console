@@ -19,7 +19,7 @@ on:
         description: "A quicker self-test (yes): Me, light / dark, sheets, the web comments, the slide-backs and the title readings left out (ios/selftest.py QUICK) — every other check still stops the build"
         default: "no"
       checks:
-        description: "The simulator self-test: full (default), none or compile — compile only builds it for the simulator (nothing signed or sent: a check while working, Haris 2026-11-11 14:12); none signs and sends straight after the app builds, for quick TestFlight builds while working; the full self-test runs as the last step before a release (Haris 2026-11-11)"
+        description: "The simulator self-test: full (default), none, compile or shots (the App Store screenshots: nothing signed or sent) — compile only builds it for the simulator (nothing signed or sent: a check while working, Haris 2026-11-11 14:12); none signs and sends straight after the app builds, for quick TestFlight builds while working; the full self-test runs as the last step before a release (Haris 2026-11-11)"
         default: full
   # (no build on a push any more: every build only on Haris's word — Haris 2026-11-08; one build, straight to TestFlight)
 permissions:
@@ -68,6 +68,13 @@ jobs:
         continue-on-error: true
         timeout-minutes: 20
         run: python3 ios/walktest.py build/Build/Products/Debug-iphonesimulator/E11Console.app --apple 2>&1 | tee "$RUNNER_TEMP/ios-apple.log"; exit ${PIPESTATUS[0]}
+      - name: App Store screenshots
+        # (checks=shots — Haris 2026-11-11: the 6.9" simulator, dark, the App Review copy's demo data only; every step's
+        #  screenshot kept in ios-appstore-shots.zip on the release below; nothing signed or sent)
+        if: inputs.checks == 'shots'
+        continue-on-error: true
+        timeout-minutes: 60
+        run: python3 ios/shots.py build/Build/Products/Debug-iphonesimulator/E11Console.app 2>&1 | tee "$RUNNER_TEMP/ios-shots.log"; true
       - name: Walk-through for every role, without the website
         # (ios/walktest.py — Haris 2026-11-05: every button, every role; read from the release below)
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.walk != 'no'   # (ios-nav branch: no walk-through on branch pushes — quicker checks while the frame is built)
@@ -80,12 +87,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view ios-selftest >/dev/null 2>&1 || gh release create ios-selftest --prerelease --title "iPhone app self-test" --notes "Latest iPhone app self-test results." --target "$GITHUB_SHA"
-          for f in ios-splash.png ios-splashTicked.png ios-home.png ios-homeSwipe.png ios-homeLead.png ios-homePress.png ios-homeScrolled.png ios-homeFind.png ios-homeDate.png ios-mytasks.png ios-mytasksDone.png ios-mytasksScrolled.png ios-ibx.png ios-ibxSwipe.png ios-ibxUnread.png ios-daily.png ios-inbox.png ios-me.png ios-meProfile.png ios-meTrash.png ios-client.png ios-tpage.png ios-tpageScrolled.png ios-tpageSheet.png ios-tpageComments.png ios-tpageBack.png ios-task.png ios-sheet.png ios-back.png ios-nsheet.png ios-nsheetEnd.png ios-nsheetChannel.png ios-nsheetTitled.png ios-form.png ios-formTuck.png ios-cbar.png ios-cbarMention.png ios-cbarAttach.png ios-cfeed.png ios-cfeedKb.png ios-cfeedDown.png ios-cweb.png ios-cwebKb.png ios-cwebDown.png ios-preview.png ios-signin.png ios-done.png ios-build.log ios-selftest.log ios-server.log ios-crash.txt ios-run.mp4 ios-walk.json ios-walk.txt ios-walk.log ios-walk-shots.zip ios-apple.log ios-apple.txt; do if [ -s "$RUNNER_TEMP/$f" ]; then gh release upload ios-selftest "$RUNNER_TEMP/$f" --clobber || echo "upload failed: $f"; fi; done; true
+          for f in ios-splash.png ios-splashTicked.png ios-home.png ios-homeSwipe.png ios-homeLead.png ios-homePress.png ios-homeScrolled.png ios-homeFind.png ios-homeDate.png ios-mytasks.png ios-mytasksDone.png ios-mytasksScrolled.png ios-ibx.png ios-ibxSwipe.png ios-ibxUnread.png ios-daily.png ios-inbox.png ios-me.png ios-meProfile.png ios-meTrash.png ios-client.png ios-tpage.png ios-tpageScrolled.png ios-tpageSheet.png ios-tpageComments.png ios-tpageBack.png ios-task.png ios-sheet.png ios-back.png ios-nsheet.png ios-nsheetEnd.png ios-nsheetChannel.png ios-nsheetTitled.png ios-form.png ios-formTuck.png ios-cbar.png ios-cbarMention.png ios-cbarAttach.png ios-cfeed.png ios-cfeedKb.png ios-cfeedDown.png ios-cweb.png ios-cwebKb.png ios-cwebDown.png ios-preview.png ios-signin.png ios-done.png ios-build.log ios-selftest.log ios-server.log ios-crash.txt ios-run.mp4 ios-walk.json ios-walk.txt ios-walk.log ios-walk-shots.zip ios-apple.log ios-apple.txt ios-appstore-shots.zip ios-shots.log; do if [ -s "$RUNNER_TEMP/$f" ]; then gh release upload ios-selftest "$RUNNER_TEMP/$f" --clobber || echo "upload failed: $f"; fi; done; true
       - name: Self-test failed — nothing sent
         if: (inputs.checks == 'full' || inputs.checks == '') && (steps.selftest.outcome != 'success' || steps.applecheck.outcome != 'success')
         run: echo "The self-test failed (see ios-selftest.log / ios-apple.log on the release); nothing is signed or sent."; exit 1
       - name: Sign and send to TestFlight
-        if: (github.ref_name == 'main' || github.event_name == 'workflow_dispatch') && inputs.checks != 'compile' && (inputs.checks == 'none' || (steps.selftest.outcome == 'success' && steps.applecheck.outcome == 'success'))
+        if: (github.ref_name == 'main' || github.event_name == 'workflow_dispatch') && inputs.checks != 'compile' && inputs.checks != 'shots' && (inputs.checks == 'none' || (steps.selftest.outcome == 'success' && steps.applecheck.outcome == 'success'))
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
