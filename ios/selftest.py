@@ -154,6 +154,7 @@ try:
     cmoved = {k: (ca.get(k), cs2.get(k), ct.get(k)) for k in set(ca) | set(cs2) | set(ct) if len({round(x) for x in (ca.get(k), cs2.get(k), ct.get(k)) if x is not None}) > 1}
     print('measure clientRowHeights', json.dumps({'arrived': ca, 'scrolled': cs2, 'top': ct}))
     check(bool(ca) and not cmoved, f"a client's page: each row keeps its height — arrived, scrolled, back at the top (moved: {cmoved})")
+    print('measure clAgainNotes', json.dumps(res.get('clAgainNotes')))
     check(res.get('clRowsBefore') is not None and res.get('clRowsAfter') == res.get('clRowsBefore'), f"the Clients tab left and opened again: no row set again {res.get('clRowsBefore')} → {res.get('clRowsAfter')}")
     check(cf.get('searching') is True and (cf.get('tasks') or 0) > 0 and cf.get('clients') == 0, f"a client's page searched for \"{res.get('clFindWord')}\": its tasks found {cf}")
     check(cw.get('title') is True and cw.get('washed') is False, f"a client's page, search closed: its task title without search's wash {cw}")

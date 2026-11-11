@@ -2255,8 +2255,9 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
       ("clFindRead", pause(1500) + "return '{}'", { self.selfResult["clFind"] = self.clientPageIfMade?.selfFindGeo() ?? [:]; self.selfResult["clFindWord"] = self.selfWashWord; self.clientPageIfMade?.selfFindDone() }),
       ("clWash", pause(1500) + "return '{}'", { self.selfResult["clWashAt"] = self.clientPageIfMade?.selfWash() ?? [:]; self.selfResult["clRowsBefore"] = (self.clientPageIfMade?.rowsSet ?? 0) + (self.clientsListIfMade?.rowsSet ?? 0); self.selfTapTab("today") }),
       // (away to Home and back to the client's page: no row set again — "only what changed changes", Haris 2026-11-10)
-      ("clAgain", pause(1500) + "return '{}'", { self.selfTapTab("projects") }),
-      ("clAgainRead", pause(2000) + "return '{}'", { self.selfResult["clRowsAfter"] = (self.clientPageIfMade?.rowsSet ?? 0) + (self.clientsListIfMade?.rowsSet ?? 0); self.selfTapTab("today") }),
+      ("clAgain", pause(1500) + "return '{}'", { BarLog.start(); self.selfTapTab("projects") }),
+      // (which rows were set again, with what they showed before and after — build 1667's 31 → 43, Haris 2026-11-11)
+      ("clAgainRead", pause(2000) + "return '{}'", { self.selfResult["clRowsAfter"] = (self.clientPageIfMade?.rowsSet ?? 0) + (self.clientsListIfMade?.rowsSet ?? 0); BarLog.on = false; self.selfResult["clAgainNotes"] = Array(BarLog.notes.prefix(40)); self.selfTapTab("today") }),
       // 26: My Tasks, the app's own (from the server): All, then the Done tab (read only), then All again
       ("mytasks", pause(2500) + "return '{}'", {
         if let i = self.tabKeys.firstIndex(of: "mytasks"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),

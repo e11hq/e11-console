@@ -274,6 +274,8 @@ final class AssetsCtl {
   func selfOpenClient() -> String {
     let list = (models[""]?["clients"] as? [[String: Any]]) ?? []
     guard let id = list.first?["id"] as? String else { return "no clients (\(models[""] == nil ? "no model" : "empty"))" }
+    // (All Client Assets gone from Me's navigation before this step — build 1667: "top is nothing of 0" — opened again here)
+    if stack.isEmpty { pickHost(); fromPage = true; openAll(animated: false) }
     guard stack.last?.kind == "all" else { return "top is \(stack.last?.kind ?? "nothing") of \(stack.count)" }
     push(screen("client", id, nil), animated: true); ask(["ev": "want", "client": id]) { _ in }
     return "opened"
