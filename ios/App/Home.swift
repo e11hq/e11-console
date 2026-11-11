@@ -3430,7 +3430,7 @@ extension HomeView {
       bc.imagePlacement = .trailing; bc.imagePadding = 5; bc.baseForegroundColor = .secondaryLabel; bc.contentInsets = .zero
       let b = UIButton(configuration: bc); b.menu = pop(); b.showsMenuAsPrimaryAction = true
       acc.append(.customView(configuration: .init(customView: b, placement: .trailing())))
-    } else if !it.value.isEmpty { acc.append(.label(text: it.value)) }
+    } else if !it.value.isEmpty { acc.append(.label(text: it.value, options: .init(font: UIFontMetrics(forTextStyle: .body).scaledFont(for: .systemFont(ofSize: 17))))) }   // (Apple's label at its own size, in the system font that carries the dirham sign — Apple's default body font showed it as [?]: Haris 2026-11-11)
     if let on = it.toggle {
       let sw = meSwitch(key)
       if sw.isOn != on { sw.setOn(on, animated: cell.window != nil) }

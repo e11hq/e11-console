@@ -127,6 +127,7 @@ final class AssetsCtl {
     if t.ownNav === t.clientsNav { appleNav = main.clientsApple ? t.clientsNav : nil }
     else if t.ownNav === t.assetsNav { appleNav = t.assetsNav }
     else if t.ownNav === t.meNav { appleNav = t.meNav }   // (Me in its own Apple navigation — AppleMe.swift: pushed on Me)
+    else if let o = t.ownNav, t.roleNavs.values.contains(where: { $0 === o }) { appleNav = o }   // (a role's own tab — an Office Admin's Overview's See All: pushed on it, as on Me — Haris 2026-11-11)
     else if t.ownNav == nil { appleNav = main.navigationController }
     else { appleNav = nil }
   }
@@ -243,7 +244,7 @@ final class AssetsCtl {
     pickHost()
     fromPage = true; rootTab = (a["root"] as? Bool) == true
     // (from Me › Client Assets: it slides in over Me, as Me's other pages — Haris 2026-11-04)
-    let slide = main.selectedTabKey == "me"
+    let slide = main.selectedTabKey == "me" || main.roleApple(main.selectedTabKey)
     // (opened from somewhere — an Inbox update, a link, a client's page: just that screen, so ‹ goes back where you came
     //  from, not up through the client's folders — Haris 2026-11-04)
     if let c = client { open(client: c, folder: folder, animated: slide, direct: !rootTab) } else { openAll(animated: slide) }
