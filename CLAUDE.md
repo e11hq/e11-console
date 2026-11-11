@@ -498,6 +498,17 @@ before starting. nothing should be missed"). Each page:
     under the logo until the copy is in (only then; never again on that phone).
 Order: 1 the startup screen (our animated logo stays — Haris 2026-11-09), then Home per its fully-Apple mock-up, then the rest.
 
+**THE iPHONE APP — FINAL, STABLE and LOCKED at build 1690 (Haris, 2026-11-11 19:51: "The app is finalized now. Mark it as
+stable release and lock it"):** commit 68753a4, branches `stable/ios-1690` and `locked/ios-app-1690` (never moved or
+deleted; every earlier lock and stable branch stays as history). The whole iPhone app is locked as it is — every page, every
+behaviour, every shared piece: nothing changes in its look, behaviour or code without telling Haris first and his yes. 1690 =
+1687 + the role pages keeping the tab bar away when a count changes (a review request, a content plan, a claim) + photos
+tried again by themselves and given to every list showing that person. The full self-test of 2026-11-11 (run 43032414483:
+109 + 28 passed, every role walked to the end; its one finding — the Clients rows set again — was Lana's late photo, fixed in
+1690) is the release's self-test; no other is run before the App Store (Haris 19:37). The server stays at 1.9.38 on live
+(its stable); main's 3a81fe3 (Finance-only search finds no tasks) is on test only. Next: the App Store screenshots — the
+approved Style F Dark frames with real captures from the App Review copy (project doc `claude/app-store-screenshots-plan.md`),
+then the release.
 **STABLE — iPhone build 1687 and server 1.9.38 (Haris, 2026-11-11 17:41: "secure 1687 aside as the stable version"):**
 commit aa5f787, branch `stable/ios-1687`; the server commit 2415d3b, branch `stable/server-1.9.38` (never moved or deleted).
 The version to go back to if later work breaks something. Next, in order (Haris 17:41): background uploads and downloads;
