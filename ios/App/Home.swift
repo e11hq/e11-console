@@ -19,40 +19,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
      shrinks as it rises into a small bar — the small title with the date under it — and the cards pass under it
      through a soft blur. Search is a Liquid Glass circle that stretches into a glass search bar; your photo then
      turns into a glass ✕ that closes it. */
-  private let blur = UIVisualEffectView(effect: nil), hairline = UIView(), blurMask = CAGradientLayer()
   // the bar's own row (the small title on it): on iOS 26+ iPhone's own scroll edge effect frosts the list under it, as in Mail
-  private let topBar = HomePassThrough(), topLine = UIView()
-  private var edgeHook: AnyObject?
-  private let frostReach = FrostReach()   // (the soft frost's area reaching a little below the bar, as Mail's)
-  private var reachK: CGFloat = 0
-  // THE FROST BAR — LOCKED (Haris 2026-11-03): two kinds of page.
-  //  • the soft one (iPhone's soft frost as strong as Mail's — FrostReach — and no line): a page with its name in the middle
-  //    of the bar and nothing stuck under it (a client's page, Client Assets, My profile, About…);
-  //  • the Inbox's (iPhone's firm frost, even down to the line, and the line): every other page — big titles (Home, My Tasks,
-  //    Inbox, Clients, Me) and pages with search / filters stuck under the bar (Trash, Team members, the task page).
-  //  Both: nothing at the top of a page; they come in once something is under the bar (the firm one fades in where iPhone
-  //  lets it).
-  var softFrost: Bool { pageBar && pinHead == nil }
-  // (never while the page is at its top or bouncing above it — Haris 2026-11-03: the frost flashed on the bounce)
-  private var underBar: Bool { pinned || scroll.contentOffset.y > -scroll.contentInset.top + 0.5 && (dLine > 0.001 || pageBar) }
-  private func applyFrost() {
-    guard #available(iOS 26.0, *) else { return }
-    let style: UIScrollEdgeEffect.Style = softFrost ? .soft : .hard
-    if scroll.topEdgeEffect.style != style { scroll.topEdgeEffect.style = style }
-    if softFrost { if scroll.topEdgeEffect.isHidden { scroll.topEdgeEffect.isHidden = false } } else { Frost.show(scroll, underBar || searching) }
-    // (the line under the bar is iPhone's own, the firm frost's — ours is gone: two lines, ours moving into iPhone's —
-    //  Haris 2026-11-03)
-    topLine.alpha = 0
-    reachK = softFrost ? (underBar ? 1 : 0) : 0
-    placeReach()
-  }
-  // (it reaches below the bar only as the line comes in — at the top of a page the big title stays clear; not while My
-  //  Tasks' filters are stuck: that firm frost ends at the line)
-  private func placeReach() {
-    CATransaction.begin(); CATransaction.setDisableActions(true)
-    frostReach.frame = CGRect(x: 0, y: 0, width: bounds.width, height: topBar.frame.height + (!softFrost || searching ? 0 : FrostReach.extra * reachK))
-    CATransaction.commit()
-  }
+  private let topBar = HomePassThrough()
   /* Mail's own measures (Haris, 2026-10-31, from his Mail screenshots): the bar's buttons 44 pt, 16 from the right
      edge, 12 apart, their middle 22 under the status bar; the bar 54 under it; the small title 17 semibold with the
      line under it 12 regular; the big title 34 bold, 16 from the left, the line under it 15 regular; system colours */
@@ -148,11 +116,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     results.automaticallyAdjustsScrollIndicatorInsets = true
     if #available(iOS 26.0, *) {
       scroll.topEdgeEffect.style = .automatic; results.topEdgeEffect.style = .automatic
-      if let i = edgeHook as? UIScrollEdgeElementContainerInteraction { topBar.removeInteraction(i) }
-      edgeHook = nil
     }
-    frostReach.isHidden = true
-    [topBar, blur, title, sub, smallTitle, smallSub, searchCircle, me, searchBar, closeCircle].forEach { $0.isHidden = true }
+    [topBar, title, sub, smallTitle, smallSub, searchCircle, me, searchBar, closeCircle].forEach { $0.isHidden = true }
     onAppleTitle?(title.attributedText?.string ?? "", sub.text ?? "")
     onAppleMe?(me.image(for: .normal))
     if assets == nil || assets == "client" || assets == "folder" || assets == "all" || isMeList { makeAppleList() }   // (Me and its pages too — AppleMe.swift)   // (the Clients tab's pages and Client Assets' too — AppleClients.swift)
@@ -647,28 +612,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     results.alpha = 0; results.isHidden = true
     hint.font = .systemFont(ofSize: 15); hint.numberOfLines = 0; hint.textAlignment = .center; results.addSubview(hint)
     addSubview(results)
-    blur.isUserInteractionEnabled = false
-    // (the bar once scrolled: frosted glass with a soft line under it, as Mail's)
-    blur.contentView.addSubview(hairline)
-    blur.alpha = 0
-    blurMask.colors = [UIColor.black.cgColor, UIColor.black.cgColor, UIColor.clear.cgColor]
-    blur.layer.mask = blurMask
-    addSubview(blur)
     addSubview(topBar)
-    topLine.alpha = 0; topBar.addSubview(topLine)   // (the soft line under the bar, as Mail's)
-    if #available(iOS 26.0, *) {
-      blur.isHidden = true
-      let i = UIScrollEdgeElementContainerInteraction()
-      i.scrollView = scroll; i.edge = .top
-      // (the bar's own row tells iPhone how far down the frost goes — FrostReach alone left it only as tall as the status
-      //  bar: Haris 2026-11-03, build 1361)
-      topBar.addInteraction(i)
-      edgeHook = i
-      frostReach.attach(scroll, in: self, below: topBar)
-      // (iPhone's soft frost — Haris 2026-11-03: back to it, and locked)
-      scroll.topEdgeEffect.style = .soft
-      results.topEdgeEffect.style = .soft
-    }
     sub.font = .systemFont(ofSize: 15)
     title.font = .systemFont(ofSize: 34, weight: .bold)
     title.adjustsFontSizeToFitWidth = true; title.minimumScaleFactor = 0.6
@@ -769,9 +713,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if appleTop { onAppleTitle?(model["title"] as? String ?? "", model["date"] as? String ?? "") }
     smallTitle.text = model["title"] as? String; smallTitle.textColor = .label
     HomeView.fadeText(smallSub, model["date"] as? String); smallSub.textColor = .secondaryLabel
-    if blur.effect == nil { blur.effect = UIBlurEffect(style: .systemUltraThinMaterial) }
-    hairline.backgroundColor = Look.c(UIColor.white.withAlphaComponent(0.08), UIColor.black.withAlphaComponent(0.08))
-    topLine.backgroundColor = Look.c(UIColor.white.withAlphaComponent(0.12), UIColor.black.withAlphaComponent(0.12))
     [searchCircle, closeCircle, searchBar].forEach { $0.setLook(tint: L.roundIc) }
     lens.tintColor = L.sub; field.textColor = L.h1; field.tintColor = L.tag
     field.attributedPlaceholder = NSAttributedString(string: assets == "plansTab" || assets == "plansPage" || assets == "me.plan" ? "Search plans — a client or a post" : assets == "reviewsTab" ? "Search requests" : assets == "claimsTab" ? "Search claims" : assets == "expensesTab" ? "Search expenses" : assets != nil ? "Search every client’s files" : "Search tasks, clients, people", attributes: [.foregroundColor: L.sub])
@@ -1412,7 +1353,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     catsView.choose(["all", "unread", "mentions"].firstIndex(of: k) ?? 0, animated: true)
     keep = Set((m["rows"] as? [[String: Any]] ?? []).filter { ($0["read"] as? Bool) != true }.compactMap { $0["id"] as? String }); keepSet = true
     drawInbox(m)
-    if #available(iOS 26.0, *), !appleTop { DispatchQueue.main.async { [weak self] in guard let self = self else { return }; Frost.nudge(self.scroll); self.applyFrost() } }
     send(["ev": "tab", "tab": k])
   }
   private func drawInbox(_ model: [String: Any]) {
@@ -1738,10 +1678,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // (as Mail's: no blur of its own — it just fades away behind the frost; Haris, 2026-11-01)
     fade(title).set(blur: 0, alpha: 1 - ease(0, 1, dBig), dy: 0, trait: tr)
     fade(sub).set(blur: 0, alpha: 1 - ease(0, 0.8, dBig), dy: 0, trait: tr)
-    if #available(iOS 26.0, *) {
-      // (no line under the bar on a page with its name in the middle — the standard, Haris 2026-11-03)
-      applyFrost()
-    } else { blur.alpha = dT }
   }
   // (Search's end, a self-test, a new layout: everything where the scroll says, at once)
   private func setBar(_ on: Bool, now: Bool = false) {
@@ -1782,20 +1718,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     topBar.frame = CGRect(x: 0, y: 0, width: W, height: barH)
     // (it comes the moment the big title has gone under the bar, as Mail's — Haris, 2026-10-31)
     if !searching { followScroll() }
-    if #available(iOS 26.0, *) {
-      if let i = edgeHook as? UIScrollEdgeElementContainerInteraction { let want: UIScrollView = searching ? results : scroll; if i.scrollView !== want { i.scrollView = want }; frostReach.follow(want) }
-      applyFrost()
-      // (one pixel, as Mail's)
-      let px = 1 / max(1, traitCollection.displayScale)
-      topLine.frame = CGRect(x: 0, y: barH - px, width: W, height: px)
-    } else {
-      blur.frame = CGRect(x: 0, y: 0, width: W, height: barH + 14)
-      CATransaction.begin(); CATransaction.setDisableActions(true)
-      blurMask.frame = blur.bounds; blurMask.locations = [0, NSNumber(value: Double(barH / (barH + 14))), 1]
-      CATransaction.commit()
-      hairline.frame = CGRect(x: 0, y: barH - 0.5, width: W, height: 0.5)
-      if searching { blur.alpha = 1 }
-    }
     // (the scroll bar on the right runs from the bar's lower edge down, never up beside it — as Mail's; set here, not by iPhone)
     if scroll.automaticallyAdjustsScrollIndicatorInsets { scroll.automaticallyAdjustsScrollIndicatorInsets = false }
     // (… down to just above the tab bar, as Mail's)
@@ -2219,7 +2141,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     ["row": selfRow, "sections": listSecs.count, "groupsApple": listSecs.filter { $0.rows }.count, "unavailable": selfUnavailable,
      "title": title.text ?? "", "date": sub.text ?? "", "stats": stats.map { ($0.viewWithTag(1) as? UILabel)?.text ?? "" },
      "groups": content.filter { $0.tag == 7 }.map { ($0 as? UILabel)?.text ?? "" }, "cards": cards.count, "fab": !fab.isHidden,
-     "headH": blur.frame.height, "shrink": shrink, "bar": blur.alpha, "smallTitle": smallTitle.alpha, "searching": searching,
+     "shrink": shrink, "smallTitle": smallTitle.alpha, "searching": searching,
      "searchBarW": searchBar.isHidden ? 0 : searchBar.frame.width, "results": resultViews.count,
      "apple": appleTop, "appleList": listOn, "appleBarH": appleBarHeight?() ?? 0, "listCells": list?.visibleCells.count ?? 0, "scrolledY": sv.contentOffset.y + inTop,
      "headGap": headGap()]
@@ -3054,49 +2976,6 @@ final class ToastCapsule: UIView {
   }
 }
 
-// The soft frost as strong as Mail's (Haris 2026-11-03, measured against his Mail screenshot): iPhone's own soft frost
-// covers the area of the views that join it, strongest at the top and fading out over it. Over the bar alone it fades
-// too early (what's under the big title showed through ~5× more than in Mail), so an invisible view a little taller than
-// the bar joins it too: the strong part covers the whole bar, and it fades out mostly near and just below the line.
-final class FrostReach: UIView {
-  static let extra: CGFloat = 20
-  private var hook: AnyObject?
-  func attach(_ scroll: UIScrollView, in parent: UIView, below: UIView) {
-    isUserInteractionEnabled = false; backgroundColor = .clear
-    parent.insertSubview(self, belowSubview: below)
-    if #available(iOS 26.0, *) {
-      let i = UIScrollEdgeElementContainerInteraction(); i.scrollView = scroll; i.edge = .top
-      addInteraction(i); hook = i
-    }
-  }
-  func follow(_ scroll: UIScrollView) {
-    if #available(iOS 26.0, *), let i = hook as? UIScrollEdgeElementContainerInteraction, i.scrollView !== scroll { i.scrollView = scroll }
-  }
-}
-
-// The firm frost (the Inbox's) only once something is under the bar — at the top of a page, nothing; fading in and out
-// where iPhone lets it (Haris 2026-11-03)
-enum Frost {
-  @available(iOS 26.0, *)
-  static func show(_ s: UIScrollView, _ on: Bool) {
-    if s.topEdgeEffect.isHidden == !on { return }
-    UIView.animate(withDuration: 0.2, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState, .curveEaseOut]) { s.topEdgeEffect.isHidden = !on }
-  }
-  // (a list placed again without scrolling — a category switched back — the frost asked again at once)
-  @available(iOS 26.0, *)
-  static func nudge(_ s: UIScrollView) { let o = s.contentOffset; s.contentOffset = CGPoint(x: o.x, y: o.y + 0.5); s.contentOffset = o }
-}
-// (for a page whose bar has no big title: the frost the moment the page has scrolled under its bar)
-final class FrostWatch: NSObject {
-  private var kv: [NSKeyValueObservation] = []
-  init(_ scroll: UIScrollView) {
-    super.init()
-    guard #available(iOS 26.0, *) else { return }
-    let f: (UIScrollView) -> Void = { s in Frost.show(s, s.contentOffset.y > -s.adjustedContentInset.top + 0.5) }
-    kv = [scroll.observe(\.contentOffset, options: [.initial, .new]) { s, _ in f(s) },
-          scroll.observe(\.contentInset, options: [.new]) { s, _ in f(s) }]
-  }
-}
 
 // the note on top of search results when a word was read as another (a typo): "Showing results for ford (you typed
 // “frod”)" — app.js searchFixedNote (Haris 2026-11-06)
