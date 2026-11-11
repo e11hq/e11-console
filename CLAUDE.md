@@ -379,7 +379,8 @@ E11 Console first (website, Mac and iPhone; test site first), E11 Talk the same 
 - Passwords and codes kept only as hashes; every code recorded (who, for whom, when); removed from the Team page = every
   sign-in stops. Live only after Haris has signed in with it on test (website, Mac, iPhone); the live site switches back to
   Cloudflare's own sign-in with one setting.
-**Remind Haris once every page is done page by page (Haris 2026-11-10 17:39):** (B) take out the leftover website code from
+**Remind Haris once every page is done page by page (Haris 2026-11-10 17:39):** (B) DONE 2026-11-11 (the website cut, build 1677,
+and its last pieces: /app/in, the new client's page) — take out the leftover website code from
 the Apple pages (about 60 `pageReady` branches — dead on the phone, which runs without the website), moving the main
 self-test's checks into the no-website run (`walktest.py --apple`) page by page first; and the smoothness check — the
 self-test filming each moment (open, back, tab switch, a row coming or going, words changing) and flagging a frame that
