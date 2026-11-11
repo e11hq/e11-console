@@ -1177,6 +1177,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let keys = list.map { $0["v"] as? String ?? "" }
     if keys != tabKeys || (tabBar.items?.count ?? 0) != keys.count {
       tabKeys = keys
+      if keys.contains("reviews") { ReviewWarm.start() }   // (the CD's review files fetched before she opens them)
       tabPhoto = [:]
       tabBadgeKey = [:]
       meTabKey = ""   // (new tabs: your photo drawn on the new Me tab)

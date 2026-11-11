@@ -4078,6 +4078,52 @@ final class MoneyFormVC: UIViewController {
 // as now, and Request Amendments' sheet ----------
 
 // the sender and the files, large and swipeable (the mock-up's D2 — a tap opens Quick Look; the strip under them)
+// The CD's review files ready before she opens a request (Haris 2026-11-11 07:08: "You can do these 3"): each request
+// in Waiting has its pictures fetched quietly as the phone's copy changes — the strip's small ones first, then the large
+// ones — into the phone's picture store (FeedLoader → DiskPics), so a request opens with its files already there, offline
+// too. Only for whoever has the Reviews tab; one picture at a time; a picture that won't come is tried twice, no more.
+enum ReviewWarm {
+  private static var started = false, busy = false, again = false, queued = false
+  private static var have = Set<String>(), tries: [String: Int] = [:]
+  static func start() {
+    guard !started else { return }
+    started = true
+    AppData.shared.listen { soon() }
+    soon()
+  }
+  // (the copy can change many times in a row: worked out once it has settled)
+  private static func soon() {
+    guard !queued else { return }
+    queued = true
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { queued = false; warm() }
+  }
+  private static func warm() {
+    guard Main.shared.tabKeys.contains("reviews") else { return }
+    if busy { again = true; return }
+    guard let m = AppData.shared.meModel("reviews", "reviews") else { return }
+    var small: [String] = [], large: [String] = []
+    for r in (m["waiting"] as? [[String: Any]]) ?? [] {
+      for f in ((r["files"] as? [[String: Any]]) ?? []) + ((r["carriedFiles"] as? [[String: Any]]) ?? []) {
+        if let p = f["pic"] as? String { small.append(p) }
+        if let p = f["big"] as? String { large.append(p) }
+      }
+    }
+    var seen = Set<String>()
+    let list = (small + large).filter { !have.contains($0) && (tries[$0] ?? 0) < 2 && seen.insert($0).inserted }
+    guard !list.isEmpty else { return }
+    busy = true
+    func next(_ i: Int) {
+      guard i < list.count else { busy = false; if again { again = false; soon() }; return }
+      let p = list[i]
+      FeedLoader.shared.image(p) { img in
+        if img != nil { have.insert(p) } else { tries[p, default: 0] += 1 }
+        next(i + 1)
+      }
+    }
+    next(0)
+  }
+}
+
 final class ReviewHero: UIView, HomeBlock, UIScrollViewDelegate {
   var onFile: ((String) -> Void)?
   private let pic = UIImageView(), who = UILabel(), meta = UILabel(), dot = UIView(), rtag = PaddedLabel()
@@ -4121,7 +4167,18 @@ final class ReviewHero: UIView, HomeBlock, UIScrollViewDelegate {
           let b = PaddedLabel(); b.text = (f["carried"] as? Bool) == true ? "✓ Approved earlier" : mk == "ok" ? "✓ Approved" : "✎ Changes"; b.font = .systemFont(ofSize: 12, weight: .bold); b.textColor = .white
           b.backgroundColor = mk == "ok" ? UIColor.systemGreen.withAlphaComponent(0.9) : UIColor.systemOrange.withAlphaComponent(0.92); b.layer.cornerRadius = 9; b.clipsToBounds = true; b.insets = UIEdgeInsets(top: 4, left: 9, bottom: 4, right: 9); b.tag = 4; v.addSubview(b)
         }
-        if let p = f["big"] as? String { FeedLoader.shared.image(p) { [weak im, weak ext] img in im?.image = img; ext?.isHidden = img != nil } }
+        // (never an empty box — Haris 2026-11-11: the strip's small picture fills it at once, the sharp one fades in over it)
+        if let p = f["big"] as? String {
+          var sharp = false
+          FeedLoader.shared.image(p) { [weak im, weak ext] img in
+            guard let im = im, let img = img else { return }
+            sharp = true; ext?.isHidden = true
+            if im.image == nil { im.image = img } else { UIView.transition(with: im, duration: 0.25, options: .transitionCrossDissolve) { im.image = img } }
+          }
+          if !sharp, let s = f["pic"] as? String, s != p {
+            FeedLoader.shared.image(s) { [weak im, weak ext] img in guard let im = im, let img = img, !sharp else { return }; im.image = img; ext?.isHidden = true }
+          }
+        }
         let t = UITapGestureRecognizer(target: self, action: #selector(tappedPage(_:))); v.addGestureRecognizer(t); v.accessibilityLabel = f["name"] as? String; v.isAccessibilityElement = true; v.accessibilityTraits = .button
         _ = i; pager.addSubview(v); return v
       }
