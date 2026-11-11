@@ -314,21 +314,28 @@ final class ServerHome {
   }
 
   // ---------- photos (the server sends where they are; fetched once, signed in) ----------
-  private var pics: [String: String] = [:], asking = Set<String>()
+  // (each screen waiting on a photo is told when it comes — only the first one asking was, so a screen asking while another
+  //  fetched it kept initials until it was drawn again: the Clients list's faces, Haris 2026-11-11)
+  private var pics: [String: String] = [:], waiting: [String: [() -> Void]] = [:]
   func photos(_ people: [String: [String: Any]], _ done: @escaping ([String: [String: Any]]) -> Void) {
-    var out = people
+    var out = people, told = Set<String>()
+    let tell = { [weak self] in
+      guard let self = self else { return }
+      done(people.mapValues { q in var q = q; if let s = q["photo"] as? String, s.hasPrefix("/") { q["photo"] = self.pics[s] }; return q })
+    }
     for (id, p) in people {
       guard let u = p["photo"] as? String, u.hasPrefix("/") else { continue }
       if pics[u] == nil, let d = DiskPics.get("photo72:" + u) { pics[u] = "data:image/jpeg;base64," + d.base64EncodedString() }   // (kept on the phone)
       if let d = pics[u] { out[id]?["photo"] = d; continue }
       out[id]?["photo"] = nil
-      guard !asking.contains(u) else { continue }
-      asking.insert(u)
+      guard told.insert(u).inserted else { continue }
+      if waiting[u] != nil { waiting[u]?.append(tell); continue }
+      waiting[u] = [tell]
       cookies { cookie in
         guard let url = URL(string: serverURL() + u) else { return }
         var r = URLRequest(url: url); if !cookie.isEmpty { r.setValue(cookie, forHTTPHeaderField: "Cookie") }
         URLSession.shared.dataTask(with: r) { [weak self] d, _, _ in
-          guard let d = d, let img = UIImage(data: d), img.size.width > 0, img.size.height > 0 else { DispatchQueue.main.async { self?.asking.remove(u) }; return }   // (tried again next time)
+          guard let d = d, let img = UIImage(data: d), img.size.width > 0, img.size.height > 0 else { DispatchQueue.main.async { self?.waiting[u] = nil }; return }   // (tried again next time)
           let side: CGFloat = 72, k = min(img.size.width, img.size.height)
           // (white under it: a see-through picture kept as JPEG was black)
           let fmt = UIGraphicsImageRendererFormat.preferred(); fmt.opaque = true
@@ -336,13 +343,12 @@ final class ServerHome {
             UIColor.white.setFill(); UIRectFill(CGRect(x: 0, y: 0, width: side, height: side))
             img.draw(in: CGRect(x: -(img.size.width - k) / 2 * side / k, y: -(img.size.height - k) / 2 * side / k, width: img.size.width * side / k, height: img.size.height * side / k))
           }
-          guard let jpg = small.jpegData(compressionQuality: 0.85) else { return }
+          guard let jpg = small.jpegData(compressionQuality: 0.85) else { DispatchQueue.main.async { self?.waiting[u] = nil }; return }
           DispatchQueue.main.async {
             guard let self = self else { return }
             self.pics[u] = "data:image/jpeg;base64," + jpg.base64EncodedString()
             DiskPics.put("photo72:" + u, jpg)
-            var again = people; for (i, q) in people where (q["photo"] as? String) == u { again[i]?["photo"] = self.pics[u] }
-            done(again.mapValues { q in var q = q; if let s = q["photo"] as? String, s.hasPrefix("/") { q["photo"] = self.pics[s] }; return q })
+            (self.waiting.removeValue(forKey: u) ?? []).forEach { $0() }
           }
         }.resume()
       }
