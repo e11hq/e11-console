@@ -25,8 +25,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
      edge, 12 apart, their middle 22 under the status bar; the bar 54 under it; the small title 17 semibold with the
      line under it 12 regular; the big title 34 bold, 16 from the left, the line under it 15 regular; system colours */
   private let R: CGFloat = 16, BTN: CGFloat = 44
-  private let sub = UILabel(), title = UILabel(), smallTitle = UILabel(), smallSub = UILabel()
-  private let me = UIButton(type: .custom)
+  // (the page's title and the line under it — shown by Apple's bar: onAppleTitle)
+  private var titleText = "", dateText = ""
+  private var meShown: UIImage?   // (your photo or initials as last told to Apple's bar)
   // (what's searched for — Apple's search bar's words, told by its screen)
   private(set) var findText = ""
   private let results = UIScrollView(), hint = UILabel()
@@ -35,11 +36,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   /* The corner button (shell 30, Haris 2026-11-01): Search here, Mark all read / unread on the Inbox and ••• on a
      task page are one glass button of the app's (CornerButton, Main): this screen's own ones then stay invisible and
      only say where the button goes and what it is. */
-  var cornerShared = false { didSet { markAll.alpha = cornerShared ? 0 : 1; me.isHidden = cornerShared } }
+  var cornerShared = false { didSet { markAll.alpha = cornerShared ? 0 : 1 } }
   // (the shared top buttons: your photo — where, what, and its tap)
   // (its place at full size — while searching it's shrunk away, and the ✕ that takes its place came out shrunk too)
-  var meFrame: CGRect { CGRect(x: me.center.x - me.bounds.width / 2, y: me.center.y - me.bounds.height / 2, width: me.bounds.width, height: me.bounds.height) }
-  var meImage: UIImage? { me.image(for: .normal) }
   func meTap() { send(["ev": "me"]) }
   var onCorner: (() -> Void)?
   // (shown or hidden — a tab changed: the corner button goes to this screen's, or away)
@@ -115,9 +114,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     if #available(iOS 26.0, *) {
       scroll.topEdgeEffect.style = .automatic; results.topEdgeEffect.style = .automatic
     }
-    [topBar, title, sub, smallTitle, smallSub, me].forEach { $0.isHidden = true }
-    onAppleTitle?(title.attributedText?.string ?? "", sub.text ?? "")
-    onAppleMe?(me.image(for: .normal))
+    topBar.isHidden = true
+    onAppleTitle?(titleText, dateText)
+    onAppleMe?(meShown)
     if assets == nil || assets == "client" || assets == "folder" || assets == "all" || isMeList { makeAppleList() }   // (Me and its pages too — AppleMe.swift)   // (the Clients tab's pages and Client Assets' too — AppleClients.swift)
     // (My Tasks: its filter rows and chips are in Apple's bar's menu now — taken out; All / Done goes into the list)
     // (My Tasks: its filters are in Apple's bar's menu, All / Done in Apple's search bar's scope bar — the rows taken out)
@@ -611,19 +610,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     hint.font = .systemFont(ofSize: 15); hint.numberOfLines = 0; hint.textAlignment = .center; results.addSubview(hint)
     addSubview(results)
     addSubview(topBar)
-    sub.font = .systemFont(ofSize: 15)
-    title.font = .systemFont(ofSize: 34, weight: .bold)
-    title.adjustsFontSizeToFitWidth = true; title.minimumScaleFactor = 0.6
-    smallTitle.font = .systemFont(ofSize: 17, weight: .semibold); smallSub.font = .systemFont(ofSize: 12)
-    smallTitle.alpha = 0; smallSub.alpha = 0
-    // (the big title scrolls with the list and goes under the frosted bar; the small title is on the bar)
-    // (the big date and title are the list's own first lines: they scroll with it, under the frosted edge)
-    scroll.addSubview(sub); scroll.addSubview(title)
-    [smallTitle, smallSub].forEach { topBar.addSubview($0) }
-    me.clipsToBounds = true
-    me.accessibilityLabel = "Me"
-    me.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.send(["ev": "me"]) }, for: .touchUpInside)
-    addSubview(me)
     let nc = NotificationCenter.default
     nc.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] n in
       guard let self = self, let end = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue else { return }
@@ -689,11 +675,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     backgroundColor = L.bg
     // (the system's own text colours, as Mail: label for the titles, secondary label for the lines under them; the look
     //  is the phone's — nothing forced, every colour switches itself: Look.swift)
-    HomeView.fadeText(sub, model["date"] as? String); sub.textColor = .secondaryLabel
-    title.attributedText = NSAttributedString(string: model["title"] as? String ?? "", attributes: [.font: UIFont.systemFont(ofSize: 34, weight: .bold), .foregroundColor: UIColor.label])
-    if appleTop { onAppleTitle?(model["title"] as? String ?? "", model["date"] as? String ?? "") }
-    smallTitle.text = model["title"] as? String; smallTitle.textColor = .label
-    HomeView.fadeText(smallSub, model["date"] as? String); smallSub.textColor = .secondaryLabel
+    titleText = model["title"] as? String ?? ""; dateText = model["date"] as? String ?? ""
+    if appleTop { onAppleTitle?(titleText, dateText) }
     hint.textColor = L.empty
     meId = model["me"] as? String ?? ""; watchMe(); meChanged()
     if var fc = fab.configuration {
@@ -927,10 +910,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     MePhoto.shared.who(p?["initials"] as? String, NativeSheetVC.color(p?["color"]))
     let pic = MePhoto.shared.image
     let key = "\(meId)|\(pic.map { "\(ObjectIdentifier($0).hashValue)" } ?? "-")|\(MePhoto.shared.initials ?? "")"
-    if key == meKey, me.image(for: .normal) != nil { return }
+    if key == meKey, meShown != nil { return }
     meKey = key
     guard let img = MePhoto.shared.picture(44) else { return }
-    me.setImage(img, for: .normal)
+    meShown = img
     onAppleMe?(img)
     onCorner?()
   }
@@ -1240,7 +1223,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
       barLogoPath = lp; barLogo.image = nil; barLogo.backgroundColor = rgb; barLogo.contentMode = .scaleAspectFill; barIni.isHidden = false
       if let p = lp { FeedLoader.shared.image(p) { [weak self] img in guard let self = self, self.barLogoPath == p, let img = img else { return }; LogoLook.put(img, key: p, in: self.barLogo); self.barIni.isHidden = true } }
     } else if barLogo.image == nil { barLogo.backgroundColor = rgb }
-    [title, sub, smallTitle, smallSub].forEach { $0.isHidden = true }
     if isClient { tellApplePage() }
   }
   // its ••• (the shared corner button's menu): Client Assets, New task
@@ -1399,11 +1381,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   override func layoutSubviews() {
     super.layoutSubviews()
     let W = bounds.width, H = bounds.height
-    let bigH = bigHead
-    // the list runs the full height, under the header; it starts below the big header
+    // the list runs the full height, under Apple's bar
     if scroll.frame != bounds { scroll.frame = bounds }
-    if !appleTop, scroll.contentInset.top != bigH { let s0 = scroll.contentOffset.y + scroll.contentInset.top; scroll.contentInset.top = bigH; scroll.contentOffset.y = s0 - bigH }
-    layoutHeader()
     // (under Apple's bar and its search bar: iPhone keeps the results clear of them, and of the keyboard)
     if results.frame != bounds { results.frame = bounds }
     results.contentInset.top = 12; results.contentInset.bottom = max(0, keyboardH - safeAreaInsets.bottom, bottomRoom - 60 - safeAreaInsets.bottom)
@@ -1424,7 +1403,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     // the three boxes (.ph-stats: 4 above, 6 below, 8 apart) — My Tasks: All / Done, the filters and what's on instead
     var y: CGFloat = 4
     let bw = (W - 32 - 16) / 3, bh: CGFloat = 1 + 10 + 41 + 15 + 12 + 1
-    if isList { listHeadH = layoutList(W); y = 4 + listHeadH - bh; layoutHeader() }
+    if isList { listHeadH = layoutList(W); y = 4 + listHeadH - bh }
     if isClients || isClient || assets != nil { y = 4 - bh }
     for (i, v) in stats.enumerated() where !noStats {
       v.frame = CGRect(x: 16 + CGFloat(i) * (bw + 8), y: y, width: bw, height: bh)
@@ -1507,7 +1486,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     sv.setContentOffset(CGPoint(x: 0, y: y), animated: animated)
   }
   func scrollViewDidScroll(_ scrollView: UIScrollView) {
-    if scrollView === scroll || scrollView === list { layoutHeader(); showMotto() }
+    if scrollView === scroll || scrollView === list { showMotto() }
     if appleTop, !searching, scrollView === sv, sv.adjustedContentInset.top > appleOpenTop { appleOpenTop = sv.adjustedContentInset.top }
   }
   // (Apple's bar coming in — after the startup screen, or back from another tab — or its big title growing: a list that
@@ -1534,199 +1513,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   private var bigHead: CGFloat { pageBar ? smallHead + 8 : safeAreaInsets.top + 66 + 41 + 1 + 19 + 18 - 4 }   // (a client's page: no big title — the task page's bar)
   // (the bar's row: its middle 28 under the status bar, 14 of room under the 46 pt buttons — Haris: they sat on its edge)
   private var smallHead: CGFloat { safeAreaInsets.top + 54 }
-  private func ease(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { let x = min(1, max(0, (t - a) / (b - a))); return x * x * (3 - 2 * x) }
-  // (how far the list has scrolled)
-  private var scrolled: CGFloat { scroll.contentOffset.y + scroll.contentInset.top }
-  // ---------- the bar switching over, as Mail (measured frame by frame from Haris's recordings, 2026-11-01) ----------
-  // Mail's is tied to the scroll, not a timed animation: as the big title reaches the top (its middle just under the
-  // status bar) it blurs and fades where it is, over ~8 pt of scroll; the small title comes in over the next ~14 pt
-  // (rising ~6 pt, sharpening), the line under it ~8 pt later. Scroll slowly and it follows your finger; flick and it's
-  // over in a few frames. Let go part way and it finishes by itself (~0.35 s, easing out) — the way it was going.
-  // Going back, the same in reverse. Everything here follows one number, u: the scroll, or the finish once let go.
-  private let bigFrom: CGFloat = 82     // (scrolled: the big title starts to go)
-  private var u: CGFloat = 0            // where the switch-over is (in scroll points)
-  private var latch: Bool? = nil        // finished by itself: held on / off until the scroll passes that end
-  private var snapFrom: CGFloat = 0, snapTo: CGFloat = 0, snapT0: CFTimeInterval = 0, snapping = false
-  private var lastS: CGFloat = 0, goingUp = true
-  // shown (eased toward u's values each frame, so nothing jumps)
-  private var dBig: CGFloat = 0, dT: CGFloat = 0, dS: CGFloat = 0, dLine: CGFloat = 0
-  private var barLink: CADisplayLink?, barLast: CFTimeInterval = 0
-  private var uEnd: CGFloat { bigFrom + 8 + 14 }   // (all in)
-  private var barIn: Bool { u >= bigFrom + 7 }      // (more than half way: what the rest of the screen goes by)
-  private var shrink: CGFloat { barIn ? 1 : 0 }
-  private var pastBig: Bool { barIn }
-  private func clamp01(_ x: CGFloat) -> CGFloat { min(1, max(0, x)) }
-  private var tBig: CGFloat { clamp01((u - bigFrom) / 8) }
-  private var tT: CGFloat { clamp01((u - bigFrom) / 14) }   // (starting the moment the big title starts to fade — Haris, 2026-11-01)
-  private var tS: CGFloat { clamp01((u - bigFrom - 8) / 14) }
-  private var fades: [ObjectIdentifier: HomeBlurFade] = [:]
-  private func fade(_ l: UILabel) -> HomeBlurFade {
-    if let f = fades[ObjectIdentifier(l)] { return f }
-    let f = HomeBlurFade(l); fades[ObjectIdentifier(l)] = f; return f
-  }
-  private func easeOut(_ x: CGFloat) -> CGFloat { let t = min(1, max(0, x)); return 1 - pow(1 - t, 3) }
-  // the scroll moved (or was set): u follows it, unless finishing by itself
-  private func followScroll() {
-    let s = scrolled
-    if abs(s - lastS) > 0.01 { goingUp = s > lastS; lastS = s }
-    let dragging = scroll.isTracking || scroll.isDragging || scroll.isDecelerating
-    if dragging { snapping = false }
-    if let l = latch {
-      // (held at its end until the scroll itself passes that end — or turns back past the start)
-      if l && (s >= uEnd || s < bigFrom) || !l && (s <= bigFrom || s > uEnd) { latch = nil }
-    }
-    if !snapping {
-      if let l = latch { u = l ? max(s, uEnd) : min(s, bigFrom) } else { u = s }
-    }
-    startBarLink()
-  }
-  // let go part way: finish the way it was going
-  private func settle() {
-    guard latch == nil, u > bigFrom, u < uEnd, !scroll.isDecelerating else { return }
-    let on = goingUp ? tBig > 0.05 : tT > 0.95
-    snapFrom = u; snapTo = on ? uEnd : bigFrom; snapT0 = CACurrentMediaTime(); snapping = true; latch = on
-    startBarLink()
-  }
-  func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) { if scrollView === scroll && !decelerate { settle() } }
-  func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) { if scrollView === scroll { settle() } }
-  private func startBarLink() {
-    if barLink != nil { return }
-    barLast = CACurrentMediaTime()
-    let l = CADisplayLink(target: self, selector: #selector(barTick))
-    if #available(iOS 15.0, *) { l.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120) }
-    l.add(to: .main, forMode: .common); barLink = l
-  }
-  @objc private func barTick() {
-    let now = CACurrentMediaTime(), dt = CGFloat(min(now - barLast, 1.0 / 30)); barLast = now
-    if snapping {
-      let k = CGFloat(min(1, (now - snapT0) / 0.35))
-      u = snapFrom + (snapTo - snapFrom) * easeOut(k)
-      if k >= 1 { snapping = false }
-    }
-    // (shown values close in on u's quickly — ~30 ms — so a flick takes a few frames, as Mail's, and nothing jumps)
-    // (Mail never goes quicker than its own pace, however fast the flick — measured from Haris's flick recordings: in, the
-    //  big title gone in ~0.07 s, the small title over ~0.09 s once the big one is mostly gone, its line over ~0.09 s
-    //  from the small title's 60 %; out, the line in ~0.07 s, the small title in ~0.15 s, the big title back once the
-    //  small one has gone. Each piece moves at most at that pace, and waits for the one before it.)
-    let a = 1 - exp(-dt / 0.03)
-    func near(_ d: inout CGFloat, _ to: CGFloat, upIn: Double, downIn: Double) {
-      var n = d + (to - d) * a
-      let up = dt / CGFloat(upIn), down = dt / CGFloat(downIn)
-      n = min(n, d + up); n = max(n, d - down)
-      d = abs(to - n) < 0.002 ? to : n
-    }
-    // (the big title and the small one cross: one starts as the other starts; the line follows the small title)
-    let gT = tT, gS = min(tS, clamp01((dT - 0.6) / 0.4))
-    let bT = max(gT, dS - 0.25), bBig = tBig
-    near(&dBig, bBig, upIn: 0.1, downIn: 0.1)
-    near(&dT, bT, upIn: 0.09, downIn: 0.15)
-    near(&dS, gS, upIn: 0.09, downIn: 0.07)
-    // (the line: in with the title; going back, gone at once)
-    if goingUp || snapping && snapTo > snapFrom { near(&dLine, dT, upIn: 0.09, downIn: 0.01) } else { dLine = tT >= 1 ? dLine : 0 }
-    applyBar()
-    if !snapping && dBig == bBig && dT == bT && dS == gS && dBig == tBig && dT == tT && dS == tS && !scroll.isTracking && !scroll.isDecelerating { barLink?.invalidate(); barLink = nil }
-  }
-  private func applyBar() {
-    let tr = traitCollection
-    if searching {
-      fades.values.forEach { $0.clear() }
-      smallTitle.alpha = 0; smallSub.alpha = 0; title.alpha = 1; sub.alpha = 1
-      return
-    }
-    // the small title and its line: rising ~6 pt and sharpening as they come; blurring and sinking as they go
-    // (each starts half its own height low — its top where its middle will be — and comes up into place: the fade and
-    //  sharpening eased out, the rise eased in; going back, the same way down — Haris, 2026-11-01)
-    func show(_ l: UILabel, _ p: CGFloat) {
-      let rise = l.bounds.height / 2
-      fade(l).set(blur: 8 * (1 - easeOut(p)), alpha: easeOut(min(1, p / 0.7)), dy: rise * (1 - p * p), trait: tr)
-    }
-    // (a page with its name in the middle of the bar — a client's, Client Assets, Me's pages: only that name; Home's small
-    //  title never comes in over it — Haris 2026-11-03)
-    if pageBar { fade(smallTitle).set(blur: 0, alpha: 0, dy: 0, trait: tr); fade(smallSub).set(blur: 0, alpha: 0, dy: 0, trait: tr) }
-    else { show(smallTitle, dT); show(smallSub, dS) }
-    // the big title: blurs and fades where it is; the big line under it with it
-    // (as Mail's: no blur of its own — it just fades away behind the frost; Haris, 2026-11-01)
-    fade(title).set(blur: 0, alpha: 1 - ease(0, 1, dBig), dy: 0, trait: tr)
-    fade(sub).set(blur: 0, alpha: 1 - ease(0, 0.8, dBig), dy: 0, trait: tr)
-  }
-  // (Search's end, a self-test, a new layout: everything where the scroll says, at once)
-  private func setBar(_ on: Bool, now: Bool = false) {
-    latch = nil; snapping = false; u = scrolled; lastS = u
-    if now { dBig = tBig; dT = tT; dS = tS; dLine = tT; applyBar() } else { startBarLink() }
-  }
-  private func layoutHeader() {
-    if appleTop { return }   // (Apple's bar: its own title, buttons and frost)
-    let W = bounds.width
-    let bigH = bigHead, smallH = smallHead, top = safeAreaInsets.top
-    let titleY = top + 66   // (the big title's top, as Mail's)
-    // the bar's frost: iPhone's own scroll edge effect under the bar's row (iOS 26+), there once the list moves under it;
-    // before iOS 26 a thin see-through blur that softens out at its lower edge
-    // My Tasks: All / Done and the filters where the list has them (4 under its top) — once they reach the bar, stuck
-    // 8 under it, the frost reaching down under them (so the cards go under them too)
-    var barH = smallH
-    if isList && listHead.superview != nil {
-      let atY = 4 - scroll.contentOffset.y, pinY = smallH + 8
-      let pin = !searching && atY < pinY
-      listHead.frame = CGRect(x: 0, y: max(atY, pin ? pinY : atY), width: W, height: listHeadH)
-      if pin != pinned {
-        pinned = pin
-        // (in the bar while stuck — iPhone's frost goes under what's in it; otherwise over the list)
-        if pin { topBar.addSubview(listHead) } else { insertSubview(listHead, belowSubview: topBar) }
-      }
-      listHead.isHidden = searching
-      if pin { barH = pinY + listHeadH + 8 }
-    } else if let p = pinHead, !isList {
-      let atY = pinHeadY - scroll.contentOffset.y, pinY = smallH + 4
-      let pin = !searching && atY < pinY
-      if pin != pinned {
-        pinned = pin
-        if pin { topBar.addSubview(p) } else { insertSubview(p, belowSubview: topBar) }
-      }
-      p.bounds = CGRect(x: 0, y: 0, width: W, height: pinHeadH); p.center = CGPoint(x: W / 2, y: max(atY, pin ? pinY : atY) + pinHeadH / 2)
-      if pin { barH = pinY + pinHeadH + 4 }
-    }
-    topBar.frame = CGRect(x: 0, y: 0, width: W, height: barH)
-    // (it comes the moment the big title has gone under the bar, as Mail's — Haris, 2026-10-31)
-    if !searching { followScroll() }
-    // (the scroll bar on the right runs from the bar's lower edge down, never up beside it — as Mail's; set here, not by iPhone)
-    if scroll.automaticallyAdjustsScrollIndicatorInsets { scroll.automaticallyAdjustsScrollIndicatorInsets = false }
-    // (… down to just above the tab bar, as Mail's)
-    // (… and from under the stuck search / filters from the very first moment, so it never jumps as they stick —
-    //  Haris 2026-11-03)
-    var barTop = smallH
-    if searching {} else if isList && listHead.superview != nil { barTop = smallH + 8 + listHeadH + 8 } else if pinHead != nil, !isList { barTop = smallH + 4 + pinHeadH + 4 }
-    scroll.verticalScrollIndicatorInsets = UIEdgeInsets(top: barTop, left: 0, bottom: tabTop.map { bounds.height - $0 + 8 } ?? bottomRoom - 20, right: 0)
-    // the big date and title: the list's own first lines (above its top, in the room it keeps for them)
-    let tw = W - 16 - R
-    // (bounds and centre, not frame: the blur fade moves them with a transform)
-    func place(_ l: UILabel, _ r: CGRect) { l.bounds = CGRect(origin: .zero, size: r.size); l.center = CGPoint(x: r.midX, y: r.midY) }
-    place(title, CGRect(x: 16, y: titleY - bigH, width: tw, height: 41))
-    place(sub, CGRect(x: 16, y: titleY + 41 + 1 - bigH, width: tw, height: 19))
-    // the small title and date on the bar: there once the big ones have gone under it (gone while searching, under its bar)
-    let smallCY = top + 22
-    let stw = W - 16 - R - BTN - 12 - BTN - 12
-    if pageBar {
-      // (in the middle of the bar, between ‹ and •••)
-      let sz = barTitle.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
-      let maxW = W - 2 * (16 + BTN + 12)
-      let w = min(sz.width, maxW)
-      let bh: CGFloat = barSub.isHidden ? 30 : 38
-      barTitle.frame = CGRect(x: (W - w) / 2, y: top + 22 - bh / 2, width: w, height: bh)
-    }
-    let sx: CGFloat = backable ? 16 + BTN + 12 : 16   // (a client's page: right of ‹)
-    place(smallTitle, CGRect(x: sx, y: top + 1, width: stw - (sx - 16), height: 21)); place(smallSub, CGRect(x: sx, y: top + 25, width: stw - (sx - 16), height: 15))
-    applyBar()
-    // Search and your photo: with the title until they reach the bar, then they stay on it
-    // (Search and your photo stay on the bar's row from the start — they don't move with the list — Haris, 2026-10-31)
-    let cy = smallCY
-    if !searching {
-      me.bounds = CGRect(x: 0, y: 0, width: BTN, height: BTN); me.center = CGPoint(x: W - R - BTN / 2, y: cy); me.layer.cornerRadius = BTN / 2
-      if isInbox {
-        let mw = ceil(markAll.sizeThatFits(CGSize(width: 300, height: BTN)).width)
-        markAll.frame = CGRect(x: W - R - BTN - 12 - mw, y: cy - BTN / 2, width: mw, height: BTN)
-      }
-    }
-  }
 
   // (search closed from the page — a plan found and opened: Apple's search bar, closed by its screen)
   func closeSearch() { onAppleFind?(nil) }
@@ -1904,7 +1690,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     let maxY = max(-inTop, scroll.contentSize.height + inBottom - scroll.bounds.height)
     scroll.setContentOffset(CGPoint(x: 0, y: min(maxY, max(-inTop, want))), animated: true)
   }
-  func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) { if scrollView === scroll { layoutHeader() } }
   func scrollViewWillBeginDragging(_ scrollView: UIScrollView) { if scrollView === list { userScrolled = true } }
 
   // ---------- a toast over Home (the page's own would be under it): "Link copied", "2 files added to …", Undo ----------
@@ -1955,7 +1740,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     selfRow["cell"] = (cv.cellForItem(at: ip) as? UICollectionViewListCell)?.contentConfiguration is UIListContentConfiguration
   }
   func selfClose() {}
-  func selfScroll(_ y: CGFloat) { userScrolled = y > 0; sv.setContentOffset(CGPoint(x: 0, y: y - inTop), animated: false); layoutHeader(); if !appleTop { setBar(barIn, now: true) } }
+  func selfScroll(_ y: CGFloat) { userScrolled = y > 0; sv.setContentOffset(CGPoint(x: 0, y: y - inTop), animated: false) }
   // (Apple's search on Home's own screen — HomeVC: the self-test types into it as a finger would)
   var onAppleFind: ((String?) -> Void)?
   func selfFind(_ q: String) { onAppleFind?(q) }
@@ -2038,9 +1823,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   func selfFab() -> Bool { guard !fab.isHidden else { return false }; if let a = fabRun { a() } else { send(["ev": "add"]) }; return true }
   func geo() -> [String: Any] {
     ["row": selfRow, "sections": listSecs.count, "groupsApple": listSecs.filter { $0.rows }.count, "unavailable": selfUnavailable,
-     "title": title.text ?? "", "date": sub.text ?? "", "stats": stats.map { ($0.viewWithTag(1) as? UILabel)?.text ?? "" },
+     "title": titleText, "date": dateText, "stats": stats.map { ($0.viewWithTag(1) as? UILabel)?.text ?? "" },
      "groups": content.filter { $0.tag == 7 }.map { ($0 as? UILabel)?.text ?? "" }, "cards": cards.count, "fab": !fab.isHidden,
-     "shrink": shrink, "smallTitle": smallTitle.alpha, "searching": searching,
+     "searching": searching,
      "results": resultViews.count,
      "apple": appleTop, "appleList": listOn, "appleBarH": appleBarHeight?() ?? 0, "listCells": list?.visibleCells.count ?? 0, "scrolledY": sv.contentOffset.y + inTop,
      "headGap": headGap()]
@@ -2351,59 +2136,6 @@ enum TaskSwipe {
   static let grey = SplashView.hex(0x8a8d96), green = SplashView.hex(0x30d158), purple = SplashView.hex(0x7a6ff0), orange = SplashView.hex(0xff9f0a)
 }
 
-// a label going or coming through a blur that builds up / clears frame by frame (Mail's bar titles): its copies at a few
-// blur strengths, the nearest two shown over each other; sharp (the label itself) when there's no blur
-final class HomeBlurFade {
-  static let radii: [CGFloat] = [0, 1.5, 3, 4.5, 6, 8, 11]
-  static let ci = CIContext()
-  weak var label: UILabel?
-  private let a = UIImageView(), b = UIImageView()
-  private var imgs: [UIImage] = [], key = ""
-  private let pad: CGFloat = 22
-  init(_ l: UILabel) { label = l; [a, b].forEach { $0.isUserInteractionEnabled = false; $0.isHidden = true } }
-  private func ready(_ trait: UITraitCollection) -> Bool {
-    guard let l = label, let text = l.text, !text.isEmpty, let font = l.font, l.bounds.width > 0, l.bounds.height > 0 else { return false }
-    let colour = (l.textColor ?? .label).resolvedColor(with: trait)
-    let k = "\(text)|\(l.bounds.size)|\(colour)|\(font.pointSize)|\(font.fontName)"
-    if k == key { return !imgs.isEmpty }
-    key = k; imgs = []
-    let fmt = UIGraphicsImageRendererFormat.preferred(); let sc = fmt.scale, bs = l.bounds.size, p = pad
-    let size = CGSize(width: bs.width + p * 2, height: bs.height + p * 2)
-    // (as the label draws it: shrunk to fit if it does, middle of its height)
-    let fit = l.adjustsFontSizeToFitWidth ? min(1, max(l.minimumScaleFactor, bs.width / max(1, (text as NSString).size(withAttributes: [.font: font]).width))) : 1
-    let f2 = fit < 1 ? font.withSize(font.pointSize * fit) : font
-    let sharp = UIGraphicsImageRenderer(size: size, format: fmt).image { _ in
-      NSAttributedString(string: text, attributes: [.font: f2, .foregroundColor: colour])
-        .draw(with: CGRect(x: p, y: p + (bs.height - f2.lineHeight) / 2, width: bs.width, height: f2.lineHeight), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], context: nil)
-    }
-    guard let src = CIImage(image: sharp) else { return false }
-    for r in HomeBlurFade.radii {
-      if r == 0 { imgs.append(sharp); continue }
-      guard let f = CIFilter(name: "CIGaussianBlur") else { imgs = []; return false }
-      f.setValue(src, forKey: kCIInputImageKey); f.setValue(r * sc, forKey: kCIInputRadiusKey)
-      guard let o = f.outputImage?.cropped(to: src.extent), let cg = Self.ci.createCGImage(o, from: src.extent) else { imgs = []; return false }
-      imgs.append(UIImage(cgImage: cg, scale: sc, orientation: .up))
-    }
-    return true
-  }
-  // blur (points; 0 = sharp), how see-through, how far below its place
-  func set(blur r: CGFloat, alpha: CGFloat, dy: CGFloat, trait: UITraitCollection) {
-    guard let l = label else { return }
-    let t = CGAffineTransform(translationX: 0, y: dy)
-    if l.transform != t { l.transform = t }
-    if alpha < 0.01 { l.alpha = 0; a.isHidden = true; b.isHidden = true; return }
-    if r < 0.2 || !ready(trait) { l.alpha = alpha; a.isHidden = true; b.isHidden = true; return }
-    if a.superview !== l.superview { l.superview?.insertSubview(a, aboveSubview: l); l.superview?.insertSubview(b, aboveSubview: a) }
-    let R = HomeBlurFade.radii
-    var i = 0; while i < R.count - 2 && r > R[i + 1] { i += 1 }
-    let f = min(1, max(0, (r - R[i]) / (R[i + 1] - R[i])))
-    l.alpha = 0
-    for v in [a, b] { v.bounds = CGRect(origin: .zero, size: imgs[0].size); v.center = l.center; v.transform = t; v.isHidden = false }
-    a.image = imgs[i]; b.image = imgs[i + 1]
-    a.alpha = alpha; b.alpha = alpha * f
-  }
-  func clear() { a.isHidden = true; b.isHidden = true; label?.transform = .identity }
-}
 
 
 // a client in the search results (phone.js search(): the coloured square with its initials, the name, its open tasks)
