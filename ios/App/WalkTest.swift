@@ -63,13 +63,15 @@ extension Main {
     // (signed in as the build machine's test person — the dev sign-in's cookie — and started the app's own way)
     guard let host = URL(string: serverURL())?.host, let email = procEnv["E11_SELFTEST_EMAIL"],
           let c = HTTPCookie(properties: [.domain: host, .path: "/", .name: "e11_dev_email", .value: email]) else { return }
-    web.configuration.websiteDataStore.httpCookieStore.setCookie(c) { self.bootCheck(); if SELFTEST == "walk" || SELFTEST == "apple" { self.walkWhenReady(0) } else { self.crawlAid() } }   // (crawl: Apple's UI testing taps it — ios/UITests)
+    web.configuration.websiteDataStore.httpCookieStore.setCookie(c) { self.bootCheck(); if SELFTEST == "walk" || SELFTEST == "apple" || SELFTEST == "1" { self.walkWhenReady(0) } else { self.crawlAid() } }   // (crawl: Apple's UI testing taps it — ios/UITests)
   }
   private func walkWhenReady(_ n: Int) {
     if !(quickBooted && AppData.shared.ready && splash == nil && shownScreen != nil) && n < 240 {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self.walkWhenReady(n + 1) }; return
     }
     selfResult["walkBooted"] = ["after": Double(n) / 4, "quick": quickBooted, "copy": AppData.shared.ready, "pageReady": pageReady]
+    // (the main self-test, the phone's way — Haris 2026-11-11: no website loaded; it starts once the app's own screens are up)
+    if SELFTEST == "1" { if !started { started = true; selfTest() }; return }
     walkRun(SELFTEST == "apple" ? appleSteps() : walkSteps(), 0)
   }
   private func walkRun(_ steps: [(String, () -> Void)], _ i: Int) {

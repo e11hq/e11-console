@@ -12,7 +12,7 @@ APP = sys.argv[1]
 BUNDLE = 'ae.e11.console.ios'
 fails = []
 # (a quick build — Haris 2026-11-09: these groups of the app's steps are left out, and the checks that need them)
-QUICK = ['me', 'look', 'form', 'nsheet', 'cweb', 'cfeed', 'cbar', 'daily', 'snap', 'storage', 'slide', 'titles', 'first', 'client']
+QUICK = ['me', 'look', 'form', 'nsheet', 'daily', 'snap', 'storage', 'slide', 'titles', 'first', 'client']
 SKIP = QUICK if os.environ.get('E11_QUICK') == 'yes' else []
 def check(ok, what, need=()):
     if any(n.startswith(g) for n in need for g in SKIP): print('skip ' + what); return
@@ -42,7 +42,27 @@ try:
     r = sh('xcrun', 'simctl', 'install', udid, APP); check(r.returncode == 0, 'installed ' + r.stderr[-300:])
     try: os.remove(os.path.join(sh('xcrun', 'simctl', 'get_app_container', udid, BUNDLE, 'data').stdout.strip(), 'Documents', 'selftest.json'))
     except Exception: pass
-    lenv = dict(os.environ, SIMCTL_CHILD_E11_SERVER=BASE, SIMCTL_CHILD_E11_SELFTEST='1', SIMCTL_CHILD_E11_SELFTEST_SKIP=','.join(SKIP), SIMCTL_CHILD_E11_SELFTEST_EMAIL=EMAIL)
+    # (the app runs without the website — Haris 2026-11-11: what to open is picked here from the server's own data, as the
+    #  page used to pick it: a task with comments and a checklist, not locked or in review; one in CD review with subtasks or a
+    #  checklist; a client's folder with more than one file)
+    pick = {}
+    try:
+        snap = json.loads(urllib.request.urlopen(urllib.request.Request(BASE + '/api/snapshot', headers={'X-Dev-Email': EMAIL}), timeout=30).read())
+        db = snap.get('data') or {}
+        tasks = db.get('tasks') or []
+        free = lambda x: not x.get('parentId') and not x.get('done') and not x.get('lockedAt') and not (x.get('reviews') or [])
+        t = next((x for x in tasks if free(x) and x.get('comments') and x.get('checklist')), None) or next((x for x in tasks if free(x) and x.get('comments')), None) or next((x for x in tasks if free(x)), None) or next((x for x in tasks if not x.get('parentId') and not x.get('done')), None)
+        rv = lambda x: not x.get('parentId') and not x.get('done') and any(r.get('state') == 'pending' for r in (x.get('reviews') or []))
+        subs = lambda x: any(y.get('parentId') == x.get('id') for y in tasks)
+        r = next((x for x in tasks if rv(x) and subs(x) and x.get('checklist')), None) or next((x for x in tasks if rv(x) and (subs(x) or x.get('checklist'))), None) or next((x for x in tasks if rv(x)), None)
+        cls = db.get('clients') or []
+        c = next((x for x in cls if any(len(f.get('files') or []) > 1 for f in (x.get('folders') or []))), None) or (cls[0] if cls else None)
+        f = next((y for y in ((c or {}).get('folders') or []) if len(y.get('files') or []) > 1), None) or (((c or {}).get('folders') or [None])[0])
+        pick = {'task': (t or {}).get('id', ''), 'review': (r or {}).get('id', ''), 'client': (c or {}).get('id', ''), 'folder': (f or {}).get('id', '')}
+    except Exception as e: print('pick failed', e)
+    print('pick', json.dumps(pick))
+    check(bool(pick.get('task')) and bool(pick.get('client')), f"the server's data gives a task and a client to open {pick}")
+    lenv = dict(os.environ, SIMCTL_CHILD_E11_SELFTEST_PICK=json.dumps(pick), SIMCTL_CHILD_E11_SERVER=BASE, SIMCTL_CHILD_E11_SELFTEST='1', SIMCTL_CHILD_E11_SELFTEST_SKIP=','.join(SKIP), SIMCTL_CHILD_E11_SELFTEST_EMAIL=EMAIL)
     # a film of the whole run (ios-run.mp4), so the moving parts — the shared top buttons, search, a page sliding in —
     # can be watched frame by frame from Claude's workspace; each stage's time in it is printed ('at 12.3s')
     # (simctl itself, in its own process group: Ctrl-C to the whole group lets it finish the file — sent to xcrun alone
@@ -80,7 +100,6 @@ try:
     try: print('recorder said:', open(os.path.join(TMP, 'ios-rec.log')).read()[-600:])
     except Exception: pass
     print(json.dumps(res, indent=1)[:4000])
-    p = res.get('home') or {}
     # 22: the startup screen is the app's own — there at once, the icon alone (Haris 2026-11-09: "Logo only, then go"), gone before Home
     sg = res.get('splashGeo') or {}
     check('splash' in seen and sg.get('logoOnly') is True and sg.get('iconLayers') == 14 and not sg.get('offline') and sg.get('files') == 5, f'the startup screen shows at once: the icon alone {sg}')
@@ -181,7 +200,7 @@ try:
     check(tp.get('copy') is True and tp.get('copyTask') and tp.get('copyTask') == tp.get('title'), f"the app's own copy of the data is ready and gives the task page the server gives {({k: tp.get(k) for k in ('copy', 'copyTask', 'title')})}")
     tsd = res.get('tpageSwipeDetailsNative') or {}
     check(tsd.get('tab') == 'details' and tsd.get('compose') is False and tsd.get('pages') == 1, f"swiped from Comments: Details, no comment box {tsd}")
-    check(tp.get('pages') == 1 and tp.get('drawn') is True and tp.get('x') == 0 and tp.get('tabBar') is False and (res.get('tpage') or {}).get('webTask') is False, f"a task opens as the app's own page, drawn from the server, nothing of the website's under it {tp} {res.get('tpage')}")
+    check(tp.get('pages') == 1 and tp.get('drawn') is True and tp.get('x') == 0 and tp.get('tabBar') is False, f"a task opens as the app's own page, drawn from the server {tp}")
     # (the Inbox in Apple's navigation: Mark all read is Apple's bar button on its own screen, not the shared corner button)
     _ib = res.get('ibxInbox') or {}
     check(((_ib.get('corner') == 'read' and _ib.get('cornerA', 0) > 0.9) or _ib.get('appleMark') == 'read') and (res.get('homeNative') or {}).get('corner') == ('none' if (res.get('homeNative') or {}).get('apple') else 'search'), f"the corner button: Search on Home, Mark all read on the Inbox {(res.get('homeNative') or {}).get('corner')} {res.get('ibxInbox')}")
@@ -193,7 +212,7 @@ try:
     check(tps.get('content', 0) > 300, f"the task page has its rows {tps}")
     check(tpc.get('feed', -1) > 0, f"the comments are the app's own (drawn from the server) {tpc}")
     check(tpc.get('tab') == 'comments' and tpc.get('compose') is True and tpc.get('box') is False, f"its Comments tab has the app's own comment box (not the old one) {tpc}")
-    check(tpb.get('pages') == 0 and tpb.get('tabBar') is True and (res.get('tpageBack') or {}).get('webTask') is False, f"back: the page goes, the tab bar is back {tpb}")
+    check(tpb.get('pages') == 0 and tpb.get('tabBar') is True, f"back: the page goes, the tab bar is back {tpb}")
     check((res.get('dailyNative') or {}).get('sheet') == 'DailySheetVC', f"the morning round-up opens as iPhone's own sheet {res.get('dailyNative')}", need=('daily',))
     mt = res.get('mytasksMyTasks') or {}; mtd = res.get('mytasksDoneMyTasks') or {}; mta = res.get('mytasksAllMyTasks') or {}
     # (Haris 2026-11-09, My Tasks fully Apple: Apple's unavailable view exactly when there's nothing to show; Home the same)
@@ -233,7 +252,6 @@ try:
     ms = res.get('mytasksScrolledMyTasks') or {}
     # (My Tasks under Apple's bar since 2026-11-08: All / Done is the first row of Apple's list, the filters in Apple's menu)
     check(ms.get('apple') is True and ms.get('scope') is True and ms.get('listOn') is True, f"My Tasks in Apple's navigation: All / Done in Apple's search bar's scope bar {ms}")
-    check((res.get('mytasksScrolled') or {}).get('blank') is True, f"the page draws nothing under the app's My Tasks {res.get('mytasksScrolled')}")
     check((res.get('mytasksTopMyTasks') or {}).get('pinned') is False, f"back at the top they're with the list again {res.get('mytasksTopMyTasks')}")
     # (the empty-Inbox / empty-Done runs: what the server itself has for this person now, and who's who)
     try:
@@ -246,7 +264,6 @@ try:
     iba = res.get('ibxAllInbox') or {}
     check(ib.get('shown') is True and ib.get('server') is True and (ib.get('tab') == 'unread' if (ib.get('unread') or 0) > 0 else ib.get('tab') == 'all') and len(ib.get('cats') or []) == 3, f"the Inbox is the app's own, from the server, opening on Unread — on All when nothing is unread {ib}")
     check((iba.get('rows') or 0) > 0 and iba.get('tab') == 'all', f"All: a row for each notification {iba}")
-    check((res.get('ibx') or {}).get('blank') is True, f"the page draws nothing under the app's Inbox {res.get('ibx')}")
     check(ibs.get('open') is True, f"a row swiped right shows Read / Unread (Apple's own swipe in Apple's list) {ibs}")
     # (the Inbox fully Apple — Haris 2026-11-10: each row Apple's own cell; holding a task's update, Apple's peek of it from the
     #  phone's copy, with Apple's menu: Open Task · Mark as Read · Copy Text / Copy Link)
@@ -262,13 +279,8 @@ try:
     check((res.get('inboxMyTasks') or {}).get('shown') is not True, f"My Tasks isn't over the Inbox {res.get('inboxMyTasks')}")
     check((res.get('inboxNative') or {}).get('shown') is False, f"the app's Home goes on another tab {res.get('inboxNative')}")
     check(res.get('splashGone') is True, f"the startup screen went before Home {res.get('splashGone')}")
-    check(set(seen) >= {x for x in {'home', 'inbox', 'me', 'meTeam', 'meAbout', 'meProfile', 'meTrash', 'meBack', 'client', 'task', 'sheet', 'back', 'nsheet', 'nsheetEnd', 'nsheetChannel', 'nsheetTitled'} if not any(x.startswith(g) for g in SKIP)}, f'all stages ran {sorted(seen)}')
-    hf = res.get('homeFrame') or {}
-    check(hf.get('web') == hf.get('screen') and hf.get('tabBar') is True, f'the page fills the screen under the floating tab bar {hf}')
-    check(int(float(str((p.get('geo') or {}).get('tabsH') or '0').replace('px','') or 0)) > 40, f"the page knows the tab bar's height {p.get('geo')}")
-    me = res.get('me') or {}
+    check(set(seen) >= {x for x in {'home', 'inbox', 'me', 'meTeam', 'meAbout', 'meProfile', 'meTrash', 'meBack', 'client', 'tpage', 'rpage', 'nsheet', 'nsheetEnd', 'nsheetChannel', 'nsheetTitled'} if not any(x.startswith(g) for g in SKIP)}, f'all stages ran {sorted(seen)}')
     mn, mt, ma, mb = res.get('meNative') or {}, res.get('meTeamNative') or {}, res.get('meAboutNative') or {}, res.get('meBackNative') or {}
-    check(me.get('native') is True and me.get('blank') is True and me.get('lockRows') == 0, f"Me is the app's own, nothing drawn under it {me}", need=('me',))
     check(mn.get('open') is True and mn.get('kind') == 'me' and mn.get('card') is True and (mn.get('rows') or 0) >= 2 and mn.get('corner') == 'none,none,none', f"the app's Me: your card and its groups, no top buttons {mn}", need=('me',))
     check(mt.get('kind') == 'team' and mt.get('screens') == 2 and (mt.get('people') or 0) >= 1 and (str(mt.get('corner')).startswith('back,') or mt.get('apple') is True), f"Team members slides in over Me, the people in it, ‹ at the top {mt}", need=('me',))
     check(ma.get('kind') == 'about' and (ma.get('parts') or 0) >= 2, f"About: its cards and What's new {ma}", need=('me',))
@@ -308,13 +320,10 @@ try:
     t0 = fr[0].get('t', 0) if fr else 0
     for f in fr: print('measure snap_back', f"{(f.get('t',0) - t0) * 1000:5.0f}ms", barLine(f))
     check(res.get('meRowsBefore') is not None and res.get('meRowsAfter') == res.get('meRowsBefore'), f"Me opened again: no row drawn again {res.get('meRowsBefore')} → {res.get('meRowsAfter')}", need=('me',))
-    check((res.get('client') or {}).get('wide') is False, f"Client Assets folder fits the screen {res.get('client')}", need=('client',))
     ca = res.get('clientAssets') or {}
     # (opened from the page — a link, an Inbox update, a client's page — just that folder, so ‹ goes back where you came from:
     #  Haris 2026-11-04; it was the client's screen, then the folder, before)
     check(ca.get('open') is True and ca.get('kind') == 'folder' and (ca.get('screens') or 0) >= 1 and (ca.get('parts') or 0) >= 1 and ca.get('shown') is True, f"a Client Assets folder opens as the app's own screen, just the folder {ca}", need=('client',))
-    sh_ = res.get('sheet') or {}; g = sh_.get('geo') or {}
-    check(sh_.get('menuBottom') is not None and sh_['menuBottom'] <= (g.get('innerH') or 0) + 1 and sh_['menuBottom'] - sh_.get('menuTop', 0) > 300, f'the comment sheet is fully on screen, all of it showing {sh_}')
     # native sheets: the same room above (TOP, 30) and below (as on the Channel sheet) everywhere; a long list's last
     # option clear of the bottom edge at the end of the scroll
     ch_ = res.get('nsheetChannelGeo') or {}; gap = ch_.get('endGap')
@@ -325,32 +334,12 @@ try:
         g_ = res.get(k + 'Geo') or {}
         check(gap is not None and g_.get('endGap') is not None and abs(g_['endGap'] - gap) <= 2, f'native sheet {k}: gap under the last option {g_.get("endGap")} = Channel\'s {gap}', need=('nsheet',))
     check((res.get('nsheetGeo') or {}).get('scrolls') is True, 'the long native sheet scrolls', need=('nsheet',))
-    # 20: the task's Comments on their own screen, scrolled by iOS: shown over the task, at the latest comment; with the
-    # keyboard up still at the latest (the room under it the keyboard's and the box's); down again, at the latest
-    w0, w1, w2 = res.get('cwebGeo') or {}, res.get('cwebKbGeo') or {}, res.get('cwebDownGeo') or {}
-    check(w0.get('made') and w0.get('loaded') and w0.get('shown') and w0.get('atEnd'), f'the comments screen shows the task, at the latest comment {w0}', need=('cweb',))
-    check(w1.get('shown') and w1.get('atEnd') and (w1.get('ty') or 0) < -300 and abs((w1.get('height') or 0) - (w0.get('height') or 0)) < 2, f'keyboard up: comments still at the latest, slid up above the keyboard, same size {w1}', need=('cweb',))
-    check(w2.get('shown') and w2.get('atEnd') and abs(w2.get('ty') or 0) < 1, f'keyboard down: at the latest, back in place {w2}', need=('cweb',))
-    # 19: Comments with the keyboard (a pretend one): iOS moves the list itself, it stays at the latest comment, and once
-    # the keyboard is up the page keeps the room (same picture); down again, the room goes and it's still at the latest
-    f0, f1, f2 = res.get('cfeed') or {}, res.get('cfeedKb') or {}, res.get('cfeedDown') or {}
-    g1 = res.get('cfeedKbGeo') or {}
-    check(f0.get('on') is True and (f0.get('toEnd') or 0) <= 60, f'a task opened on Comments, at the latest comment {f0}', need=('cfeed',))
-    check(g1.get('found') is True, f'iOS found the comments list to move with the keyboard {g1}', need=('cfeed',))
-    check(f1.get('kbpad') == f"{round(g1.get('T') or 0)}px" and not f1.get('transform') and abs(f1.get('toEnd', 99)) <= 4 and (g1.get('inset') == 0), f'keyboard up: still at the latest comment, the page keeps the room {f1} {g1}', need=('cfeed',))
-    check(f2.get('kbpad') in ('0px', '') and abs(f2.get('toEnd', 99)) <= 4, f'keyboard down: room gone, still at the latest comment {f2} {res.get("cfeedDownGeo")}', need=('cfeed',))
     fr = res.get('frame') or {}
     print('note ' + ('ok' if (fr.get('insetTop') or 0) >= 20 else 'CHECK SCREENSHOT') + f" the sign-in page clears the status bar {fr} {res.get('signin')}")   # (needs the internet: not a blocker)
     print('note ' + ('ok' if fr.get('reviewLink') is True or 'cloudflareaccess' not in str(fr.get('host')) else 'CHECK SCREENSHOT') + f" the App Review sign-in link shows under the sign-in page {fr.get('host')} {fr.get('reviewLink')}")   # (needs the internet)
     check(fr.get('privacy') is True, f"Apple's privacy manifest is in the app {fr.get('privacy')}")
-    check(p.get('ios') is True and p.get('isIOSApp') is True and p.get('isMacApp') is False, 'the web app knows it is in the iPhone app (not the Mac app)')
-    check(p.get('phone') is True, 'phone layout')
-    check(p.get('webTabsShown') is False, "the page's own tab bar is hidden (the app draws a native one)")
-    check((p.get('appInfo') or {}).get('native') == 'ios', f"appInfo {p.get('appInfo')}")
-    check('Unknown command' in str(p.get('unknown')), 'unknown commands answered')
+    check((res.get('appInfo') or {}).get('native') == 'ios', f"appInfo {res.get('appInfo')}")
     check(len(res.get('tabs') or []) >= 4 and 'inbox' in (res.get('tabs') or []), f"native tab bar has the page's tabs {res.get('tabs')}")
-    check((res.get('inbox') or {}).get('view') == 'inbox', f"tapping the native Inbox tab opens the Inbox {res.get('inbox')}")
-    check((res.get('task') or {}).get('taskOpen') is True and (res.get('back') or {}).get('taskOpen') is False, 'a task opens and closes')
 finally:
     srv.terminate()
     # if the app crashed: the newest crash report (on our own Mac, macOS keeps the simulator's apps' reports) goes with the results

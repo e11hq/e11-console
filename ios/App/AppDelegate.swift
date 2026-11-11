@@ -237,7 +237,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if !Main.noPage { loadHome() }
     // (Part B step 8: who's signed in, asked by the app itself — Boot.swift; the self-test's sign-in is set as the page
     //  loads: asked once it has)
-    if SELFTEST.isEmpty { bootCheck() } else if SELFTEST == "walk" || SELFTEST == "crawl" || SELFTEST == "apple" { walkTest() }   // (the walk-through: WalkTest.swift)
+    if SELFTEST.isEmpty { bootCheck() } else { walkTest() }   // (the walk-through: WalkTest.swift)
   }
   /* ---------- the quick start (iOS app data plan, step 3 — Haris, 2026-11-02): with this person's copy saved on the
      phone, the app opens on its own Home and tab bar at once, drawn from that copy; the website loads quietly behind,
@@ -2788,6 +2788,12 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     try? Data(jsonString(selfResult).utf8).write(to: url)
   }
   func probe(_ key: String, _ js: String, _ then: @escaping () -> Void) {
+    // (no website in the app — Haris 2026-11-11: only the sign-in page is ever a page; elsewhere the step's own wait, nothing asked)
+    if Main.noPage && (web.url == nil || web.url?.scheme == "about" || web.url?.host == serverHost) {
+      let ms = js.components(separatedBy: "setTimeout(r, ").dropFirst().compactMap { Int($0.prefix { $0.isNumber }) }.reduce(0, +)
+      DispatchQueue.main.asyncAfter(deadline: .now() + Double(ms) / 1000) { self.selfResult[key] = [String: Any](); then() }
+      return
+    }
     web.callAsyncJavaScript(js, arguments: [:], in: nil, in: .page) { r in
       switch r {
       case .success(let v): self.selfResult[key] = (try? JSONSerialization.jsonObject(with: Data(((v as? String) ?? "null").utf8), options: [.fragmentsAllowed])) ?? NSNull()
@@ -2956,7 +2962,6 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     }
   }
   // the comments list as the page sees it: where it's scrolled, whether the latest comment shows, the room kept
-  let feedJS = "const f = document.querySelector('#detail .tm-feed'); if (!f) return JSON.stringify({ error: 'no list' }); const last = f.lastElementChild; return JSON.stringify({ on: document.documentElement.classList.contains('ph-cb-on'), st: f.scrollTop, sh: f.scrollHeight, ch: f.clientHeight, toEnd: f.scrollHeight - f.scrollTop - f.clientHeight, lastBottom: last ? last.getBoundingClientRect().bottom : null, top: f.getBoundingClientRect().top, kbpad: getComputedStyle(document.documentElement).getPropertyValue('--ph-kbpad').trim(), transform: f.style.transform, n: f.children.length })"
   func fakeKeyboard(_ h: CGFloat) {
     let b = view.bounds
     let end = view.convert(CGRect(x: 0, y: h > 0 ? b.height - h : b.height, width: b.width, height: max(h, 1)), to: nil)
@@ -2964,17 +2969,13 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       UIResponder.keyboardFrameEndUserInfoKey: NSValue(cgRect: end), UIResponder.keyboardAnimationDurationUserInfoKey: 0.35, UIResponder.keyboardAnimationCurveUserInfoKey: UInt(7)])
   }
   func selfTest() {
-    let wait = "for (let i = 0; i < 120 && !((typeof db !== 'undefined' && db) && typeof currentUserId !== 'undefined' && currentUserId && document.getElementById('ph-tabs')); i++) await new Promise((r) => setTimeout(r, 250));"
-    let geo = "const cs = getComputedStyle(document.documentElement); const geo = { innerH: innerHeight, vvH: visualViewport ? visualViewport.height : null, shift: cs.getPropertyValue('--ph-shift'), tabsH: cs.getPropertyValue('--ios-tabs-h'), kb: cs.getPropertyValue('--ph-kb') };"
+    // (what to open, picked by the build machine from the server's own data: a task, one in CD review, a client's folder)
+    let pick = (procEnv["E11_SELFTEST_PICK"].flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }) ?? [:]
     // (name, script run in the page, what to do in the app first)
     let allSteps: [(String, String, (() -> Void)?)] = [
-      ("home", wait + pause(1500) + """
-        const info = await NativeMac.call('appInfo');
-        \(geo)
-        return JSON.stringify({ ios: document.documentElement.classList.contains('ios-app'), phone: typeof Phone !== 'undefined' && !!Phone.on, isIOSApp: Host.isIOSApp, isMacApp: Host.isMacApp,
-          webTabsShown: getComputedStyle(document.getElementById('ph-tabs')).display !== 'none', view: ui.view, appInfo: info, geo,
-          top: getComputedStyle(document.documentElement).getPropertyValue('--ph-top'), unknown: await NativeMac.call('nope').then(() => 'answered').catch((e) => e.message) });
-        """, nil),
+      // (the app without the website — Haris 2026-11-11: the self-test runs the phone's way; what the page used to answer
+      //  is read from the app itself)
+      ("home", pause(1500) + "return '{}'", { self.run("appInfo", [:]) { r in self.selfResult["appInfo"] = r } }),
       // (Haris 2026-11-09 16:56, exactly: the app opened on E11 Day, My Tasks, another tab, My Tasks again — its big title
       //  gone for good, until the app is opened again; the tabs tapped as a finger does, from the very start, the title
       //  read each time with whatever lies over it)
@@ -3037,13 +3038,13 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("clAgain", pause(1500) + "return '{}'", { self.selfTapTab("projects") }),
       ("clAgainRead", pause(2000) + "return '{}'", { self.selfResult["clRowsAfter"] = (self.clientPageIfMade?.rowsSet ?? 0) + (self.clientsListIfMade?.rowsSet ?? 0); self.selfTapTab("today") }),
       // 26: My Tasks, the app's own (from the server): All, then the Done tab (read only), then All again
-      ("mytasks", pause(2500) + "return JSON.stringify({ view: ui.view })", {
+      ("mytasks", pause(2500) + "return '{}'", {
         if let i = self.tabKeys.firstIndex(of: "mytasks"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),
-      ("mytasksDone", pause(2500) + "return JSON.stringify({ tab: ui.myTasksTab })", { self.myTasksIfMade?.selfTab("done") }),
+      ("mytasksDone", pause(2500) + "return '{}'", { self.myTasksIfMade?.selfTab("done") }),
       // (scrolled on the Done tab — the longer list: All / Done and the filters stuck under the frost bar)
-      ("mytasksScrolled", "return JSON.stringify({ blank: !!document.querySelector('#content .ph-under-app') })", { self.myTasksIfMade?.selfScroll(400) }),
+      ("mytasksScrolled", "return '{}'", { self.myTasksIfMade?.selfScroll(400) }),
       ("mytasksTop", "return '{}'", { self.myTasksIfMade?.selfScroll(0) }),
-      ("mytasksAll", pause(2000) + "return JSON.stringify({ tab: ui.myTasksTab })", { self.myTasksIfMade?.selfTab("all") }),
+      ("mytasksAll", pause(2000) + "return '{}'", { self.myTasksIfMade?.selfTab("all") }),
       // (Haris 2026-11-09: "I open search and close it, title disappears" — search opened and closed on My Tasks; its big
       //  title read as on screen after)
       ("mytasksFind", pause(1500) + "return '{}'", { self.myTasksIfMade?.selfFind("a") }),
@@ -3073,7 +3074,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("titlesLineAwayBack", pause(1500) + "return '{}'", { self.selfTapTab("mytasks") }),
       ("titlesLineAwayRead", "return '{}'", { self.selfResult["titleMtLineHidden"] = self.selfBigTitle("My Tasks"); if let vc = MyTasksVC.shared { BigLine.set(vc, self.selfResult["lineWas"] as? String ?? "", "mytasks", save: false) }; self.selfResult["lineSets"] = BigLine.sets }),
       // 28: the Inbox, the app's own: All, a row swiped right (Read / Unread), Unread, Mentions
-      ("ibx", pause(2500) + "return JSON.stringify({ view: ui.view, blank: !!document.querySelector('#content .ph-under-app') })", {
+      ("ibx", pause(2500) + "return '{}'", {
         if let i = self.tabKeys.firstIndex(of: "inbox"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),
       ("ibxSwipe", "return '{}'", { self.inboxIfMade?.selfInboxTab("all"); self.inboxIfMade?.selfSwipeRow() }),
       ("ibxUnread", pause(2000) + "return '{}'", { self.inboxIfMade?.selfInboxTab("unread") }),
@@ -3103,10 +3104,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // 29: the morning round-up as iPhone's own sheet (the page's own sections, as the Inbox's round-up opens it)
       ("daily", pause(1500) + "return '{}'", { _ = self.dailyNative() }),   // (the app's own round-up — step 8)
       ("dailyDone", "return '{}'", { self.presentedViewController?.dismiss(animated: false) }),
-      ("inbox", pause(1500) + "return JSON.stringify({ view: ui.view })", {
+      ("inbox", pause(1500) + "return '{}'", {
         if let i = self.tabKeys.firstIndex(of: "inbox"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),
       // (33: Me is the app's own — the page draws nothing under it; its Team members page pushed in, then back)
-      ("me", "go('me'); " + pause(1200) + "for (let i = 0; i < 3; i++) { await Push.refresh(); " + pause(300) + " } return JSON.stringify({ native: typeof NativeMe !== 'undefined' && NativeMe.shown, blank: !!document.querySelector('#content .ph-under-app'), lockRows: document.querySelectorAll('#ph-lock, [data-ph-lock]').length, pushRows: document.querySelectorAll('#ph-push').length })", nil),
+      ("me", pause(1500) + "return '{}'", { self.selfSelect("me") }),
       ("meTeam", pause(2500) + "return '{}'", { self.meCtl.selfOpen("team") }),
       ("meAbout", pause(2500) + "return '{}'", { self.selfResult["frost_team"] = self.selfBar(AppleTabs.shared?.meNav); self.meCtl.pop(animated: false); self.meCtl.selfOpen("about") }),
       ("meProfile", pause(2500) + "return '{}'", { self.meCtl.pop(animated: false); self.meCtl.selfOpen("profile") }),
@@ -3146,12 +3147,19 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         SelfFrames.run(1.2, { self.selfBar(AppleTabs.shared?.meNav) }) { f in self.selfResult["snap_back"] = f }
         self.assetsCtl.pop(animated: true) }),
       ("snapDone", pause(1500) + "return '{}'", { AppleTabs.shared?.meNav.popToRootViewController(animated: false) }),
-      ("client", "try { let c = db.clients.find((x) => (x.folders || []).some((f) => (f.files || []).length > 1)) || db.clients[0]; if (!c) { c = createClient('Sample client'); c.folders[0].files = [{ id: 'st-a1', name: 'Logo primary.png', size: 48000, at: nowISO() }, { id: 'st-a2', name: 'Brand guidelines.pdf', size: 2400000, at: nowISO() }, { id: 'st-a3', name: 'Logo lockup.ai', size: 4800000, at: nowISO() }] } const f = (c.folders || []).find((x) => (x.files || []).length > 1) || (c.folders || [])[0]; if (!f) return JSON.stringify({ error: 'no folder' }); openClient(c.id, f.id); " + pause(1200) + "return JSON.stringify({ wide: document.getElementById('content').scrollWidth > innerWidth + 1 }) } catch (e) { return JSON.stringify({ error: String(e && e.message || e) }) }", nil),
+      // (a client's folder with files, picked by the build machine from the server's data — E11_SELFTEST_PICK — opened as
+      //  a link or an Inbox update opens it: just the folder)
+      ("client", pause(1200) + "return '{}'", {
+        guard let c = pick["client"] as? String, !c.isEmpty else { return }
+        var st: [String: Any] = ["client": c]; if let f = pick["folder"] as? String, !f.isEmpty { st["folder"] = f }
+        self.assetsCtl.command(["show": true, "me": AppData.shared.me ?? "", "start": st]) }),
       // 30: the app's own task page — pushed in, scrolled, its Comments, back (then the website's task page for the
       // stages after it)
       // (from Home — the Client Assets stage before leaves the page on a client's folder, the app's own screens over it —
       //  and a task that isn't locked for CD review: its Assignees lock then, 32)
-      ("tpage", "if (ui.view === 'client' || ui.view === 'clients') go('today'); const free = (x) => !x.parentId && !x.done && !x.lockedAt && !(x.reviews || []).length; const t = db.tasks.find((x) => free(x) && (x.comments || []).length && (x.checklist || []).length) || db.tasks.find((x) => free(x) && (x.comments || []).length) || db.tasks.find(free) || db.tasks.find((x) => !x.parentId && !x.done); openTask(t.id); " + pause(3000) + "return JSON.stringify({ webTask: !!ui.taskId, id: t.id })", { self.presentedViewController?.dismiss(animated: false) }),
+      ("tpage", pause(3000) + "return '{}'", {
+        self.presentedViewController?.dismiss(animated: false); self.assetsCtl.close(animated: false); self.selfSelect("today")
+        if let t = pick["task"] as? String, !t.isEmpty { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.openTaskPage(t, tab: "details", focus: "") } } }),
       // (each row's height once the page has arrived and the tab bar has gone, then scrolled, then back at the top: the
       //  same row the same height — Haris 2026-11-09)
       ("tpageHold", pause(1500) + "return '{}'", { self.selfResult["holdArrived"] = self.taskPages.last?.detailsHeights() ?? [:] }),
@@ -3186,11 +3194,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("tpageFeedTop", pause(1500) + "return '{}'", { self.selfResult["feedTop"] = self.taskPages.last?.feed?.selfCheck() ?? [:]; self.selfResult["feedBar"] = Int((self.taskPages.last?.barBottom ?? -1).rounded()); self.taskPages.last?.feed?.toEnd(animated: false) }),
       // (Comments → Details as the swipe does it — for the film: nothing of Comments may show on Details on the way)
       ("tpageSwipeDetails", pause(1500) + "return '{}'", { if let p = self.taskPages.last { self.toDetailsFromComments(p) } }),
-      ("tpageBack", pause(1500) + "return JSON.stringify({ webTask: !!ui.taskId })", { if let p = self.taskPages.last { p.setTab("details", tell: true); self.closeTaskPage(p, animated: false) } }),
+      ("tpageBack", pause(1500) + "return '{}'", { if let p = self.taskPages.last { p.setTab("details", tell: true); self.closeTaskPage(p, animated: false) } }),
       // (a task in CD review — its lock note, the review switch on with the CD's name, the review files: the task page crashed
       //  on Haris's phone with these, never opened by the self-test before — 1624, Haris 2026-11-09 19:53). Opened, scrolled
       //  to the very end (the description, the files, Created by) and back to the top: every row the same height, no loop.
-      ("rpage", pause(1200) + "const rv = (x) => !x.parentId && !x.done && (x.reviews || []).some((r) => r.state === 'pending'); const subs = (x) => db.tasks.some((y) => y.parentId === x.id); const cl = (x) => (x.checklist || []).length; const t = db.tasks.find((x) => rv(x) && subs(x) && cl(x)) || db.tasks.find((x) => rv(x) && (subs(x) || cl(x))) || db.tasks.find(rv); if (t) openTask(t.id); " + pause(3000) + "return JSON.stringify({ id: t ? t.id : '', subtasks: t ? subs(t) : false, checklist: t ? cl(t) : 0 })", nil),
+      ("rpage", pause(4200) + "return '{}'", { if let t = pick["review"] as? String, !t.isEmpty { self.openTaskPage(t, tab: "details", focus: "") } }),
       ("rpageHold", pause(1500) + "return '{}'", { self.selfResult["rHoldArrived"] = self.taskPages.last?.detailsHeights() ?? [:] }),
       ("rpageEnd", pause(600) + "return '{}'", { if let p = self.taskPages.last { let sv = p.scroll; sv.setContentOffset(CGPoint(x: 0, y: max(-sv.adjustedContentInset.top, sv.contentSize.height - sv.bounds.height + sv.adjustedContentInset.bottom)), animated: true) } }),
       ("rpageHoldEnd", pause(2000) + "return '{}'", { self.selfResult["rHoldEnd"] = self.taskPages.last?.detailsHeights() ?? [:]; if let p = self.taskPages.last { p.scroll.setContentOffset(CGPoint(x: 0, y: -p.scroll.adjustedContentInset.top), animated: true) } }),
@@ -3202,9 +3210,6 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         let id = ((self.serverHome.shown?["groups"] as? [[String: Any]]) ?? []).flatMap { $0["cards"] as? [[String: Any]] ?? [] }.compactMap { $0["id"] as? String }.first
         if let id = id { self.openTaskPage(id, tab: "details", focus: "") } }),
       ("meltBack", pause(2500) + "return '{}'", { if let p = self.taskPages.last { self.closeTaskPage(p) } }),
-      ("task", "window.__e11WebTask = true; const t = db.tasks.find((x) => !x.parentId && !x.done && (x.comments || []).length) || db.tasks.find((x) => !x.parentId && !x.done); openTask(t.id); " + pause(1500) + "return JSON.stringify({ taskOpen: !!ui.taskId })", nil),
-      ("sheet", "const m = showMenu(document.body, [{ html: '<div class=\"react-pick\">' + REACTIONS.map((e) => '<button>' + e + '</button>').join('') + '</div>' }, { label: 'Reply', icon: 'reply', run() {} }, { label: 'Edit comment', icon: 'edit', run() {} }, { label: 'Copy text', icon: 'copy', run() {} }, '-', { label: 'Delete comment', icon: 'trash', danger: true, run() {} }]); m.classList.add('cm-sheet'); " + pause(900) + geo + " const r = m.getBoundingClientRect(); return JSON.stringify({ menuTop: r.top, menuBottom: r.bottom, geo })", nil),
-      ("back", "document.querySelectorAll('.menu, #ph-menu-scrim').forEach((x) => x.remove()); closeDetail(); " + pause(800) + "return JSON.stringify({ taskOpen: !!ui.taskId })", nil),
       // native sheets (Haris: the same room above and below as the Channel sheet, everywhere — and the last option of a
       // long list clear of the bottom edge at the end of the scroll): a long titled one at rest, the same scrolled to the
       // end, a short untitled one like Channel, a short one titled with a person
@@ -3223,35 +3228,14 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         let show = { self.run("formSheet", FormSheetVC.selfArgs()) { _ in } }
         if let p = self.presentedViewController { p.dismiss(animated: false) { show() } } else { show() } }),
       ("formTuck", "return '{}'", { FormSheetVC.current?.selfFill("Spring launch reel"); DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { FormSheetVC.current?.selfTuck() } }),
-      // the native comment box (17+): replying, a file and one uploading, text typed — then @Sa for the people list
-      ("cbar", "return '{}'", {
-        self.presentedViewController?.dismiss(animated: false)
-        self.commentBar(CommentBar.selfArgs())
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.cbar.selfType("Thanks, can we make the logo a bit bigger on the last frame and keep the date as it is?") } }),
-      ("cbarMention", "return '{}'", { self.cbar.selfType("Hi @Sa") }),
-      ("cbarAttach", "return '{}'", { self.cbar.openAttach() }),
-      // 19: a task's Comments with the keyboard coming up and going down (a pretend keyboard: the simulator shows none) —
-      // the list is moved by iOS and stays at the latest comment, the page keeps the room once it's up
-      ("cfeed", "window.__stPause = 1; const t = db.tasks.filter((x) => !x.parentId).sort((a, b) => (b.comments || []).length - (a.comments || []).length)[0]; openTask(t.id); " + pause(1200) + "document.querySelector('#detail .ph-seg.in-task [data-tab=\"comments\"]').click(); " + pause(2500) + feedJS, {
-        self.presentedViewController?.dismiss(animated: false)
-        self.cwebPaused = true; self.cwebUpdate()
-        self.commentBar(["show": false, "clear": true]) }),
-      ("cfeedKb", pause(1200) + feedJS, { self.fakeKeyboard(336) }),
-      ("cfeedDown", pause(1200) + feedJS, { self.fakeKeyboard(0) }),
-      // 20: the same task's Comments on their own screen — shown over the task, at the latest; the keyboard up and down
-      ("cweb", pause(2500) + "return '{}'", { self.cwebPaused = false; self.cwebUpdate() }),
-      ("cwebKb", pause(1200) + "return '{}'", { self.fakeKeyboard(336) }),
-      ("cwebDown", pause(1200) + "return '{}'", { self.fakeKeyboard(0) }),
       ("preview", "return '{}'", {
         self.presentedViewController?.dismiss(animated: false)
-        self.commentBar(["show": false])
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.run("preview", PreviewVC.selfArgs()) { _ in } } }),
       // (measurement — Haris 2026-11-09: what the app keeps on the phone, every build; the step's own name is taken by
       //  the page's answer, so it's kept as storageAt)
       ("storage", pause(2000) + "return '{}'", { self.selfResult["storageAt"] = self.selfStorage() }),
       ("signin", pause(4000) + "return JSON.stringify({ host: location.host, top: (document.querySelector('h1, h2, img, form') || document.body).getBoundingClientRect().top })", {
         self.presentedViewController?.dismiss(animated: false)
-        self.commentBar(["show": false])
         self.previewVC = nil
         self.web.load(URLRequest(url: URL(string: "https://e11hq.cloudflareaccess.com/")!)) }),
     ]
