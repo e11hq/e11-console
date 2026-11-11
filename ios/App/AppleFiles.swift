@@ -77,6 +77,7 @@ final class FileTile: UIView {
   static let folderBlue = Look.c(UIColor(red: 0x5A / 255, green: 0xA9 / 255, blue: 0xE6 / 255, alpha: 1), UIColor(red: 0x6C / 255, green: 0xB7 / 255, blue: 0xF0 / 255, alpha: 1))
   override init(frame: CGRect) {
     super.init(frame: frame)
+    BarLog.note("tile made")   // (the measurement: a tile made again in place of one that was there)
     isUserInteractionEnabled = false
     pic.contentMode = .scaleAspectFit; pic.layer.cornerCurve = .continuous
     badge.font = .systemFont(ofSize: 12, weight: .bold); badge.textAlignment = .center

@@ -137,6 +137,8 @@ if APPLE:
         if not ok: fails.append(what)
     st, rv, rl, fc = a.get('start') or {}, a.get('review') or {}, a.get('roles') or {}, a.get('focus') or {}
     print('measure apple', json.dumps(a))
+    # (Haris 2026-11-11: back from a client's Client Assets — what was set again, and the search box's fill frame by frame)
+    print('measure apple caBack', json.dumps({'notes': (a.get('caBack') or {}).get('notes'), 'frames': (a.get('caBackFrames') or {}).get('frames')}))
     check(st.get('pageReady') is False, f"the Apple pages ran without the website {st}")
     check(rv.get('cd') is True and rv.get('tab') == 'mytasks', f"Home's In review box: My Tasks with Waiting for CD review on {rv}")
     rows = rl.get('rows') or []

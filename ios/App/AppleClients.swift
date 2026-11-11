@@ -249,8 +249,8 @@ final class AssetsVC: ClientsPushedVC, UISearchResultsUpdating, UISearchControll
       //  laid itself out again mid-slide and its search box came in late: Haris 2026-11-08)
       h.onAppleTitle = { [weak self] t, d in
         guard let self = self else { return }
-        if self.navigationItem.title != t { self.navigationItem.title = t }
-        if #available(iOS 26.0, *) { let sub: String? = d.isEmpty ? nil : d; if self.navigationItem.subtitle != sub { self.navigationItem.subtitle = sub } }
+        if self.navigationItem.title != t { BarLog.note("title \(t)"); self.navigationItem.title = t }
+        if #available(iOS 26.0, *) { let sub: String? = d.isEmpty ? nil : d; if self.navigationItem.subtitle != sub { BarLog.note("subtitle \(sub ?? "-")"); self.navigationItem.subtitle = sub } }
       }
     }
   }

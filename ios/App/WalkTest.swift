@@ -233,6 +233,33 @@ extension Main {
         guard self.meApple, !self.officeTabs else { return }
         self.apple("trash", self.meCtl.selfOffice()); self.meCtl.backToRoot(); self.tab(self.tabKeys.first ?? "today")
       }),
+      // (measurement, Haris 2026-11-11 07:58: back from a client's Client Assets to All Client Assets — every row or tile set
+      //  again with its signature before and after, any tile made anew, every title / line set on Apple's bar, and the
+      //  search box's fill, frame by frame, with their times)
+      ("aCaAll", { if self.meApple { self.tab(self.tabKeys.first ?? "today"); self.selectTab("me"); self.assetsCtl.command(["show": true, "me": AppData.shared.me ?? "", "start": [String: Any]()]) } }),
+      ("aCaAllWait", {}),
+      ("aCaOpen", { if self.meApple { self.apple("caOpen", ["r": self.assetsCtl.selfOpenClient()]) } }),
+      ("aCaOpenWait", {}),
+      ("aCaBack", {
+        guard self.meApple else { return }
+        BarLog.start()
+        let nav = self.assetsCtl.appleNav
+        // (each frame of the slide back: the search box's fill on Apple's bar, as the video showed it coming in)
+        func field(_ v: UIView?) -> UISearchTextField? { guard let v = v else { return nil }; if let f = v as? UISearchTextField { return f }; for s in v.subviews { if let f = field(s) { return f } }; return nil }
+        SelfFrames.run(1.6, {
+          let f = field(nav?.navigationBar)
+          return ["t": Int((CACurrentMediaTime() - BarLog.t0) * 1000), "field": f != nil, "alpha": Double(f?.alpha ?? -1),
+                  "bgAlpha": Double(f?.subviews.first?.alpha ?? -1), "y": Double(f?.convert(CGPoint.zero, to: nil).y ?? -1)]
+        }) { fr in self.apple("caBackFrames", ["frames": fr]) }
+        self.assetsCtl.selfBack()
+      }),
+      ("aCaBackWait", {}),
+      ("aCaBackWait2", {}),
+      ("aCaBackWait3", {}),
+      ("aCaBackRead", {
+        guard self.meApple else { return }
+        BarLog.on = false; self.apple("caBack", ["notes": BarLog.notes]); self.assetsCtl.close(animated: false); self.tab(self.tabKeys.first ?? "today")
+      }),
       // (measurement, Haris 2026-11-10: a client's page sliding in from the Clients list — frame by frame, the search box
       //  and its glass in Apple's bar, and every touch of ours on the bar with its time)
       ("aBar", { self.tab("projects") }),

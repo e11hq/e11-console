@@ -408,6 +408,14 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       else { sigs[k] = "\(ObjectIdentifier(v).hashValue)|\(itemHeight(k, v))" }
     }
     let changed = secs.joined().filter { had.contains($0) && listDrawn[$0] != sigs[$0] }
+    // (the measurement — Haris 2026-11-11 07:58: coming back to Client Assets, its logos flashed as the search box's grey
+    //  came: each row or tile set again, with what it showed before and after; rows that came and went)
+    if BarLog.on {
+      for k in changed { BarLog.note("set \(k): \(listDrawn[k] ?? "-") → \(sigs[k] ?? "-")") }
+      let now = Set(secs.joined()), came = now.subtracting(had), went = had.subtracting(now)
+      if !came.isEmpty || !went.isEmpty { BarLog.note("rows came \(came.count) \(came.prefix(6).joined(separator: ",")) · went \(went.count) \(went.prefix(6).joined(separator: ","))") }
+      if changed.isEmpty && came.isEmpty && went.isEmpty { BarLog.note("list drawn, nothing changed") }
+    }
     listDrawn = sigs
     if !changed.isEmpty { snap.reconfigureItems(changed); rowsSet += changed.count }
     // (a section that became a group, or stopped being one: its layout asked again)

@@ -283,6 +283,8 @@ final class AssetsCtl {
     if stack.isEmpty { pickHost() }
     open(client: client, folder: folder, animated: true, direct: true)   // (‹ back to the client's page, the way you came)
   }
+  // (the self-test: back with Apple's ‹, as a finger does)
+  func selfBack() { appleNav?.popViewController(animated: true) }
   // (the self-test: the first client opened from All Client Assets, as tapping its card)
   func selfOpenClient() -> String {
     let list = (models[""]?["clients"] as? [[String: Any]]) ?? []
