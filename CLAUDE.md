@@ -133,6 +133,8 @@ at all**, and there's no separate check build: one TestFlight build (`gh workflo
 **Quick builds while working (Haris 2026-11-11 13:00: "I dont want long simulator test now … do it briefly as the last
 step"):** builds while working add `-f checks=none` — the app built, signed and sent with no simulator self-test (~10 min,
 not ~35); the full self-test (`checks=full`, the default) runs as the last step, before a release or a lock.
+**Compile checks (Haris 2026-11-11 14:12: "Yes, compile checks OK"):** `-f checks=compile` only builds the app for the
+simulator — nothing signed or sent; run freely while working. The real (TestFlight) build still only on his "build".
 
 **TestFlight only on Haris's yes (Haris, 2026-11-03):** "publish, publish app build" builds, self-tests and signs the
 iPhone app, then keeps it on his Mac (ios.yml `send: ask`, the default). When a build has finished, ask Haris; only on
