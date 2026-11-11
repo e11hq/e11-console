@@ -1469,8 +1469,43 @@ final class UploadRing: UIView {
 }
 
 // the pictures kept on the phone (in its caches folder, which iPhone may clear when it needs room — then they're
-// fetched again): one file each, named by its address
+// fetched again): one file each, named by its address. Only what's needed (Haris 2026-11-11 07:21: "Yes"): a picture not
+// shown for 30 days goes, at most 500 MB in all (the ones shown longest ago go first), and none left once someone signs
+// out or someone else starts on this phone (AppData.forgetCopies).
 enum DiskPics {
+  private static let maxBytes = 500_000_000, maxAge: TimeInterval = 30 * 86400
+  private static var puts = 0
+  // (shown: its date moved on, so it's kept longest — at most once a day each)
+  private static func touch(_ u: URL) {
+    io.async {
+      let fm = FileManager.default
+      guard let m = (try? fm.attributesOfItem(atPath: u.path))?[.modificationDate] as? Date, Date().timeIntervalSince(m) > 86400 else { return }
+      try? fm.setAttributes([.modificationDate: Date()], ofItemAtPath: u.path)
+    }
+  }
+  private static func trim() {
+    io.async {
+      let fm = FileManager.default, keys: [URLResourceKey] = [.fileSizeKey, .contentModificationDateKey], old = Date().addingTimeInterval(-maxAge)
+      guard let list = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: keys) else { return }
+      var items: [(URL, Int, Date)] = []
+      for u in list {
+        guard let v = try? u.resourceValues(forKeys: Set(keys)) else { continue }
+        let at = v.contentModificationDate ?? .distantPast
+        if at < old { try? fm.removeItem(at: u) } else { items.append((u, v.fileSize ?? 0, at)) }
+      }
+      var total = items.reduce(0) { $0 + $1.1 }
+      items.sort { $0.2 < $1.2 }
+      while total > maxBytes, let first = items.first { try? fm.removeItem(at: first.0); total -= first.1; items.removeFirst() }
+    }
+  }
+  private static let trimmedAtStart: Void = trim()
+  // (signing out, or someone else starting here: every picture of the one before let go)
+  static func clear() {
+    io.async {
+      let fm = FileManager.default
+      for u in (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [] { try? fm.removeItem(at: u) }
+    }
+  }
   private static let dir: URL = {
     let d = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("pics", isDirectory: true)
     try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
@@ -1480,8 +1515,16 @@ enum DiskPics {
   private static func file(_ key: String) -> URL {
     dir.appendingPathComponent(SHA256.hash(data: Data(key.utf8)).map { String(format: "%02x", $0) }.joined())
   }
-  static func get(_ key: String) -> Data? { try? Data(contentsOf: file(key)) }
-  static func put(_ key: String, _ d: Data) { io.async { try? d.write(to: file(key), options: .atomic) } }
+  static func get(_ key: String) -> Data? {
+    _ = trimmedAtStart
+    let u = file(key)
+    guard let d = try? Data(contentsOf: u) else { return nil }
+    touch(u); return d
+  }
+  static func put(_ key: String, _ d: Data) {
+    _ = trimmedAtStart
+    io.async { try? d.write(to: file(key), options: .atomic); puts += 1; if puts % 200 == 0 { trim() } }
+  }
 }
 
 // The comment reactions as SF Symbols (Haris 2026-11-04 — mockup symbols-mockup.png): each emoji kept as it is in the data

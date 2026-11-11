@@ -4091,6 +4091,8 @@ enum ReviewWarm {
     AppData.shared.listen { soon() }
     soon()
   }
+  // (the pictures let go — a sign-out, someone else here: fetched again when needed)
+  static func forget() { have.removeAll(); tries.removeAll() }
   // (the copy can change many times in a row: worked out once it has settled)
   private static func soon() {
     guard !queued else { return }

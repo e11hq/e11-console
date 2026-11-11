@@ -596,6 +596,13 @@ enum MediaKeep {
       trim()
     }.resume()
   }
+  // (signing out, or someone else starting here: none of the one before's left — Haris 2026-11-11)
+  static func clear() {
+    DispatchQueue.global(qos: .utility).async {
+      let fm = FileManager.default
+      for u in (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [] { try? fm.removeItem(at: u) }
+    }
+  }
   // (at most 2 GB: the least recently played go first)
   private static func trim() {
     let fm = FileManager.default

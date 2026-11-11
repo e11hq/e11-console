@@ -277,9 +277,12 @@ final class AppData: NSObject, URLSessionDataDelegate {
     q.async {
       let fm = FileManager.default
       guard let list = try? fm.contentsOfDirectory(atPath: self.dir.path) else { return }
+      var gone = false
       for f in list where f.hasPrefix("copy-") && f.hasSuffix(".json") && f != keep.map({ "copy-\($0).json" }) {
-        try? fm.removeItem(at: self.dir.appendingPathComponent(f))
+        try? fm.removeItem(at: self.dir.appendingPathComponent(f)); gone = true
       }
+      // (their pictures and kept videos too — Haris 2026-11-11: everything cleared on sign-out)
+      if gone || keep == nil { DiskPics.clear(); MediaKeep.clear(); DispatchQueue.main.async { ReviewWarm.forget() } }
     }
   }
   // a copy saved on this phone for this person (step 3: then the app can open on its own screens at once)
