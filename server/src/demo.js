@@ -67,7 +67,7 @@ export function demoData(store, me, filesRoot) {
     for (const u of out.users) if (!u.avatar && stage && hasFace(u.id)) { const rel = `attachments/_avatars/smp-${u.id}.jpg`; put(stage, rel, FACE(u.id)); u.avatar = rel; }
     const meUser = store.get('users', me);
     if (meUser && stage) { const rel = `attachments/_avatars/smp-${me}.jpg`; put(stage, rel, FACE('u-review')); out.users.push({ ...meUser, avatar: rel }); }
-    out.plans = [];   // (content plans are a trial on the test copy only)
+    // (content plans kept — on everywhere since 2026-10-28; the App Store screenshots show one: Haris 2026-11-11)
     const data = JSON.parse(scrub(JSON.stringify(out)));
     // everyone's email made from their made-up name (the reviewer keeps the sign-in address)
     for (const u of data.users) { delete u.salt; delete u.hash; u.prefs = { ...(u.prefs || {}), profileAsked: true }; } // (old local sign-in fields; no "add your birthday" card in a demo)
