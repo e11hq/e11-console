@@ -406,7 +406,13 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   /* ---------- navigation: our server and its sign-in stay here; other sites open in Safari ---------- */
   func allowedHere(_ u: URL) -> Bool {
     guard let h = u.host?.lowercased() else { return true }
-    return h == serverHost.lowercased() || h.hasSuffix(".cloudflareaccess.com") || h.hasSuffix("cloudflare.com")
+    return h == serverHost.lowercased() || h.hasSuffix(".cloudflareaccess.com") || h.hasSuffix("cloudflare.com") || isSigninHost(h)
+  }
+  // our own sign-in page (signin.e11hq.com for live, signin-test.e11hq.com for test — Haris 2026-11-11), beside the server
+  func isSigninHost(_ h: String) -> Bool {
+    guard let dot = serverHost.firstIndex(of: ".") else { return false }
+    let parent = serverHost[dot...].lowercased()
+    return (h.hasPrefix("signin.") || h.hasPrefix("signin-")) && h.hasSuffix(parent) && !h.dropLast(parent.count).contains(".")
   }
   func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
     if action.shouldPerformDownload { return decisionHandler(.download) }
