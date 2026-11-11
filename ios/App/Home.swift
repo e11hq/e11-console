@@ -1075,7 +1075,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let tab = (a["tab"] as? String) == "done" ? "done" : "all"
     if tab != listTab { listTab = tab }
     seg.selectedSegmentIndex = listTab == "done" ? 1 : 0
-    let key = String(describing: a["buttons"] ?? "") + "|" + String(describing: a["chips"] ?? "") 
+    let key = valSig(a["buttons"]) + "|" + valSig(a["chips"]) 
     if key == filtersKey { return }
     filtersKey = key
     filterBtns.forEach { $0.removeFromSuperview() }; chipBtns.forEach { $0.removeFromSuperview() }
@@ -1442,7 +1442,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         inboxRows[id] = v
       }
       let p = people[r["from"] as? String ?? ""]
-      let sig = drawSig(r) + "|\((p?["photo"] as? String)?.hashValue ?? 0)|\(p?["initials"] as? String ?? "")|\(String(describing: p?["color"]))|\(InboxRow.label(r["at"] as? String ?? ""))"
+      let sig = drawSig(r) + "|\((p?["photo"] as? String)?.hashValue ?? 0)|\(p?["initials"] as? String ?? "")|\(valSig(p?["color"]))|\(InboxRow.label(r["at"] as? String ?? ""))"
       if v.rowSig != sig { v.rowSig = sig; v.set(r, photo: roundPic(NativeSheetVC.photo(p), initials: p?["initials"] as? String, color: NativeSheetVC.color(p?["color"]), size: 44)) }
       content.append(v)
     }
@@ -3124,6 +3124,9 @@ final class SearchFixedNote: UIView {
 
 
 // what a model shows, as words — to tell whether it changed (keys in order; anything that can't be written: always new)
+// (one value's signature — a colour's numbers, a list: String(describing:) of a list from the server wrote its memory address
+//  in, so the same colour read as changed on every draw and every client tile was set again — Haris's recording 2026-11-11)
+func valSig(_ v: Any?) -> String { drawSig([v ?? NSNull()]) }
 func drawSig(_ d: Any) -> String {
   guard JSONSerialization.isValidJSONObject(d), let data = try? JSONSerialization.data(withJSONObject: d, options: [.sortedKeys]) else { return UUID().uuidString }
   return String(decoding: data, as: UTF8.self)

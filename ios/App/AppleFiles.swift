@@ -145,7 +145,7 @@ final class FileTile: UIView {
   // a client in All Client Assets (Haris 2026-11-10, mock-up 0 B — the Files app's grid, two across, no card): its logo whole on
   // its own background (LogoLook), or its colour with its name; the name and "4 folders · 1 file" centred under it
   func client(_ c: [String: Any]) {
-    let s = "c|\(c["name"] ?? "")|\(c["sub"] ?? "")|\(c["logo"] ?? "")|\(String(describing: c["rgb"]))"
+    let s = "c|\(c["name"] ?? "")|\(c["sub"] ?? "")|\(c["logo"] ?? "")|\(valSig(c["rgb"]))"
     guard s != sig else { return }
     sig = s; info = c; isFolder = false; isClient = true; lines = 1; id = c["id"] as? String ?? ""
     let p = c["logo"] as? String
@@ -308,7 +308,7 @@ final class FileListRow: UIView, AppleRow {
   }
   private func paint(_ L: HomeLook) {
     let nm = info["name"] as? String ?? "File"
-    let sig = "\(isFolder)|\(nm)|\(line)|\(marks.joined(separator: ","))|\(pic != nil)|\(picPath ?? "")|\(String(describing: info["rgb"]))|\(L.key)"
+    let sig = "\(isFolder)|\(nm)|\(line)|\(marks.joined(separator: ","))|\(pic != nil)|\(picPath ?? "")|\(valSig(info["rgb"]))|\(L.key)"
     guard sig != rowSig else { return }
     rowSig = sig
     var cfg = UIListContentConfiguration.subtitleCell()
