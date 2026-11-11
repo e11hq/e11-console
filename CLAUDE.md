@@ -116,6 +116,9 @@ Chat section of E11 Console (not on the website — Haris, 2026-11-05). (Plan: p
 E11 Talk is built on the **test server** first (talk-test.e11hq.com), with its own sign-in for now; **before the App
 Store, the shared sign-in goes into both apps and both are sent for review together** (Haris, 2026-11-06).
 
+**E11 Talk is built exactly as its mock-ups (Haris 2026-11-11 23:41):** the canvas "E11 Talk — design" is followed strictly —
+every gap, size, colour, placement and every animation, done the Apple way (Apple's parts and Apple's animations set to
+match, never our own drawing). Light and dark follow the iPhone. Decisions: project doc `claude/talk-design-reference.md`.
 **E11 Talk never follows "View as" (Haris 2026-11-11 23:39):** "View as…" is only for E11 Console — E11 Talk always stays
 on the main account signed in on the phone (it switched Talk to that person before and cost Haris his own chats, 17:04).
 And a backup is always restorable from Settings → Chat Backup (not only on a new phone).
