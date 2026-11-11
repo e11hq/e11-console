@@ -350,7 +350,10 @@ behaviour unchanged, the self-test checks each) and to Home's background behind 
 the main self-test's checks into the no-website run first, Me's 12 hand-offs say "try again", the cut page by page, then after
 Cloudflare a tiny server address instead of `/`. Stays (not the website): the shared engine, Svg.swift's hidden logo drawer.
 Audit: project doc `claude/ios-website-dependencies-audit.md`.
-**Our own sign-in — DECIDED, not started (Haris 2026-11-11 09:35–10:05; plan: project doc `claude/own-sign-in-plan.md`):**
+**Our own sign-in — DECIDED; mock-ups APPROVED (Haris 2026-11-11: "All approved", canvas "Sign-in — fully Apple": email ·
+password · sign-in code · set password · Face ID · an admin's code sheet · the other admins' alert · the owner's password and
+owner code); the server part made on main (signin.js, signin-page.js, /oidc/*, /api/signin/code(s) — tested, NOT released;
+plan: project doc `claude/own-sign-in-plan.md`):**
 E11 Console first (website, Mac and iPhone; test site first), E11 Talk the same when its work starts. No email, no SMS.
 - Cloudflare stays in front, our server its only sign-in provider (Generic OIDC); our page (the wordmark design).
 - The email is the username. A password once set; else a **4-digit sign-in code** from an admin: made by any Super Admin
