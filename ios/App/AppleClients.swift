@@ -281,7 +281,38 @@ final class AssetsVC: ClientsPushedVC, UISearchResultsUpdating, UISearchControll
       navigationItem.searchController = s   // (given once where it goes is told — ClientVC)
     }
   }
-  func placeholder(_ p: String) { if search?.searchBar.placeholder != p { search?.searchBar.placeholder = p } }   // (only when it changes — as the title)
+  func placeholder(_ p: String) { if search?.searchBar.placeholder != p { BarLog.note("placeholder \(p)"); search?.searchBar.placeholder = p } }   // (only when it changes — as the title)
+  // ---- the recorder, for a while (Haris 2026-11-11 13:51): coming back to All Client Assets, the search box's grey came in
+  //  late on his phone, not Home's. Everything our code tells Apple's bar, and each change in the search bar's own views,
+  //  frame by frame for 1.2 s — then Apple's alert with Copy. Only that moment, never in the self-test; taken out once found.
+  private var seenOnce = false
+  override func viewWillAppear(_ a: Bool) {
+    let rec = h.assets == "all" && seenOnce && SELFTEST.isEmpty
+    seenOnce = true
+    if rec { BarLog.start() }
+    super.viewWillAppear(a)
+    guard rec, let bar = search?.searchBar else { return }
+    func tree(_ v: UIView, _ d: Int) -> String {
+      let me = "\(type(of: v))\(v.isHidden ? "·h" : "")\(v.alpha < 0.99 ? "·a\(String(format: "%.1f", v.alpha))" : "")\(v.frame.width < 1 ? "·0w" : "")"
+      guard d < 7, !v.subviews.isEmpty else { return me }
+      return me + "[" + v.subviews.map { tree($0, d + 1) }.joined(separator: ",") + "]"
+    }
+    var last = "", lines: [String] = []
+    Main.SelfFrames.run(1.2, { [weak bar] in
+      guard let bar = bar else { return [:] }
+      let f = bar.searchTextField.convert(bar.searchTextField.bounds, to: nil)
+      let now = "y\(Int(f.minY)) h\(Int(f.height)) w\(Int(f.width)) " + tree(bar, 0)
+      if now != last { last = now; lines.append("\(Int((CACurrentMediaTime() - BarLog.t0) * 1000))ms \(now)") }
+      return [:]
+    }) { [weak self] _ in
+      BarLog.on = false
+      let text = (BarLog.notes + ["— search bar —"] + lines).joined(separator: "\n")
+      let al = UIAlertController(title: "Bar recorded", message: "\(BarLog.notes.count) notes, \(lines.count) changes. Copy and paste it to Claude.", preferredStyle: .alert)
+      al.addAction(UIAlertAction(title: "Copy", style: .default) { _ in UIPasteboard.general.string = text })
+      al.addAction(UIAlertAction(title: "Close", style: .cancel))
+      self?.present(al, animated: true)
+    }
+  }
   // (All Client Assets: "Client Assets" and its line come from its title — no client name or logo square in the bar's
   //  middle: an empty name with a grey square stood over it, the title never showing — Haris 2026-11-08 video)
   override func setBar(_ t: String, _ sub: String, _ col: UIColor, _ logo: String?, _ ini: String?, _ showLogo: Bool) {
