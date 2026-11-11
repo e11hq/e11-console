@@ -359,6 +359,10 @@ E11 Console first (website, Mac and iPhone; test site first), E11 Talk the same 
   admin made the code, **every other Super Admin and Office Admin** (not the one who made it, not the person) gets an
   Inbox notification **and a push**: "<admin> made a sign-in code for <person>, and <person>'s password was changed". A
   code that's never used: nothing.
+- **The owner's standing code (Haris 2026-11-11 13:11):** the owner signs in the first time on a fresh app — and any time
+  the owner's password isn't set or is forgotten — with a fixed 4-digit owner code, always there, the owner's email only;
+  then sets a password and adds the team from the owner's view. Its digits are never written in code, GitHub, docs or
+  chat — only a hash in the NAS settings; 5 wrong tries lock it for an hour, never for good.
 - Both admins locked out: the **owner, through the owner's view**, makes a code for anyone — **no notification to anyone**,
   and the owner's codes stay out of the admins' record (only the owner's view shows them).
 - Passwords and codes kept only as hashes; every code recorded (who, for whom, when); removed from the Team page = every
