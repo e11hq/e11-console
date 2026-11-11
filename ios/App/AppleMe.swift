@@ -237,15 +237,18 @@ final class MePageVC: ClientsPushedVC, UISearchResultsUpdating, UISearchBarDeleg
   func updateSearchResults(for s: UISearchController) { onSearch?(s.searchBar.text ?? "") }
   func searchBar(_ b: UISearchBar, selectedScopeButtonIndexDidChange i: Int) { UISelectionFeedbackGenerator().selectionChanged(); onScope?(i) }
   // (+ Add member: Apple's + in the bar's right corner — the mock-up's C2; none for those who can't add)
-  private var plusOn = false
+  // (kept as the page's own right button: the page's ••• check — menuChanged — took it away again, so Team members showed
+  //  no + at all: Haris 2026-11-11)
+  private var plusItem: UIBarButtonItem?
   func usePlus(_ run: (() -> Void)?) {
-    guard (run != nil) != plusOn || run != nil else { return }
     if let run = run {
-      guard !plusOn else { return }
-      plusOn = true
-      let p = UIBarButtonItem(systemItem: .add, primaryAction: UIAction { _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); run() })
-      p.accessibilityLabel = "Add member"; navigationItem.rightBarButtonItem = p
-    } else { plusOn = false; navigationItem.rightBarButtonItem = nil }
+      if plusItem == nil {
+        let p = UIBarButtonItem(systemItem: .add, primaryAction: UIAction { _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); run() })
+        p.accessibilityLabel = "Add member"; plusItem = p
+      }
+    } else { plusItem = nil }
+    let want = plusItem ?? (menuItems().isEmpty ? nil : moreItem)
+    if navigationItem.rightBarButtonItem !== want { navigationItem.rightBarButtonItem = want }
   }
   private(set) var appeared = false
   override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); appeared = true }
@@ -281,12 +284,12 @@ final class MePageVC: ClientsPushedVC, UISearchResultsUpdating, UISearchBarDeleg
     super.viewDidLoad()
     // (Me's pages have no ••• of their own: none in the bar — a skeleton's comes once it knows it has one)
     moreItem = navigationItem.rightBarButtonItem
-    if menuItems().isEmpty { navigationItem.rightBarButtonItem = nil }
+    if menuItems().isEmpty { navigationItem.rightBarButtonItem = plusItem }
   }
   private var moreItem: UIBarButtonItem?
   func menuChanged() {
     guard isViewLoaded else { return }
-    let want = menuItems().isEmpty ? nil : moreItem
+    let want = plusItem ?? (menuItems().isEmpty ? nil : moreItem)
     if navigationItem.rightBarButtonItem !== want { navigationItem.rightBarButtonItem = want }
   }
   override func viewDidDisappear(_ a: Bool) {
