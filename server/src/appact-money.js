@@ -49,11 +49,15 @@ export function createMoneyActs({ store, now } = {}) {
 
   // ---------- Claims ----------
   // HR approved (a Submitted claim; anything else: nothing happens, and the page still answers ok)
+  // (one claim, or several at once — claims.js markApproved(ids): the Finance page's "Mark all HR approved", Haris
+  //  2026-11-11 C1)
   function clApprove(u, body = {}) {
     if (!isFinAdm(u)) return fail(403, ONLY_ADMIN);
-    const before = store.get('claims', String(body.id));
+    const ids = Array.isArray(body.ids) ? body.ids.map(String) : [String(body.id)];
     const changes = [];
-    if (before && before.state === 'submitted') {
+    for (const id of ids) {
+      const before = store.get('claims', id);
+      if (!before || before.state !== 'submitted') continue;
       const c = clone(before);
       c.state = 'approved'; c.approvedAt = nowISO(); c.approvedBy = u.id;
       saved(c);
@@ -61,13 +65,28 @@ export function createMoneyActs({ store, now } = {}) {
       const n = notice(u, c.userId, c, 'claim-ok', `marked your ${monthName(c.month, true)} expense claim <b>HR approved</b>`);
       if (n) changes.push(n);
     }
-    return done(changes);
+    const k = changes.filter((x) => x.kind === 'claims').length;
+    return done(changes, { n: k, text: k > 1 ? `${k} claims marked HR approved` : 'Marked HR approved' });
   }
 
   // Paid on a date (a Submitted or HR approved claim): HR approved too if it wasn't, and the payment as a staff
   // reimbursement in Finance → Expenses (its record made once, then kept up to date)
+  // (one claim, or several on one date — claims.js paidOn(ids, date): "Set all paid on…", Haris 2026-11-11 C1)
   function clPaid(u, body = {}) {
     if (!isFinAdm(u)) return fail(403, ONLY_ADMIN);
+    if (Array.isArray(body.ids)) {
+      const all = [];
+      for (const id of body.ids.map(String)) {
+        const b = store.get('claims', id);
+        if (!b || !['submitted', 'approved'].includes(b.state)) continue;
+        const r = clPaid(u, { id, date: body.date });
+        if (!r.ok) return r;
+        all.push(...r.changes);
+      }
+      const k = all.filter((x) => x.kind === 'claims').length;
+      if (!k) return fail(400, 'Those claims can’t be marked paid');
+      return done(all, { n: k, text: k > 1 ? `${k} claims marked paid` : 'Marked paid' });
+    }
     const date = String(body.date || '');
     const before = store.get('claims', String(body.id));
     if (!before || !['submitted', 'approved'].includes(before.state) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail(400, 'That claim can’t be marked paid');
@@ -167,6 +186,33 @@ export function createMoneyActs({ store, now } = {}) {
     return done([{ kind: 'finance', id: x.id, base: before, data: x }]);
   }
 
-  return { clApprove, clPaid, clAdd, clPerson, clMark, exAdd, exEnd };
+  // An invoice added afterwards (finance.js subInvoice / txInvoice): a subscription's for a month it was billed, or an
+  // office expense's (or a reimbursement added by hand) — never one that came from an expense claim
+  function exInv(u, body = {}) {
+    if (!isFinAdm(u)) return fail(403, ONLY_ADMIN);
+    const before = typeof body.id === 'string' ? store.get('finance', body.id) : null;
+    if (!before || !['sub', 'expense', 'reimb'].includes(before.type) || (before.type === 'reimb' && before.claimId)) return fail(404, 'That record isn’t here any more');
+    if (!body.invoice || !body.invoice.path) return fail(400, 'Attach the invoice');
+    const f = { path: String(body.invoice.path), name: String(body.invoice.name || 'Invoice'), size: Number(body.invoice.size) || 0, addedAt: nowISO(), addedBy: u.id };
+    const x = clone(before);
+    if (x.type === 'sub') {
+      const m = /^\d{4}-\d{2}$/.test(body.month || '') ? String(body.month) : todayStr().slice(0, 7);
+      x.invoices = { ...(x.invoices || {}), [m]: f };
+      return done([{ kind: 'finance', id: x.id, base: before, data: x }], { text: `${monthName(m)} invoice added to ${x.name}` });
+    }
+    x.invoice = f;
+    return done([{ kind: 'finance', id: x.id, base: before, data: x }], { text: `Invoice added to ${x.name || 'the record'}` });
+  }
+
+  // An office expense (or a reimbursement added by hand) removed — finance.js remove: it no longer counts in the
+  // expenses (a subscription is ended instead: exEnd)
+  function exDel(u, body = {}) {
+    if (!isFinAdm(u)) return fail(403, ONLY_ADMIN);
+    const before = typeof body.id === 'string' ? store.get('finance', body.id) : null;
+    if (!before || !['expense', 'reimb'].includes(before.type) || before.claimId) return fail(404, 'That record isn’t here any more');
+    return done([{ kind: 'finance', id: before.id, del: true }], { text: 'Removed' });
+  }
+
+  return { clApprove, clPaid, clAdd, clPerson, clMark, exAdd, exEnd, exInv, exDel };
 }
 

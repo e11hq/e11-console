@@ -87,34 +87,88 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
       claims, finance, claimMonth, totalOf, itemsOf, receiptsOf, ownerName, expenses, clients: Array.isArray(data.clients) ? data.clients : [] };
   }
 
-  // Claims: this claim month's reimbursement claims (phone.js claimsModel)
-  M.claims = function (R, data, me, nowMs) {
+  // Claims: a month's reimbursement claims (phone.js claimsModel; claims.js financeSection — the month picked from the
+  // last 12, the claim month first; who said they have none and who hasn't answered yet: Haris 2026-11-11, B1 · D1)
+  M.claims = function (R, data, me, nowMs, pick) {
     const W = world(R, data, me, nowMs);
-    const m = W.claimMonth();
+    const cm = W.claimMonth();
+    const pickable = Array.from({ length: 12 }, (_, i) => addMonth(cm, -i));
+    const m = pickable.includes(pick) ? pick : cm;
+    const closed = W.today >= `${m}-28`;
     const PILL = { submitted: ['Submitted', 'sub'], approved: ['HR approved', 'ok'], paid: ['Paid', 'paid'] };
-    const row = (c) => { const nm = W.ownerName(c); const rc = W.receiptsOf(c).length; return { id: c.id, name: nm, ini: initials(nm), rgb: W.rgb(W.avColor(c.userId || c.personId || c.id)), photo: c.userId ? photoOf(W.userById(c.userId)) : null,
+    const person = (uid, name, key) => ({ name, ini: initials(name), rgb: W.rgb(W.avColor(uid || key)), photo: uid ? photoOf(W.userById(uid)) : null });
+    const row = (c) => { const nm = W.ownerName(c); const rc = W.receiptsOf(c).length; return Object.assign(person(c.userId, nm, c.personId || c.id), { id: c.id,
       sub: `${c.byHand ? 'Added by hand' : `${plural(W.itemsOf(c), 'item')} · ${plural(rc, 'receipt')}`} · ${W.fmtDay(c.submittedAt || c.updatedAt ? W.isoDay(c.submittedAt || c.updatedAt) : W.today)}`,
-      amt: '\u20C3' + aedOf(c.total || W.totalOf(c)), st: c.state, pill: (PILL[c.state] || ['', ''])[0] + (c.state === 'paid' && c.paidOn ? ' · ' + W.fmtDay(c.paidOn) : ''), pk: (PILL[c.state] || ['', ''])[1] }; };
+      amt: '⃃' + aedOf(c.total || W.totalOf(c)), st: c.state, pill: (PILL[c.state] || ['', ''])[0] + (c.state === 'paid' && c.paidOn ? ' · ' + W.fmtDay(c.paidOn) : ''), pk: (PILL[c.state] || ['', ''])[1] }); };
     const list = W.claims.filter((c) => c.month === m && ['submitted', 'approved', 'paid'].includes(c.state)).sort((a, b) => String(b.submittedAt || '').localeCompare(String(a.submittedAt || '')));
+    // (the ones added by hand before they were claims — already paid: shown as Paid claims, their invoice to open)
+    const legacy = W.finance.filter((r) => r.type === 'reimb' && !r.claimId && String(r.date || '').slice(0, 7) === m).map((r) => Object.assign(person(r.userId, r.userId ? fullName(W.userById(r.userId)) : r.personName || 'Someone', r.personId || r.id),
+      { id: 'r:' + r.id, sub: 'Added by hand (PDF)', amt: '⃃' + aedOf(r.amount), st: 'paid', pill: 'Paid · ' + W.fmtDay(r.date), pk: 'paid', legacy: true, inv: r.invoice || null }));
     const total = list.reduce((a, c) => a + (c.total || W.totalOf(c)), 0);
+    const answered = new Set(W.claims.filter((c) => c.month === m && !c.byHand).map((c) => c.userId));
+    const none = W.claims.filter((c) => c.month === m && c.state === 'none').map((c) => Object.assign(person(c.userId, fullName(W.userById(c.userId)), c.id), { id: 'n:' + c.id }));
+    const waiting = closed ? [] : W.users.filter((x) => !W.isFinUser(x) && x.active !== false && !answered.has(x.id)).sort((a, b) => fullName(a).localeCompare(fullName(b))).map((x) => Object.assign(person(x.id, fullName(x), x.id), { id: 'w:' + x.id }));
     const people = W.users.filter((x) => x.active !== false && !W.isFinUser(x)).sort((a, b) => fullName(a).localeCompare(fullName(b))).map((x) => ({ id: 'u:' + x.id, name: fullName(x) }))
       .concat(W.finance.filter((x) => x.type === 'person').map((p) => ({ id: 'p:' + p.id, name: p.name, other: true })));
     const now = W.today.slice(0, 7), prev = addMonth(now, -1);
-    return { month: m, label: monthLong(m), sub: `${plural(list.length, 'claim')} · \u20C3${aedOf(total)}`, admin: W.finLevel(W.u) === 'admin',
-      need: list.filter((c) => c.state === 'submitted').map(row), all: list.map(row), people, months: [{ m: prev, t: monthLong(prev) }, { m: now, t: monthLong(now) }] };
+    const [, mo] = m.split('-').map(Number);
+    const monthOnly = new Date(2000, mo - 1, 1).toLocaleDateString('en-US', { month: 'long' });
+    return { month: m, label: monthLong(m), sub: `${monthOnly} · ${plural(list.length + legacy.length, 'claim')} · ⃃${aedOf(total + legacy.reduce((a, r) => a + num0(r.amt), 0))}`, admin: W.finLevel(W.u) === 'admin',
+      foot: `Submitted from the app by the 27th. ${closed ? 'This month is closed.' : `Open until 27 ${monthOnly}.`}`,
+      need: list.filter((c) => c.state === 'submitted').map(row), all: list.map(row).concat(legacy), none, waiting,
+      open: list.filter((c) => c.state !== 'paid').length, toApprove: list.filter((c) => c.state === 'submitted').length,
+      people, months: [{ m: prev, t: monthLong(prev) }, { m: now, t: monthLong(now) }], pick: pickable.map((x) => ({ m: x, t: monthLong(x) })) };
+  };
+  const num0 = (s) => Number(String(s).replace(/[^0-9.]/g, '')) || 0;
+
+  // A claim opened (claims.js's claim view, Haris 2026-11-11 E1): the person, its total and state, its items by day,
+  // each with its receipt (a file to open)
+  M.claim = function (R, data, me, nowMs, id) {
+    const W = world(R, data, me, nowMs);
+    const c = W.claims.find((x) => x.id === id);
+    if (!c || !['submitted', 'approved', 'paid'].includes(c.state)) return { gone: true };
+    const nm = W.ownerName(c);
+    const PILL = { submitted: 'Submitted', approved: 'HR approved', paid: 'Paid' };
+    const rf = (f) => (f && f.path ? { path: f.path, name: f.name || 'Receipt', size: f.size || 0 } : null);
+    return { id: c.id, name: nm, ini: initials(nm), rgb: W.rgb(W.avColor(c.userId || c.personId || c.id)), photo: c.userId ? photoOf(W.userById(c.userId)) : null,
+      month: monthLong(c.month), st: c.state, pill: PILL[c.state] + (c.state === 'paid' && c.paidOn ? ' · ' + W.fmtDay(c.paidOn) : ''),
+      amt: '⃃' + aedOf(c.total || W.totalOf(c)), admin: W.finLevel(W.u) === 'admin',
+      sub: `${c.byHand ? 'Added by hand' : `Submitted ${W.fmtDay(W.isoDay(c.submittedAt || c.updatedAt || new Date(W.now).toISOString()))}`} · ${plural(W.itemsOf(c), 'item')} · ${plural(W.receiptsOf(c).length, 'receipt')}`,
+      groups: (c.groups || []).filter((g) => (g.items || []).length).map((g) => ({ id: g.id, head: [g.date ? W.fmtDay(g.date) : '', g.title || ''].filter(Boolean).join(' · '),
+        items: (g.items || []).map((i) => ({ id: i.id, desc: i.desc || 'Item', amt: aedOf(num0(i.amount)), receipt: rf(i.receipt) })) })) };
   };
 
-  // Expenses: every monthly subscription that's on, and this month's office expenses (phone.js expensesModel)
-  M.expenses = function (R, data, me, nowMs) {
+  // Expenses: the monthly subscriptions (each with this month's invoice and the months still missing one — finance.js
+  // subsPage; the ended ones apart, F1) and a month's office expenses (the month picked from the last 12, B1)
+  M.expenses = function (R, data, me, nowMs, pick) {
     const W = world(R, data, me, nowMs);
     const now = W.today.slice(0, 7);
-    const subs = W.finance.filter((x) => x.type === 'sub' && !x.endedAt).sort((a, b) => (Number(a.day) || 0) - (Number(b.day) || 0));
-    const office = W.expenses().filter((x) => String(x.date).startsWith(now)).sort((a, b) => String(b.date).localeCompare(String(a.date)));
-    return { admin: W.finLevel(W.u) === 'admin', month: monthLong(now),
-      subs: subs.map((x) => ({ id: x.id, name: x.name, amt: '\u20C3' + aedOf(x.amount), sub: `Billed on the ${ordN(Number(x.day) || 1)} · monthly`, inv: !!Object.keys(x.invoices || {}).length, invFile: Object.values(x.invoices || {}).slice(-1)[0] || null })),
-      subsTotal: '\u20C3' + aedOf(subs.reduce((a, x) => a + (Number(x.amount) || 0), 0)),
-      office: office.map((x) => ({ id: x.id, name: x.name, amt: '\u20C3' + aedOf(x.amount), sub: W.fmtDay(x.date) + (x.invoice ? ' · invoice' : ''), inv: !!x.invoice, invFile: x.invoice || null })),
-      officeTotal: '\u20C3' + aedOf(office.reduce((a, x) => a + (Number(x.amount) || 0), 0)) };
+    const pickable = Array.from({ length: 12 }, (_, i) => addMonth(now, -i));
+    const om = pickable.includes(pick) ? pick : now;
+    const daysIn = (m) => { const [y, mo] = m.split('-').map(Number); return new Date(y, mo, 0).getDate(); };
+    const dayIn = (s, m) => `${m}-${pad2(Math.min(Number(s.day) || 1, daysIn(m)))}`;
+    // (finance.js subPayments: the months it was billed so far)
+    const paidMonths = (s) => { const out = [], start = s.startMonth || String(s.createdAt || '').slice(0, 7) || now, end = s.endedAt ? W.isoDay(s.endedAt) : null;
+      for (let m = start; m <= now; m = addMonth(m, 1)) { const d = dayIn(s, m); if (d > W.today || (end && d > end)) break; out.push(m); } return out; };
+    const missing = (s) => paidMonths(s).filter((m) => !(s.invoices || {})[m] && m >= addMonth(now, -11) && m !== now);
+    const nextDate = (s) => { const d = dayIn(s, now); return d >= W.today ? d : dayIn(s, addMonth(now, 1)); };
+    const mOnly = (m) => { const [, mo] = m.split('-').map(Number); return new Date(2000, mo - 1, 1).toLocaleDateString('en-US', { month: 'long' }) + (m.slice(0, 4) !== now.slice(0, 4) ? ' ' + m.slice(0, 4) : ''); };
+    const subRow = (x) => { const inv = (x.invoices || {})[now] || null, miss = missing(x);
+      return { id: x.id, name: x.name, amt: '⃃' + aedOf(x.amount), sub: x.endedAt ? `Ended ${W.fmtDay(W.isoDay(x.endedAt))}` : `Every month on the ${ordN(Number(x.day) || 1)} · next ${W.fmtDay(nextDate(x))}`,
+        inv: !!inv, invFile: inv, nowMonth: now, nowName: mOnly(now), missing: miss.map((m) => ({ m, t: mOnly(m) })),
+        line: miss.length ? `Missing invoice${miss.length === 1 ? '' : 's'}: ${miss.map(mOnly).join(', ')}` : inv ? `${mOnly(now)} invoice` : `No ${mOnly(now)} invoice yet`,
+        lk: miss.length ? 'miss' : inv ? 'ok' : '', ended: !!x.endedAt }; };
+    const byDay = (a, b) => (Number(a.day) || 0) - (Number(b.day) || 0);
+    const subs = W.finance.filter((x) => x.type === 'sub' && !x.endedAt).sort(byDay);
+    const ended = W.finance.filter((x) => x.type === 'sub' && x.endedAt).sort((a, b) => String(b.endedAt).localeCompare(String(a.endedAt)));
+    const office = W.expenses().filter((x) => String(x.date).startsWith(om)).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const officeTotal = office.reduce((a, x) => a + (Number(x.amount) || 0), 0);
+    return { admin: W.finLevel(W.u) === 'admin', month: monthLong(now), om, omName: monthLong(om),
+      subs: subs.map(subRow), ended: ended.map(subRow),
+      subsTotal: '⃃' + aedOf(subs.reduce((a, x) => a + (Number(x.amount) || 0), 0)), subsN: subs.length,
+      office: office.map((x) => ({ id: x.id, name: x.name, amt: '⃃' + aedOf(x.amount), sub: 'Paid ' + W.fmtDay(x.date), inv: !!x.invoice, invFile: x.invoice || null, month: String(x.date).slice(0, 7) })),
+      officeTotal: '⃃' + aedOf(officeTotal), officeN: office.length,
+      pick: pickable.map((x) => ({ m: x, t: monthLong(x) })) };
   };
 
   // a file's small picture (phone.js ovPic / rvPic)
@@ -155,6 +209,8 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     out.cards = [{ n: `${sent}`, of: `/ ${team}`, t: 'claims submitted this month' }, { n: '\u20C3' + money(exp.reduce((a, x) => a + (Number(x.amount) || 0), 0)), t: 'office expenses so far' }, { n: `${subs}`, t: 'monthly subscriptions' }];
     out.claims = need.slice(0, 3).map((c) => ({ id: c.id, name: W.ownerName(c), ini: initials(W.ownerName(c)), rgb: W.rgb(W.avColor(c.userId || c.personId || c.id)), sub: `${c.byHand ? 'Added by hand' : plural(W.itemsOf(c), 'item')} · ${W.fmtDay(W.isoDay(c.submittedAt || c.updatedAt))}`, amt: '\u20C3' + money(c.total || W.totalOf(c)) }));
     out.needN = need.length;
+    out.cm = monthLong(m); out.nowName = monthLong(now);   // (the numbers' group heading, Haris 2026-11-11 A1)
+    out.claims.forEach((r, i) => { r.photo = need[i].userId ? photoOf(W.userById(need[i].userId)) : null; });
     out.expenses = exp.slice(0, 3).map((x) => ({ id: x.id, name: x.name, sub: W.fmtDay(x.date), amt: '\u20C3' + money(x.amount) }));
     return out;
   };

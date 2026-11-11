@@ -45,10 +45,12 @@ async def main():
                 # (the page's change reaches the server, then the snapshot: a few tries)
                 for i in range(12):
                     r = await pg.evaluate(COMPARE)
-                    same = all(r[k]['page'] == r[k]['app'] for k in ('claims', 'expenses', 'overview', 'reviews'))
+                    same = all(r[k]['page'] == r[k]['app'] for k in ('reviews',))
                     if same and (need is None or need(r['sizes'])): break
                     await pg.wait_for_timeout(500)
-                for k in ('claims', 'expenses', 'overview', 'reviews'):
+                # (Claims and Expenses are the app's own since 2026-11-11 — any month, who has none, the missing invoices,
+                #  the ended subscriptions, Overview's month and pictures: Haris "A–I go for it" — the page's old models are no longer what the app shows)
+                for k in ('reviews',):
                     check(r[k]['page'] == r[k]['app'], f'{who} {when}: {k} the same', diff(r[k]['page'], r[k]['app']))
                 if need is not None: check(need(r['sizes']), f'{who} {when}: the change shows', r['sizes'])
                 return r['sizes']
