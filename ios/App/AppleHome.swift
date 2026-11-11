@@ -59,7 +59,7 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
   override init(nibName: String?, bundle: Bundle?) { super.init(nibName: nil, bundle: nil); HomeVC.shared = self }
   required init?(coder: NSCoder) { fatalError() }
   override var preferredStatusBarStyle: UIStatusBarStyle { Main.shared.statusStyle }
-  override func loadView() { let v = UIView(); v.backgroundColor = HomeLook.bg; view = v }   // (Home's own background, as every page — Haris 2026-11-11)
+  override func loadView() { let v = UIView(); v.backgroundColor = HomeLook(nil).bg; view = v }   // (Home's own background, as every page — Haris 2026-11-11)
   override func viewDidLoad() {
     super.viewDidLoad()
     // (the big title: Apple's own default — its tab asks for big titles; never ".always", which kept the big title's room

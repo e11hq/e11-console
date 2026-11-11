@@ -14,7 +14,7 @@ final class MyTasksVC: UIViewController, UISearchResultsUpdating, UISearchContro
   override init(nibName: String?, bundle: Bundle?) { super.init(nibName: nil, bundle: nil); MyTasksVC.shared = self }
   required init?(coder: NSCoder) { fatalError() }
   override var preferredStatusBarStyle: UIStatusBarStyle { Main.shared.statusStyle }
-  override func loadView() { let v = UIView(); v.backgroundColor = HomeLook.bg; view = v }   // (Home's own background, as every page — Haris 2026-11-11)
+  override func loadView() { let v = UIView(); v.backgroundColor = HomeLook(nil).bg; view = v }   // (Home's own background, as every page — Haris 2026-11-11)
   private var meItem: UIBarButtonItem?
   private var filterItem: UIBarButtonItem?
   private var filterSym = ""
