@@ -769,6 +769,9 @@ export function createServer(cfg) {
 
     const u = await who(req, res);
     if (!u) return;
+    // (the iPhone app's sign-in comes back here: reaching it means signed in — a tiny page, not the whole website, which the
+    //  app no longer shows)
+    if (p === '/app/in') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end('<!doctype html><meta name="viewport" content="width=device-width"><title>E11 Console</title>'); }
 
     // Owner view, look only: nothing changes (reading, files, previews and this device's notifications still work)
     if (req.ownerView === 'look' && req.method !== 'GET' && req.method !== 'HEAD') {

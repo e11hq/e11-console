@@ -118,3 +118,9 @@ test("the app's device key: issued when signed in, then signs it back in on our 
   await post('/api/signin/device', { drop: true, key: k.key }, { 'X-Dev-Email': 'lina@e11.test' });
   assert.equal((await api('device', { key: k.key })).ok, false);
 });
+
+test("the iPhone app's way back from signing in: a tiny page, signed in only", async () => {
+  const r = await fetch(base + '/app/in', { headers: { 'X-Dev-Email': 'lina@e11.test' } });
+  assert.equal(r.status, 200);
+  assert.ok((await r.text()).length < 200);
+});
