@@ -8947,6 +8947,8 @@ async function addMemberFlow() {
   if (!Host.isServer) setPassword(u, v.pw);
   persist(0); renderContent();
   toast(`Added ${v.email} as ${ROLES[v.role]}`);
+  // (our own sign-in on: their sign-in code straight away, to send them — Haris 2026-11-11; then a freelancer's clients)
+  if (signinOn) { clearTimeout(saveTimer); await Sync.push(); await signinCodeFlow(u, true); }
   if (v.role === 'freelancer') projectAccessDialog(u);
 }
 function tempPassword() { const c = 'abcdefghjkmnpqrstuvwxyz23456789'; let s = ''; for (let i = 0; i < 10; i++) s += c[Math.floor(Math.random() * c.length)]; return s; }
@@ -9056,9 +9058,13 @@ function memberMenu(anchor, id, head) {
   showMenu(anchor, items.map((it, i) => (it === '-' || it.label ? it : { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) })), { native: true });
 }
 // A sign-in code for someone (Haris 2026-11-11): 4 digits, once, 24 hours — passed on with the message the server writes
-async function signinCodeFlow(u) {
+async function signinCodeFlow(u, justAdded = false) {
   let r;
-  try { r = await api('POST', '/api/signin/code', { userId: u.id }); } catch (e) { return toast((e && e.message) || 'Couldn’t make a code — try again'); }
+  // (just added: the server may still be saving them — asked again a moment later, a few times)
+  for (let i = 0; ; i++) {
+    try { r = await api('POST', '/api/signin/code', { userId: u.id }); break; }
+    catch (e) { if (justAdded && i < 5 && !e.network) { await new Promise((ok) => setTimeout(ok, 700)); continue; } return toast((e && e.message) || 'Couldn’t make a code — try again'); }
+  }
   if (!r || !r.ok) return toast((r && r.error) || 'Couldn’t make a code — try again');
   const copy = await dialog({ title: `Sign-in code for ${fullName(u)}`, okText: 'Copy Message', cancelText: 'Done',
     bodyHtml: `<div style="font-size:40px;font-weight:700;letter-spacing:12px;text-align:center;margin:6px 0 4px;font-variant-numeric:tabular-nums">${esc(r.code)}</div>`
