@@ -1614,60 +1614,8 @@ final class MeCtl {
     h.onCorner = { [weak self] in self?.main.updateCorner() }
     // (a tap anywhere puts the keyboard away — Team members' search; taps still reach what's under the finger)
     KeyboardShield.attach(h)
-    // (Team members, Expenses, Reviews: a swipe across the middle switches the two lists, as the task page's Details ·
-    //  Comments — Haris 2026-11-04; the edge is left to the swipe back)
-    if kind == "expenses" {   // (Team members, Reviews: Apple's own controls in Apple's navigation, no swipe of ours)
-      SegSwipe.attach(h) { [weak self, weak h] dir in
-        guard let self = self, let h = h, let s = self.screenOf(h) else { return }
-        let to = dir < 0 ? 1 : 0
-        switch s.kind {
-        case "expenses": guard self.exSeg != to else { return }; self.exSeg = to
-        default: return
-        }
-        UISelectionFeedbackGenerator().selectionChanged()
-        self.slideLists(h, dir: dir) { self.draw(s) }
-      }
-    }
     if appleNav == nil { main.view.insertSubview(h, belowSubview: main.tabsMark) }
     return Screen(h: h, kind: kind, id: id)
-  }
-  // the two lists swapped with the task page's Details ↔ Comments slide: what's under the switch goes off to one side,
-  // the other list comes in from the other (the bar and the switch stay put — Haris 2026-11-04 "same as comments/detail")
-  private func slideLists(_ h: HomeView, dir: Int, _ change: () -> Void) {
-    let W = h.bounds.width, H = h.bounds.height
-    let segV = h.assetsParts["seg"] as? UIView
-    let y0 = max(0, min(H, segV.map { $0.convert($0.bounds, to: h).maxY } ?? 0))
-    let r = CGRect(x: 0, y: y0, width: W, height: H - y0)
-    // (each side drawn into a picture there and then — iPhone's snapshot views are only filled in at the next screen
-    //  update, by which time the list had already changed: the new list slid in over itself, twice — Haris 2026-11-05)
-    // (only the list itself — the page's floating buttons (+ Add…, search, NOT JUST ANY AGENCY) stay where they are, over
-    //  the slide: drawn into the pictures too, they slid as copies beside the real ones — Haris 2026-11-05)
-    let list: UIView = h.subviews.first(where: { $0 is UIScrollView }) ?? h
-    let shot = { (after: Bool) -> UIImageView in
-      let f = UIGraphicsImageRendererFormat.preferred(); f.opaque = false
-      let at = list === h ? CGRect(x: -r.minX, y: -r.minY, width: W, height: H) : CGRect(x: list.frame.minX - r.minX, y: list.frame.minY - r.minY, width: list.bounds.width, height: list.bounds.height)
-      let img = UIGraphicsImageRenderer(size: r.size, format: f).image { _ in list.drawHierarchy(in: at, afterScreenUpdates: after) }
-      return UIImageView(image: img)
-    }
-    guard h.window != nil, r.height > 0, r.width > 0 else {
-      UIView.performWithoutAnimation { change(); h.setNeedsLayout(); h.layoutIfNeeded() }; return
-    }
-    let old = shot(false)
-    UIView.performWithoutAnimation { change(); h.setNeedsLayout(); h.layoutIfNeeded() }
-    let new = shot(true)
-    let cover = UIView(frame: r); cover.backgroundColor = h.look.bg; cover.isUserInteractionEnabled = false; cover.clipsToBounds = true
-    old.frame = cover.bounds; new.frame = cover.bounds.offsetBy(dx: CGFloat(-dir) * W, dy: 0)
-    cover.addSubview(old); cover.addSubview(new)
-    // (under the switch when it's stuck under the bar — a direct part of the page; else over the list, under the bar)
-    // (it must be over the page's list — under it, the list itself showed through beside the slide: twice, Haris 2026-11-04)
-    // (the switch is usually in the list itself — then its parent is the list's scroll view, and the slide went UNDER
-    //  the list: the real new list showed at once with the picture sliding behind it, twice — Haris 2026-11-05)
-    if let pin = segV?.superview, pin.superview === h, !(pin is UIScrollView) { h.insertSubview(cover, belowSubview: pin) }
-    else if let sc = h.subviews.first(where: { $0 is UIScrollView }) { h.insertSubview(cover, aboveSubview: sc) }
-    else { h.addSubview(cover) }
-    UIView.animate(withDuration: 0.34, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
-      old.frame = cover.bounds.offsetBy(dx: CGFloat(dir) * W, dy: 0); new.frame = cover.bounds
-    } completion: { _ in cover.removeFromSuperview() }
   }
   private func open(_ kind: String, _ id: String? = nil) {
     guard !leaving else { return }
@@ -4349,33 +4297,3 @@ final class AmendSheetVC: UIViewController, UITextViewDelegate {
   }
 }
 
-// a swipe across the middle of a page (not from its edge, not while searching): left → the second list, right → the first
-final class SegSwipe: NSObject, UIGestureRecognizerDelegate {
-  private let act: (Int) -> Void
-  private var done = false
-  private static var kept: [ObjectIdentifier: SegSwipe] = [:]
-  private init(_ act: @escaping (Int) -> Void) { self.act = act }
-  static func attach(_ v: UIView, _ act: @escaping (Int) -> Void) {
-    let s = SegSwipe(act)
-    let g = UIPanGestureRecognizer(target: s, action: #selector(panned(_:))); g.delegate = s; g.cancelsTouchesInView = false
-    v.addGestureRecognizer(g)
-    kept[ObjectIdentifier(v)] = s
-  }
-  @objc private func panned(_ g: UIPanGestureRecognizer) {
-    switch g.state {
-    case .began: done = false
-    case .changed:
-      guard !done, let v = g.view else { return }
-      let t = g.translation(in: v)
-      if abs(t.x) > 60 && abs(t.x) > abs(t.y) * 1.6 { done = true; act(t.x < 0 ? -1 : 1) }
-    default: done = false
-    }
-  }
-  func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
-    guard let p = g as? UIPanGestureRecognizer, let v = g.view else { return false }
-    if let h = v as? HomeView, h.searching { return false }
-    if p.location(in: v).x < 28 { return false }   // (the edge: iPhone's swipe back)
-    let vel = p.velocity(in: v); return abs(vel.x) > abs(vel.y) * 1.6
-  }
-  func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith o: UIGestureRecognizer) -> Bool { true }
-}

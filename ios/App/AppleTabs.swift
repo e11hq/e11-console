@@ -250,12 +250,14 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
     //  — the sign-in page, the website's own screens — it goes into a tab of its own, out of sight with the tab bar;
     //  with tabs, it's kept out of sight in Me's screen, still part of the app, so sheets can open from it)
     if noSlot {
+      // (signed out — the sign-in page alone: the tabs set aside, not a sixth tab beside them — with five tabs iPhone put it
+      //  in its own "More" list, a ‹ over Cloudflare's page and an empty row: Haris 2026-11-11)
       if main.tabsHidden {
-        if !(viewControllers ?? []).contains(spare) { setViewControllers((viewControllers ?? []) + [spare], animated: false) }
+        if (viewControllers ?? []).count != 1 || viewControllers?.first !== spare { setViewControllers([spare], animated: false) }
         host(in: spare)
         if selectedViewController !== spare { selectedViewController = spare }
       } else if (viewControllers ?? []).contains(spare) {
-        setViewControllers((viewControllers ?? []).filter { $0 !== spare }, animated: false)
+        setViewControllers(slots.indices.map { tabVC($0) }, animated: false)
         stash()
         if let sel = main.tabBar.selectedItem?.tag { select(sel) }
       } else if nav.parent == nil || (nav.parent is TabSlot && !(viewControllers ?? []).contains(nav.parent!)) { stash() }

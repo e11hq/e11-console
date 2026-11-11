@@ -129,7 +129,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var meKeys: [String] { meItems.values.map { $0.title + ($0.popup != nil ? " ⌄" : $0.toggle != nil ? " ⏻" : "") }.sorted() }   // (the self-test)
   fileprivate var meSecs: [Int: MeSec] = [:]
   fileprivate var meSwitches: [String: UISwitch] = [:]
-  fileprivate var meHolds: [String: MeHold] = [:]
   fileprivate var mePics: [String: UIImage] = [:]
   fileprivate var mePicAsked = Set<String>()
   fileprivate var meDrawn: [String: String] = [:]
@@ -3171,6 +3170,15 @@ extension HomeView: UICollectionViewDelegate {
   func collectionView(_ cv: UICollectionView, contextMenuConfiguration c: UIContextMenuConfiguration, dismissalPreviewForItemAt ip: IndexPath) -> UITargetedPreview? { tileLift(ip) }
   func collectionView(_ cv: UICollectionView, contextMenuConfigurationForItemsAt ips: [IndexPath], point: CGPoint) -> UIContextMenuConfiguration? {
     if ips.count == 1, let key = listDS?.itemIdentifier(for: ips[0]), let row = listViews[key] as? InboxRow { return inboxMenu(row, key) }
+    // (a settings row with a hold — a team member, a claim, an expense, a Trash item: Apple's list's own hold, its lift and
+    //  menu; it was on the row itself and didn't answer — Haris 2026-11-11)
+    if ips.count == 1, let key = listDS?.itemIdentifier(for: ips[0]), let it = meItems[key], it.menu != nil || it.hold != nil {
+      if let m = it.menu { guard let built = m() else { return nil }; return UIContextMenuConfiguration(identifier: key as NSString, previewProvider: nil) { _ in built } }
+      let r = it.hold
+      return UIContextMenuConfiguration(identifier: key as NSString, previewProvider: nil) { _ in
+        UIMenu(children: [UIAction(title: "Role, rights and access", image: UIImage(systemName: "slider.horizontal.3")) { _ in r?() }])
+      }
+    }
     // (a folder or a file held: Apple's menu with its lift — Assets.swift's menus)
     if ips.count == 1, let key = listDS?.itemIdentifier(for: ips[0]), let t = listViews[key] as? FileTile, let menu = t.menu {
       return UIContextMenuConfiguration(identifier: key as NSString, previewProvider: nil) { _ in menu() }
@@ -3237,17 +3245,6 @@ extension HomeView: UICollectionViewDelegate {
 // right, Apple's switch, Apple's highlight. Ours: the coloured icons and pictures the cells show, and the page's own
 // blocks (Appearance's phones, About's cards…), each in a cell of Apple's list as before.
 struct MeSec { var grouped = false; var head = ""; var foot: NSAttributedString? = nil; var footCentred = false }
-final class MeHold: NSObject, UIContextMenuInteractionDelegate {
-  var run: (() -> Void)?
-  var menu: (() -> UIMenu?)?   // (Apple's own menu with the row's actions in it — a team member, Haris 2026-11-10)
-  func contextMenuInteraction(_ i: UIContextMenuInteraction, configurationForMenuAtLocation p: CGPoint) -> UIContextMenuConfiguration? {
-    if let m = menu { guard let built = m() else { return nil }; return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in built } }
-    guard let r = run else { return nil }
-    return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in
-      UIMenu(children: [UIAction(title: "Role, rights and access", image: UIImage(systemName: "slider.horizontal.3")) { _ in r() }])
-    }
-  }
-}
 extension HomeView {
   var isMeList: Bool { isMe || assets == "plansPage" }
   // (a page pushed on a tab, not a tab's first screen)
@@ -3264,6 +3261,9 @@ extension HomeView {
     c.separatorConfiguration.color = HomeLook.line   // (Apple's line, a little softer — every Apple page)
     c.headerMode = g.head.isEmpty ? .none : .supplementary
     c.footerMode = g.foot == nil ? .none : .supplementary
+    // (Apple's swipes on the rows that have them — Claims, Office expenses, the Trash; none on the others: Haris 2026-11-11)
+    c.trailingSwipeActionsConfigurationProvider = { [weak self] ip in self?.swipeActions(ip, leading: false) }
+    c.leadingSwipeActionsConfigurationProvider = { [weak self] ip in self?.swipeActions(ip, leading: true) }
     let sec = NSCollectionLayoutSection.list(using: c, layoutEnvironment: env)
     // (the page's sides, as its other blocks: 16 pt)
     sec.contentInsetsReference = .none
@@ -3438,11 +3438,6 @@ extension HomeView {
     } else if it.chevron && it.tap != nil { acc.append(.disclosureIndicator()) }
     cell.accessories = acc
     cell.contentView.alpha = it.dim ? 0.6 : 1
-    // (touch and hold — a team member: Apple's own lift and its menu)
-    if it.hold != nil || it.menu != nil {
-      let d = MeHold(); d.run = it.hold; d.menu = it.menu; meHolds[key] = d
-      cell.addInteraction(UIContextMenuInteraction(delegate: d))
-    }
     cell.accessibilityLabel = [it.title, it.sub, it.value].filter { !$0.isEmpty }.joined(separator: ", ")
   }
   // a switch whose change was called off (its question answered Cancel, or tapped away from): back to what its row
