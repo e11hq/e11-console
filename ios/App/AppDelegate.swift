@@ -1,10 +1,8 @@
 // E11 Console for iPhone — the native app around the E11 Console server (console.e11hq.com).
-// The screens, data and updates come live from the server (the same phone layout as the browser); the app adds
-// what only a real app can: a native tab bar, Apple's push notifications (with the app closed), opening the right
-// page from a notification, the app icon badge, Face ID lock, downloads to Files / Photos through the share sheet,
-// and the page running up under the status bar (no iOS 26 blur workaround needed in a native app).
-// It talks to the page through the same kind of bridge as the Mac app (handler "e11ios"; replies via
-// window.__e11NativeReply), so the web app (web/app.js Host.isIOSApp, web/phone.js) knows it's here.
+// The data and updates come live from the server; Apple's push notifications (with the app closed), opening the right
+// screen from a notification, the app icon badge, Face ID lock, downloads to Files / Photos through the share sheet.
+// Every screen is the app's own (Apple's parts, from the app's copy of the data); the web view is kept only for signing in
+// (our own sign-in page, Cloudflare's sign-out, App Review's own sign-in).
 import UIKit
 import CoreText
 import Network
@@ -165,7 +163,6 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     config.allowsInlineMediaPlayback = true
     config.applicationNameForUserAgent = "E11ConsoleiOS/\(SHELL_VERSION)"
     // (this app follows the phone's own light / dark — the page too; older apps keep the account's choice)
-    if FOLLOW_DEVICE { config.userContentController.addUserScript(WKUserScript(source: "window.__e11FollowPhone = true;", injectionTime: .atDocumentStart, forMainFrameOnly: true)) }
     web = WKWebView(frame: view.bounds, configuration: config)
     FocusAfterPicker.install()
     web.navigationDelegate = self
@@ -393,7 +390,8 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   // the web view's only page: the sign-in — Cloudflare's (our address answered with it), or App Review's own sign-in page
   // (straight to it: our "/" answers it too, but there a sign-in can't be told from coming back signed in)
   func loadHome(_ path: String? = nil) {
-    let to = path ?? (defaults.string(forKey: "e11_server") == "review" ? "/review/sign-in" : "/")
+    // (signing in comes back to the server's tiny "signed in" page — the website itself is no longer shown in the app)
+    let to = path ?? (defaults.string(forKey: "e11_server") == "review" ? "/review/sign-in" : "/app/in")
     guard let u = URL(string: serverURL() + to) else { return }
     if !SELFTEST.isEmpty, let host = u.host, let email = procEnv["E11_SELFTEST_EMAIL"],
        let c = HTTPCookie(properties: [.domain: host, .path: "/", .name: "e11_dev_email", .value: email]) {
@@ -1676,7 +1674,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
         if (body["active"] as? Bool) != false, let id = j["created"] as? String {
           // (its page slides in, as a tap on it — once the sheet has gone and the page behind has the new client too: it
           //  went half way, stopped and jumped when the page didn't know it yet — Haris 2026-11-03)
-          self.whenPageHasClient(id, tries: 30) { [weak self] in
+          self.whenSheetGone(tries: 30) { [weak self] in
             guard let self = self, let l = self.clientsListIfMade else { return }
             l.onEvent?(["ev": "client", "id": id])
             if let m = msg { DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self.clientPageIfMade?.toast(["t": m]) } }
@@ -1689,15 +1687,11 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     nav.prepare(width: view.bounds.width, bottom: bottomSafe)
     topMost().present(nav, animated: true)
   }
-  // (the page behind knows this client — asked every 0.1 s, at most `tries` times — and no sheet is up)
-  func whenPageHasClient(_ id: String, tries: Int, _ then: @escaping () -> Void) {
-    let q = jsonString([id]).dropFirst().dropLast()
-    web?.evaluateJavaScript("!!(typeof proj === 'function' && proj(\(q)))") { [weak self] r, _ in
-      guard let self = self else { return }
-      if (r as? Bool) == true, self.presentedViewController == nil { then(); return }
-      if tries <= 0 { if (r as? Bool) == true || self.presentedViewController == nil { then() }; return }
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { self.whenPageHasClient(id, tries: tries - 1, then) }
-    }
+  // (once the sheet has gone — asked every 0.1 s, at most `tries` times; the new client is already in the app's copy. It
+  //  used to wait for the website behind to know it too, which the app no longer has: the page came only after 3 s)
+  func whenSheetGone(tries: Int, _ then: @escaping () -> Void) {
+    if presentedViewController == nil || tries <= 0 { then(); return }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in self?.whenSheetGone(tries: tries - 1, then) }
   }
   // (let go part way through the edge swipe: the rest of the way out, from where the finger left it)
   func clientLeavingBySwipe(_ p: HomeView, _ l: HomeView) {
