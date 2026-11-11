@@ -20,7 +20,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
      through a soft blur. Search is a Liquid Glass circle that stretches into a glass search bar; your photo then
      turns into a glass ✕ that closes it. */
   // the bar's own row (the small title on it): on iOS 26+ iPhone's own scroll edge effect frosts the list under it, as in Mail
-  private let topBar = HomePassThrough()
   /* Mail's own measures (Haris, 2026-10-31, from his Mail screenshots): the bar's buttons 44 pt, 16 from the right
      edge, 12 apart, their middle 22 under the status bar; the bar 54 under it; the small title 17 semibold with the
      line under it 12 regular; the big title 34 bold, 16 from the left, the line under it 15 regular; system colours */
@@ -36,7 +35,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   /* The corner button (shell 30, Haris 2026-11-01): Search here, Mark all read / unread on the Inbox and ••• on a
      task page are one glass button of the app's (CornerButton, Main): this screen's own ones then stay invisible and
      only say where the button goes and what it is. */
-  var cornerShared = false { didSet { markAll.alpha = cornerShared ? 0 : 1 } }
+  var cornerShared = false   // (its screen told once when it's shown or hidden — MenuItem.swift's updateCorner)
   // (the shared top buttons: your photo — where, what, and its tap)
   // (its place at full size — while searching it's shrunk away, and the ✕ that takes its place came out shrunk too)
   func meTap() { send(["ev": "me"]) }
@@ -49,7 +48,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     let f = CGRect.zero
     if searching || isHidden { return ("none", "", f) }
     guard isInbox else { return ("search", "", f) }
-    if !markAll.isHidden { return ("read", "Mark all read", f) }
+    if markAllOn { return ("read", "Mark all read", f) }
     let rows = content.compactMap { $0 as? InboxRow }
     return rows.isEmpty ? ("none", "", f) : ("unread", "Mark all unread", f)
   }
@@ -114,15 +113,14 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     if #available(iOS 26.0, *) {
       scroll.topEdgeEffect.style = .automatic; results.topEdgeEffect.style = .automatic
     }
-    topBar.isHidden = true
     onAppleTitle?(titleText, dateText)
     onAppleMe?(meShown)
     if assets == nil || assets == "client" || assets == "folder" || assets == "all" || isMeList { makeAppleList() }   // (Me and its pages too — AppleMe.swift)   // (the Clients tab's pages and Client Assets' too — AppleClients.swift)
     // (My Tasks: its filter rows and chips are in Apple's bar's menu now — taken out; All / Done goes into the list)
     // (My Tasks: its filters are in Apple's bar's menu, All / Done in Apple's search bar's scope bar — the rows taken out)
-    if isList && !isInbox { listHead.removeFromSuperview(); if let f = lastFilters { onAppleFilters?(f) } }
+    if isList && !isInbox, let f = lastFilters { onAppleFilters?(f) }
     // (the Inbox: Mail's buttons go into the list, Mark all read into Apple's bar — HomeView's own taken out)
-    if isInbox { listHead.removeFromSuperview(); markAll.removeFromSuperview(); catsWrap.addSubview(catsView); if !content.isEmpty { applyList(animated: false) }; onAppleCorner?() }
+    if isInbox { catsWrap.addSubview(catsView); if !content.isEmpty { applyList(animated: false) }; onAppleCorner?() }
     // (the Clients tab's pages and Client Assets': what's drawn already goes into Apple's list)
     if (isClients || isClient || assets != nil || !cards.isEmpty), listOn, !content.isEmpty { applyList(animated: false) }
     setNeedsLayout()
@@ -609,7 +607,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     results.alpha = 0; results.isHidden = true
     hint.font = .systemFont(ofSize: 15); hint.numberOfLines = 0; hint.textAlignment = .center; results.addSubview(hint)
     addSubview(results)
-    addSubview(topBar)
     let nc = NotificationCenter.default
     nc.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] n in
       guard let self = self, let end = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue else { return }
@@ -922,53 +919,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
 
   // ---------- My Tasks (26+): the same screen as a list — All / Done, the filter buttons and the filters that are on ----------
   // (the page says which buttons this person has and what's on: setFilters; taps go back as tab / filter / chip / reset)
-  var isList = false { didSet { if isList && seg.superview == nil { makeList() } } }
-  private let seg = UISegmentedControl(items: ["All", "Done"])
-  private let filterRow = UIScrollView(), chipRow = UIScrollView()
-  private let listHead = HomePassThrough()
-  private var listHeadH: CGFloat = 0
-  private var pinned = false   // (the tabs and filters stuck under the bar)
-  // a page's own search and filters (the Trash's): at the top of its list, stuck under the bar once they reach it, as
-  // My Tasks' — the standard (Haris 2026-11-03)
-  var pinHead: UIView? { didSet {
-    if oldValue !== pinHead { oldValue?.removeFromSuperview(); if let p = pinHead { insertSubview(p, belowSubview: topBar) }; pinned = false; setNeedsLayout() }
-  } }
-  private var pinHeadY: CGFloat = 0, pinHeadH: CGFloat = 0
-  private var filterBtns: [UIButton] = [], chipBtns: [UIButton] = []
+  var isList = false { didSet { if isList && !oldValue && isInbox { makeInbox() } } }
   private(set) var listTab = "all"
   private var filtersKey = ""
-  private func makeList() {
-    if isInbox { makeInbox(); return }
-    seg.selectedSegmentIndex = 0
-    seg.addAction(UIAction { [weak self] _ in
-      guard let self = self else { return }
-      UISelectionFeedbackGenerator().selectionChanged()
-      self.listTab = self.seg.selectedSegmentIndex == 1 ? "done" : "all"
-      self.send(["ev": "tab", "tab": self.listTab])
-    }, for: .valueChanged)
-    [filterRow, chipRow].forEach { $0.showsHorizontalScrollIndicator = false; $0.alwaysBounceHorizontal = true; $0.clipsToBounds = false; $0.contentInset = UIEdgeInsets(top: 0, left: 16, bottom: 0, right: 16) }
-    [filterRow, chipRow].forEach { $0.contentOffset.x = -16 }   // (the first button 16 in, as the cards)
-    // (together, over the list: they move with it until they reach the frost bar, then stay under it — Haris, 2026-11-01)
-    [seg, filterRow, chipRow].forEach { listHead.addSubview($0) }
-    insertSubview(listHead, belowSubview: topBar)
-  }
-  private func capsule(_ t: String, sym: String?, on: Bool, small: Bool) -> UIButton {
-    var c: UIButton.Configuration
-    if #available(iOS 26.0, *) { c = on ? .prominentGlass() : .glass() } else { c = on ? .filled() : .gray(); c.cornerStyle = .capsule }
-    // (a filter that's on: filled — black with white in light, white with black in dark, as Mail's "All Mail"; fixed
-    //  colours, not the system's: the glass worked its own text colour out and it came out white on white in dark — Haris,
-    //  2026-11-01)
-    let ink: UIColor = on ? Look.inkInverse : Look.ink
-    if on { c.baseBackgroundColor = Look.ink }
-    c.baseForegroundColor = ink
-    let f = UIFont.systemFont(ofSize: small ? 13 : 15, weight: on ? .semibold : .regular)
-    c.attributedTitle = AttributedString(t, attributes: AttributeContainer([.font: f, .foregroundColor: ink]))
-    if let sym = sym { c.image = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: small ? 10 : 12, weight: .semibold))?.withTintColor(ink, renderingMode: .alwaysOriginal); c.imagePadding = small ? 5 : 6 }
-    c.imagePlacement = small ? .trailing : .leading
-    c.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: small ? 12 : 14, bottom: 0, trailing: small ? 10 : 14)
-    let b = UIButton(type: .system); b.configuration = c
-    return b
-  }
+  // (what the page says about the filters — shown by Apple's bar's menu: AppleMyTasks.swift)
   private var lastFilters: [String: Any]?
   func setFilters(_ a: [String: Any]) {
     if !isList { isList = true }
@@ -976,60 +930,16 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     if appleTop { onAppleFilters?(a) }
     let tab = (a["tab"] as? String) == "done" ? "done" : "all"
     if tab != listTab { listTab = tab }
-    seg.selectedSegmentIndex = listTab == "done" ? 1 : 0
-    let key = valSig(a["buttons"]) + "|" + valSig(a["chips"]) 
+    let key = valSig(a["buttons"]) + "|" + valSig(a["chips"])
     if key == filtersKey { return }
     filtersKey = key
-    filterBtns.forEach { $0.removeFromSuperview() }; chipBtns.forEach { $0.removeFromSuperview() }
-    let syms = ["due": "calendar", "people": "person.2", "ams": "person.crop.circle", "assigned": "person.fill.checkmark"]
-    filterBtns = (a["buttons"] as? [[String: Any]] ?? []).map { d -> UIButton in
-      let k = d["k"] as? String ?? ""
-      let b = capsule((d["t"] as? String ?? ""), sym: syms[k] ?? "line.3.horizontal.decrease", on: (d["on"] as? Bool) == true, small: false)
-      b.accessibilityIdentifier = "filter-" + k
-      b.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.send(["ev": "filter", "k": k]) }, for: .touchUpInside)
-      filterRow.addSubview(b); return b
-    }
-    var chips = (a["chips"] as? [[String: Any]] ?? []).map { d -> UIButton in
-      let b = capsule(d["t"] as? String ?? "", sym: "xmark", on: false, small: true)
-      b.accessibilityLabel = "Remove " + (d["t"] as? String ?? "")
-      var ev: [String: Any] = ["ev": "chip", "act": d["act"] as? String ?? ""]; if let id = d["id"] as? String { ev["id"] = id }
-      b.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.send(ev) }, for: .touchUpInside)
-      return b
-    }
-    if chips.count > 1 {
-      let b = UIButton(type: .system)
-      b.setAttributedTitle(NSAttributedString(string: "Clear all", attributes: [.font: UIFont.systemFont(ofSize: 13, weight: .semibold), .foregroundColor: UIColor.secondaryLabel]), for: .normal)
-      b.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.send(["ev": "reset"]) }, for: .touchUpInside)
-      chips.append(b)
-    }
-    chips.forEach { chipRow.addSubview($0) }
-    chipBtns = chips
     setNeedsLayout()
   }
-  // (where the boxes are on Home: All / Done 32 tall, the filter buttons 36, what's on 30 under them; returns where the list starts)
-  private func layoutList(_ W: CGFloat) -> CGFloat {
-    if isInbox { return layoutCats(W) }
-    var y: CGFloat = 0
-    seg.frame = CGRect(x: 16, y: y, width: W - 32, height: 32); y += 32 + 10
-    func row(_ r: UIScrollView, _ bs: [UIButton], _ h: CGFloat) {
-      var x: CGFloat = 0
-      for (i, b) in bs.enumerated() {
-        let w = ceil(b.sizeThatFits(CGSize(width: 400, height: h)).width)
-        if i > 0 { x += 8 }
-        b.frame = CGRect(x: x, y: 0, width: w, height: h); x += w
-      }
-      r.frame = CGRect(x: 0, y: y, width: W, height: h)
-      r.contentSize = CGSize(width: x, height: h)
-    }
-    filterRow.isHidden = filterBtns.isEmpty
-    if !filterBtns.isEmpty { row(filterRow, filterBtns, 36); y += 36 + 10 }
-    chipRow.isHidden = chipBtns.isEmpty
-    if !chipBtns.isEmpty { row(chipRow, chipBtns, 30); y += 30 + 10 }
-    return y - 10
-  }
-  func selfTab(_ t: String) { seg.selectedSegmentIndex = t == "done" ? 1 : 0; seg.sendActions(for: .valueChanged) }
+  // (the self-test: All / Done picked)
+  func selfTab(_ t: String) { listTab = t == "done" ? "done" : "all"; send(["ev": "tab", "tab": listTab]) }
   func listGeo() -> [String: Any] {
-    ["tab": listTab, "pinned": pinned, "apple": appleTop, "listOn": listOn, "headTop": listHead.frame.minY, "barBottom": smallHead, "filters": filterBtns.map { $0.accessibilityIdentifier ?? "" }, "chips": chipBtns.count, "cards": cards.count,
+    let buttons = (lastFilters?["buttons"] as? [[String: Any]]) ?? [], chips = (lastFilters?["chips"] as? [Any]) ?? []
+    return ["tab": listTab, "apple": appleTop, "listOn": listOn, "barBottom": smallHead, "filters": buttons.map { "filter-" + ($0["k"] as? String ?? "") }, "chips": chips.count + (chips.count > 1 ? 1 : 0), "cards": cards.count,
      "groups": content.compactMap { ($0 as? UILabel)?.tag == 7 ? $0.accessibilityIdentifier : nil }]
   }
 
@@ -1182,47 +1092,27 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   // ‹ on a client's page: where it is (the shared top buttons' row, at the page's left edge) and its tap
   var backable: Bool { isClient || (assets != nil && assetsBack) || (isClients && backFromMe) }
   var backFromMe = false   // (the Clients list opened from Me › Work — the CD's: ‹ back to Me, Haris 2026-11-05)
-  // a client's page has the task page's header (Haris 2026-11-02, "b"): ‹ · its logo and name in the middle · •••
-  private lazy var barTitle: UIStackView = {
-    // (name, and a line under it on Client Assets: "6 folders · 48 files", a folder's client)
-    let words = UIStackView(arrangedSubviews: [barName, barSub]); words.axis = .vertical; words.alignment = .center; words.spacing = 0
-    barSub.font = .systemFont(ofSize: 12); barSub.textColor = .secondaryLabel; barSub.isHidden = true; barSub.lineBreakMode = .byTruncatingTail
-    let s = UIStackView(arrangedSubviews: [barLogo, words]); s.spacing = 8; s.alignment = .center
-    barLogo.layer.cornerRadius = 7; barLogo.layer.cornerCurve = .continuous; barLogo.clipsToBounds = true; barLogo.contentMode = .scaleAspectFill
-    barLogo.widthAnchor.constraint(equalToConstant: 26).isActive = true; barLogo.heightAnchor.constraint(equalToConstant: 26).isActive = true
-    barIni.font = .systemFont(ofSize: 10, weight: .bold); barIni.textColor = .white; barIni.textAlignment = .center; barLogo.addSubview(barIni)
-    barName.font = .systemFont(ofSize: 17, weight: .semibold); barName.lineBreakMode = .byTruncatingTail
-    s.isUserInteractionEnabled = false
-    topBar.addSubview(s)
-    return s
-  }()
-  private let barLogo = UIImageView(), barIni = UILabel(), barName = UILabel(), barSub = UILabel()
-  // Client Assets' bar: its name (and logo, for a client) with the line under it
+  // a page's name for Apple's bar (AppleClients.swift): a client's with its colour or logo beside it; Client Assets' with
+  // the line under it ("6 folders · 48 files")
+  private var barNameText = "", barSubText = "", barIniText: String?, barRGB: UIColor = .systemGray, barShowLogo = true
   func drawAssetsBar(name: String, sub: String, logo: String?, rgb: Any?, ini: String?, showLogo: Bool) {
     drawBarTitle(["title": name, "logo": logo as Any, "rgb": rgb as Any, "ini": ini as Any])
-    barLogo.isHidden = !showLogo
-    HomeView.fadeText(barSub, sub); barSub.isHidden = sub.isEmpty; barSub.textColor = .secondaryLabel
-    barName.font = .systemFont(ofSize: sub.isEmpty ? 17 : 16, weight: .semibold)
-    setNeedsLayout()
+    barShowLogo = showLogo
+    barSubText = sub
     tellApplePage()
   }
   // (a page pushed on the Clients tab — AppleClients.swift: its name, the line under it and its colour or logo, for
   //  Apple's bar)
   var onApplePage: ((String, String, UIColor, String?, String?, Bool) -> Void)?
   func tellApplePage() {
-    onApplePage?(barName.text ?? "", barSub.isHidden ? "" : (barSub.text ?? ""), NativeSheetVC.color(m["rgb"]) ?? barLogo.backgroundColor ?? .systemGray, barLogoPath, barIni.text, !barLogo.isHidden)
+    onApplePage?(barNameText, barSubText, NativeSheetVC.color(m["rgb"]) ?? barRGB, barLogoPath, barIniText, barShowLogo)
   }
   private var barLogoPath: String?
   private func drawBarTitle(_ model: [String: Any]) {
-    _ = barTitle
-    barName.text = model["title"] as? String; barName.textColor = .label
-    barIni.text = model["ini"] as? String
-    let rgb = NativeSheetVC.color(model["rgb"]) ?? .systemGray
-    let lp = model["logo"] as? String
-    if lp != barLogoPath {
-      barLogoPath = lp; barLogo.image = nil; barLogo.backgroundColor = rgb; barLogo.contentMode = .scaleAspectFill; barIni.isHidden = false
-      if let p = lp { FeedLoader.shared.image(p) { [weak self] img in guard let self = self, self.barLogoPath == p, let img = img else { return }; LogoLook.put(img, key: p, in: self.barLogo); self.barIni.isHidden = true } }
-    } else if barLogo.image == nil { barLogo.backgroundColor = rgb }
+    barNameText = model["title"] as? String ?? ""
+    barIniText = model["ini"] as? String
+    barRGB = NativeSheetVC.color(model["rgb"]) ?? .systemGray
+    barLogoPath = model["logo"] as? String
     if isClient { tellApplePage() }
   }
   // its ••• (the shared corner button's menu): Client Assets, New task
@@ -1271,30 +1161,15 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     .init(key: "all", sym: "tray", name: "All", fill: MailCats.neutral),
     .init(key: "unread", sym: "envelope", name: "Unread", fill: MailCats.blue),
     .init(key: "mentions", sym: "at", name: "Mentions", fill: MailCats.purple)])
-  private let markAll = UIButton(type: .system)
+  private var markAllOn = false   // (anything unread: Apple's bar shows Mark all read — AppleInbox.swift)
   // (the Inbox opens on Unread — Haris 2026-11-08: "Make the inbox open on unread"; All and Mentions a tap away)
   private(set) var inboxTab = "unread"
   private var keepSet = false
   private var inboxRows: [String: InboxRow] = [:]
   private var keep = Set<String>()     // (rows that were in the list when it was picked stay until it's left — read or not)
   private func makeInbox() {
-    var c: UIButton.Configuration
-    if #available(iOS 26.0, *) { c = .glass() } else { c = .gray(); c.cornerStyle = .capsule }
-    c.attributedTitle = AttributedString("Mark all read", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 15, weight: .semibold)]))
-    c.baseForegroundColor = .label
-    c.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16)
-    markAll.configuration = c
-    markAll.accessibilityIdentifier = "mark-all-read"
-    markAll.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.send(["ev": "readAll"]) }, for: .touchUpInside)
-    addSubview(markAll)
     catsView.onPick = { [weak self] i in guard let self = self else { return }; self.pickTab(["all", "unread", "mentions"][i]) }
     catsView.choose(1, animated: false)
-    listHead.addSubview(catsView)
-    insertSubview(listHead, belowSubview: topBar)
-  }
-  private func layoutCats(_ W: CGFloat) -> CGFloat {
-    catsView.frame = CGRect(x: 0, y: 0, width: W, height: MailCats.H)
-    return MailCats.H
   }
   private func fits(_ r: [String: Any]) -> Bool {
     let id = r["id"] as? String ?? ""
@@ -1315,8 +1190,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   }
   private func drawInbox(_ model: [String: Any]) {
     fab.isHidden = (model["add"] as? Bool) != true   // (+ New task, as on Home — for those who may)
-    markAll.isHidden = ((model["unread"] as? Int) ?? 0) == 0
-    markAll.alpha = cornerShared ? 0 : 1
+    markAllOn = ((model["unread"] as? Int) ?? 0) > 0
     defer { onCorner?() }
     // (opened on Unread: the unread ones at the start stay in it until another list is picked — read or not, as Mail)
     // (nothing unread when it first opens: it opens on All instead — Haris 2026-11-10)
@@ -1374,7 +1248,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   private var peekSeen: [String: Any] = [:]
   func inboxGeo() -> [String: Any] {
     ["tab": inboxTab, "unread": (m["unread"] as? Int) ?? 0, "rows": content.filter { $0 is InboxRow }.count, "unreadRows": content.compactMap { $0 as? InboxRow }.filter { !$0.read }.count,
-     "cats": catsView.widths, "markAll": !markAll.isHidden, "open": appleSwipeOK, "cells": inboxCells, "peek": peekSeen, "pinned": pinned, "apple": appleTop, "listOn": listOn]
+     "cats": catsView.widths, "markAll": markAllOn, "open": appleSwipeOK, "cells": inboxCells, "peek": peekSeen, "apple": appleTop, "listOn": listOn]
   }
 
   // ---------- where things go ----------
@@ -1400,10 +1274,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
         v.viewWithTag(2)?.frame = CGRect(x: 13, y: 11 + 41, width: bw - 26, height: 15)
       }
     } else {
-    // the three boxes (.ph-stats: 4 above, 6 below, 8 apart) — My Tasks: All / Done, the filters and what's on instead
+    // the three boxes (.ph-stats: 4 above, 6 below, 8 apart) — none on My Tasks
     var y: CGFloat = 4
     let bw = (W - 32 - 16) / 3, bh: CGFloat = 1 + 10 + 41 + 15 + 12 + 1
-    if isList { listHeadH = layoutList(W); y = 4 + listHeadH - bh }
+    if isList { y = 4 - bh }
     if isClients || isClient || assets != nil { y = 4 - bh }
     for (i, v) in stats.enumerated() where !noStats {
       v.frame = CGRect(x: 16 + CGFloat(i) * (bw + 8), y: y, width: bw, height: bh)
@@ -1411,7 +1285,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
       v.viewWithTag(2)?.frame = CGRect(x: 13, y: 11 + 41, width: bw - 26, height: 15)
     }
     y += bh + 6
-    if let p = pinHead, !isList { pinHeadY = y; pinHeadH = (p as? HomeBlock)?.blockHeight(W) ?? 0; y += pinHeadH }
     // the list (.ph-list: 16 from the sides, 10 between things; a group's title 12 lower than that)
     let lw = W - 32
     for (i, v) in content.enumerated() {
@@ -2172,11 +2045,6 @@ final class HomeClientRow: UIView, AppleRow {
     rowContent = cfg
     accessibilityLabel = name
   }
-}
-
-// a view that only takes touches on what's in it (the bar's row: the list under its empty parts still scrolls)
-final class HomePassThrough: UIView {
-  override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? { let v = super.hitTest(point, with: event); return v === self ? nil : v }
 }
 
 // ---------- the Inbox: a notification as Apple's own list cell (Haris 2026-11-09/10, mock-up "Inbox — with the rules", B) ----------
