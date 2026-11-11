@@ -2512,8 +2512,15 @@ final class MeCtl {
     let sub = all.filter { ($0["st"] as? String) == "submitted" }.compactMap { $0["id"] as? String }
     var out: [UIMenuElement] = []
     if (m["admin"] as? Bool) == true {
-      let a = UIAction(title: "Mark All HR Approved", image: UIImage(systemName: "checkmark.circle"), attributes: sub.isEmpty ? .disabled : []) { [weak self, weak h] _ in self?.clApprove(h, sub) }
-      let p = UIAction(title: "Set All Paid On…", image: UIImage(systemName: "calendar"), attributes: open.isEmpty ? .disabled : []) { [weak self, weak h] _ in self?.paidOn(h, open, sub: "\(open.count) claim\(open.count == 1 ? "" : "s") · \(m["label"] as? String ?? "")") }
+      let a = UIAction(title: "Mark All HR Approved", image: UIImage(systemName: "checkmark.circle"), attributes: sub.isEmpty ? .disabled : []) { [weak self, weak h] _ in
+        // (all at once: asked first, in case of a slip — Haris 2026-11-11)
+        let n = sub.count
+        self?.ask(["kind": "alert", "title": "Mark \(n) Claim\(n == 1 ? "" : "s") HR Approved?", "body": "Every submitted claim for \(m["label"] as? String ?? "this month") will be marked HR approved.", "okText": "Mark All", "cancelText": "Cancel"]) { r in
+          guard (r["ok"] as? Bool) == true else { return }
+          self?.clApprove(h, sub)
+        }
+      }
+      let p = UIAction(title: "Set All Paid On…", image: UIImage(systemName: "calendar"), attributes: open.isEmpty ? .disabled : []) { [weak self, weak h] _ in self?.paidOn(h, open, sub: "\(open.count) claim\(open.count == 1 ? "" : "s") · \(m["label"] as? String ?? "")", confirm: true) }
       out.append(UIMenu(options: .displayInline, children: [a, p]))
     }
     let cur = m["month"] as? String ?? ""
@@ -2537,14 +2544,22 @@ final class MeCtl {
     }
   }
   // Paid on — iPhone's own calendar (as the website, a submitted one is HR approved with it); one claim or all at once
-  private func paidOn(_ h: HomeView?, _ ids: [String], sub: String = "") {
+  private func paidOn(_ h: HomeView?, _ ids: [String], sub: String = "", confirm: Bool = false) {
     guard !ids.isEmpty else { return }
     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     let fmt = DateFormatter(); fmt.calendar = Calendar(identifier: .gregorian); fmt.locale = Locale(identifier: "en_US_POSIX"); fmt.dateFormat = "yyyy-MM-dd"
     main.topMost().present(DateSheetVC(["value": fmt.string(from: Date()), "min": "", "max": "", "clearable": false, "md": false, "title": "Paid on", "sub": sub]) { [weak self, weak h] r in
       if (r["cancel"] as? Bool) == true || (r["ok"] as? Bool) == false { return }
       guard let d = r["date"] as? String, !d.isEmpty else { return }
-      self?.request(["ev": "clPaid", "ids": ids, "date": d]) { r in if (r["ok"] as? Bool) == true { UINotificationFeedbackGenerator().notificationOccurred(.success); h?.toast(["t": (r["text"] as? String) ?? "Marked paid"]) } else { h?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]) } }
+      let send = { self?.request(["ev": "clPaid", "ids": ids, "date": d]) { r in if (r["ok"] as? Bool) == true { UINotificationFeedbackGenerator().notificationOccurred(.success); h?.toast(["t": (r["text"] as? String) ?? "Marked paid"]) } else { h?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]) } } }
+      guard confirm else { send(); return }
+      // (Set All Paid On…: asked once the day is picked, in case of a slip — Haris 2026-11-11)
+      let shown = fmt.date(from: d).map { x -> String in let f = DateFormatter(); f.dateFormat = "d MMMM yyyy"; return f.string(from: x) } ?? d
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+        self?.ask(["kind": "alert", "title": "Mark \(ids.count) Claim\(ids.count == 1 ? "" : "s") Paid?", "body": "Paid on \(shown). Submitted claims are marked HR approved too.", "okText": "Mark Paid", "cancelText": "Cancel"]) { r in
+          if (r["ok"] as? Bool) == true { send() }
+        }
+      }
     }, animated: true)
   }
   // a claim's PDF, made by the server (its sheet, receipts and signature) — shared with iPhone's own share sheet
