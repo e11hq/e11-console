@@ -3151,9 +3151,9 @@ extension HomeView: UICollectionViewDelegate {
     guard let key = listDS?.itemIdentifier(for: ip), let t = listViews[key] as? FileTile, t.window != nil else { return nil }
     let v = t.liftView
     let p = UIPreviewParameters(); p.backgroundColor = .clear
-    // (the whole picture shown — the folder's own outline cut its tab's slope off: Haris 2026-11-10 17:54; its shadow the
-    //  folder's shape, so no box shows around it)
-    p.visiblePath = UIBezierPath(roundedRect: v.bounds, cornerRadius: t.liftRadius); p.shadowPath = t.liftPath
+    // (the picture in its own shape, the folder's read off Apple's folder itself — its whole tab and slope, no box around it
+    //  in light or dark: Haris 2026-11-10 17:54, 2026-11-11 07:43)
+    p.visiblePath = t.liftPath; p.shadowPath = t.liftPath
     return UITargetedPreview(view: v, parameters: p)
   }
   func collectionView(_ cv: UICollectionView, contextMenuConfiguration c: UIContextMenuConfiguration, highlightPreviewForItemAt ip: IndexPath) -> UITargetedPreview? { tileLift(ip) }

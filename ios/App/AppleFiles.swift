@@ -24,13 +24,43 @@ final class FileTile: UIView {
   var liftRadius: CGFloat { isFolder ? 4 : max(6, pic.layer.cornerRadius) }
   // (held: the lift's outline — a folder in its own shape, its tab and its body, so Apple's lift shadow follows the folder,
   //  not a box around it: a grey box showed behind a lifted folder, Haris 2026-11-10 17:08; a file: its picture's rounded shape)
+  // (a folder: its outline read off Apple's folder picture itself — its tab, the tab's slope and its rounded corners exactly,
+  //  in light and dark: drawn by hand the tab's slope was cut off, Haris 2026-11-10 17:54; drawn as a box, the lift showed a
+  //  pale box around the folder in light, 2026-11-11 07:43)
   var liftPath: UIBezierPath {
     let b = pic.bounds
-    guard isFolder else { return UIBezierPath(roundedRect: b, cornerRadius: liftRadius) }
-    let path = UIBezierPath(roundedRect: CGRect(x: 0, y: b.height * 0.14, width: b.width, height: b.height * 0.86), cornerRadius: b.width * 0.08)
-    path.append(UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: b.width * 0.5, height: b.height * 0.3), cornerRadius: b.width * 0.06))
+    guard isFolder, FileTile.folderOutline.count > 2 else { return UIBezierPath(roundedRect: b, cornerRadius: liftRadius) }
+    let path = UIBezierPath()
+    for (i, q) in FileTile.folderOutline.enumerated() {
+      let pt = CGPoint(x: q.x * b.width, y: q.y * b.height)
+      if i == 0 { path.move(to: pt) } else { path.addLine(to: pt) }
+    }
+    path.close()
     return path
   }
+  // the folder picture's outline, 0…1 across and down: its top edge left to right, then its bottom edge back
+  static let folderOutline: [CGPoint] = {
+    // (drawn afresh at a known size, so its pixels are its own — a cropped picture's may still be the whole one's)
+    let img = folderImage.withTintColor(.black, renderingMode: .alwaysOriginal)
+    guard img.size.width > 0 else { return [] }
+    let fmt = UIGraphicsImageRendererFormat(); fmt.scale = 1; fmt.opaque = false
+    let size = CGSize(width: 200, height: (200 * img.size.height / img.size.width).rounded())
+    let drawn = UIGraphicsImageRenderer(size: size, format: fmt).image { _ in img.draw(in: CGRect(origin: .zero, size: size)) }
+    guard let cg = drawn.cgImage, let data = cg.dataProvider?.data, let px = CFDataGetBytePtr(data) else { return [] }
+    let w = cg.width, h = cg.height, bpr = cg.bytesPerRow, bpp = cg.bitsPerPixel / 8
+    guard w > 1, h > 1, bpp >= 1 else { return [] }
+    let on = { (x: Int, y: Int) -> Bool in px[y * bpr + x * bpp + (bpp - 1)] > 8 }
+    var top: [CGPoint] = [], bottom: [CGPoint] = []
+    let n = 96
+    for i in 0...n {
+      let x = min(w - 1, Int((Double(i) / Double(n) * Double(w - 1)).rounded()))
+      guard let y0 = (0..<h).first(where: { on(x, $0) }), let y1 = (0..<h).reversed().first(where: { on(x, $0) }) else { continue }
+      let fx = CGFloat(x) / CGFloat(w - 1)
+      top.append(CGPoint(x: fx, y: CGFloat(y0) / CGFloat(h)))
+      bottom.append(CGPoint(x: fx, y: CGFloat(y1 + 1) / CGFloat(h)))
+    }
+    return top + bottom.reversed()
+  }()
   // (Apple's folder symbol with the room Apple leaves around it taken off — so the folder itself fills its 84 × 70, as the
   //  mock-up; with that room it came out about a fifth smaller than its name called for: Haris 2026-11-10 15:21)
   static let folderImage: UIImage = {
