@@ -498,6 +498,12 @@ before starting. nothing should be missed"). Each page:
     under the logo until the copy is in (only then; never again on that phone).
 Order: 1 the startup screen (our animated logo stays — Haris 2026-11-09), then Home per its fully-Apple mock-up, then the rest.
 
+**STABLE — iPhone build 1687 and server 1.9.38 (Haris, 2026-11-11 17:41: "secure 1687 aside as the stable version"):**
+commit aa5f787, branch `stable/ios-1687`; the server commit 2415d3b, branch `stable/server-1.9.38` (never moved or deleted).
+The version to go back to if later work breaks something. Next, in order (Haris 17:41): background uploads and downloads;
+then the full self-test in the simulator (roles, smoothness, the rules, reminders, every function) — **not sent to
+TestFlight**, its results shared and decided on; then new App Store screenshots (very interactive — mock-ups first) and the
+release.
 **The App Store release — APPROVED (Haris, 2026-11-06):** the iPhone app 1.1.0, build 1472 (commit 9ca8c16, marked by
 the branch `approved/appstore-ios-1.1.0-build-1472` — never moved or deleted) is approved as it is for the App Store.
 From now on:
