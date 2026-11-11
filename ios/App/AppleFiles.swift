@@ -393,10 +393,21 @@ final class FilesLook: NSObject, QLPreviewControllerDataSource, QLPreviewControl
     }
   }
   // Apple's spinner in the middle of Quick Look while the file on show is on its way
-  private var spin: UIActivityIndicatorView?
+  private var spin: UIActivityIndicatorView?, still: UIImageView?
   private func waiting(_ on: Bool) {
-    guard on else { spin?.removeFromSuperview(); spin = nil; return }
+    guard on else { spin?.removeFromSuperview(); spin = nil; still?.removeFromSuperview(); still = nil; return }
     guard let v = q?.view, spin == nil else { return }
+    // (its picture behind the spinner while it comes — a video's frame, a photo's small copy — as Photos shows it before the
+    //  whole file is there; a blank page with a spinner before, Haris 2026-11-11)
+    if let q = q, q.currentPreviewItemIndex < items.count, let t = Main.previewItem(items[q.currentPreviewItemIndex].f)["thumb"] as? String, !t.isEmpty {
+      let iv = UIImageView(); iv.contentMode = .scaleAspectFit; iv.alpha = 0
+      iv.translatesAutoresizingMaskIntoConstraints = false
+      v.addSubview(iv)
+      NSLayoutConstraint.activate([iv.leadingAnchor.constraint(equalTo: v.leadingAnchor), iv.trailingAnchor.constraint(equalTo: v.trailingAnchor),
+                                   iv.centerYAnchor.constraint(equalTo: v.centerYAnchor), iv.heightAnchor.constraint(equalTo: v.heightAnchor, multiplier: 0.7)])
+      still = iv
+      PreviewLoad.image(t) { [weak iv] img in guard let iv = iv, let img = img else { return }; iv.image = img; UIView.animate(withDuration: 0.2) { iv.alpha = 1 } }
+    }
     let s = UIActivityIndicatorView(style: .large); s.hidesWhenStopped = true
     s.translatesAutoresizingMaskIntoConstraints = false
     v.addSubview(s)

@@ -662,7 +662,11 @@ extension Main {
     //  else the file's picture — a video's frame, a PDF's first page)
     // (the same 480-wide copy the file cards ask for: the server makes it once — two sizes meant twice the work)
     let small = (p["url"] as? String).map { v(serverURL() + $0.replacingOccurrences(of: "?view=1", with: "?w=480")) } ?? ""
-    let thumb = (p["thumbUrl"] as? String).map { serverURL() + $0 } ?? (CommentCell.isPic(n) ? small : "")
+    // (a video given by its place only — Overview's latest files, a receipt — the server's frame of it, as the lists ask for:
+    //  it opened on a grey MP4 card, Haris 2026-11-11)
+    let path = (p["path"] as? String) ?? (p["file"] as? String) ?? ""
+    let frame = CommentCell.isVideo(n) && !path.isEmpty ? serverURL() + "/api/fthumb?path=" + (path.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? path) + "&id=" + ((p["id"] as? String ?? "").addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "") : ""
+    let thumb = (p["thumbUrl"] as? String).map { serverURL() + $0 } ?? (CommentCell.isPic(n) ? small : frame)
     let meta = [TaskPage.size(p["size"] as? Int ?? 0)].joined()
     var it: [String: Any] = ["id": p["id"] ?? "", "name": n, "ext": String(ext.prefix(5)), "meta": meta, "src": src, "thumb": thumb, "cover": thumb]
     if CommentCell.isPic(n) { it["kind"] = "image" }
