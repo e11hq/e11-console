@@ -1172,7 +1172,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     var mm = m; mm["show"] = true
     mm["look"] = lookBoth
     if let p = m["people"] as? [String: [String: Any]] {
-      serverHome.photos(p) { [weak self] got in
+      serverHome.photos(p, for: "home") { [weak self] got in
         guard let self = self else { return }
         self.homeServerPeople = got
         self.homeIfMade?.people = got.merging(self.homePagePeople, uniquingKeysWith: { s, pg in pg["photo"] != nil || s["photo"] == nil ? pg : s })
@@ -1254,7 +1254,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     // (Home's colours from the page when they're for the same light / dark)
     mm["look"] = lookBoth
     if let p = m["people"] as? [String: [String: Any]] {
-      serverMyTasks.photos(p) { [weak self] got in
+      serverMyTasks.photos(p, for: "mytasks") { [weak self] got in
         guard let self = self else { return }
         self.myTasksServerPeople = got
         self.myTasksIfMade?.people = got.merging(self.homePagePeople, uniquingKeysWith: { s, pg in pg["photo"] != nil || s["photo"] == nil ? pg : s })
@@ -1359,7 +1359,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     var mm = m; mm["show"] = true
     mm["look"] = lookBoth
     if let p = m["people"] as? [String: [String: Any]] {
-      serverInbox.photos(p) { [weak self] got in
+      serverInbox.photos(p, for: "inbox") { [weak self] got in
         guard let self = self else { return }
         self.inboxIfMade?.people = got.merging(self.homePagePeople, uniquingKeysWith: { s, pg in pg["photo"] != nil || s["photo"] == nil ? pg : s })
       }
@@ -1710,7 +1710,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     var mm = m; mm["show"] = true
     mm["look"] = lookBoth
     if let p = m["people"] as? [String: [String: Any]] {
-      serverClients.photos(p) { [weak self, weak h] got in
+      serverClients.photos(p, for: page ? "client" : "clients") { [weak self, weak h] got in
         guard let self = self else { return }
         h?.people = got.merging(self.homePagePeople, uniquingKeysWith: { s, pg in pg["photo"] != nil || s["photo"] == nil ? pg : s })
       }

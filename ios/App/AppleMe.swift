@@ -128,7 +128,9 @@ final class MeTabVC: UIViewController, TabRoot, UISearchResultsUpdating, UISearc
     navigationItem.searchController = s
     BigLine.prime(self, key)
   }
-  func paintMe() { meItem?.image = BarImage.me(mePhoto ?? MePhoto.shared.image, traitCollection) }
+  // (your photo, else your initials in your colour — as the Inbox; an empty circle showed while viewing as someone with no
+  //  photo: Haris 2026-11-11 14:01)
+  func paintMe() { meItem?.image = BarImage.me(mePhoto ?? MePhoto.shared.picture(44), traitCollection) }
   // ••• beside your photo — Apple's own pull-down menu, worked out each time it opens (Claims: Mark All HR Approved, Set All
   // Paid On…, Month; Office Expenses: Month — Haris 2026-11-11, B1 · C1); nil: none
   private var moreItem: UIBarButtonItem?

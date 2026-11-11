@@ -316,11 +316,17 @@ final class ServerHome {
   // ---------- photos (the server sends where they are; fetched once, signed in) ----------
   // (each screen waiting on a photo is told when it comes — only the first one asking was, so a screen asking while another
   //  fetched it kept initials until it was drawn again: the Clients list's faces, Haris 2026-11-11)
-  private var pics: [String: String] = [:], waiting: [String: [() -> Void]] = [:]
-  func photos(_ people: [String: [String: Any]], _ done: @escaping ([String: [String: Any]]) -> Void) {
+  // (a screen's people asked again — another draw, or back to yourself after View as… — the photos coming for its older
+  //  asking aren't told to it: each laid an older list over the new one, the AMs' photos turning back to initials one by one —
+  //  Haris 2026-11-11 14:03)
+  private var pics: [String: String] = [:], waiting: [String: [() -> Void]] = [:], latest: [String: Int] = [:]
+  func photos(_ people: [String: [String: Any]], for screen: String? = nil, _ done: @escaping ([String: [String: Any]]) -> Void) {
     var out = people, told = Set<String>()
+    var gen = 0
+    if let k = screen { gen = (latest[k] ?? 0) + 1; latest[k] = gen }
     let tell = { [weak self] in
       guard let self = self else { return }
+      if let k = screen, self.latest[k] != gen { return }
       done(people.mapValues { q in var q = q; if let s = q["photo"] as? String, s.hasPrefix("/") { q["photo"] = self.pics[s] }; return q })
     }
     for (id, p) in people {
