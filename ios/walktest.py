@@ -31,7 +31,9 @@ try:
     for _ in range(60):
         try: urllib.request.urlopen(BASE + '/api/health', timeout=2); break
         except Exception: time.sleep(0.5)
-    api('/api/sample', {})
+    # (the full sample — clients with their Client Assets and logos, claims, plans: the owner's "Start fresh"; the plain
+    #  sample has no Client Assets clients, so Client Assets was never measured — 2026-11-11)
+    if not api('/api/sample/reset', {}).get('ok'): api('/api/sample', {})
     snap = api('/api/snapshot')
     users = (snap.get('data') or snap).get('users') or []
     by = lambda r: next((u for u in users if u.get('role') == r and u.get('active') is not False and u.get('email') != EMAIL), None)

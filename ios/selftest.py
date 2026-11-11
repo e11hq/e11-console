@@ -25,7 +25,10 @@ try:
     for _ in range(60):
         try: urllib.request.urlopen(BASE + '/api/health', timeout=2); break
         except Exception: time.sleep(0.5)
-    urllib.request.urlopen(urllib.request.Request(BASE + '/api/sample', method='POST', data=b'{}', headers={'X-Dev-Email': EMAIL, 'Content-Type': 'application/json'}), timeout=60)
+    # (the full sample, with Client Assets clients — the plain one has none; else the plain one)
+    try: fresh = json.loads(urllib.request.urlopen(urllib.request.Request(BASE + '/api/sample/reset', method='POST', data=b'{}', headers={'X-Dev-Email': EMAIL, 'Content-Type': 'application/json'}), timeout=120).read() or b'{}').get('ok')
+    except Exception as e: print('sample reset failed', e); fresh = False
+    if not fresh: urllib.request.urlopen(urllib.request.Request(BASE + '/api/sample', method='POST', data=b'{}', headers={'X-Dev-Email': EMAIL, 'Content-Type': 'application/json'}), timeout=60)
     devs = json.loads(sh('xcrun', 'simctl', 'list', 'devices', 'available', '-j').stdout)['devices']
     # (an ordinary numbered iPhone on the newest iOS: e.g. not the iPhone Duo, which sorts after them by name)
     rtv = lambda rt: [int(x) for x in re.findall(r'(\d+)', rt.split('iOS')[-1])[:2]]
