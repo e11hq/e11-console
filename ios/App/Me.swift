@@ -1142,14 +1142,15 @@ final class MeCtl {
   // Our own sign-in (Haris 2026-11-11, the approved mock-up "Sign-in — fully Apple", 6): a 4-digit code for someone, made by
   // the server (Super / Office Admins, the owner) and shown in iPhone's own sheet with Copy Message and Share
   private var signinOn: Bool { (main.startInfo["signin"] as? Bool) == true }
-  private func signinCode(_ id: String) {
+  private func signinCode(_ id: String, then: (() -> Void)? = nil) {
     main.serverTask.request("/api/signin/code", body: ["userId": id]) { [weak self] j in
       DispatchQueue.main.async {
         guard let self = self else { return }
-        guard let j = j, (j["ok"] as? Bool) == true, let code = j["code"] as? String else { (self.top ?? self.shown)?.toast(["t": "Couldn’t make a code — try again"]); return }
+        guard let j = j, (j["ok"] as? Bool) == true, let code = j["code"] as? String else { (self.top ?? self.shown)?.toast(["t": "Couldn’t make a code — try again"]); then?(); return }
         let p = self.person(id) ?? [:]
         let vc = SigninCodeVC(code: code, name: j["name"] as? String ?? "", email: j["email"] as? String ?? "", newUser: (j["newUser"] as? Bool) == true,
                               until: j["until"] as? String ?? "", message: j["message"] as? String ?? "", ini: p["ini"] as? String ?? "", rgb: NativeSheetVC.color(p["rgb"]) ?? .systemGray)
+        vc.onClose = then
         let nav = UINavigationController(rootViewController: vc)
         if let sp = nav.sheetPresentationController { sp.detents = [.medium(), .large()]; sp.prefersGrabberVisible = true }
         self.main.topMost().present(nav, animated: true)
@@ -1212,7 +1213,11 @@ final class MeCtl {
         var b: [String: Any] = ["ev": "addMember"]; for (k, x) in v { b[k] = x }
         self?.direct(b, or: ["ev": "addMember"], quiet: true) { j in
           if (j["ok"] as? Bool) != true, j["off"] == nil { DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { once(v, j["error"] as? String ?? "That didn’t work — try again") }; return }
-          if (j["clients"] as? Bool) == true, let nid = j["id"] as? String { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self?.clientsMenu(nid) } }
+          guard let nid = j["id"] as? String else { return }
+          let clients: (() -> Void)? = (j["clients"] as? Bool) == true ? { self?.clientsMenu(nid) } : nil
+          // (our own sign-in on: their sign-in code straight away, to send them — Haris 2026-11-11; then a freelancer's clients)
+          if self?.signinOn == true { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self?.signinCode(nid, then: clients) } }
+          else if let c = clients { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { c() } }
         }
       }
     }
@@ -4319,6 +4324,11 @@ final class AmendSheetVC: UIViewController, UITextViewDelegate {
 // (Apple's buttons). Ours, inside it: the person's initials circle and the digits' boxes.
 final class SigninCodeVC: UIViewController {
   private let code: String, name: String, email: String, newUser: Bool, until: String, message: String, ini: String, rgb: UIColor
+  var onClose: (() -> Void)?   // (after it's gone: a new freelancer's clients)
+  override func viewDidDisappear(_ animated: Bool) {
+    super.viewDidDisappear(animated)
+    if navigationController?.isBeingDismissed == true || isBeingDismissed || presentingViewController == nil { let c = onClose; onClose = nil; c?() }
+  }
   init(code: String, name: String, email: String, newUser: Bool, until: String, message: String, ini: String, rgb: UIColor) {
     self.code = code; self.name = name; self.email = email; self.newUser = newUser; self.until = until; self.message = message; self.ini = ini; self.rgb = rgb
     super.init(nibName: nil, bundle: nil)
