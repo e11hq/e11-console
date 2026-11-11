@@ -1135,8 +1135,26 @@ final class MeCtl {
     }
     var last: [UIMenuElement] = []
     if let r = o.restore { last.append(UIAction(title: "Restore Access", image: UIImage(systemName: "person.badge.plus")) { _ in r() }) }
+    if signinOn, o.remove != nil { main.append(UIAction(title: "New Sign-in Code", image: UIImage(systemName: "key")) { [weak self] _ in self?.signinCode(id) }) }
     if let r = o.remove { last.append(UIAction(title: "Remove from Team", image: UIImage(systemName: "trash"), attributes: .destructive) { _ in r() }) }
     return UIMenu(children: [UIMenu(options: .displayInline, children: main), UIMenu(options: .displayInline, children: last)])
+  }
+  // Our own sign-in (Haris 2026-11-11, the approved mock-up "Sign-in — fully Apple", 6): a 4-digit code for someone, made by
+  // the server (Super / Office Admins, the owner) and shown in iPhone's own sheet with Copy Message and Share
+  private var signinOn: Bool { (main.startInfo["signin"] as? Bool) == true }
+  private func signinCode(_ id: String) {
+    main.serverTask.request("/api/signin/code", body: ["userId": id]) { [weak self] j in
+      DispatchQueue.main.async {
+        guard let self = self else { return }
+        guard let j = j, (j["ok"] as? Bool) == true, let code = j["code"] as? String else { (self.top ?? self.shown)?.toast(["t": "Couldn’t make a code — try again"]); return }
+        let p = self.person(id) ?? [:]
+        let vc = SigninCodeVC(code: code, name: j["name"] as? String ?? "", email: j["email"] as? String ?? "", newUser: (j["newUser"] as? Bool) == true,
+                              until: j["until"] as? String ?? "", message: j["message"] as? String ?? "", ini: p["ini"] as? String ?? "", rgb: NativeSheetVC.color(p["rgb"]) ?? .systemGray)
+        let nav = UINavigationController(rootViewController: vc)
+        if let sp = nav.sheetPresentationController { sp.detents = [.medium(), .large()]; sp.prefersGrabberVisible = true }
+        self.main.topMost().present(nav, animated: true)
+      }
+    }
   }
   private func memberAct(_ id: String, _ act: [String: Any], then next: (() -> Void)? = nil) {
     if (act["open"] as? String) == "clients" { clientsMenu(id); return }
@@ -3219,6 +3237,7 @@ final class MeCtl {
         manage.append(SetItem(key: "cd", title: "Creative Director", sub: "Reviews every file sent for CD review", toggle: (cd["on"] as? Bool) == true, flip: { [weak self, weak h] _ in self?.cdFlow(id, h); if let h = h { self?.settle(h) } }))
       }
       if let c = o.clients { manage.append(SetItem(key: "clients", title: "Clients They Can See", tap: c)) }
+      if signinOn, o.remove != nil { manage.append(SetItem(key: "signin", title: "New Sign-in Code", tap: { [weak self] in self?.signinCode(id) })) }
     }
     guard !manage.isEmpty else { return }
     out.append(head(h, "manage", "Role and access")); out.append(group(h, "manage", manage))
@@ -4294,3 +4313,67 @@ final class AmendSheetVC: UIViewController, UITextViewDelegate {
   }
 }
 
+
+// A sign-in code, as the approved mock-up "Sign-in — fully Apple" (6 · Admin makes a code — Haris 2026-11-11): iPhone's own
+// sheet with Apple's bar (Sign-in Code · Done), the person, the four digits, when it stops working, Copy Message and Share…
+// (Apple's buttons). Ours, inside it: the person's initials circle and the digits' boxes.
+final class SigninCodeVC: UIViewController {
+  private let code: String, name: String, email: String, newUser: Bool, until: String, message: String, ini: String, rgb: UIColor
+  init(code: String, name: String, email: String, newUser: Bool, until: String, message: String, ini: String, rgb: UIColor) {
+    self.code = code; self.name = name; self.email = email; self.newUser = newUser; self.until = until; self.message = message; self.ini = ini; self.rgb = rgb
+    super.init(nibName: nil, bundle: nil)
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    title = "Sign-in Code"
+    view.backgroundColor = .systemGroupedBackground
+    navigationItem.rightBarButtonItem = UIBarButtonItem(systemItem: .done, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
+    let first = name.split(separator: " ").first.map(String.init) ?? name
+    let circle = UILabel(); circle.text = ini; circle.textAlignment = .center; circle.textColor = .white
+    circle.font = .systemFont(ofSize: 15, weight: .semibold); circle.backgroundColor = rgb; circle.layer.cornerRadius = 22; circle.clipsToBounds = true
+    circle.widthAnchor.constraint(equalToConstant: 44).isActive = true; circle.heightAnchor.constraint(equalToConstant: 44).isActive = true
+    let who = UILabel(); who.text = name; who.font = .preferredFont(forTextStyle: .headline)
+    let sub = UILabel(); sub.text = "\(email) · \(newUser ? "New user" : "Forgot password")"; sub.font = .preferredFont(forTextStyle: .subheadline); sub.textColor = .secondaryLabel
+    let names = UIStackView(arrangedSubviews: [who, sub]); names.axis = .vertical; names.spacing = 2
+    let person = UIStackView(arrangedSubviews: [circle, names]); person.spacing = 12; person.alignment = .center
+    let digits = UIStackView(arrangedSubviews: code.map { ch -> UIView in
+      let l = UILabel(); l.text = String(ch); l.textAlignment = .center; l.font = .monospacedDigitSystemFont(ofSize: 34, weight: .semibold)
+      l.backgroundColor = .secondarySystemGroupedBackground; l.layer.cornerRadius = 14; l.clipsToBounds = true
+      l.widthAnchor.constraint(equalToConstant: 60).isActive = true; l.heightAnchor.constraint(equalToConstant: 68).isActive = true
+      return l
+    })
+    digits.spacing = 12; digits.isAccessibilityElement = true; digits.accessibilityLabel = "Code " + code.map(String.init).joined(separator: " ")
+    let note = UILabel(); note.numberOfLines = 0; note.textAlignment = .center; note.font = .preferredFont(forTextStyle: .footnote); note.textColor = .secondaryLabel
+    note.text = "Works once, only for \(first), until \(until). A new code cancels this one."
+    var cc = UIButton.Configuration.filled(); cc.title = "Copy Message"; cc.cornerStyle = .capsule; cc.buttonSize = .large
+    let copy = UIButton(configuration: cc, primaryAction: UIAction { [weak self] _ in
+      guard let self = self else { return }
+      UIPasteboard.general.string = self.message
+      UINotificationFeedbackGenerator().notificationOccurred(.success)
+      var c = cc; c.title = "Copied"; c.image = UIImage(systemName: "checkmark"); c.imagePadding = 6
+      UIView.transition(with: self.view, duration: 0.2, options: .transitionCrossDissolve) { (self.view.viewWithTag(77) as? UIButton)?.configuration = c }
+    })
+    copy.tag = 77
+    var sc = UIButton.Configuration.gray(); sc.title = "Share…"; sc.cornerStyle = .capsule; sc.buttonSize = .large
+    let share = UIButton(configuration: sc, primaryAction: nil)
+    share.addAction(UIAction { [weak self, weak share] _ in
+      guard let self = self else { return }
+      let a = UIActivityViewController(activityItems: [self.message], applicationActivities: nil)
+      a.popoverPresentationController?.sourceView = share
+      self.present(a, animated: true)
+    }, for: .primaryActionTriggered)
+    let foot = UILabel(); foot.numberOfLines = 0; foot.textAlignment = .center; foot.font = .preferredFont(forTextStyle: .footnote); foot.textColor = .secondaryLabel
+    foot.text = "The message has \(first)’s email, the code, when it stops working and your name — ready for WhatsApp."
+    let stack = UIStackView(arrangedSubviews: [person, digits, note, copy, share, foot])
+    stack.axis = .vertical; stack.alignment = .center; stack.spacing = 18; stack.setCustomSpacing(10, after: copy)
+    stack.translatesAutoresizingMaskIntoConstraints = false
+    view.addSubview(stack)
+    let g = view.layoutMarginsGuide
+    NSLayoutConstraint.activate([
+      stack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),
+      stack.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 8), stack.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -8),
+      copy.widthAnchor.constraint(equalTo: stack.widthAnchor), share.widthAnchor.constraint(equalTo: stack.widthAnchor),
+    ])
+  }
+}
