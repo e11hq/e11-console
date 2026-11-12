@@ -199,12 +199,13 @@ enum GroupFace {
     if let i = cache[key] { return i }
     let c = Talk.shared.clients[g.client]
     let ink = Look.hex(c?.color) ?? Look.accent
-    let draw = { (pic: UIImage?) -> UIImage in
+    let draw = { (pic: UIImage?, logo: Bool) -> UIImage in
       let S: CGFloat = 80
       return UIGraphicsImageRenderer(size: CGSize(width: S, height: S)).image { ctx in
         let r = CGRect(x: 0, y: 0, width: S, height: S)
         ctx.cgContext.saveGState(); UIBezierPath(ovalIn: r).addClip()
-        if let p = pic { p.draw(in: r) } else {
+        if let p = pic, logo { ink.setFill(); UIRectFill(r); Avatar.inCircle(p, side: S).draw(in: r) }   // (a client's logo whole on its colour)
+        else if let p = pic { p.draw(in: r) } else {
           ink.setFill(); UIRectFill(r)
           let t = NSAttributedString(string: String(g.name.prefix(1)).uppercased(), attributes: [.font: UIFont.systemFont(ofSize: 32, weight: .semibold), .foregroundColor: UIColor.white])
           let ts = t.size(); t.draw(at: CGPoint(x: (S - ts.width) / 2, y: (S - ts.height) / 2))
@@ -220,15 +221,15 @@ enum GroupFace {
         }
       }
     }
-    let plain = draw(nil)
-    let took = { (i: UIImage?) in
+    let plain = draw(nil, false)
+    let took = { (i: UIImage?, logo: Bool) in
       guard let i = i else { return }
       let first = cache[key] == nil
-      cache[key] = draw(i)
+      cache[key] = draw(i, logo)
       if first { DispatchQueue.main.async { loaded() } }
     }
-    if let p = g.pic { Net.shared.file(p) { url in took(url.flatMap { UIImage(contentsOfFile: $0.path) }) } }
-    else if let l = c?.logo { Net.shared.picture(l) { took($0) } }
+    if let p = g.pic { Net.shared.file(p) { url in took(url.flatMap { UIImage(contentsOfFile: $0.path) }, false) } }
+    else if let l = c?.logo { Net.shared.picture(l) { took($0, true) } }
     else { cache[key] = plain }
     return cache[key] ?? plain
   }

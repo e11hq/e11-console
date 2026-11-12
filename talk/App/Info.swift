@@ -178,7 +178,12 @@ final class MessageInfoVC: UIViewController {
     if let ph = p?.picture {
       Net.shared.picture(ph) { i in
         guard let i = i else { return }
-        let round = UIGraphicsImageRenderer(size: size).image { _ in UIBezierPath(ovalIn: CGRect(origin: .zero, size: size)).addClip(); i.draw(in: CGRect(origin: .zero, size: size)) }
+        // (a client contact's picture is their client's logo: whole on their colour, never cut)
+        let logo = p?.contact == true
+        let round = UIGraphicsImageRenderer(size: size).image { _ in
+          let r = CGRect(origin: .zero, size: size); UIBezierPath(ovalIn: r).addClip()
+          if logo { Look.person(pid).setFill(); UIRectFill(r); Avatar.inCircle(i, side: size.width).draw(in: r) } else { i.draw(in: r) }
+        }
         let first = faces[ph] == nil
         faces[ph] = round
         if first { DispatchQueue.main.async { loaded() } }

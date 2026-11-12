@@ -548,7 +548,7 @@ final class ContactsVC: UITableViewController {
     cfg.text = k.name; cfg.secondaryText = k.email; cfg.secondaryTextProperties.color = .secondaryLabel
     cfg.image = UIImage(systemName: "circle.fill"); cfg.imageProperties.tintColor = .clear; cfg.imageProperties.reservedLayoutSize = CGSize(width: 40, height: 40)
     c.contentConfiguration = cfg
-    let a = Avatar(frame: CGRect(x: 16, y: 9, width: 40, height: 40)); a.set(name: k.name, color: Look.color(for: k.id), picture: Talk.shared.clients[k.client]?.logo); c.contentView.addSubview(a)   // (their client's logo when it has one, else initials)
+    let a = Avatar(frame: CGRect(x: 16, y: 9, width: 40, height: 40)); a.set(name: k.name, color: Look.color(for: k.id), picture: Talk.shared.clients[k.client]?.logo, logo: true); c.contentView.addSubview(a)   // (their client's logo when it has one, else initials)
     let n = UILabel(); n.text = "\(k.groups) group\(k.groups == 1 ? "" : "s")"; n.font = .systemFont(ofSize: 14); n.textColor = .secondaryLabel; n.sizeToFit(); c.accessoryView = n
     c.selectionStyle = .none
     return c

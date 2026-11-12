@@ -588,8 +588,10 @@ final class Avatar: UIView {
     img.frame = bounds; lbl.frame = bounds.insetBy(dx: 3, dy: 0)
     lbl.font = .systemFont(ofSize: bounds.width * 0.36, weight: .semibold)
   }
-  func set(name: String, color: UIColor, picture: String?, talkFile: String? = nil) {
-    lbl.text = Look.initials(name); backgroundColor = color
+  // (a logo — a client's — is shown whole inside the circle on the client's colour, never cut: Haris 2026-11-13)
+  private var isLogo = false
+  func set(name: String, color: UIColor, picture: String?, talkFile: String? = nil, logo: Bool = false) {
+    lbl.text = Look.initials(name); backgroundColor = color; isLogo = logo
     img.image = nil; img.isHidden = true; lbl.isHidden = false
     let key = talkFile ?? picture
     want = key
@@ -603,18 +605,25 @@ final class Avatar: UIView {
     Net.shared.picture(p) { [weak self] i in
       guard let self = self, self.want == key else { return }
       guard let i = i else { if tries > 1 { DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in self?.load(p, key, tries: tries - 1) } }; return }
-      self.img.image = i; self.img.isHidden = false; self.lbl.isHidden = true
+      self.img.image = self.isLogo ? Avatar.inCircle(i) : i; self.img.isHidden = false; self.lbl.isHidden = true
     }
+  }
+  // a logo drawn whole in the middle of a circle: its corners inside it, with a little room
+  static func inCircle(_ i: UIImage, side: CGFloat = 120) -> UIImage {
+    let s = i.size; guard s.width > 0, s.height > 0 else { return i }
+    let k = side * 0.8 / (s.width * s.width + s.height * s.height).squareRoot()
+    let w = s.width * k, h = s.height * k
+    return UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in i.draw(in: CGRect(x: (side - w) / 2, y: (side - h) / 2, width: w, height: h)) }
   }
   // a group: its own picture, else its client's logo, else a letter on the client's colour
   func set(group g: Group) {
     let c = Talk.shared.clients[g.client]
     if g.pic != nil { set(name: g.name, color: Look.hex(c?.color) ?? Look.accent, picture: nil, talkFile: g.pic) }
-    else if c?.logo != nil { set(name: c?.name ?? g.name, color: Look.hex(c?.color) ?? Look.accent, picture: c?.logo) }
+    else if c?.logo != nil { set(name: c?.name ?? g.name, color: Look.hex(c?.color) ?? Look.accent, picture: c?.logo, logo: true) }
     else { lbl.text = String(g.name.prefix(1)).uppercased(); backgroundColor = Look.hex(c?.color) ?? Look.accent; img.isHidden = true; lbl.isHidden = false; want = nil }
   }
-  func set(client c: Client) { set(name: c.name, color: Look.hex(c.color) ?? Look.accent, picture: c.logo) }
-  func set(person p: Person?) { set(name: p?.name ?? "?", color: p.map { Look.person($0.id) } ?? Look.accent, picture: p?.picture) }
+  func set(client c: Client) { set(name: c.name, color: Look.hex(c.color) ?? Look.accent, picture: c.logo, logo: true) }
+  func set(person p: Person?) { set(name: p?.name ?? "?", color: p.map { Look.person($0.id) } ?? Look.accent, picture: p?.picture, logo: p?.contact == true) }
 }
 
 // a short line at the bottom (as Console's toasts)
