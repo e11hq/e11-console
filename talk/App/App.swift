@@ -60,7 +60,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
   var window: UIWindow?
   static weak var current: SceneDelegate?
-  private var tabs: UITabBarController?
+  private(set) var tabs: UITabBarController?
   private var wantGroup: String?
 
   func scene(_ s: UIScene, willConnectTo session: UISceneSession, options: UIScene.ConnectionOptions) {
@@ -137,7 +137,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     if c != contactMode || !shaped {
       shaped = true
       contactMode = c
-      t.tabBar.isHidden = c
+      // (iOS 18 on: Apple's own call — the tab bar's isHidden set by hand left Apple's call to hide it beside a chat
+      //  doing nothing, the bar staying behind the chat and Message info)
+      if #available(iOS 18, *) { t.setTabBarHidden(c, animated: false) } else { t.tabBar.isHidden = c }
       if c { t.selectedIndex = 0; (t.viewControllers?.first as? UINavigationController)?.popToRootViewController(animated: false) }
       t.viewControllers?.compactMap { ($0 as? UINavigationController)?.viewControllers.first }.forEach { $0.additionalSafeAreaInsets.bottom = 0 }
     }
@@ -274,11 +276,11 @@ final class SettingsVC: UITableViewController {
 // never "hide when pushed", which snapped the big title into the bar; Settings' pages keep it
 enum TabBarHide {
   static func arrived(_ vc: UIViewController) {
-    guard #available(iOS 18, *), !Talk.shared.isContact, let t = vc.tabBarController, !t.isTabBarHidden else { return }
+    guard #available(iOS 18, *), !Talk.shared.isContact, let t = vc.tabBarController ?? SceneDelegate.current?.tabs else { return }
     t.setTabBarHidden(true, animated: true)
   }
   static func leaving(_ vc: UIViewController) {
-    guard #available(iOS 18, *), !Talk.shared.isContact, let t = vc.tabBarController, let n = vc.navigationController,
+    guard #available(iOS 18, *), !Talk.shared.isContact, let t = vc.tabBarController ?? SceneDelegate.current?.tabs, let n = vc.navigationController,
           vc.isMovingFromParent, n.viewControllers.count == 1 else { return }
     t.setTabBarHidden(false, animated: true)
     vc.transitionCoordinator?.notifyWhenInteractionChanges { c in if c.isCancelled { t.setTabBarHidden(true, animated: true) } }
