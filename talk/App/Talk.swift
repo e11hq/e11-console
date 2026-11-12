@@ -57,7 +57,7 @@ struct Msg: Codable, Equatable {
       return URL(string: "https://\(files)/t/" + (id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id))
     }
   }
-  struct LinkPrev: Codable, Equatable, Hashable { var url: String; var title: String?; var site: String?; var video: Bool; var img: String?; var icon: String? }
+  struct LinkPrev: Codable, Equatable, Hashable { var url: String; var title: String?; var site: String?; var video: Bool; var img: String?; var icon: String?; var e11: String? = nil }   // (e11: one of our own links — "file" / "folder", its card from the server)
   struct FileRef: Codable, Equatable { var id: String; var name: String; var size: Int; var kind: String; var w: Double?; var h: Double?; var secs: Double?; var wave: String? = nil }
   struct Reply: Codable, Equatable { var id: String; var by: String; var text: String; var kind: String }
 }
@@ -270,7 +270,7 @@ final class Talk {
       DispatchQueue.main.async { Talk.shared.stoppedTyping(g, by) }
       if let k = e["link"] as? [String: Any], let u = k["url"] as? String {
         m.link = Msg.LinkPrev(url: u, title: k["title"] as? String, site: k["site"] as? String, video: (k["video"] as? Bool) == true,
-                              img: (k["img"] as? [String: Any])?["id"] as? String, icon: (k["icon"] as? [String: Any])?["id"] as? String)
+                              img: (k["img"] as? [String: Any])?["id"] as? String, icon: (k["icon"] as? [String: Any])?["id"] as? String, e11: k["e11"] as? String)
       }
       if let i = l.msgs.firstIndex(where: { $0.id == id || ($0.pending && m.cid != nil && $0.cid == m.cid) }) {
         // (one of mine sent from here: it keeps its place, with the server's id; a photo keeps the copy it was sent from)
@@ -335,7 +335,7 @@ final class Talk {
         m.file?.id = fid
         go(fid)
       }
-    } else if file == nil, !fwd, task == nil, let u = LinkPrevMaker.firstLink(text) {
+    } else if file == nil, !fwd, task == nil, let u = LinkPrevMaker.firstLink(text), !LinkPrevMaker.ours(u) {
       // (words with a link: its preview made here first — the picture and the site's icon sent up as files — then the
       //  message with it; the clock shows meanwhile, and the message goes without a preview if none comes)
       LinkPrevMaker.make(u) { [weak self] prev, img, icon in
@@ -635,6 +635,8 @@ final class PaddedLabel: UILabel {
 // a link's preview, read by Apple's own link reader (LinkPresentation) on the sender's phone — the picture, the title,
 // the site, its icon, whether it's a video (Apple gives no length, nor a description)
 enum LinkPrevMaker {
+  // (our own E11 links — a file, a folder, a task: the server makes their card, as no phone can read those pages)
+  static func ours(_ u: URL) -> Bool { ["files.e11hq.com", "files-test.e11hq.com"].contains(u.host ?? "") }
   static func firstLink(_ text: String) -> URL? {
     guard let d = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return nil }
     return d.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { $0.url }.first { $0.scheme?.hasPrefix("http") == true }
@@ -697,6 +699,24 @@ extension Talk {
     case 1: return "\(ns[0]) is typing…"
     case 2: return "\(ns[0]) and \(ns[1]) are typing…"
     default: return "\(ns[0]) and \(ns.count - 1) others are typing…"
+    }
+  }
+}
+
+// ---------- task cards as their tasks are now (Haris 2026-11-12): asked for as a chat opens and when the app comes back ----------
+extension Talk {
+  private static var live: [String: Msg.TaskCard] = [:]
+  func liveTask(_ t: Msg.TaskCard) -> Msg.TaskCard { Talk.live[t.id] ?? t }
+  func refreshTasks(_ g: String) {
+    let ids = Array(Set(log(g).msgs.compactMap { $0.deleted ? nil : $0.task?.id }))
+    guard !ids.isEmpty, groups[g]?.withClient != true, !isContact else { return }
+    Net.shared.act(["act": "taskCards", "group": g, "ids": ids]) { j in
+      let cards = ((j?["cards"] as? [[String: Any]]) ?? []).compactMap { Msg.TaskCard($0) }
+      DispatchQueue.main.async {
+        var changed = false
+        for c in cards where Talk.live[c.id] != c { Talk.live[c.id] = c; changed = true }
+        if changed { NotificationCenter.default.post(name: .talkGroup, object: g) }
+      }
     }
   }
 }

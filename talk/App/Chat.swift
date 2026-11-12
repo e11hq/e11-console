@@ -261,6 +261,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (arrived: the chat's end where it really is — a last message whose height settled during the slide (a task card)
     //  was left half under the message bar, Haris 2026-11-12)
     if !scrolledAway, focus == nil, !table.isDragging, !table.isDecelerating { toBottom(false) }
+    Talk.shared.refreshTasks(group)
     Talk.shared.markRead(group)
     ChatVC.open = group
   }
@@ -662,7 +663,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         newDayOf[section] = d; snap.appendSections([section])
       }
       msgs[m.id] = m
-      var h = Hasher(); h.combine(m.text); h.combine(m.edited); h.combine(m.deleted); h.combine(m.pending); h.combine(m.failed); h.combine(m.reactions); h.combine(m.file?.id); h.combine(m.link); h.combine(m.task); h.combine(newAlbums[m.id]?.map { $0.id + ($0.file?.id ?? "") })
+      var h = Hasher(); h.combine(m.text); h.combine(m.edited); h.combine(m.deleted); h.combine(m.pending); h.combine(m.failed); h.combine(m.reactions); h.combine(m.file?.id); h.combine(m.link); h.combine(m.task.map { Talk.shared.liveTask($0) }); h.combine(newAlbums[m.id]?.map { $0.id + ($0.file?.id ?? "") })
       h.combine(newRuns[m.id]); h.combine(Talk.shared.people[m.by]?.color); h.combine(Talk.shared.people[m.by]?.role)
       if m.by == meId { h.combine(i <= readTo); h.combine(i <= gotTo) }
       let key: String = {
@@ -704,7 +705,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     keyUp = kbOverlap > home + 20   // (the keyboard guide counts the home line when the keyboard is down)
     fitBottom()
   }
-  @objc private func backInApp() { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.kbSettled() } }
+  @objc private func backInApp() { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.kbSettled() }; if view.window != nil { Talk.shared.refreshTasks(group) } }
   @objc private func kbMoved(_ n: Notification) {
     if let f = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue {
       kbOverlap = max(0, view.bounds.maxY - view.convert(f, from: nil).minY)
@@ -1888,7 +1889,7 @@ final class BubbleCell: UITableViewCell {
       linkSite.text = title ?? site; linkSite.textColor = ink; linkSite.numberOfLines = title == nil ? 1 : 2
       linkURL.text = title == nil ? u.absoluteString : nil; linkURL.textColor = sub
       linkLine.backgroundColor = sub.withAlphaComponent(0.3)
-      let mark = NSTextAttachment(image: UIImage(systemName: "link", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold))!.withTintColor(sub))
+      let mark = NSTextAttachment(image: UIImage(systemName: pv?.e11 == "folder" ? "folder" : pv?.e11 == "file" ? "doc" : "link", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold))!.withTintColor(sub))
       if let ic = pv?.icon, let i = UIImage(contentsOfFile: Net.local(ic).path) { mark.image = i; mark.bounds = CGRect(x: 0, y: -2, width: 14, height: 14) }
       let lf = NSMutableAttributedString(attachment: mark)
       lf.append(NSAttributedString(string: "  " + site, attributes: [.foregroundColor: sub])); linkFoot.attributedText = lf
@@ -1903,7 +1904,7 @@ final class BubbleCell: UITableViewCell {
     taskWrap.isHidden = m.task == nil || m.deleted
     if let t = m.task, !m.deleted {
       taskWrap.reach(nameL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
-      taskCard.set(t, mine: mine, ink: ink); wideCard = true
+      taskCard.set(Talk.shared.liveTask(t), mine: mine, ink: ink); wideCard = true
     }
     let words = a.length > 0
     textL.isHidden = !words
