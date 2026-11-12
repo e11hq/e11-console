@@ -166,6 +166,14 @@ test('client contacts: added by Super / Office Admins only; E11 Talk only; their
   const k = (await act('off', { act: 'addContact', name: 'Ahmed Karim', email: 'ahmed@harbor.ae', client: 'p1' })).contact;
   assert.ok(k && k.id.startsWith('k-'));
   const KH = { 'X-Dev-Email': 'ahmed@harbor.ae', 'Content-Type': 'application/json' };
+  // and the other way: the contact's email can't join the Team (it made the client staff in E11 Talk, his groups gone)
+  const push = async (who, changes) => (await fetch(base + '/api/push', { method: 'POST', headers: H(who), body: JSON.stringify({ changes }) })).json();
+  const tryAdd = await push('adm', [{ kind: 'users', id: 'u-k', data: { id: 'u-k', email: 'ahmed@harbor.ae', name: 'Ahmed', role: 'production', active: true } }]);
+  assert.ok(tryAdd.results[0].refused, 'a client contact’s email isn’t added to the Team');
+  const tryEmail = await push('adm', [{ kind: 'users', id: 'u-6', data: { id: 'u-6', email: 'Ahmed@Harbor.ae', role: 'social', active: true, name: 'Six' } }]);
+  assert.ok(tryEmail.results[0].refused, 'nor given to someone on it');
+  const fine = await push('adm', [{ kind: 'users', id: 'u-ok', data: { id: 'u-ok', email: 'new@x.com', name: 'New', role: 'production', active: true } }]);
+  assert.ok(!fine.results[0].refused, 'any other email joins as before');
   // E11 Console refuses them; E11 Talk lets them in, with nothing but their own client
   assert.equal((await fetch(base + '/api/me', { headers: KH })).status, 403);
   let ks = await (await fetch(base + '/api/talk/state', { headers: KH })).json();

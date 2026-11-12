@@ -494,12 +494,23 @@ export function createServer(cfg) {
 
   // Save a person's changes and do what follows (live updates, final files, content plans, phone notifications…):
   // what /api/push does for the website, and the iPhone app's Home actions (/api/home/act) too
+  // An email is either on the Team or an E11 Talk client contact, never both (Haris 2026-11-12: a client added to the Team
+  // for testing with the same email became staff in E11 Talk — his client groups gone, nothing reaching him). Client
+  // Contacts already refuses a Team email; this is the other way: a person added, brought back or given a new email.
+  const TALK_CLASH = 'That email is a client contact in E11 Talk — use another email, or remove the contact first';
+  function clashesTalkContact(ch, current) {
+    if (!ch || ch.kind !== 'users' || ch.del || !ch.data || ch.data.active === false || !ch.data.email) return false;
+    const email = String(ch.data.email).toLowerCase();
+    const isNew = !current || current.active === false || String(current.email || '').toLowerCase() !== email;
+    if (!isNew) return false;
+    try { return !!talkNow().contactByEmail(email); } catch { return false; }
+  }
   function pushAs(u, changes, client) {
       const fresh = new Set(changes.filter((ch) => ch && ch.kind === 'notifications' && !ch.del && !store.get('notifications', String(ch.id))).map((ch) => String(ch.id)));
       const restoring = new Set(changes.filter((ch) => ch && !ch.del && ch.kind !== 'trash').map((ch) => `${ch.kind}:${ch.id}`));
       const namesBefore = new Map(changes.filter((ch) => ch && ch.kind === 'projects' && !ch.del).map((ch) => [String(ch.id), (store.get('projects', String(ch.id)) || {}).name]));
       const tasksBefore = new Map(changes.filter((ch) => ch && ch.kind === 'tasks').map((ch) => [String(ch.id), store.get('tasks', String(ch.id))]));
-      const { rev, results } = store.apply(changes, u.id, (ch, current) => access.canWrite(u, ch, current, { restoring }));
+      const { rev, results } = store.apply(changes, u.id, (ch, current) => !clashesTalkContact(ch, current) && access.canWrite(u, ch, current, { restoring }));
       broadcast(rev, results, client, u.id);
       renameLinkedAssets(results, namesBefore);
       unlinkGoneClients(results);
@@ -1167,7 +1178,8 @@ export function createServer(cfg) {
         const changes = r.changes || [];
         const restoring = new Set(changes.filter((ch) => !ch.del && ch.kind !== 'trash').map((ch) => `${ch.kind}:${ch.id}`));
         const allowed = changes.every((ch) => access.canWrite(u, ch, store.get(ch.kind, String(ch.id)), { restoring }));
-        if (!allowed) out = { ok: false, error: 'Your role doesn’t allow this', status: 403 };
+        if (changes.some((ch) => clashesTalkContact(ch, store.get(ch.kind, String(ch.id))))) out = { ok: false, error: TALK_CLASH, status: 409 };
+        else if (!allowed) out = { ok: false, error: 'Your role doesn’t allow this', status: 403 };
         else {
           const pushed = changes.length ? pushAs(u, changes, null) : null;
           if (r.sysChanges && r.sysChanges.length) { const o2 = store.apply(r.sysChanges, u.id); broadcast(o2.rev, o2.results, null, u.id); }
