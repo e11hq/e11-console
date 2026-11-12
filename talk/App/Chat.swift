@@ -763,37 +763,19 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   // ---------- hold: reactions and the menu ----------
   func tableView(_ tv: UITableView, contextMenuConfigurationForRowAt ip: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
     guard case .msg(let id)? = data.itemIdentifier(for: ip), let m = msgs[id], m.kind != "sys" else { return nil }
-    return UIContextMenuConfiguration(identifier: id as NSString, previewProvider: nil) { [weak self] _ in self?.menu(m) }
+    // (the trial of Haris 2026-11-12: a preview of the bubble — iPhone places it where it fits with the menu, shrinking a
+    //  tall one — iMessage's way; build 39 kept the bubble itself, slid up WhatsApp's way)
+    let shot = (tv.cellForRow(at: ip) as? BubbleCell)?.bubbleShot()
+    return UIContextMenuConfiguration(identifier: id as NSString, previewProvider: shot.map { img in { BubblePreview(img) } }) { [weak self] _ in self?.menu(m) }
   }
-  // closing: the message goes back into its own place in the chat — the row showing it now (the old way let it fade
-  // out at the top and pop back in a moment later)
-  func tableView(_ tv: UITableView, previewForDismissingContextMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? {
-    holdPreview(tv, c, shifted: false)
-  }
-  // opening: the message lifted where it can have the reactions above it and the menu below it — slid up from the
-  // bottom of the page (or down from under the bar), WhatsApp's way, Haris 2026-11-12; Apple's lift moves it there
-  func tableView(_ tv: UITableView, previewForHighlightingContextMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? {
-    holdPreview(tv, c, shifted: true)
-  }
-  private func holdPreview(_ tv: UITableView, _ c: UIContextMenuConfiguration, shifted: Bool) -> UITargetedPreview? {
+  // opening and closing: from and back to the message's own place in the chat
+  func tableView(_ tv: UITableView, previewForDismissingContextMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? { holdPreview(tv, c) }
+  func tableView(_ tv: UITableView, previewForHighlightingContextMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? { holdPreview(tv, c) }
+  private func holdPreview(_ tv: UITableView, _ c: UIContextMenuConfiguration) -> UITargetedPreview? {
     guard let id = c.identifier as? String, let ip = data.indexPath(for: .msg(id)), let cell = tv.cellForRow(at: ip) as? BubbleCell else { return nil }
     let p = UIPreviewParameters(); p.backgroundColor = .clear
     p.visiblePath = UIBezierPath(roundedRect: cell.bubble.bounds, cornerRadius: 19)
-    guard shifted, let m = msgs[id], let w = view.window else { return UITargetedPreview(view: cell.bubble, parameters: p) }
-    let dy = holdShift(cell, m, in: w)
-    let at = cell.bubble.convert(CGPoint(x: cell.bubble.bounds.midX, y: cell.bubble.bounds.midY + dy), to: tv)
-    return UITargetedPreview(view: cell.bubble, parameters: p, target: UIPreviewTarget(container: tv, center: at))
-  }
-  // how far the held message moves: up until the menu fits under it, then down if the reactions wouldn't fit above it
-  // (the same place for Apple's lift and our reactions bar)
-  private func holdShift(_ cell: BubbleCell, _ m: Msg, in w: UIWindow) -> CGFloat {
-    let b = cell.bubble.convert(cell.bubble.bounds, to: w)
-    let rows = CGFloat(menu(m).children.flatMap { ($0 as? UIMenu)?.children ?? [$0] }.count)
-    let menuH = rows * 44 + 30
-    let top = w.safeAreaInsets.top + 8 + 62, bottom = w.bounds.height - w.safeAreaInsets.bottom - 12
-    var dy = min(0, bottom - (b.maxY + 12 + menuH))
-    if b.minY + dy < top { dy = top - b.minY }
-    return dy
+    return UITargetedPreview(view: cell.bubble, parameters: p)
   }
   // the design (board 33): the reactions on top, then Reply · Forward · Copy · Star · (line) · Delete — Forward comes with
   // the forward sheet (stage 5); yours also keep Edit (15 minutes) and Info, files Save / Share, as the app has them today
@@ -887,21 +869,26 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       if let e = e { self.react(m, m.reactions[me] == e ? nil : e) } else { self.pendingMore = m }
       tv?.contextMenuInteraction?.dismissMenu()
     }
-    // (where the lifted message is shown — holdShift, the same as Apple's lift — the bar just above it)
-    let b = cell.bubble.convert(cell.bubble.bounds, to: w).offsetBy(dx: 0, dy: holdShift(cell, m, in: w))
-    bar.frame = CGRect(x: 14, y: max(w.safeAreaInsets.top + 8, b.minY - 62), width: w.bounds.width - 28, height: 54)
-    // (WhatsApp's: the strip grows out of the message's top corner, the emojis popping in one after another)
-    let from = CGPoint(x: m.by == Talk.shared.me?.id ? b.maxX - 34 : b.minX + 34, y: b.minY)
-    let k: CGFloat = 0.2
-    bar.alpha = 0
-    bar.transform = CGAffineTransform(translationX: (from.x - bar.center.x) * (1 - k), y: (from.y - bar.center.y) * (1 - k)).scaledBy(x: k, y: k)
-    bar.prepareToPop()
     reactBar = bar
-    DispatchQueue.main.async {
-      w.addSubview(bar)
-      UIView.animate(withDuration: 0.45, delay: 0.02, usingSpringWithDamping: 0.74, initialSpringVelocity: 0) { bar.alpha = 1; bar.transform = .identity }
+    let mine = m.by == Talk.shared.me?.id
+    // (the strip just above where iPhone put the preview — known once its lift has finished; grows out of its top corner,
+    //  the emojis popping in one after another)
+    let show = { (b: CGRect) in
+      guard self.reactBar === bar else { return }
+      bar.frame = CGRect(x: 14, y: max(w.safeAreaInsets.top + 8, b.minY - 62), width: w.bounds.width - 28, height: 54)
+      let from = CGPoint(x: mine ? b.maxX - 34 : b.minX + 34, y: b.minY), k: CGFloat = 0.2
+      bar.alpha = 0
+      bar.transform = CGAffineTransform(translationX: (from.x - bar.center.x) * (1 - k), y: (from.y - bar.center.y) * (1 - k)).scaledBy(x: k, y: k)
+      bar.prepareToPop(); w.addSubview(bar)
+      UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 0.74, initialSpringVelocity: 0) { bar.alpha = 1; bar.transform = .identity }
       bar.pop()
     }
+    if let a = animator {
+      a.addCompletion { [weak a] in
+        if let pv = a?.previewViewController?.view, let sv = pv.superview { show(sv.convert(pv.frame, to: w)) }
+        else { show(cell.bubble.convert(cell.bubble.bounds, to: w)) }
+      }
+    } else { show(cell.bubble.convert(cell.bubble.bounds, to: w)) }
   }
   func tableView(_ tv: UITableView, willEndContextMenuInteraction c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
     if let bar = reactBar {
@@ -1638,6 +1625,10 @@ final class BubbleCell: UITableViewCell {
   @objc private func quoteTap() { if let r = msg?.reply { onReplyTap?(r.id) } }
   @objc private func fileTap() { if let m = msg { onFileTap?(m) } }
   @objc private func linkTap() { if let u = link { UIApplication.shared.open(u) } }
+  // the bubble as a picture, for the hold's preview
+  func bubbleShot() -> UIImage {
+    UIGraphicsImageRenderer(bounds: bubble.bounds).image { _ in bubble.drawHierarchy(in: bubble.bounds, afterScreenUpdates: false) }
+  }
   // a found message: the bubble swells a little and settles (on its layer, so a swipe's own move is never disturbed)
   func pulse() {
     let a = CAKeyframeAnimation(keyPath: "transform.scale")
@@ -2170,3 +2161,11 @@ final class FindBar: UIView {
   }
 }
 
+
+// the hold's preview (trial, Haris 2026-11-12): the bubble's picture at its own size — iPhone shrinks it if it won't fit
+final class BubblePreview: UIViewController {
+  private let img: UIImage
+  init(_ img: UIImage) { self.img = img; super.init(nibName: nil, bundle: nil); preferredContentSize = img.size }
+  required init?(coder: NSCoder) { fatalError() }
+  override func loadView() { let v = UIImageView(image: img); v.contentMode = .scaleAspectFit; v.backgroundColor = .clear; view = v }
+}
