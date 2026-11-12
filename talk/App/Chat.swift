@@ -55,12 +55,15 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private var spotW: NSLayoutConstraint!
   private static let titleLead: CGFloat = { if #available(iOS 26.0, *) { return 68 } else { return 44 } }()
   private static let rowMid: CGFloat = { if #available(iOS 26.0, *) { return 27 } else { return 22 } }()
+  // (the picture's middle level with the back button's, as WhatsApp's — measured from Haris's screenshots: it sat about 5
+  //  lower, 2026-11-12)
+  private static let titleMid: CGFloat = { if #available(iOS 26.0, *) { return 32 } else { return 22 } }()
   // the picture and the name in the page, on its frost (they slide with it)
   private func pinTitle() {
     titleV.removeFromSuperview(); titleV.translatesAutoresizingMaskIntoConstraints = false
     view.insertSubview(titleV, aboveSubview: topFrost)
     NSLayoutConstraint.activate([titleV.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: ChatVC.titleLead),
-                                 titleV.centerYAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: -ChatVC.rowMid)])
+                                 titleV.centerYAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: -ChatVC.titleMid)])
   }
   // the chat's top frost (Haris 2026-11-12, b): Apple's blur, tinted thick with the chat's colour — nothing shows through
   static func frost() -> UIVisualEffectView {
@@ -238,7 +241,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     titleV.removeFromSuperview(); titleV.translatesAutoresizingMaskIntoConstraints = false
     n.view.insertSubview(titleV, belowSubview: n.navigationBar)
     NSLayoutConstraint.activate([titleV.leadingAnchor.constraint(equalTo: n.view.leadingAnchor, constant: ChatVC.titleLead),
-                                 titleV.centerYAnchor.constraint(equalTo: n.view.topAnchor, constant: rowBottom - ChatVC.rowMid)])
+                                 titleV.centerYAnchor.constraint(equalTo: n.view.topAnchor, constant: rowBottom - ChatVC.titleMid)])
     guard full - rowBottom > 1 else { tc.animate(alongsideTransition: nil) { [weak self] _ in self?.pinTitle() }; return }
     // (WhatsApp's, frame by frame: at the first moment one frost from the very top down past the list's search bar, thick
     //  enough that the big title and the search don't show through; then it settles to the chat's bar. Two pieces of the
