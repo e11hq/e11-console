@@ -48,10 +48,11 @@ final class ChatRowCell: UITableViewCell {
     title.text = t; time.text = tm
     // (someone typing: the last line becomes "Omar is typing…" in our blue, crossfading — the design's board 33)
     let ink: UIColor = typing ? Look.accent : .secondaryLabel
-    if sub.text != s || sub.textColor != ink {
-      if window != nil && sub.text != nil { UIView.transition(with: sub, duration: 0.2, options: .transitionCrossDissolve) { self.sub.text = s; self.sub.textColor = ink } }
-      else { sub.text = s; sub.textColor = ink }
-    }
+    // (crossfaded only when typing starts or stops on a row in view — a fade on every redraw left the line blank)
+    let typingNow = sub.textColor == Look.accent
+    if typing != typingNow && window != nil && sub.text != nil {
+      UIView.transition(with: sub, duration: 0.2, options: [.transitionCrossDissolve, .beginFromCurrentState]) { self.sub.text = s; self.sub.textColor = ink }
+    } else { sub.layer.removeAllAnimations(); sub.text = s; sub.textColor = ink }
     chipL.text = chip; chipL.isHidden = chip == nil
     time.textColor = unread > 0 ? Look.accent : .secondaryLabel
     badge.isHidden = unread == 0; badge.text = unread > 99 ? "99+" : "\(unread)"
