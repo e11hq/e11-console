@@ -533,7 +533,8 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
             video: b.link.video === true, img: own(b.link.img), icon: own(b.link.icon) };
         }
         Q.putSent.run(id, g.id, u.id, t, JSON.stringify([file && file.id, link && link.img && link.img.id, link && link.icon && link.icon.id].filter(Boolean)));
-        const seq = emit(g, 'msg', { id, cid: clip(b.cid, 60), kind: file ? file.kind : 'text', text, file, reply, mentions, ...(b.fwd === true ? { fwd: true } : {}), ...(link ? { link } : {}) }, u.id);   // (fwd: forwarded from another chat — "Forwarded" over it)
+        const seq = emit(g, 'msg', { id, cid: clip(b.cid, 60), kind: file ? file.kind : 'text', text, file, reply, mentions, ...(b.fwd === true ? { fwd: true } : {}), ...(link ? { link } : {}),
+          ...(file && typeof b.album === 'string' && /^[A-Za-z0-9-]{6,40}$/.test(b.album) ? { album: b.album } : {}) }, u.id);   // (album: photos and videos sent together — one album in the chat, Haris 2026-11-12)   // (fwd: forwarded from another chat — "Forwarded" over it)
         Q.touch.run(t, g.id);
         notify(g, u, file && !text.trim() ? ({ photo: '📷 Photo', video: '🎥 Video', voice: '🎤 Voice message' }[file.kind] || `📄 ${file.name}`) : text, id, mentions);
         return { ok: true, id, seq, at: t };
