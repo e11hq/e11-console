@@ -132,13 +132,16 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
   override func viewDidAppear(_ a: Bool) {
     super.viewDidAppear(a)
+    TabBarHide.arrived(self)
+    // (the back swipe from the edge goes first; a reply swipe starts away from the edge)
+    if let pop = navigationController?.interactivePopGestureRecognizer, !swipeWaits { swipeWaits = true; swipe.require(toFail: pop) }
     becomeFirstResponder()
     bar.onLayout = { [weak self] in self?.fitBottom() }
     fitBottom()
     Talk.shared.markRead(group)
     ChatVC.open = group
   }
-  override func viewWillDisappear(_ a: Bool) { super.viewWillDisappear(a); if ChatVC.open == group { ChatVC.open = nil } }
+  override func viewWillDisappear(_ a: Bool) { super.viewWillDisappear(a); if ChatVC.open == group { ChatVC.open = nil }; TabBarHide.leaving(self) }
   static var open: String?
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
@@ -425,9 +428,11 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   // (while the keyboard is up, what's in the messages doesn't take touches — the tap above has them; scrolling and the
   // swipes are the list's own and go on)
   private var keyUp = false { didSet { if keyUp != oldValue { table.visibleCells.forEach { $0.contentView.isUserInteractionEnabled = !keyUp } } } }
+  private var swipeWaits = false
   func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
     if g === keyTap { return bar.box.isFirstResponder }
     guard g === swipe else { return true }
+    guard swipe.location(in: view).x > 28 else { return false }   // (the screen's edge: going back)
     let v = swipe.velocity(in: table)
     guard abs(v.x) > abs(v.y) * 1.3, bar.recording == false,
           let ip = table.indexPathForRow(at: swipe.location(in: table)), case .msg(let id)? = data.itemIdentifier(for: ip), let m = msgs[id] else { return false }
@@ -438,6 +443,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
      (far enough or flicked: it arrives; else it slides back, the bubble and the chat as they were). Apple has no push
      a finger can drive, so this one slide is ours (SlideIn), the way Apple's own push looks. */
   private(set) var hook: UIPercentDrivenInteractiveTransition?
+  private let hookDelegate = HookSlide()
   @objc private func swiped(_ g: UIPanGestureRecognizer) {
     let raw = g.translation(in: table).x, W = max(1, view.bounds.width)
     switch g.state {
@@ -483,14 +489,16 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     }
   }
   private func startHook(_ m: Msg, _ c: BubbleCell) {
-    guard let n = navigationController, n.delegate is TabBarFollow else { return }
+    guard let n = navigationController else { return }
     let h = UIPercentDrivenInteractiveTransition(); h.completionCurve = .easeOut
     hook = h
+    // (the navigation's delegate only for this one slide — with one there all the time, Apple's back swipe stopped)
+    n.delegate = hookDelegate
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     n.pushViewController(MessageInfoVC(group: group, id: m.id), animated: true)
     n.transitionCoordinator?.animate(alongsideTransition: nil) { [weak self] ctx in
       guard let self = self else { return }
-      self.hook = nil
+      self.hook = nil; n.delegate = nil
       if ctx.isCancelled {
         UIView.animate(withDuration: 0.3) { self.dimOthers(0, but: c) }
         c.settle(animated: true)
@@ -820,7 +828,7 @@ final class BubbleCell: UITableViewCell {
   private var wMine: NSLayoutConstraint!, wTheirs: NSLayoutConstraint!, top: NSLayoutConstraint!, stackTrail: NSLayoutConstraint!
   private var reactsLead: NSLayoutConstraint!, reactsTrail: NSLayoutConstraint!, bubbleBottom: NSLayoutConstraint!, reactsBottom: NSLayoutConstraint!
   private var msg: Msg?
-  private var media = false, caption = false, tailOn = false, isMine = false, framed = false, overPhoto = false
+  private var media = false, caption = false, tailOn = false, isMine = false, framed = false, overPhoto = false, shownFile: String?
   // "Forwarded" over a forwarded message (the design, board 32: italic, its arrow, in the time's colour)
   private let fwdL = UILabel()
   // the round forward button beside a photo, video, file or link (anyone's) — on the other side from the bubble
@@ -1016,7 +1024,7 @@ final class BubbleCell: UITableViewCell {
     let T = Talk.shared, mine = m.by == T.me?.id
     isMine = mine
     let sys = m.kind == "sys"
-    sysL.isHidden = !sys; bubble.isHidden = sys; reacts.isHidden = true; retryB.isHidden = !(mine && m.failed); face.isHidden = true
+    sysL.isHidden = !sys; bubble.isHidden = sys; reacts.isHidden = true; retryB.isHidden = !(mine && m.failed); face.isHidden = true; fwdB.isHidden = true
     bubbleBottom.isActive = false; reactsBottom.isActive = false
     if sys { sysL.text = m.text; media = false; return }
     top.constant = run.first ? 10 : 2
@@ -1092,9 +1100,11 @@ final class BubbleCell: UITableViewCell {
       let w: CGFloat = mine ? 236 : 262, ratio = CGFloat((f.h ?? 3) / max(1, f.w ?? 4))
       photoH.constant = min(330, max(120, w * ratio))
       if framed { photoWrap.reach(0, 8, caption ? 0 : 3, mine ? 7 : 8) } else { photoWrap.reach(8, 12, caption ? 0 : 7, mine ? 11 : 12) }
-      photo.image = nil
       if let s = f.secs { vlen.text = String(format: "%d:%02d", Int(s) / 60, Int(s) % 60) }
-      if !isVideo || f.size <= 60 * 1024 * 1024 || FileManager.default.fileExists(atPath: Net.local(f.id).path) {
+      // (the same photo drawn again keeps its picture — it blanked for a moment on every redraw, all photos flashing)
+      let known = isVideo ? BubbleCell.frames.object(forKey: f.id as NSString) : BubbleCell.pictures.object(forKey: f.id as NSString)
+      if shownFile == f.id && photo.image != nil { } else if let k = known { photo.image = k; shownFile = f.id } else { photo.image = nil; shownFile = f.id }
+      if photo.image == nil, !isVideo || f.size <= 60 * 1024 * 1024 || FileManager.default.fileExists(atPath: Net.local(f.id).path) {
         Net.shared.file(f.id) { [weak self] url in
           guard let self = self, self.msg?.id == m.id, let url = url else { return }
           if isVideo { BubbleCell.frame(url, f.id) { [weak self] img in if self?.msg?.id == m.id { self?.photo.image = img } } }
@@ -1225,7 +1235,7 @@ final class BubbleCell: UITableViewCell {
     let i = UIImage(cgImage: cg); pictures.setObject(i, forKey: id as NSString); return i
   }
   // a video's first frame (kept)
-  private static let frames = NSCache<NSString, UIImage>()
+  static let frames = NSCache<NSString, UIImage>()
   static func frame(_ url: URL, _ id: String, _ done: @escaping (UIImage?) -> Void) {
     if let i = frames.object(forKey: id as NSString) { done(i); return }
     DispatchQueue.global(qos: .userInitiated).async {

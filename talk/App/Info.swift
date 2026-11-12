@@ -16,6 +16,7 @@ final class MessageInfoVC: UIViewController {
   init(group: String, id: String) { self.group = group; self.id = id; super.init(nibName: nil, bundle: nil); if #unavailable(iOS 18) { hidesBottomBarWhenPushed = true } }
   required init?(coder: NSCoder) { fatalError() }
 
+  override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); TabBarHide.arrived(self) }
   override func viewDidLoad() {
     super.viewDidLoad()
     title = "Message info"

@@ -121,16 +121,12 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     let settings = UINavigationController(rootViewController: SettingsVC())
     settings.navigationBar.prefersLargeTitles = true
     settings.tabBarItem = UITabBarItem(title: "Settings", image: UIImage(systemName: "gearshape"), selectedImage: UIImage(systemName: "gearshape.fill"))
-    // (a chat and the pages under it: Apple's tab bar goes once the page has arrived and comes back as the slide back
-    // begins — never "hide when pushed", which snapped the big title into the bar; Settings' pages keep it)
-    groups.delegate = tabFollow; clients.delegate = tabFollow
     t.viewControllers = [groups, clients, settings]
     tabs = t
     NotificationCenter.default.addObserver(self, selector: #selector(badge), name: .talkChanged, object: nil)
     shape()
     return t
   }
-  private let tabFollow = TabBarFollow()
   // a client contact sees one list of their chats (no tab bar); staff see the three tabs. Checked on every count change, so
   // it acts only when the kind of account changes — it used to put the tab bar back whenever a message or a read came in,
   // there behind an open chat's message box
@@ -273,22 +269,28 @@ final class SettingsVC: UITableViewController {
 
 // the tab bar beside a pushed chat (Console's way, its lesson 2026-11-08): hidden with Apple's call once the page has
 // arrived, back as the slide back to the tab's first screen begins (and hidden again if that slide is called off)
-final class TabBarFollow: NSObject, UINavigationControllerDelegate {
-  // (a chat's Message info hooked by the finger: our slide, driven by it — else Apple's own push)
+// the tab bar beside a chat and the pages under it (Console's way, its lesson 2026-11-08): hidden with Apple's call once
+// the page has arrived, back as the slide back to the tab's first screen begins (and hidden again if that's called off) —
+// never "hide when pushed", which snapped the big title into the bar; Settings' pages keep it
+enum TabBarHide {
+  static func arrived(_ vc: UIViewController) {
+    guard #available(iOS 18, *), !Talk.shared.isContact, let t = vc.tabBarController, !t.isTabBarHidden else { return }
+    t.setTabBarHidden(true, animated: true)
+  }
+  static func leaving(_ vc: UIViewController) {
+    guard #available(iOS 18, *), !Talk.shared.isContact, let t = vc.tabBarController, let n = vc.navigationController,
+          vc.isMovingFromParent, n.viewControllers.count == 1 else { return }
+    t.setTabBarHidden(false, animated: true)
+    vc.transitionCoordinator?.notifyWhenInteractionChanges { c in if c.isCancelled { t.setTabBarHidden(true, animated: true) } }
+  }
+}
+// the navigation's delegate for one slide only: Message info hooked by the finger (SlideIn, driven by it)
+final class HookSlide: NSObject, UINavigationControllerDelegate {
   func navigationController(_ n: UINavigationController, animationControllerFor op: UINavigationController.Operation, from: UIViewController, to: UIViewController) -> UIViewControllerAnimatedTransitioning? {
     op == .push && (from as? ChatVC)?.hook != nil ? SlideIn() : nil
   }
   func navigationController(_ n: UINavigationController, interactionControllerFor a: UIViewControllerAnimatedTransitioning) -> UIViewControllerInteractiveTransitioning? {
     a is SlideIn ? n.viewControllers.compactMap { $0 as? ChatVC }.last?.hook : nil
-  }
-  func navigationController(_ n: UINavigationController, willShow vc: UIViewController, animated: Bool) {
-    guard #available(iOS 18, *), let t = n.tabBarController, !Talk.shared.isContact, vc === n.viewControllers.first else { return }
-    t.setTabBarHidden(false, animated: true)
-    n.transitionCoordinator?.notifyWhenInteractionChanges { c in if c.isCancelled { t.setTabBarHidden(true, animated: true) } }
-  }
-  func navigationController(_ n: UINavigationController, didShow vc: UIViewController, animated: Bool) {
-    guard #available(iOS 18, *), let t = n.tabBarController, !Talk.shared.isContact, vc !== n.viewControllers.first else { return }
-    t.setTabBarHidden(true, animated: true)
   }
 }
 
