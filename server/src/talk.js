@@ -354,7 +354,32 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     if (ks.some((k) => (contactRow(k) || {}).client !== g.client)) return bad('A client contact can only join their own client’s groups');
     return null;
   }
-  const CONTACT_ACTS = new Set(['send', 'edit', 'del', 'react', 'read', 'leave', 'pin', 'mute']);
+  const CONTACT_ACTS = new Set(['send', 'edit', 'del', 'react', 'read', 'leave', 'pin', 'mute', 'typing']);
+
+  // ---------- typing (step 5, Haris 2026-11-12): passed straight to the group's other phones and Macs that are listening —
+  // nothing kept; a phone shows it for a few seconds unless told again ----------
+  function typing(g, by) {
+    const line = `event: typing\ndata: ${JSON.stringify({ group: g.id, by })}\n\n`;
+    for (const id of devicesFor(memberIds(g).filter((m) => m !== by), null)) for (const s of listeners.get(id) || []) { try { s.write(line); } catch { /* closed */ } }
+  }
+  // ---------- tasks in a staff group (# — step 5, Haris 2026-11-12): the E11 Console tasks this person already sees; the
+  // card is made here from the task itself, never from what the phone says. Never in a group with a client. ----------
+  function taskCard(t) {
+    const p = clientById(t.projectId);
+    const sec = p ? (p.sections || []).find((x) => x.id === t.sectionId) : null;
+    const status = t.done ? { name: 'Complete', color: '#3ddc97' } : sec ? { name: sec.name, color: sec.color || '#87909e' } : { name: 'Open', color: '#87909e' };
+    return { id: String(t.id), title: clip(t.title || 'Untitled task', 300), client: p ? p.name : '', status: status.name, color: status.color,
+      due: t.due || null, done: !!t.done, people: (t.assignees || []).map(String).slice(0, 8) };
+  }
+  const seeTask = (u, t) => !!t && !t.trashed && access.canSee(u, 'tasks', t);
+  function tasksFor(u, g, q) {
+    const words = String(q || '').toLowerCase().trim();
+    const all = store.list('tasks').filter((t) => !t.parentId && seeTask(u, t) && (!words || String(t.title || '').toLowerCase().includes(words)));
+    // (open ones first, the group's own client first among them, the latest changed first)
+    const key = (t) => [t.done ? 1 : 0, t.projectId === g.client ? 0 : 1, -(Date.parse(t.updatedAt || t.createdAt || 0) || 0)];
+    all.sort((a, b2) => { const x = key(a), y = key(b2); return x[0] - y[0] || x[1] - y[1] || x[2] - y[2]; });
+    return all.slice(0, 20).map(taskCard);
+  }
 
   function act(u, b) {
     const t = now();
@@ -521,7 +546,15 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
             w: Number(b.file.w) || null, h: Number(b.file.h) || null, secs: Number(b.file.secs) || null,
             wave: typeof b.file.wave === 'string' ? clip(b.file.wave.replace(/[^A-Za-z0-9+/=]/g, ''), 400) : null };   // (a voice message's waveform, made on the phone that recorded it)
         }
-        if (!text.trim() && !file) return bad('Nothing to send');
+        // (a task shared with # — staff groups only, a task this person sees; its card made here)
+        let task = null;
+        if (b.task && typeof b.task === 'object') {
+          if (isContact(u) || withClient(g)) return bad('Tasks aren’t shared in a group with a client', 403);
+          const tk = store.get('tasks', String(b.task.id || ''));
+          if (!seeTask(u, tk)) return bad('That task isn’t there any more', 404);
+          task = taskCard(tk);
+        }
+        if (!text.trim() && !file && !task) return bad('Nothing to send');
         const id = rid('m'), mentions = cleanIds(b.mentions).filter((m) => member(g, m));
         const reply = b.reply && typeof b.reply === 'object' ? { id: clip(b.reply.id, 40), by: clip(b.reply.by, 40), text: clip(b.reply.text, 200), kind: clip(b.reply.kind, 10) } : null;
         // a link's preview, made on the sender's phone (Apple's link reader there): the address, title, site, whether it's a
@@ -533,10 +566,10 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
             video: b.link.video === true, img: own(b.link.img), icon: own(b.link.icon) };
         }
         Q.putSent.run(id, g.id, u.id, t, JSON.stringify([file && file.id, link && link.img && link.img.id, link && link.icon && link.icon.id].filter(Boolean)));
-        const seq = emit(g, 'msg', { id, cid: clip(b.cid, 60), kind: file ? file.kind : 'text', text, file, reply, mentions, ...(b.fwd === true ? { fwd: true } : {}), ...(link ? { link } : {}),
+        const seq = emit(g, 'msg', { id, cid: clip(b.cid, 60), kind: file ? file.kind : 'text', text, file, reply, mentions, ...(b.fwd === true ? { fwd: true } : {}), ...(link ? { link } : {}), ...(task ? { task } : {}),
           ...(file && typeof b.album === 'string' && /^[A-Za-z0-9-]{6,40}$/.test(b.album) ? { album: b.album } : {}) }, u.id);   // (album: photos and videos sent together — one album in the chat, Haris 2026-11-12)   // (fwd: forwarded from another chat — "Forwarded" over it)
         Q.touch.run(t, g.id);
-        notify(g, u, file && !text.trim() ? ({ photo: '📷 Photo', video: '🎥 Video', voice: '🎤 Voice message' }[file.kind] || `📄 ${file.name}`) : text, id, mentions);
+        notify(g, u, file && !text.trim() ? ({ photo: '📷 Photo', video: '🎥 Video', voice: '🎤 Voice message' }[file.kind] || `📄 ${file.name}`) : task && !text.trim() ? `☑️ ${task.title}` : text, id, mentions);
         return { ok: true, id, seq, at: t };
       }
       case 'edit': case 'del': case 'react': {
@@ -577,6 +610,16 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         if (!m) return bad('That Mac isn’t linked', 404);
         unlinkMac(m.id);
         return { ok: true };
+      }
+      case 'typing': {
+        const [g, e] = needGroup(u, b.group); if (e) return e;
+        typing(g, u.id);
+        return { ok: true };
+      }
+      case 'tasks': {
+        const [g, e] = needGroup(u, b.group); if (e) return e;
+        if (withClient(g)) return bad('Tasks aren’t shared in a group with a client', 403);
+        return { ok: true, tasks: tasksFor(u, g, b.q) };
       }
       case 'read': {
         const [g, e] = needGroup(u, b.group); if (e) return e;

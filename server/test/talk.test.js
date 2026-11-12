@@ -273,3 +273,28 @@ test('a linked Mac: code from the Mac, scanned by the same person’s phone; get
   app.talk.sweep();
   assert.equal((await state('am')).macs.length, 0);
 });
+
+test('step 5: typing passed on to members only; # tasks in a staff group — the card made by the server, never with a client', async () => {
+  app.store.apply([
+    { kind: 'tasks', id: 't-a', data: { id: 't-a', projectId: 'p1', sectionId: null, parentId: null, title: 'Hero banner — round 3', done: false, due: '2026-11-13', assignees: ['u-des', 'u-am'], updatedAt: '2026-11-12T08:00:00Z' } },
+    { kind: 'tasks', id: 't-b', data: { id: 't-b', projectId: 'p2', sectionId: null, parentId: null, title: 'Menu board', done: true, assignees: [], updatedAt: '2026-11-01T08:00:00Z' } },
+  ], 'test');
+  const g = (await act('adm', { act: 'newGroup', client: 'p1', name: 'Step five', members: ['u-des'] })).group.id;
+  assert.ok((await act('adm', { act: 'typing', group: g })).ok, 'a member types');
+  assert.equal((await act('sm', { act: 'typing', group: g })).ok, false, 'not in the group');
+  const r = await act('adm', { act: 'tasks', group: g, q: 'hero' });
+  assert.ok(r.ok && r.tasks.length === 1 && r.tasks[0].id === 't-a' && r.tasks[0].client === 'Northline' && r.tasks[0].due === '2026-11-13', 'found by its words');
+  const all = (await act('adm', { act: 'tasks', group: g })).tasks.map((t) => t.id);
+  assert.deepEqual(all.slice(0, 2), ['t-a', 't-b'], 'open ones first');
+  // the card is the server's, whatever the phone says
+  const s = await act('adm', { act: 'send', group: g, text: 'Round 3 is on the task', task: { id: 't-a', title: 'Something else' } });
+  const ev = (await sync('des')).events.find((e) => e.type === 'msg' && e.id === s.id);
+  assert.ok(ev && ev.task && ev.task.title === 'Hero banner — round 3' && ev.task.people.includes('u-des'), 'the task card from the task itself');
+  assert.ok((await act('adm', { act: 'send', group: g, text: '', task: { id: 't-a' } })).ok, 'a task alone is enough');
+  assert.equal((await act('adm', { act: 'send', group: g, text: 'x', task: { id: 'nope' } })).ok, false, 'no such task');
+  // a group with a client: no tasks at all
+  const k = (await act('off', { act: 'addContact', name: 'Mona Client', email: 'mona@client.ae', client: 'p1' })).contact;
+  const cg = (await act('adm', { act: 'newGroup', client: 'p1', name: 'With client', members: ['u-des', k.id] })).group.id;
+  assert.equal((await act('adm', { act: 'tasks', group: cg })).ok, false, 'no # list with a client');
+  assert.equal((await act('adm', { act: 'send', group: cg, text: 'x', task: { id: 't-a' } })).ok, false, 'no task card with a client');
+});
