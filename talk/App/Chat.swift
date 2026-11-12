@@ -1599,7 +1599,7 @@ final class MessageBar: UIView, UITextViewDelegate {
     box.frame = CGRect(x: 46, y: y, width: W - 46 - right, height: boxH)
     smiley.frame = CGRect(x: box.frame.maxX - 34, y: y + boxH - 31, width: 32, height: 32)
     place.frame = CGRect(x: 13, y: 5, width: box.bounds.width - 46, height: 20)
-    sendB.frame = CGRect(x: W - 41, y: by, width: 32, height: 32)
+    sendB.frame = CGRect(x: W - 41, y: y + boxH - 15 - 15.5, width: 31, height: 31)   // (the mic's own size and place)
     cam.frame = CGRect(x: W - 79, y: by, width: 32, height: 32); mic.frame = CGRect(x: W - 41, y: y + boxH - 15 - 15.5, width: 31, height: 31)
     sendB.isHidden = !typing; cam.isHidden = typing; mic.isHidden = typing
     recV.frame = CGRect(x: 0, y: y, width: W - 60, height: 32)
