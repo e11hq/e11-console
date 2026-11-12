@@ -48,7 +48,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private var homeLimits: [NSLayoutConstraint] = []
   private var home: CGFloat { UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first?.safeAreaInsets.bottom ?? 0 }
   private func placeBars() {
-    view.keyboardLayoutGuide.usesBottomSafeArea = false
+    if #available(iOS 17.0, *) { view.keyboardLayoutGuide.usesBottomSafeArea = false }   // (iOS 16: the guide stops at the home line itself)
     for a in [bar, findAcc] as [UIView] {
       a.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(a)
       let onKeys = a.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor); onKeys.priority = .init(999)
