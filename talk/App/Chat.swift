@@ -40,9 +40,25 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private var focus: String?   // (opened from a search result: that message, highlighted)
   init(group: String, focus: String? = nil) { self.group = group; self.focus = focus; super.init(nibName: nil, bundle: nil); if #unavailable(iOS 18) { hidesBottomBarWhenPushed = true } }
   required init?(coder: NSCoder) { fatalError() }
-  override var canBecomeFirstResponder: Bool { true }
-  // (while searching, the bar of matches sits where the message bar was — the design's board "Search in a chat")
-  override var inputAccessoryView: UIView? { finding ? findAcc : bar }
+  /* The message bar is part of the page, held on Apple's keyboard guide (Haris 2026-11-12): above the keyboard while it's
+     up, above the home line while it's down — the lower of the two, so it moves with the keyboard (and a drag down)
+     smoothly, never jumping as the home line's room came and went; its frost reaches down behind the keyboard, so no
+     page shows at the keyboard's rounded corners. (It was the keyboard's own accessory before.) While searching, the
+     bar of matches takes its place (the design's board "Search in a chat"). */
+  private var homeLimits: [NSLayoutConstraint] = []
+  private var home: CGFloat { UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first?.safeAreaInsets.bottom ?? 0 }
+  private func placeBars() {
+    view.keyboardLayoutGuide.usesBottomSafeArea = false
+    for a in [bar, findAcc] as [UIView] {
+      a.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(a)
+      let onKeys = a.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor); onKeys.priority = .init(999)
+      let aboveHome = a.bottomAnchor.constraint(lessThanOrEqualTo: view.bottomAnchor, constant: -home)
+      homeLimits.append(aboveHome)
+      NSLayoutConstraint.activate([a.leadingAnchor.constraint(equalTo: view.leadingAnchor), a.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                                   a.bottomAnchor.constraint(lessThanOrEqualTo: view.keyboardLayoutGuide.topAnchor), onKeys, aboveHome])
+    }
+    findAcc.isHidden = true
+  }
 
   override func viewDidLoad() {
     super.viewDidLoad()
@@ -67,6 +83,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // with the E11. wordmark in outline, faint, standing still behind the messages — the list's own background view
     let pattern = UIView(); pattern.backgroundColor = ChatVC.pattern; table.backgroundView = pattern
     view.addSubview(table)
+    placeBars()
     data = UITableViewDiffableDataSource<String, ChatItem>(tableView: table) { [weak self] tv, ip, item in
       guard let self = self else { return UITableViewCell() }
       switch item {
@@ -156,7 +173,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     TabBarHide.arrived(self)
     // (the back swipe from the edge goes first; a reply swipe starts away from the edge)
     if let pop = navigationController?.interactivePopGestureRecognizer, !swipeWaits { swipeWaits = true; swipe.require(toFail: pop) }
-    becomeFirstResponder()
+    homeLimits.forEach { $0.constant = -home }
     bar.onLayout = { [weak self] in self?.fitBottom() }
     fitBottom()
     Talk.shared.markRead(group)
@@ -254,7 +271,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private func startFind() {
     guard !finding else { return }
     findBar.placeholder = "Search in this chat"; findBar.delegate = self; findBar.text = ""
-    findBar.searchTextField.inputAccessoryView = findAcc
+    bar.box.resignFirstResponder(); bar.isHidden = true; findAcc.isHidden = false
     finding = true; finds = []; findQ = ""; findCur = nil; findSet = []
     findAcc.show(0, 0, typed: false)
     navigationItem.leftBarButtonItems = nil
@@ -268,13 +285,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private func endFind(leaving: Bool = false) {
     guard finding else { return }
     finding = false
-    findBar.searchTextField.inputAccessoryView = nil
+    findAcc.isHidden = true; bar.isHidden = false
     findBar.searchTextField.resignFirstResponder()
     let was = findSet
     finds = []; findSet = []; findQ = ""; findCur = nil
     remark(was)
     setBarButtons()
-    if !leaving { reloadInputViews(); becomeFirstResponder(); fitBottom() }
+    if !leaving { fitBottom() }
   }
   private func runFind() {
     let q = (findBar.text ?? "").trimmingCharacters(in: .whitespaces)
@@ -383,15 +400,15 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   @objc private func kbSettled() {
     let acc: UIView = finding ? findAcc : bar
     guard isViewLoaded, view.window != nil, acc.window != nil else { return }
-    kbOverlap = max(0, view.bounds.maxY - view.convert(acc.bounds, from: acc).minY)
-    keyUp = kbOverlap > acc.bounds.height + 20
+    kbOverlap = view.keyboardLayoutGuide.layoutFrame.height
+    keyUp = kbOverlap > 20
     fitBottom()
   }
   @objc private func backInApp() { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.kbSettled() } }
   @objc private func kbMoved(_ n: Notification) {
     if let f = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue {
       kbOverlap = max(0, view.bounds.maxY - view.convert(f, from: nil).minY)
-      keyUp = kbOverlap > (finding ? findAcc : bar).bounds.height + 20
+      keyUp = kbOverlap > 20
     }
     view.layoutIfNeeded(); fitBottom()
   }
@@ -405,9 +422,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (the message bar's real height from the start — before it's on the screen it has no home-line room yet, and the
     //  chat opened that much short and then jumped when the bar came — Haris 2026-11-12)
     let acc: UIView = finding ? findAcc : bar
-    let accH = acc.window != nil ? acc.bounds.height : acc.intrinsicContentSize.height + (view.window?.safeAreaInsets.bottom ?? 0)
+    let accTop = acc.frame.height > 0 ? acc.frame.minY : view.bounds.maxY - home - acc.intrinsicContentSize.height
     // (the @ list comes over the chat, as a menu would — it isn't counted, so the messages don't move for it — Haris 2026-11-12)
-    let cover = max(kbOverlap, accH) - (finding ? 0 : bar.listH)
+    let cover = view.bounds.maxY - accTop - (finding ? 0 : bar.listH)
     guard abs(cover - kb) > 0.5 else { return }
     let wasAtEnd = table.contentOffset.y + table.bounds.height >= table.contentSize.height + table.adjustedContentInset.bottom - 40
     let grew = cover > kb
@@ -622,7 +639,6 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       if ctx.isCancelled {
         UIView.animate(withDuration: 0.3) { self.dimOthers(0, but: c) }
         c.settle(animated: true)
-        self.becomeFirstResponder()   // (the message bar back as the page slides away)
       } else { c.settle(animated: false); self.dimOthers(0, but: c) }
     }
   }
@@ -815,11 +831,7 @@ extension ChatVC: UISearchBarDelegate {
   func searchBarSearchButtonClicked(_ b: UISearchBar) { b.searchTextField.resignFirstResponder() }
   // (the keyboard put down — Search, a tap on the chat or dragged away: the matches' bar stays at the bottom)
   func searchBarTextDidEndEditing(_ b: UISearchBar) {
-    guard finding else { return }
-    DispatchQueue.main.async { [weak self] in
-      guard let self = self, self.finding, !self.findBar.searchTextField.isFirstResponder else { return }
-      self.reloadInputViews(); self.becomeFirstResponder(); self.fitBottom()
-    }
+    fitBottom()
   }
 }
 
@@ -1658,13 +1670,12 @@ final class MessageBar: UIView, UITextViewDelegate {
   // (the bar stays above the home indicator when the keyboard is down)
   private var mentionH: CGFloat { mentionV.isHidden ? 0 : CGFloat(mentionV.arrangedSubviews.count) * 44 }
   var listH: CGFloat { mentionH }   // (the @ list sits over the chat — the chat makes no room for it)
-  override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: (locked ? 83 : boxH + 13) + (replyV.isHidden ? 0 : 52) + mentionH + safeAreaInsets.bottom) }
-  override func safeAreaInsetsDidChange() { super.safeAreaInsetsDidChange(); invalidateIntrinsicContentSize() }
+  override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: (locked ? 83 : boxH + 13) + (replyV.isHidden ? 0 : 52) + mentionH) }
   override func layoutSubviews() {
     super.layoutSubviews()
     defer { onLayout?() }
     let W = bounds.width, mh = mentionH, top: CGFloat = mh + (replyV.isHidden ? 0 : 52)
-    blur.frame = CGRect(x: 0, y: 0, width: W, height: bounds.height + 200)
+    blur.frame = CGRect(x: 0, y: 0, width: W, height: bounds.height + 420)   // (down behind the home line and the keyboard)
     mentionV.frame = CGRect(x: 0, y: 0, width: W, height: mh)
     replyV.frame = CGRect(x: 0, y: mh, width: W, height: 52)
     replyBar.frame = CGRect(x: 0, y: 0, width: 4, height: 52)
@@ -2022,11 +2033,10 @@ final class FindBar: UIView {
     addSubview(countL)
   }
   required init?(coder: NSCoder) { fatalError() }
-  override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: 56 + safeAreaInsets.bottom) }
-  override func safeAreaInsetsDidChange() { super.safeAreaInsetsDidChange(); invalidateIntrinsicContentSize() }
+  override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: 56) }
   override func layoutSubviews() {
     super.layoutSubviews()
-    blur.frame = bounds
+    blur.frame = CGRect(x: 0, y: 0, width: bounds.width, height: bounds.height + 420)
     line.frame = CGRect(x: 0, y: 0, width: bounds.width, height: 1 / max(1, traitCollection.displayScale))
     capsule.frame = CGRect(x: 16, y: 8, width: 100, height: 40)
     up.frame = CGRect(x: 0, y: 0, width: 50, height: 40); down.frame = CGRect(x: 50, y: 0, width: 50, height: 40)
