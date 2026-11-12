@@ -305,6 +305,15 @@ final class Talk {
     deleteForMe(g, m)
     send(g, text: m.text, reply: nil)
   }
+  // what you do shows at once (the rule of every page): the change on this phone first, the server's answer after — a
+  // refusal puts the message back as it was
+  @discardableResult func local(_ g: String, _ id: String, _ change: (inout Msg) -> Void) -> Msg? {
+    var l = log(g); guard let i = l.msgs.firstIndex(where: { $0.id == id }) else { return nil }
+    let was = l.msgs[i]; change(&l.msgs[i]); logs[g] = l; saveSoon(g)
+    NotificationCenter.default.post(name: .talkGroup, object: g); NotificationCenter.default.post(name: .talkChanged, object: nil)
+    return was
+  }
+  func putBack(_ g: String, _ m: Msg) { local(g, m.id) { $0 = m } }
   func deleteForMe(_ g: String, _ m: Msg) {
     var l = log(g); l.msgs.removeAll { $0.id == m.id }; logs[g] = l; saveSoon(g)
     if let f = m.file { try? FileManager.default.removeItem(at: Net.local(f.id)) }
@@ -516,8 +525,15 @@ final class Avatar: UIView {
     want = key
     if let f = talkFile {
       Net.shared.file(f) { [weak self] url in guard let self = self, self.want == key, let u = url, let i = UIImage(contentsOfFile: u.path) else { return }; self.img.image = i; self.img.isHidden = false; self.lbl.isHidden = true }
-    } else if let p = picture {
-      Net.shared.picture(p) { [weak self] i in guard let self = self, self.want == key, let i = i else { return }; self.img.image = i; self.img.isHidden = false; self.lbl.isHidden = true }
+    } else if let p = picture { load(p, key, tries: 3) }
+  }
+  // (a picture that didn't come is tried again by itself, a little later — never left as initials until the page is
+  //  opened again: E11 Console's lesson, build 1690)
+  private func load(_ p: String, _ key: String?, tries: Int) {
+    Net.shared.picture(p) { [weak self] i in
+      guard let self = self, self.want == key else { return }
+      guard let i = i else { if tries > 1 { DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in self?.load(p, key, tries: tries - 1) } }; return }
+      self.img.image = i; self.img.isHidden = false; self.lbl.isHidden = true
     }
   }
   // a group: its own picture, else its client's logo, else a letter on the client's colour

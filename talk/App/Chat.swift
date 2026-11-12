@@ -594,8 +594,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let mine = m.by == Talk.shared.me?.id, now = Date().timeIntervalSince1970 * 1000
     let a = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
     if mine && !m.deleted && !m.pending && now - m.at < 2 * 86400000 {
-      a.addAction(UIAlertAction(title: "Delete for Everyone", style: .destructive) { _ in
-        Net.shared.act(["act": "del", "msg": m.id]) { j in if (j?["ok"] as? Bool) == true { Talk.shared.sync() } else { toast(j?["error"] as? String ?? "Couldn’t delete it") } }
+      a.addAction(UIAlertAction(title: "Delete for Everyone", style: .destructive) { [weak self] _ in
+        guard let g = self?.group else { return }
+        let was = Talk.shared.local(g, m.id) { $0.deleted = true; $0.text = ""; $0.reply = nil }   // (shows at once; the file goes with the server's answer)
+        Net.shared.act(["act": "del", "msg": m.id]) { j in if (j?["ok"] as? Bool) == true { Talk.shared.sync() } else { if let w = was { Talk.shared.putBack(g, w) }; toast(j?["error"] as? String ?? "Couldn’t delete it") } }
       })
     }
     a.addAction(UIAlertAction(title: "Delete for Me", style: .destructive) { [weak self] _ in guard let self = self else { return }; Talk.shared.deleteForMe(self.group, m) })
@@ -609,8 +611,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
   private func react(_ m: Msg, _ e: String?) {
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    guard let me = Talk.shared.me?.id else { return }
+    let g = group
+    let was = Talk.shared.local(g, m.id) { $0.reactions[me] = e }   // (shows at once)
     var b: [String: Any] = ["act": "react", "msg": m.id]; if let e = e { b["emoji"] = e }
-    Net.shared.act(b) { _ in Talk.shared.sync() }
+    Net.shared.act(b) { j in
+      if (j?["ok"] as? Bool) == true { Talk.shared.sync() } else { if let w = was { Talk.shared.putBack(g, w) }; toast(j?["error"] as? String ?? "Couldn’t react — try again") }
+    }
   }
   // + : any emoji, from iPhone's emoji keyboard
   private func anyEmoji(_ m: Msg) {
@@ -665,6 +672,7 @@ final class DayHeader: UITableViewHeaderFooterView {
   override init(reuseIdentifier: String?) {
     super.init(reuseIdentifier: reuseIdentifier)
     backgroundConfiguration = .clear()
+    insetsLayoutMarginsFromSafeArea = false; contentView.insetsLayoutMarginsFromSafeArea = false
     chip.backgroundColor = Look.dayChip; chip.layer.cornerRadius = 8; chip.layer.cornerCurve = .continuous
     l.font = .systemFont(ofSize: 13, weight: .semibold); l.textColor = .label; l.textAlignment = .center
     chip.addSubview(l); contentView.addSubview(chip)
@@ -854,6 +862,7 @@ final class BubbleCell: UITableViewCell {
   override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
     super.init(style: style, reuseIdentifier: reuseIdentifier)
     backgroundColor = .clear; selectionStyle = .none
+    insetsLayoutMarginsFromSafeArea = false; contentView.insetsLayoutMarginsFromSafeArea = false   // (steady heights — the rule)
     stack.axis = .vertical; stack.spacing = 0; stack.alignment = .fill
     nameL.font = .systemFont(ofSize: 15, weight: .semibold)
     roleL.font = .systemFont(ofSize: 12); roleL.textColor = Look.roleInk
