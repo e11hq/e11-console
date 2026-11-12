@@ -1861,6 +1861,18 @@ final class EmojiBox: UITextView {
   // (the keyboard you were typing on, given back when the emojis go — iPhone otherwise picked the next one in your list,
   //  Arabic here; Haris 2026-11-12)
   var typing: UITextInputMode?
+  // the keyboard really up now (ours below answers what we ask for, not what iPhone shows)
+  var shown: UITextInputMode? { super.textInputMode }
+  // (iPhone reads the keyboard asked for only as the box becomes the one typed in — reloadInputViews never asked it again,
+  //  so the ⌨︎ changed but the emojis stayed, Haris 2026-11-12. Let go and taken back at once: iPhone swaps the keyboard
+  //  in place, the box keeps its words and caret.)
+  private(set) var swapping = false
+  func swapKeyboard() {
+    guard isFirstResponder else { becomeFirstResponder(); return }
+    let sel = selectedRange
+    swapping = true; resignFirstResponder(); becomeFirstResponder(); swapping = false
+    selectedRange = sel
+  }
   override var textInputMode: UITextInputMode? {
     if emoji, let m = UITextInputMode.activeInputModes.first(where: { $0.primaryLanguage == "emoji" }) { return m }
     // (matched by its language — iPhone hands out a new object for the same keyboard each time, so the one kept was never
@@ -1879,7 +1891,7 @@ final class MessageBar: UIView, UITextViewDelegate {
   let box = EmojiBox()
   private let smiley = UIButton(type: .system)
   // (the keyboard put away: next time the box opens on the letters, the button back to the smiley)
-  func textViewDidEndEditing(_ t: UITextView) { if box.emoji { box.emoji = false; setSmiley() } }
+  func textViewDidEndEditing(_ t: UITextView) { if !box.swapping, box.emoji { box.emoji = false; setSmiley() } }
   // the box's button: the smiley, or the keyboard while the emojis are up (WhatsApp's), crossfading
   private func setSmiley() {
     let name = box.emoji ? "keyboard" : "face.smiling"
@@ -1943,13 +1955,13 @@ final class MessageBar: UIView, UITextViewDelegate {
     smiley.setImage(sym("face.smiling", 15, .regular), for: .normal); smiley.tintColor = .label; smiley.accessibilityLabel = "Emoji"
     smiley.addAction(UIAction { [weak self] _ in
       guard let self = self else { return }
-      if !self.box.emoji, self.box.isFirstResponder, let now = self.box.textInputMode, now.primaryLanguage != "emoji" { self.box.typing = now }
+      if !self.box.emoji, self.box.isFirstResponder, let now = self.box.shown, now.primaryLanguage != "emoji" { self.box.typing = now }
       self.box.emoji.toggle(); self.setSmiley()
-      if self.box.isFirstResponder { self.box.reloadInputViews() } else { self.box.becomeFirstResponder() }
+      self.box.swapKeyboard()
     }, for: .touchUpInside)
     // (the keyboard changed with the 🌐 key: the button follows — ⌨︎ while the emojis are up, ☺︎ otherwise)
     NotificationCenter.default.addObserver(forName: UITextInputMode.currentInputModeDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
-      guard let self = self, self.box.isFirstResponder, let now = self.box.textInputMode else { return }
+      guard let self = self, self.box.isFirstResponder, !self.box.swapping, let now = self.box.shown else { return }
       let isEmoji = now.primaryLanguage == "emoji"
       if !isEmoji { self.box.typing = now }
       if self.box.emoji != isEmoji { self.box.emoji = isEmoji; self.setSmiley() }
