@@ -298,3 +298,21 @@ test('step 5: typing passed on to members only; # tasks in a staff group — the
   assert.equal((await act('adm', { act: 'tasks', group: cg })).ok, false, 'no # list with a client');
   assert.equal((await act('adm', { act: 'send', group: cg, text: 'x', task: { id: 't-a' } })).ok, false, 'no task card with a client');
 });
+
+test('a pinned message: anyone in the group, one at a time, until unpinned or replaced; gone with the message', async () => {
+  const g = (await act('adm', { act: 'newGroup', client: 'p1', name: 'Pins', members: ['u-des'] })).group.id;
+  const a = await act('adm', { act: 'send', group: g, text: 'Shoot moved to Sunday' });
+  const b2 = await act('des', { act: 'send', group: g, text: 'Brief is in the plan' });
+  assert.ok((await act('des', { act: 'pinMsg', msg: a.id, text: 'Shoot moved to Sunday' })).ok, 'anyone pins');
+  let pin = (await state('adm')).groups.find((x) => x.id === g).pin;
+  assert.ok(pin && pin.id === a.id && pin.text === 'Shoot moved to Sunday' && pin.pinnedBy === 'u-des');
+  assert.ok((await sync('adm')).events.some((e) => e.type === 'msg' && e.kind === 'sys' && /Yousef pinned a message/.test(e.text)), 'a note in the chat');
+  await act('adm', { act: 'pinMsg', msg: b2.id, text: 'Brief is in the plan' });
+  assert.equal((await state('des')).groups.find((x) => x.id === g).pin.id, b2.id, 'replaced');
+  assert.equal((await act('sm', { act: 'pinMsg', msg: b2.id })).ok, false, 'not in the group');
+  await act('adm', { act: 'pinMsg', msg: b2.id, on: false });
+  assert.equal((await state('des')).groups.find((x) => x.id === g).pin, null, 'unpinned');
+  await act('adm', { act: 'pinMsg', msg: b2.id });
+  await act('des', { act: 'del', msg: b2.id });
+  assert.equal((await state('adm')).groups.find((x) => x.id === g).pin, null, 'deleted for everyone: the pin goes too');
+});

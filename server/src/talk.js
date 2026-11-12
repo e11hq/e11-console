@@ -46,6 +46,8 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     CREATE TABLE IF NOT EXISTS link_codes (code TEXT PRIMARY KEY, uid TEXT NOT NULL, name TEXT NOT NULL, at INTEGER NOT NULL, mac TEXT);
     CREATE TABLE IF NOT EXISTS phone_seen (uid TEXT PRIMARY KEY, at INTEGER NOT NULL);
   `);
+  // (a group's pinned message — one, kept until unpinned or replaced; anyone in the group pins, Haris 2026-11-12)
+  try { db.exec('ALTER TABLE groups ADD COLUMN pin TEXT'); } catch { /* already there */ }
   const q = (sql) => db.prepare(sql);
   const Q = {
     group: q('SELECT * FROM groups WHERE id = ? AND gone = 0'),
@@ -147,8 +149,9 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     const pref = Q.pref.get(uid, 'group', g.id) || {};
     return { id: g.id, client: g.client, name: g.name, creator: g.creator, creatorAdmin: !g.creator_off, second: g.second || null, admins: adminsOf(g), pic: g.pic || null,
       createdAt: g.created_at, lastAt: g.last_at, members: ms.map((m) => m.uid), pinnedAt: pref.pinned_at || null, mutedUntil: pref.muted_until || null,
-      withClient: ms.some((m) => isContactId(m.uid)) };
+      withClient: ms.some((m) => isContactId(m.uid)), pin: pinOf(g) };
   }
+  const pinOf = (g) => { try { return g.pin ? JSON.parse(g.pin) : null; } catch { return null; } };
   // everything the app needs to draw its lists (the messages themselves come by sync)
   function state(u) {
     const groups = Q.groupsOf.all(u.id).filter((g) => clientById(g.client)).map((g) => groupView(g, u.id))
@@ -586,6 +589,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
           if (t - s.at > DEL_ALL_MS) return bad('Too late to delete it for everyone');
           emit(g, 'del', { id: s.id }, u.id);
           dropFiles(JSON.parse(s.files || '[]'));
+          if ((pinOf(g) || {}).id === s.id) { db.prepare('UPDATE groups SET pin = NULL WHERE id = ?').run(g.id); changed(g, u.id); }
         } else {
           const emoji = b.emoji ? clip(b.emoji, 16) : null;
           emit(g, 'react', { id: s.id, emoji }, u.id);
@@ -609,6 +613,22 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         const m = db.prepare('SELECT * FROM macs WHERE id = ? AND uid = ?').get(String(b.id || ''), u.id);
         if (!m) return bad('That Mac isn’t linked', 404);
         unlinkMac(m.id);
+        return { ok: true };
+      }
+      // ---- a pinned message (one per group): its id and, from the pinner's phone, a line of what it says ----
+      case 'pinMsg': {
+        const s = Q.getSent.get(String(b.msg || ''));
+        if (!s) return bad('That message has gone', 404);
+        const [g, e] = needGroup(u, s.grp); if (e) return e;
+        if (b.on === false) {
+          if ((pinOf(g) || {}).id !== s.id) return { ok: true };
+          db.prepare('UPDATE groups SET pin = NULL WHERE id = ?').run(g.id);
+        } else {
+          const pin = { id: s.id, by: s.by, text: clip(b.text || '', 200), kind: clip(b.kind || 'text', 10), at: s.at, pinnedBy: u.id, pinnedAt: t };
+          db.prepare('UPDATE groups SET pin = ? WHERE id = ?').run(JSON.stringify(pin), g.id);
+          sys(g, u.id, `${nameOf(u.id)} pinned a message`);
+        }
+        changed(g, u.id);
         return { ok: true };
       }
       case 'typing': {
