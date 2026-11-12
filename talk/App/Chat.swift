@@ -1136,13 +1136,17 @@ final class BubbleCell: UITableViewCell {
   // (a short message: the bubble as narrow as its words — a weak pull to nothing that the words hold out against;
   //  the widest stays the design's — Haris 2026-11-12)
   private lazy var tight: NSLayoutConstraint = { let c = bubble.widthAnchor.constraint(equalToConstant: 0); c.priority = .init(200); return c }()
-  // a single emoji on its own: big, with no bubble, the time in a small pill under it (WhatsApp's — Haris 2026-11-12)
-  private var big = false
+  // emojis alone (WhatsApp's, measured from Haris's screenshot, 2026-11-12): one — big, no bubble, the time in a small
+  // pill of the bubble's colour under it; two or three — larger in the bubble, the time on its own line; more — as words
+  private var big = false, emojis = 0
   private let stampPill = UIView()
-  static func oneEmoji(_ s: String) -> Bool {
-    let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard t.count == 1, let c = t.first, let f = c.unicodeScalars.first else { return false }
-    return f.properties.isEmojiPresentation || (f.properties.isEmoji && c.unicodeScalars.count > 1)
+  static func emojiCount(_ s: String) -> Int {
+    let cs = s.filter { !$0.isWhitespace }
+    guard !cs.isEmpty, cs.count <= 3 else { return 0 }
+    for c in cs {
+      guard let f = c.unicodeScalars.first, f.properties.isEmojiPresentation || (f.properties.isEmoji && c.unicodeScalars.count > 1) else { return 0 }
+    }
+    return cs.count
   }
   static let clear = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1)).image { _ in }
   required init?(coder: NSCoder) { fatalError() }
@@ -1218,7 +1222,9 @@ final class BubbleCell: UITableViewCell {
     let isPhoto = !m.deleted && m.file != nil && (m.kind == "photo" || isVideo)
     let isVoice = !m.deleted && m.file != nil && m.kind == "voice"
     let isDoc = !m.deleted && m.file != nil && !isPhoto && !isVoice
-    big = !m.deleted && m.file == nil && m.reply == nil && m.fwd != true && BubbleCell.oneEmoji(m.text)
+    emojis = !m.deleted && m.file == nil && m.reply == nil && m.fwd != true ? BubbleCell.emojiCount(m.text) : 0
+    big = emojis == 1
+    stampPill.backgroundColor = mine ? Look.mine : Look.theirs
     stampPill.isHidden = !big
     textL.preferredMaxLayoutWidth = UIScreen.main.bounds.width * (mine ? 281 : 250) / 393 - 24
     // (a forwarded photo sits inside the bubble under "Forwarded", rounded 14, the bubble's colour round it)
@@ -1367,9 +1373,9 @@ final class BubbleCell: UITableViewCell {
     footL.isHidden = true
     stamp.isHidden = false
     foot(m)
-    if words && big {
-      // (the emoji at 52, the time on its own line under it, in its pill)
-      let e = NSMutableAttributedString(string: m.text.trimmingCharacters(in: .whitespacesAndNewlines), attributes: [.font: UIFont.systemFont(ofSize: 52)])
+    if words && emojis > 0 {
+      // (one at 46, two at 28, three at 22 — the time on its own line under them)
+      let e = NSMutableAttributedString(string: m.text.trimmingCharacters(in: .whitespacesAndNewlines), attributes: [.font: UIFont.systemFont(ofSize: [46, 28, 22][emojis - 1])])
       let room = NSTextAttachment(image: BubbleCell.clear); room.bounds = CGRect(x: 0, y: 0, width: 1, height: 16)
       e.append(NSAttributedString(string: "\n")); e.append(NSAttributedString(attachment: room))
       textL.attributedText = e
@@ -1397,7 +1403,7 @@ final class BubbleCell: UITableViewCell {
     guard let g = group, let l = log else { return }
     let T = Talk.shared, mine = m.by == T.me?.id
     let over = overPhoto
-    let dim: UIColor = over ? .white : mine && !big ? Look.mineTime : Look.roleInk
+    let dim: UIColor = over ? .white : mine ? Look.mineTime : Look.roleInk
     let f = NSMutableAttributedString(string: (m.edited && !m.deleted ? "Edited " : "") + Look.clock(m.at), attributes: [.foregroundColor: dim, .font: UIFont.systemFont(ofSize: 12)])
     if mine && !m.deleted {
       let others = g.members.filter { $0 != m.by }
@@ -1409,7 +1415,7 @@ final class BubbleCell: UITableViewCell {
       if m.pending {
         f.append(NSAttributedString(attachment: NSTextAttachment(image: UIImage(systemName: m.failed ? "exclamationmark.circle" : "clock", withConfiguration: UIImage.SymbolConfiguration(pointSize: 10, weight: .bold))!.withTintColor(dim.resolvedColor(with: traitCollection)))))
       } else {
-        let c: UIColor = allSeen ? (big ? Look.rgb(0x2F7BFF) : Look.readTick) : over ? .white : big ? Look.roleInk : Look.mineTime
+        let c: UIColor = allSeen ? Look.readTick : over ? .white : Look.mineTime
         let t = NSTextAttachment(image: Ticks.image(c.resolvedColor(with: traitCollection), double: allSeen || allGot))
         t.bounds = CGRect(x: 0, y: -1, width: 16, height: 10)
         f.append(NSAttributedString(attachment: t))
