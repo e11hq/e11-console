@@ -189,6 +189,12 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
   override func viewWillDisappear(_ a: Bool) {
     super.viewWillDisappear(a); endFind(leaving: true); if ChatVC.open == group { ChatVC.open = nil }
+    // (going back, Apple puts the tab bar back at the first touch of the swipe — its icons fade in with the slide instead,
+    //  following the finger, Haris 2026-11-12)
+    if isMovingFromParent, let bar = tabBarController?.tabBar, let tc = transitionCoordinator {
+      bar.alpha = 0
+      tc.animate(alongsideTransition: { _ in bar.alpha = 1 }, completion: { _ in bar.alpha = 1 })
+    }
   }
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
