@@ -51,6 +51,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
      bar of matches takes its place (the design's board "Search in a chat"). */
   private var homeLimits: [NSLayoutConstraint] = []
   private let topFrost = ChatVC.frost()
+  private let titleSpot = UIView()
+  private var spotW: NSLayoutConstraint!
   // the chat's top frost (Haris 2026-11-12, b): Apple's blur, tinted thick with the chat's colour — nothing shows through
   static func frost() -> UIVisualEffectView {
     let v = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial)); v.isUserInteractionEnabled = false
@@ -130,6 +132,17 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     titleV.addArrangedSubview(titlePic); titleV.addArrangedSubview(words)
     titleV.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(info)))
     titleV.widthAnchor.constraint(lessThanOrEqualToConstant: max(140, UIScreen.main.bounds.width - 150)).isActive = true
+    // (the picture and the name are the page's own, on its top frost where the bar had them — so they slide with the chat
+    //  and follow the finger on a back swipe, WhatsApp's way, instead of Apple's fade of a bar item; Haris 2026-11-12. An
+    //  empty spot of the same size stays in Apple's bar for the tap, as the bar takes the touches there.)
+    titleV.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(titleV)
+    let lead: CGFloat = { if #available(iOS 26.0, *) { return 68 } else { return 44 } }()
+    NSLayoutConstraint.activate([titleV.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: lead),
+                                 titleV.centerYAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: { if #available(iOS 26.0, *) { return -27 } else { return -22 } }())])
+    titleSpot.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(info)))
+    titleSpot.translatesAutoresizingMaskIntoConstraints = false
+    spotW = titleSpot.widthAnchor.constraint(equalToConstant: 200)
+    NSLayoutConstraint.activate([spotW, titleSpot.heightAnchor.constraint(equalToConstant: 39)])
     setBarButtons()
     bar.onSend = { [weak self] t, ms in self?.send(t, mentions: ms) }
     bar.onPlus = { [weak self] k in self?.attach(k) }
@@ -159,6 +172,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     topFrost.isUserInteractionEnabled = false; topFrost.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(topFrost)
     NSLayoutConstraint.activate([topFrost.topAnchor.constraint(equalTo: view.topAnchor), topFrost.leadingAnchor.constraint(equalTo: view.leadingAnchor),
                                  topFrost.trailingAnchor.constraint(equalTo: view.trailingAnchor), topFrost.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor)])
+    view.bringSubviewToFront(titleV)   // (the name on the frost)
     clientLine.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(clientLine)
     NSLayoutConstraint.activate([
       tint.leadingAnchor.constraint(equalTo: clientLine.contentView.leadingAnchor), tint.trailingAnchor.constraint(equalTo: clientLine.contentView.trailingAnchor),
@@ -279,6 +293,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let clients = others.filter { $0.contact }.map { p in p.client.flatMap { T.clients[$0]?.name }.map { "\(p.name) (\($0))" } ?? p.name }
     let team = others.filter { !$0.contact }.map { $0.name }
     subL.text = (clients + team + ["You"]).joined(separator: ", ")
+    spotW?.constant = min(titleV.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).width, max(140, UIScreen.main.bounds.width - 150))
     // a client group, to staff: the band under the bar and the box's hint — the client can see what's written here
     let shared = g.withClient && !T.isContact
     bar.placeholder = shared ? "Message — client can see this" : ""
@@ -312,7 +327,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private func setBarButtons() {
     let find = UIBarButtonItem(title: nil, image: UIImage(systemName: "magnifyingglass"), primaryAction: UIAction { [weak self] _ in self?.startFind() }, menu: nil)
     navigationItem.rightBarButtonItems = [find]
-    let t = UIBarButtonItem(customView: titleV)
+    let t = UIBarButtonItem(customView: titleSpot)
+    titleV.isHidden = false
     if #available(iOS 26.0, *) { t.hidesSharedBackground = true }
     navigationItem.leftItemsSupplementBackButton = true
     navigationItem.leftBarButtonItems = [t]
@@ -325,7 +341,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     bar.box.resignFirstResponder(); bar.isHidden = true; findAcc.isHidden = false
     finding = true; finds = []; findQ = ""; findCur = nil; findSet = []
     findAcc.show(0, 0, typed: false)
-    navigationItem.leftBarButtonItems = nil
+    navigationItem.leftBarButtonItems = nil; titleV.isHidden = true
     navigationItem.hidesBackButton = true
     navigationItem.titleView = findBox
     let close = UIBarButtonItem(title: nil, image: UIImage(systemName: "xmark"), primaryAction: UIAction { [weak self] _ in self?.endFind() }, menu: nil)
