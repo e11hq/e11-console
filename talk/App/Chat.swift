@@ -404,6 +404,11 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private func bring(_ id: String) {
     guard let ip = data.indexPath(for: .msg(id)) else { return }
     table.scrollToRow(at: ip, at: .middle, animated: true)
+    // (the match found: its bubble pulses once it's in view — Haris 2026-11-12)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+      guard let self = self, self.findCur == id, let ip = self.data.indexPath(for: .msg(id)) else { return }
+      (self.table.cellForRow(at: ip) as? BubbleCell)?.pulse()
+    }
   }
   @objc private func info() { navigationController?.pushViewController(GroupInfoVC(group: group), animated: true) }
   @objc private func gone(_ n: Notification) {
@@ -1604,6 +1609,13 @@ final class BubbleCell: UITableViewCell {
   @objc private func quoteTap() { if let r = msg?.reply { onReplyTap?(r.id) } }
   @objc private func fileTap() { if let m = msg { onFileTap?(m) } }
   @objc private func linkTap() { if let u = link { UIApplication.shared.open(u) } }
+  // a found message: the bubble swells a little and settles (on its layer, so a swipe's own move is never disturbed)
+  func pulse() {
+    let a = CAKeyframeAnimation(keyPath: "transform.scale")
+    a.values = [1, 1.07, 0.98, 1]; a.keyTimes = [0, 0.35, 0.7, 1]; a.duration = 0.45
+    a.timingFunctions = [CAMediaTimingFunction(name: .easeOut), CAMediaTimingFunction(name: .easeInEaseOut), CAMediaTimingFunction(name: .easeOut)]
+    bubble.layer.add(a, forKey: "pulse")
+  }
   func flash() {
     UIView.animate(withDuration: 0.2, animations: { self.bubble.alpha = 0.55 }) { _ in UIView.animate(withDuration: 0.6) { self.bubble.alpha = 1 } }
   }
