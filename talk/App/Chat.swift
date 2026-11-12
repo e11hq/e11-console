@@ -1008,8 +1008,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     guard let id = c.identifier as? String, let ip = data.indexPath(for: .msg(id)), let cell = tv.cellForRow(at: ip) as? BubbleCell else { return nil }
     // (the bubble's own shape, tail and all, lifting from the row — not a rounded box that cut the tail away)
     let p = UIPreviewParameters(); p.backgroundColor = .clear
-    p.visiblePath = cell.heldPath(origin: .zero)
-    return UITargetedPreview(view: cell.contentView, parameters: p)
+    p.visiblePath = cell.heldPath(origin: cell.bubble.frame.origin)
+    // (the bubble alone — the whole row lifted its forward button too, a faint box behind the preview, Haris 2026-11-12)
+    return UITargetedPreview(view: cell.bubble, parameters: p)
   }
   // the design (board 33): the reactions on top, then Reply · Forward · Copy · Star · (line) · Delete — Forward comes with
   // the forward sheet (stage 5); yours also keep Edit (15 minutes) and Info, files Save / Share, as the app has them today

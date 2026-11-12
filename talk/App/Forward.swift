@@ -95,7 +95,8 @@ final class ForwardVC: UIViewController, UICollectionViewDelegate, UISearchResul
 
   // RECENT: the five chats most lately busy; ALL GROUPS: every group by name — searching: the matching ones, one list
   private func reload() {
-    let T = Talk.shared, all = Array(T.groups.values)
+    // (a task card can't go where a client can see it — those groups aren't offered, Haris 2026-11-12)
+    let T = Talk.shared, all = Array(T.groups.values).filter { msg.task == nil || !$0.withClient }
     var s = NSDiffableDataSourceSnapshot<String, String>()
     let q = query.trimmingCharacters(in: .whitespaces).lowercased()
     if !q.isEmpty {
@@ -152,7 +153,7 @@ final class ForwardVC: UIViewController, UICollectionViewDelegate, UISearchResul
       self?.dismiss(animated: true)
     }
     guard let f = m.file else {
-      for g in targets { Talk.shared.send(g, text: m.text, fwd: true) }
+      for g in targets { Talk.shared.send(g, text: m.text, fwd: true, task: m.task) }
       done(); return
     }
     sendB.isEnabled = false

@@ -156,7 +156,11 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     let to = ZoomPage.fit(img.size, in: view.bounds)
     UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.88, initialSpringVelocity: 0) {
       fly.frame = to; fly.layer.cornerRadius = 0; fly.shades.forEach { $0.alpha = 0 }; self.back.alpha = 1; self.top.alpha = 1; self.foot.alpha = 1
-    } completion: { _ in self.pager.alpha = 1; fly.removeFromSuperview(); src.alpha = 1 }
+    } completion: { _ in
+      // (the page fades in over the landed picture — with it Apple's shade under the status bar, which popped in at once,
+      //  Haris 2026-11-12)
+      UIView.animate(withDuration: 0.18, animations: { self.pager.alpha = 1 }) { _ in fly.removeFromSuperview(); src.alpha = 1 }
+    }
   }
 
   private func go(_ i: Int, animated: Bool) {
