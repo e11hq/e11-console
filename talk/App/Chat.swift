@@ -615,6 +615,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     toBottom(true)
   }
+  private weak var sendPreview: SendPreviewVC?
   private func attach(_ kind: String) {
     switch kind {
     case "photos":
@@ -636,9 +637,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     toBottom(true)
   }
   // a video from the camera or Photos: shrunk to 720p first (Haris 2026-11-05); one from Files goes as it is
-  fileprivate func sendVideo(_ url: URL, name: String) {
+  fileprivate func sendVideo(_ url: URL, name: String, caption: String = "", hd: Bool = false) {
     let asset = AVURLAsset(url: url)
-    guard let ex = AVAssetExportSession(asset: asset, presetName: AVAssetExportPreset1280x720) else { sendFile(url, kind: "file", name: name); return }
+    // (HD: 1080p; otherwise 720p)
+    guard let ex = AVAssetExportSession(asset: asset, presetName: hd ? AVAssetExportPreset1920x1080 : AVAssetExportPreset1280x720) else { sendFile(url, kind: "file", name: name, caption: caption); return }
     let out = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mp4")
     ex.outputURL = out; ex.outputFileType = .mp4; ex.shouldOptimizeForNetworkUse = true
     toast("Getting the video ready…")
@@ -654,29 +656,30 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         guard let d = try? Data(contentsOf: src) else { toast("Couldn’t read that video"); return }
         let tmpId = "local-" + UUID().uuidString
         let fname = (name as NSString).deletingPathExtension + ".mp4"
-        Talk.shared.send(self.group, text: "", reply: self.replying, file: Msg.FileRef(id: tmpId, name: fname, size: d.count, kind: "video", w: w, h: h, secs: secs.isFinite ? secs : nil), localFile: src, upload: d)
+        Talk.shared.send(self.group, text: caption, reply: self.replying, file: Msg.FileRef(id: tmpId, name: fname, size: d.count, kind: "video", w: w, h: h, secs: secs.isFinite ? secs : nil), localFile: src, upload: d)
         self.replying = nil
         self.toBottom(true)
       }
     }
   }
-  fileprivate func sendFile(_ url: URL, kind: String, name: String) {
-    if kind == "video" { sendVideo(url, name: name); return }
+  fileprivate func sendFile(_ url: URL, kind: String, name: String, caption: String = "", hd: Bool = false) {
+    if kind == "video" { sendVideo(url, name: name, caption: caption, hd: hd); return }
     guard let d = try? Data(contentsOf: url) else { toast("Couldn’t read that file"); return }
     var w: Double? = nil, h: Double? = nil, data = d
     var kind = kind
     if kind == "photo", let img = UIImage(data: d) {
       // (a photo shrunk to 2048 across, as WhatsApp sends one)
-      let s = min(1, 2048 / max(img.size.width, img.size.height))
+      // (HD: the photo at its full size)
+      let s = hd ? 1 : min(1, 2048 / max(img.size.width, img.size.height))
       let sized = s < 1 ? UIGraphicsImageRenderer(size: CGSize(width: img.size.width * s, height: img.size.height * s)).image { _ in img.draw(in: CGRect(origin: .zero, size: CGSize(width: img.size.width * s, height: img.size.height * s))) } : img
-      data = sized.jpegData(compressionQuality: 0.8) ?? d
+      data = sized.jpegData(compressionQuality: hd ? 0.92 : 0.8) ?? d
       w = Double(sized.size.width); h = Double(sized.size.height)
     } else if kind == "photo" { kind = "file" }
     let tmpId = "local-" + UUID().uuidString
     let local = FileManager.default.temporaryDirectory.appendingPathComponent(tmpId)
     try? data.write(to: local)
     let fname = kind == "photo" ? (name as NSString).deletingPathExtension + ".jpg" : name
-    Talk.shared.send(group, text: "", reply: replying, file: Msg.FileRef(id: tmpId, name: fname, size: data.count, kind: kind, w: w, h: h, secs: nil), localFile: local, upload: data)
+    Talk.shared.send(group, text: caption, reply: replying, file: Msg.FileRef(id: tmpId, name: fname, size: data.count, kind: kind, w: w, h: h, secs: nil), localFile: local, upload: data)
     replying = nil
     toBottom(true)
   }
@@ -966,30 +969,55 @@ extension ChatVC: UISearchBarDelegate {
 }
 
 extension ChatVC: PHPickerViewControllerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate, UIDocumentPickerDelegate {
+  // (what's picked opens in the send preview first — caption, HD, Markup / trim — approved mock-up "Talk send preview",
+  //  Haris 2026-11-12; picked from its + / ⊕, it's added to the preview that's open)
   func picker(_ p: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
     p.dismiss(animated: true)
-    for r in results {
+    guard !results.isEmpty else { return }
+    var got = [SendPreviewVC.Item?](repeating: nil, count: results.count)
+    let group = DispatchGroup()
+    for (i, r) in results.enumerated() {
       let ip = r.itemProvider
       let isMovie = ip.hasItemConformingToTypeIdentifier(UTType.movie.identifier)
       let type = isMovie ? UTType.movie.identifier : UTType.image.identifier
-      ip.loadFileRepresentation(forTypeIdentifier: type) { [weak self] url, _ in
-        guard let url = url else { return }
-        let copy = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + "-" + url.lastPathComponent)
-        try? FileManager.default.copyItem(at: url, to: copy)
-        DispatchQueue.main.async { self?.sendFile(copy, kind: isMovie ? "video" : "photo", name: ip.suggestedName.map { $0 + "." + url.pathExtension } ?? url.lastPathComponent) }
+      group.enter()
+      ip.loadFileRepresentation(forTypeIdentifier: type) { url, _ in
+        if let url = url {
+          let copy = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + "-" + url.lastPathComponent)
+          try? FileManager.default.copyItem(at: url, to: copy)
+          got[i] = SendPreviewVC.Item(url: copy, kind: isMovie ? "video" : "photo", name: ip.suggestedName.map { $0 + "." + url.pathExtension } ?? url.lastPathComponent)
+        }
+        group.leave()
       }
     }
+    group.notify(queue: .main) { [weak self] in self?.preview(got.compactMap { $0 }) }
   }
   func imagePickerController(_ p: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
     p.dismiss(animated: true)
-    if let url = info[.mediaURL] as? URL { sendFile(url, kind: "video", name: "Video.mov") }
-    else if let img = info[.originalImage] as? UIImage, let d = img.jpegData(compressionQuality: 0.9) {
+    if let url = info[.mediaURL] as? URL { preview([SendPreviewVC.Item(url: url, kind: "video", name: "Video.mov")]) }
+    else if let img = info[.originalImage] as? UIImage, let d = img.jpegData(compressionQuality: 0.95) {
       let u = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jpg"); try? d.write(to: u)
-      sendFile(u, kind: "photo", name: "Photo.jpg")
+      preview([SendPreviewVC.Item(url: u, kind: "photo", name: "Photo.jpg")])
     }
   }
   func documentPicker(_ c: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-    for u in urls { sendFile(u, kind: "file", name: u.lastPathComponent) }
+    preview(urls.map { SendPreviewVC.Item(url: $0, kind: "file", name: $0.lastPathComponent) })
+  }
+  private func preview(_ items: [SendPreviewVC.Item]) {
+    guard !items.isEmpty else { return }
+    if let open = sendPreview { open.add(items); return }
+    let v = SendPreviewVC(items: items, to: Talk.shared.groups[group]?.name ?? "")
+    v.onSend = { [weak self] all in
+      guard let self = self else { return }
+      for it in all { self.sendFile(it.url, kind: it.kind, name: it.name, caption: it.caption.trimmingCharacters(in: .whitespacesAndNewlines), hd: it.hd) }
+    }
+    v.onAddMore = { [weak self, weak v] in
+      guard let v = v else { return }
+      var c = PHPickerConfiguration(); c.selectionLimit = 10; c.filter = .any(of: [.images, .videos])
+      let p = PHPickerViewController(configuration: c); p.delegate = self; v.present(p, animated: true)
+    }
+    sendPreview = v
+    present(v, animated: true)
   }
 }
 
