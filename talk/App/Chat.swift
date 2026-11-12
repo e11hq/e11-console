@@ -593,8 +593,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     //  chat opened that much short and then jumped when the bar came — Haris 2026-11-12)
     let acc: UIView = finding ? findAcc : bar
     let accTop = acc.frame.height > 0 ? acc.frame.minY : view.bounds.maxY - home - acc.intrinsicContentSize.height
-    // (the @ list comes over the chat, as a menu would — it isn't counted, so the messages don't move for it — Haris 2026-11-12)
-    let cover = view.bounds.maxY - accTop - (finding ? 0 : bar.listH)
+    // (the @ list comes over the chat, as a menu would — it floats above the bar, outside its height, so the messages don't
+    //  move for it — Haris 2026-11-12)
+    let cover = view.bounds.maxY - accTop
     guard abs(cover - kb) > 0.5 else { return }
     let wasAtEnd = table.contentOffset.y + table.bounds.height >= table.contentSize.height + table.adjustedContentInset.bottom - 40
     let grew = cover > kb
@@ -1935,7 +1936,9 @@ final class MessageBar: UIView, UITextViewDelegate {
   // @: the group's people (id, name); the ones picked while typing
   var people: [(String, String)] = []
   private var picked: [String: String] = [:]   // id → name
-  private let mentionV = UIStackView()
+  private let mentionV = UIStackView(), mentionBox = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
+  private var mentionIds: [String] = []
+  override func point(inside p: CGPoint, with e: UIEvent?) -> Bool { super.point(inside: p, with: e) || (!mentionBox.isHidden && mentionBox.frame.contains(p)) }
   private var mentionQ: (NSRange, String)?
   // the voice message being recorded: red dot, time, "‹ Slide to cancel"
   private let rec = VoiceRecorder()
@@ -2031,8 +2034,12 @@ final class MessageBar: UIView, UITextViewDelegate {
       self.recTime.text = s; self.lockedTime.text = s
       if self.locked { self.live.levels = self.rec.levels }
     }
-    mentionV.axis = .vertical; mentionV.isHidden = true
-    addSubview(mentionV)
+    // (the @ list floats above the bar, over the chat — never part of the bar's height: it grew and shrank the bar with
+    //  each letter and the chat jumped, Haris 2026-11-12)
+    mentionV.axis = .vertical
+    mentionBox.contentView.backgroundColor = UIColor { Look.chatBg.resolvedColor(with: $0).withAlphaComponent(0.62) }
+    mentionBox.contentView.addSubview(mentionV); mentionBox.isHidden = true; mentionBox.clipsToBounds = true
+    addSubview(mentionBox)
     sendB.addAction(UIAction { [weak self] _ in self?.sendNow() }, for: .touchUpInside)
     box.font = .systemFont(ofSize: 17); box.backgroundColor = Look.field; box.layer.cornerRadius = 15; box.layer.cornerCurve = .continuous; box.layer.borderWidth = 0.5
     box.textContainerInset = UIEdgeInsets(top: 5, left: 8, bottom: 5, right: 34); box.delegate = self; box.isScrollEnabled = false
@@ -2053,16 +2060,15 @@ final class MessageBar: UIView, UITextViewDelegate {
   }
   required init?(coder: NSCoder) { fatalError() }
   // (the bar stays above the home indicator when the keyboard is down)
-  private var mentionH: CGFloat { mentionV.isHidden ? 0 : CGFloat(mentionV.arrangedSubviews.count) * 52 }
-  var listH: CGFloat { mentionH }   // (the @ list sits over the chat — the chat makes no room for it)
-  override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: (locked ? 83 : boxH + 13) + (replyV.isHidden ? 0 : 52) + mentionH) }
+  private var mentionH: CGFloat { mentionBox.isHidden ? 0 : CGFloat(mentionV.arrangedSubviews.count) * 52 }
+  override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: (locked ? 83 : boxH + 13) + (replyV.isHidden ? 0 : 52)) }
   override func layoutSubviews() {
     super.layoutSubviews()
     defer { onLayout?() }
-    let W = bounds.width, mh = mentionH, top: CGFloat = mh + (replyV.isHidden ? 0 : 52)
+    let W = bounds.width, mh = mentionH, top: CGFloat = replyV.isHidden ? 0 : 52
     blur.frame = CGRect(x: 0, y: 0, width: W, height: bounds.height + 420)   // (down behind the home line and the keyboard)
-    mentionV.frame = CGRect(x: 0, y: 0, width: W, height: mh)
-    replyV.frame = CGRect(x: 0, y: mh, width: W, height: 52)
+    mentionBox.frame = CGRect(x: 0, y: -mh, width: W, height: mh); mentionV.frame = mentionBox.bounds
+    replyV.frame = CGRect(x: 0, y: 0, width: W, height: 52)
     replyBar.frame = CGRect(x: 0, y: 0, width: 4, height: 52)
     let tx: CGFloat = editing ? 40 : 12
     editIcon.frame = CGRect(x: 10, y: 12, width: 24, height: 28)
@@ -2266,6 +2272,13 @@ final class MessageBar: UIView, UITextViewDelegate {
     showMentions(people.filter { q.isEmpty || $0.1.lowercased().hasPrefix(q) || $0.1.lowercased().contains(" " + q) }.prefix(4).map { $0 })
   }
   private func showMentions(_ list: [(String, String)]) {
+    // (the same people: nothing touched — rows made again only when who's in the list changes, without animation)
+    let ids = list.map { $0.0 }
+    if ids == mentionIds && mentionBox.isHidden == list.isEmpty { return }
+    mentionIds = ids
+    UIView.performWithoutAnimation { fillMentions(list); layoutIfNeeded() }
+  }
+  private func fillMentions(_ list: [(String, String)]) {
     mentionV.arrangedSubviews.forEach { $0.removeFromSuperview() }
     for (id, name) in list {
       // (each person with their role under the name, as the design's board 37)
@@ -2282,9 +2295,8 @@ final class MessageBar: UIView, UITextViewDelegate {
       b.addAction(UIAction { [weak self] _ in self?.pick(id, name) }, for: .touchUpInside)
       mentionV.addArrangedSubview(b)
     }
-    let was = mentionV.isHidden
-    mentionV.isHidden = list.isEmpty
-    if was != mentionV.isHidden || !list.isEmpty { invalidateIntrinsicContentSize(); setNeedsLayout() }
+    mentionBox.isHidden = list.isEmpty
+    setNeedsLayout(); onLayout?()
   }
   private func pick(_ id: String, _ name: String) {
     guard let r = mentionQ?.0 else { return }
