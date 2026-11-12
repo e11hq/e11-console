@@ -396,13 +396,21 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       return seeTask(u, tk) ? { task: taskCard(tk) } : null;
     }
     const L = links(); if (!L) return null;
+    // (its picture, from the link's own page — the file's, or the folder's first one with a picture, as its page shows —
+    //  Talk had none: Haris 2026-11-12)
+    const ext = (x) => String((x && (x.name || x.path)) || '').split('.').pop().toLowerCase();
+    const pictured = (x) => !!x && ext(x) !== 'svg' && (!!x.thumb || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'heic', 'pdf', 'mp4', 'mov', 'm4v', 'webm', 'avi', 'mkv', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(ext(x)));
+    const base = url.replace(/\/+$/, '');
     if (kind === 'd') {
       const r = L.resolveFolder(tok); if (!r || !r.live) return null;
-      return { link: { url, title: r.hit.f.name, site: 'E11 Console · Folder', video: false, img: null, icon: null, e11: 'folder' } };
+      const { c, f } = r.hit, all = [], walk = (x, d) => { all.push(...(x.files || [])); if (d < 8) for (const k of (c.folders || []).filter((y) => y.parentId === x.id)) walk(k, d + 1); };
+      walk(f, 0);
+      const cover = all.find(pictured);
+      return { link: { url, title: f.name, site: 'E11 Console · Folder', video: false, img: null, icon: null, e11: 'folder', ...(cover ? { pic: `${base}/f/${cover.id}/thumb` } : {}) } };
     }
     const r = L.resolveToken(tok); if (!r || !r.live) return null;
     const a = r.hit.att || {};
-    return { link: { url, title: a.name || 'File', site: 'E11 Console · File', video: false, img: null, icon: null, e11: 'file' } };
+    return { link: { url, title: a.name || 'File', site: 'E11 Console · File', video: false, img: null, icon: null, e11: 'file', ...(pictured(a) ? { pic: `${base}/thumb` } : {}) } };
   }
 
   function act(u, b) {
