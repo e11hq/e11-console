@@ -697,6 +697,31 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   // ---------- reading ----------
   private func open(_ m: Msg) {
     guard let f = m.file else { return }
+    // (a photo or video: the photo viewer — the design's "A photo opened" — through the chat's photos and videos)
+    if m.kind == "photo" || m.kind == "video" {
+      let all = Talk.shared.log(group).msgs.filter { ($0.kind == "photo" || $0.kind == "video") && !$0.deleted && $0.file != nil && !$0.pending }
+      guard let i = all.firstIndex(where: { $0.id == m.id }) else { return }
+      let v = PhotoViewerVC(items: all, at: i)
+      v.source = { [weak self] x in
+        guard let self = self else { return nil }
+        // (the bubble showing it — an album's first stands for the album)
+        let id = self.albums.first(where: { $0.value.contains { $0.id == x.id } })?.key ?? x.id
+        guard let ip = self.data.indexPath(for: .msg(id)), let c = self.table.cellForRow(at: ip) as? BubbleCell, c.window != nil else { return nil }
+        return c.photo
+      }
+      v.onReply = { [weak self] x in self?.startReply(x) }
+      v.onForward = { [weak self] x in self?.forward(x) }
+      v.onDelete = { [weak self] x in self?.askDelete(x) }
+      v.onReact = { [weak self, weak v] x in
+        let s = EmojiSheet(mine: x.reactions[Talk.shared.me?.id ?? ""]) { e in self?.react(x, e) }
+        let n = UINavigationController(rootViewController: s)
+        if let sh = n.sheetPresentationController { sh.detents = [.medium(), .large()]; sh.prefersGrabberVisible = true }
+        v?.present(n, animated: true)
+      }
+      v.onShow = { [weak self] x in self?.jump(to: self?.albums.first(where: { $0.value.contains { $0.id == x.id } })?.key ?? x.id) }
+      present(v, animated: false)
+      return
+    }
     Net.shared.file(f.id) { [weak self] url in
       guard let self = self, let url = url else { toast("That file isn’t on the server any more"); return }
       // (QuickLook wants the name's extension)
