@@ -1264,8 +1264,8 @@ final class BubbleCell: UITableViewCell {
     linkImg.contentMode = .scaleAspectFill; linkImg.clipsToBounds = true; linkImg.backgroundColor = UIColor.black.withAlphaComponent(0.12)
     linkImg.setContentCompressionResistancePriority(.init(1), for: .vertical); linkImg.setContentCompressionResistancePriority(.init(1), for: .horizontal)
     linkPlay.backgroundColor = UIColor.black.withAlphaComponent(0.45); linkPlay.layer.cornerRadius = 23; linkPlay.isUserInteractionEnabled = false
-    let tri = UIImageView(image: UIImage(systemName: "play.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 19, weight: .semibold))); tri.tintColor = .white
-    tri.translatesAutoresizingMaskIntoConstraints = false; linkPlay.addSubview(tri)
+    let playTri = UIImageView(image: UIImage(systemName: "play.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 19, weight: .semibold))); playTri.tintColor = .white
+    playTri.translatesAutoresizingMaskIntoConstraints = false; linkPlay.addSubview(playTri)
     [linkImg, linkSite, linkURL, linkLine, linkFoot].forEach { linkBox.addSubview($0); $0.translatesAutoresizingMaskIntoConstraints = false }
     linkPlay.translatesAutoresizingMaskIntoConstraints = false; linkImg.addSubview(linkPlay)
     linkImgH = linkImg.heightAnchor.constraint(equalTo: linkImg.widthAnchor, multiplier: 1 / 1.91); linkImgH.priority = .init(999)
@@ -1273,7 +1273,7 @@ final class BubbleCell: UITableViewCell {
     NSLayoutConstraint.activate([linkImg.topAnchor.constraint(equalTo: linkBox.topAnchor), linkImg.leadingAnchor.constraint(equalTo: linkBox.leadingAnchor), linkImg.trailingAnchor.constraint(equalTo: linkBox.trailingAnchor), linkImgOff,
                                  linkPlay.widthAnchor.constraint(equalToConstant: 46), linkPlay.heightAnchor.constraint(equalToConstant: 46),
                                  linkPlay.centerXAnchor.constraint(equalTo: linkImg.centerXAnchor), linkPlay.centerYAnchor.constraint(equalTo: linkImg.centerYAnchor),
-                                 tri.centerXAnchor.constraint(equalTo: linkPlay.centerXAnchor, constant: 2), tri.centerYAnchor.constraint(equalTo: linkPlay.centerYAnchor)])
+                                 playTri.centerXAnchor.constraint(equalTo: linkPlay.centerXAnchor, constant: 2), playTri.centerYAnchor.constraint(equalTo: linkPlay.centerYAnchor)])
     NSLayoutConstraint.activate([linkSite.topAnchor.constraint(equalTo: linkImg.bottomAnchor, constant: 9), linkSite.leadingAnchor.constraint(equalTo: linkBox.leadingAnchor, constant: 12), linkSite.trailingAnchor.constraint(equalTo: linkBox.trailingAnchor, constant: -12),
                                  linkURL.topAnchor.constraint(equalTo: linkSite.bottomAnchor), linkURL.leadingAnchor.constraint(equalTo: linkSite.leadingAnchor), linkURL.trailingAnchor.constraint(equalTo: linkSite.trailingAnchor),
                                  linkLine.topAnchor.constraint(equalTo: linkURL.bottomAnchor, constant: 9), linkLine.leadingAnchor.constraint(equalTo: linkSite.leadingAnchor), linkLine.trailingAnchor.constraint(equalTo: linkSite.trailingAnchor), linkLine.heightAnchor.constraint(equalToConstant: 0.5),
