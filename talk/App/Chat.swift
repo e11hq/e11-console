@@ -1442,6 +1442,14 @@ final class Bleed: UIView {
 }
 
 final class BubbleCell: UITableViewCell {
+  // (a logo on a link card: drawn in the middle with room around it — a third of the card's height each side)
+  static func padded(_ i: UIImage) -> UIImage {
+    let W = max(i.size.width, i.size.height * 1.91) * 1.5, H = W / 1.91
+    let k = min(W * 0.6 / max(i.size.width, 1), H * 0.45 / max(i.size.height, 1))
+    let w = i.size.width * k, h = i.size.height * k
+    let f = UIGraphicsImageRendererFormat(); f.opaque = false; f.scale = i.scale
+    return UIGraphicsImageRenderer(size: CGSize(width: W, height: H), format: f).image { _ in i.draw(in: CGRect(x: (W - w) / 2, y: (H - h) / 2, width: w, height: h)) }
+  }
   var find: (String, Bool)?   // (searching: the words, and whether this is the match shown)
   static let findAll = Look.rgb(0x7A5626), findNow = Look.rgb(0xD9952F)
   let bubble = BubbleShape()
@@ -1902,13 +1910,19 @@ final class BubbleCell: UITableViewCell {
       let hasImg = pv?.img != nil || pv?.pic != nil
       linkImgOff.isActive = !hasImg; linkImgH.isActive = hasImg; linkPlay.isHidden = !(hasImg && pv?.video == true)
       wideCard = hasImg
+      if pv?.pic == nil { linkImg.contentMode = .scaleAspectFill }
       if let id = pv?.img {
         if let i = UIImage(contentsOfFile: Net.local(id).path) { linkImg.image = i }
         else { linkImg.image = nil; Net.shared.file(id) { [weak self] url in guard let self = self, self.msg?.id == m.id, let url = url else { return }; self.linkImg.image = UIImage(contentsOfFile: url.path) } }
       } else if let p = pv?.pic {
-        // (an E11 link: its page's own picture, kept once fetched)
-        linkImg.image = nil
-        Net.shared.picture(p) { [weak self] i in guard let self = self, self.msg?.id == m.id else { return }; self.linkImg.image = i }
+        // (an E11 link: its page's own picture, kept once fetched; a logo (SVG — its own file, /view) whole, smaller, with
+        //  room around it, not cropped to the card: Haris 2026-11-12)
+        let logo = p.hasSuffix("/view")
+        linkImg.image = nil; linkImg.contentMode = logo ? .scaleAspectFit : .scaleAspectFill
+        Net.shared.picture(p, max: logo ? 600 : 160) { [weak self] i in
+          guard let self = self, self.msg?.id == m.id else { return }
+          self.linkImg.image = logo ? i.map { BubbleCell.padded($0) } : i
+        }
       } else { linkImg.image = nil }
     } else { linkImgOff.isActive = true; linkImgH.isActive = false }
     taskWrap.isHidden = m.task == nil || m.deleted

@@ -145,7 +145,7 @@ final class Net {
   }
   // E11 Console's pictures (people's photos, client logos) — the same server
   private let pics = NSCache<NSString, UIImage>()
-  func picture(_ path: String?, _ done: @escaping (UIImage?) -> Void) {
+  func picture(_ path: String?, max: CGFloat = 160, _ done: @escaping (UIImage?) -> Void) {
     guard let p = path, !p.isEmpty else { done(nil); return }
     if let i = pics.object(forKey: p as NSString) { done(i); return }
     let disk = Net.filesDir.appendingPathComponent("pic-" + Net.stableKey(p))   // (a name that stays the same from one launch to the next)
@@ -153,7 +153,7 @@ final class Net {
     // (an SVG logo: drawn once into a picture and kept as one — iPhone's own pictures can't read SVG)
     let svg = { (d: Data) in
       DispatchQueue.main.async {
-        SVGRaster.shared.image(d, max: 160) { [weak self] i in
+        SVGRaster.shared.image(d, max: max) { [weak self] i in
           if let i = i { if let png = i.pngData() { try? png.write(to: disk) }; self?.pics.setObject(i, forKey: p as NSString) }
           done(i)
         }
