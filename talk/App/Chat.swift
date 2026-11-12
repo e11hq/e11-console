@@ -1497,7 +1497,8 @@ final class MessageBar: UIView, UITextViewDelegate {
     plus.setImage(sym("plus", 18, .light), for: .normal); cam.setImage(sym("camera", 16, .regular), for: .normal)
     [plus, cam].forEach { $0.tintColor = .label; addSubview($0) }
     var mc = UIButton.Configuration.filled()
-    mc.image = UIImage(systemName: "mic", withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .regular))
+    // (WhatsApp's, measured from Haris's screenshot: a filled mic about 11 × 16 in a 31 circle, level with the box)
+    mc.image = UIImage(systemName: "mic.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .regular))
     mc.baseBackgroundColor = .label; mc.baseForegroundColor = .systemBackground; mc.cornerStyle = .capsule; mc.contentInsets = .zero
     mic.configuration = mc
     var sc = UIButton.Configuration.filled()
@@ -1599,7 +1600,7 @@ final class MessageBar: UIView, UITextViewDelegate {
     smiley.frame = CGRect(x: box.frame.maxX - 34, y: y + boxH - 31, width: 32, height: 32)
     place.frame = CGRect(x: 13, y: 5, width: box.bounds.width - 46, height: 20)
     sendB.frame = CGRect(x: W - 41, y: by, width: 32, height: 32)
-    cam.frame = CGRect(x: W - 79, y: by, width: 32, height: 32); mic.frame = CGRect(x: W - 41, y: by, width: 32, height: 32)
+    cam.frame = CGRect(x: W - 79, y: by, width: 32, height: 32); mic.frame = CGRect(x: W - 41, y: y + boxH - 15 - 15.5, width: 31, height: 31)
     sendB.isHidden = !typing; cam.isHidden = typing; mic.isHidden = typing
     recV.frame = CGRect(x: 0, y: y, width: W - 60, height: 32)
     recTime.frame = CGRect(x: 42, y: 0, width: 70, height: 32)
