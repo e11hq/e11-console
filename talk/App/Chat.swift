@@ -252,12 +252,17 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     }
     // (the list's search bar goes the moment the cover comes, so it can't show again as the cover settles; back as it
     //  always is once the chat has arrived — the way back is Apple's, as usual)
-    let searchBar = (tc.viewController(forKey: .from)?.navigationItem.searchController?.searchBar)
+    let fromItem = tc.viewController(forKey: .from)?.navigationItem
+    let searchBar = fromItem?.searchController?.searchBar
     searchBar?.alpha = 0
+    // (and the list's small title: as its big title folds, Apple shows the small one ("E11") in the bar's middle and slides
+    //  it away — right over the chat's name; an empty title view in its place for the slide, Haris 2026-11-12)
+    let hadTitleView = fromItem?.titleView
+    if hadTitleView == nil { fromItem?.titleView = UIView() }
     let upper = piece(0, rowBottom), lower = piece(rowBottom, full - rowBottom)
     n.view.insertSubview(upper, belowSubview: titleV); n.view.insertSubview(lower, aboveSubview: n.navigationBar)
     tc.animate(alongsideTransition: { _ in lower.frame.size.height = 0 },
-               completion: { [weak self] _ in upper.removeFromSuperview(); lower.removeFromSuperview(); searchBar?.alpha = 1; self?.pinTitle() })
+               completion: { [weak self] _ in upper.removeFromSuperview(); lower.removeFromSuperview(); searchBar?.alpha = 1; if hadTitleView == nil { fromItem?.titleView = nil }; self?.pinTitle() })
   }
   static var open: String?
   override func viewDidLayoutSubviews() {
