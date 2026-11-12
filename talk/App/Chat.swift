@@ -1053,7 +1053,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       //  Delete stays at the end of the first page, in red)
       var acts: [UIMenuElement] = []
       // (an E11 file or folder card: Open in E11 Console first, and Copy Link — the mock-up, Haris 2026-11-13)
-      let card = m.link.map { T.liveLink($0) }.flatMap { $0.e11 != nil && ($0.state ?? "ok") == "ok" ? $0 : nil }
+      let card = T.isContact ? nil : m.link.map { T.liveLink($0) }.flatMap { $0.e11 != nil && ($0.state ?? "ok") == "ok" ? $0 : nil }
       if let c = card, let u = URL(string: c.url) { acts.append(UIAction(title: "Open in E11 Console", image: UIImage(systemName: c.e11 == "folder" ? "folder" : "doc")) { _ in UIApplication.shared.open(u) }) }
       acts.append(UIAction(title: "Reply", image: UIImage(systemName: "arrowshape.turn.up.left")) { [weak self] _ in self?.startReply(m) })
       if let c = card { acts.append(UIAction(title: "Copy Link", image: UIImage(systemName: "link")) { _ in UIPasteboard.general.string = c.url; toast("Copied") }) }
@@ -1869,18 +1869,22 @@ final class BubbleCell: UITableViewCell {
       a.append(NSAttributedString(attachment: NSTextAttachment(image: sign)))
       a.append(NSAttributedString(string: " " + (mine || m.goneForMe == true ? "You deleted this message" : "This message was deleted"), attributes: [.font: UIFont.italicSystemFont(ofSize: 15), .foregroundColor: dim]))
     } else {
-      a.append(NSAttributedString(string: m.text, attributes: [.font: UIFont.systemFont(ofSize: 17), .foregroundColor: ink]))
+      // (staff: an E11 file or folder link becomes its card, and the address itself leaves the words — a client contact
+      //  keeps the plain link, no card: Haris 2026-11-13)
+      let cardOn = !T.isContact && m.link?.e11 != nil
+      let txt = cardOn ? m.text.replacingOccurrences(of: m.link?.url ?? "", with: "").trimmingCharacters(in: .whitespacesAndNewlines) : m.text
+      a.append(NSAttributedString(string: txt, attributes: [.font: UIFont.systemFont(ofSize: 17), .foregroundColor: ink]))
       for id in m.mentions {
         guard let n = T.people[id]?.name, !n.isEmpty else { continue }
-        var from = m.text.startIndex
-        while let r = m.text.range(of: "@" + n, range: from..<m.text.endIndex) {
-          a.addAttributes([.font: UIFont.systemFont(ofSize: 17, weight: .semibold), .foregroundColor: mine ? UIColor.white : Look.person(id)], range: NSRange(r, in: m.text))
+        var from = txt.startIndex
+        while let r = txt.range(of: "@" + n, range: from..<txt.endIndex) {
+          a.addAttributes([.font: UIFont.systemFont(ofSize: 17, weight: .semibold), .foregroundColor: mine ? UIColor.white : Look.person(id)], range: NSRange(r, in: txt))
           from = r.upperBound
         }
       }
-      if let d = BubbleCell.links, !m.text.isEmpty {
-        let ns = m.text as NSString
-        for hit in d.matches(in: m.text, range: NSRange(location: 0, length: ns.length)) {
+      if let d = BubbleCell.links, !txt.isEmpty {
+        let ns = txt as NSString
+        for hit in d.matches(in: txt, range: NSRange(location: 0, length: ns.length)) {
           guard let u = hit.url, u.scheme?.hasPrefix("http") == true else { continue }
           if link == nil { link = u }
           a.addAttributes([.foregroundColor: mine ? UIColor.white : Look.linkInk, .underlineStyle: NSUnderlineStyle.single.rawValue], range: hit.range)
@@ -1889,9 +1893,9 @@ final class BubbleCell: UITableViewCell {
       // (searching: every match marked in amber, the one shown brighter — the design's board "Search in a chat")
       if let f = find, !f.0.isEmpty {
         let q = f.0, cur = f.1
-        var from = m.text.startIndex
-        while let r = m.text.range(of: q, options: [.caseInsensitive, .diacriticInsensitive], range: from..<m.text.endIndex) {
-          a.addAttributes([.backgroundColor: cur ? BubbleCell.findNow : BubbleCell.findAll, .foregroundColor: UIColor.white], range: NSRange(r, in: m.text))
+        var from = txt.startIndex
+        while let r = txt.range(of: q, options: [.caseInsensitive, .diacriticInsensitive], range: from..<txt.endIndex) {
+          a.addAttributes([.backgroundColor: cur ? BubbleCell.findNow : BubbleCell.findAll, .foregroundColor: UIColor.white], range: NSRange(r, in: txt))
           from = r.upperBound
         }
       }
@@ -1933,8 +1937,8 @@ final class BubbleCell: UITableViewCell {
       } else { linkImg.image = nil }
     } else { linkImgOff.isActive = true; linkImgH.isActive = false }
     // (an E11 file or folder link: its live card, as a task's — the link's own box not shown)
-    if let l = m.link, l.e11 != nil, !m.deleted {
-      linkWrap.isHidden = true; e11Wrap.isHidden = false
+    if let l = m.link, l.e11 != nil, !m.deleted, !Talk.shared.isContact {
+      linkWrap.isHidden = true; e11Wrap.isHidden = false; if !m.pending { fwdB.isHidden = false }
       e11Wrap.reach(nameL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
       e11Card.set(Talk.shared.liveLink(l), mine: mine, ink: ink, msg: m.id) { [weak self] in self?.msg?.id }; wideCard = true
     } else { e11Wrap.isHidden = true }
