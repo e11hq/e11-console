@@ -38,7 +38,11 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private var downBottom: NSLayoutConstraint!
 
   private var focus: String?   // (opened from a search result: that message, highlighted)
-  init(group: String, focus: String? = nil) { self.group = group; self.focus = focus; super.init(nibName: nil, bundle: nil); if #unavailable(iOS 18) { hidesBottomBarWhenPushed = true } }
+  init(group: String, focus: String? = nil) { self.group = group; self.focus = focus; super.init(nibName: nil, bundle: nil)
+    // (Apple's own: the tab bar slides away with the list as the chat comes in, and back with the finger on the back swipe —
+    //  Haris 2026-11-12, option A; it was hidden with Apple's call after arriving and faded, iOS 26 leaving it drawn)
+    hidesBottomBarWhenPushed = true
+  }
   required init?(coder: NSCoder) { fatalError() }
   /* The message bar is part of the page, held on Apple's keyboard guide (Haris 2026-11-12): above the keyboard while it's
      up, above the home line while it's down — the lower of the two, so it moves with the keyboard (and a drag down)
@@ -175,7 +179,6 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
   override func viewDidAppear(_ a: Bool) {
     super.viewDidAppear(a)
-    TabBarHide.arrived(self)
     // (the back swipe from the edge goes first; a reply swipe starts away from the edge)
     if let pop = navigationController?.interactivePopGestureRecognizer, !swipeWaits { swipeWaits = true; swipe.require(toFail: pop) }
     homeLimits.forEach { $0.constant = -home }
@@ -184,7 +187,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     Talk.shared.markRead(group)
     ChatVC.open = group
   }
-  override func viewWillDisappear(_ a: Bool) { super.viewWillDisappear(a); endFind(leaving: true); if ChatVC.open == group { ChatVC.open = nil }; TabBarHide.leaving(self) }
+  override func viewWillDisappear(_ a: Bool) { super.viewWillDisappear(a); endFind(leaving: true); if ChatVC.open == group { ChatVC.open = nil } }
   static var open: String?
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
