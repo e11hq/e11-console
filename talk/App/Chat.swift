@@ -4,6 +4,7 @@ import QuickLook
 import UniformTypeIdentifiers
 import AVFoundation
 import AudioToolbox
+import ImageIO
 
 /* A group's chat (the mockups — WhatsApp's way, in E11's colours with SF Symbols): bubbles with the time inside and
    ✓✓ (blue once everyone has seen it), names coloured with their role, a reply's quote (tap: up to the original), photos
@@ -13,7 +14,7 @@ import AudioToolbox
    typing, the send button. */
 enum ChatItem: Hashable { case day(String), msg(String) }
 
-final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDataSource {
+final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDataSource, QLPreviewControllerDelegate {
   let group: String
   private let table = UITableView(frame: .zero, style: .plain)
   private var data: UITableViewDiffableDataSource<Int, ChatItem>!
@@ -54,7 +55,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         let c = tv.dequeueReusableCell(withIdentifier: "b", for: ip) as! BubbleCell
         if let m = self.msgs[id], let g = Talk.shared.groups[self.group] { c.set(m, group: g, log: Talk.shared.log(self.group), run: self.runs[id] ?? Run()) }
         c.onReplyTap = { [weak self] rid in self?.jump(to: rid) }
-        c.onFileTap = { [weak self] m in self?.open(m) }
+        c.onFileTap = { [weak self, weak c] m in self?.openFrom = (m.kind == "photo" || m.kind == "video") ? c?.photo : nil; self?.open(m) }
         c.onRetry = { [weak self] m in guard let self = self else { return }; Talk.shared.retry(self.group, m) }
         return c
       }
@@ -344,10 +345,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       let named = FileManager.default.temporaryDirectory.appendingPathComponent(f.name)
       try? FileManager.default.removeItem(at: named); try? FileManager.default.copyItem(at: url, to: named)
       self.previewURL = named
-      let q = QLPreviewController(); q.dataSource = self
+      let q = QLPreviewController(); q.dataSource = self; q.delegate = self
       self.present(q, animated: true)
     }
   }
+  // a photo or video opens out of its bubble and, swiped down, shrinks back into it — Apple's own zoom (Quick Look's)
+  private weak var openFrom: UIView?
+  func previewController(_ c: QLPreviewController, transitionViewFor item: QLPreviewItem) -> UIView? { openFrom }
   func numberOfPreviewItems(in c: QLPreviewController) -> Int { previewURL == nil ? 0 : 1 }
   func previewController(_ c: QLPreviewController, previewItemAt i: Int) -> QLPreviewItem { previewURL! as NSURL }
 
@@ -532,28 +536,33 @@ final class BubbleShape: UIView {
   private let shape = CAShapeLayer()
   var fill: UIColor = .clear { didSet { shape.fillColor = fill.resolvedColor(with: traitCollection).cgColor } }
   var tail: (mine: Bool, on: Bool) = (false, false) { didSet { setNeedsLayout() } }
+  var fillTop: CGFloat = 0 { didSet { if fillTop != oldValue { setNeedsLayout() } } }
   override init(frame: CGRect) { super.init(frame: frame); backgroundColor = .clear; layer.insertSublayer(shape, at: 0) }
   required init?(coder: NSCoder) { fatalError() }
   override func layoutSubviews() {
     super.layoutSubviews()
     shape.frame = bounds
-    shape.path = BubbleShape.path(bounds.size, mine: tail.mine, tail: tail.on).cgPath
+    shape.path = BubbleShape.path(bounds.size, mine: tail.mine, tail: tail.on, top: fillTop).cgPath
   }
   override func traitCollectionDidChange(_ p: UITraitCollection?) {
     super.traitCollectionDidChange(p)
     if traitCollection.hasDifferentColorAppearance(comparedTo: p) { shape.fillColor = fill.resolvedColor(with: traitCollection).cgColor }
   }
-  static func path(_ s: CGSize, mine: Bool, tail: Bool, r: CGFloat = 19) -> UIBezierPath {
+  // a rectangle with its own radius at each corner (tl, tr, br, bl)
+  static func rounded(_ r: CGRect, _ tl: CGFloat, _ tr: CGFloat, _ br: CGFloat, _ bl: CGFloat) -> UIBezierPath {
+    let p = UIBezierPath(), x = r.minX, y = r.minY, W = r.maxX, H = r.maxY
+    p.move(to: CGPoint(x: x + tl, y: y))
+    p.addLine(to: CGPoint(x: W - tr, y: y)); if tr > 0 { p.addArc(withCenter: CGPoint(x: W - tr, y: y + tr), radius: tr, startAngle: -.pi / 2, endAngle: 0, clockwise: true) }
+    p.addLine(to: CGPoint(x: W, y: H - br)); if br > 0 { p.addArc(withCenter: CGPoint(x: W - br, y: H - br), radius: br, startAngle: 0, endAngle: .pi / 2, clockwise: true) }
+    p.addLine(to: CGPoint(x: x + bl, y: H)); if bl > 0 { p.addArc(withCenter: CGPoint(x: x + bl, y: H - bl), radius: bl, startAngle: .pi / 2, endAngle: .pi, clockwise: true) }
+    p.addLine(to: CGPoint(x: x, y: y + tl)); if tl > 0 { p.addArc(withCenter: CGPoint(x: x + tl, y: y + tl), radius: tl, startAngle: .pi, endAngle: -.pi / 2, clockwise: true) }
+    p.close(); return p
+  }
+  static func path(_ s: CGSize, mine: Bool, tail: Bool, r: CGFloat = 19, top: CGFloat = 0) -> UIBezierPath {
     let W = s.width, H = s.height, R = min(r, H / 2, W / 2)
     let small: CGFloat = 4
-    let tl = R, tr = R, br = mine && tail ? small : R, bl = !mine && tail ? small : R
-    let p = UIBezierPath()
-    p.move(to: CGPoint(x: tl, y: 0))
-    p.addLine(to: CGPoint(x: W - tr, y: 0)); p.addArc(withCenter: CGPoint(x: W - tr, y: tr), radius: tr, startAngle: -.pi / 2, endAngle: 0, clockwise: true)
-    p.addLine(to: CGPoint(x: W, y: H - br)); p.addArc(withCenter: CGPoint(x: W - br, y: H - br), radius: br, startAngle: 0, endAngle: .pi / 2, clockwise: true)
-    p.addLine(to: CGPoint(x: bl, y: H)); p.addArc(withCenter: CGPoint(x: bl, y: H - bl), radius: bl, startAngle: .pi / 2, endAngle: .pi, clockwise: true)
-    p.addLine(to: CGPoint(x: 0, y: tl)); p.addArc(withCenter: CGPoint(x: tl, y: tl), radius: tl, startAngle: .pi, endAngle: -.pi / 2, clockwise: true)
-    p.close()
+    let br = mine && tail ? small : R, bl = !mine && tail ? small : R
+    let p = rounded(CGRect(x: 0, y: top, width: W, height: max(0, H - top)), top > 0 ? 0 : R, top > 0 ? 0 : R, br, bl)
     guard tail, H >= 17 else { return p }
     // (the tail: the design's curve "M0 0 C0 9 3 14 10 17 H0 z", 10 × 17, 8 outside the bubble's edge)
     let t = UIBezierPath()
@@ -584,21 +593,48 @@ enum Ticks {
   }
 }
 
+final class Bleed: UIView {
+  let inner: UIView
+  private var l: NSLayoutConstraint!, r: NSLayoutConstraint!, t: NSLayoutConstraint!, b: NSLayoutConstraint!
+  init(_ v: UIView) {
+    inner = v; super.init(frame: .zero)
+    addSubview(v); v.translatesAutoresizingMaskIntoConstraints = false
+    l = v.leadingAnchor.constraint(equalTo: leadingAnchor); r = v.trailingAnchor.constraint(equalTo: trailingAnchor)
+    t = v.topAnchor.constraint(equalTo: topAnchor); b = v.bottomAnchor.constraint(equalTo: bottomAnchor)
+    NSLayoutConstraint.activate([l, r, t, b])
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  // how far past each edge it reaches
+  func reach(_ top: CGFloat, _ left: CGFloat, _ bottom: CGFloat, _ right: CGFloat) { t.constant = -top; l.constant = -left; b.constant = bottom; r.constant = right }
+}
+
 final class BubbleCell: UITableViewCell {
   let bubble = BubbleShape()
   private let stack = UIStackView()
   private let nameL = UILabel(), roleL = UILabel(), textL = UILabel(), footL = UILabel(), stamp = UILabel()
-  private let quote = UIView(), quoteBar = UIView(), quoteName = UILabel(), quoteText = UILabel()
-  private let photo = UIImageView(), fileRow = UIStackView(), fileIcon = UIImageView(), fileName = UILabel(), fileSize = UILabel()
+  // a reply's quote (the design: a tinted box 4 from the bubble's edge, a bar in their colour, a photo's picture at the right)
+  private let quote = UIView(), quoteBar = UIView(), quoteName = UILabel(), quoteText = UILabel(), quoteThumb = UIImageView()
+  private lazy var quoteWrap = Bleed(quote)
+  // a photo / video: to the bubble's edges; someone else's name over it on a diagonal shadow; the time over a bottom one
+  let photo = UIImageView()
+  private lazy var photoWrap = Bleed(photo)
+  private let photoName = UILabel(), photoRole = UILabel(), diag = CAGradientLayer(), foot = CAGradientLayer()
+  private let playDisc = UIView(), vlen = UILabel()
+  // a document (any file): one card — its kind, name, size · kind; a download circle on one not on this phone yet
+  private let card = UIView(), cardIcon = UIImageView(), cardName = UILabel(), cardSize = UILabel(), cardDown = UIImageView()
+  private lazy var cardWrap = Bleed(card)
+  // a link: its preview box — the site, the address, a line, 🔗 the site
+  private let linkBox = UIView(), linkSite = UILabel(), linkURL = UILabel(), linkLine = UIView(), linkFoot = UILabel()
+  private lazy var linkWrap = Bleed(linkBox)
+  private var link: URL?
   private let voice = VoiceView()
-  private let play = UIImageView(image: UIImage(systemName: "play.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 44)))
-  private let vlen = PaddedLabel()
   private let reacts = PaddedLabel(), sysL = PaddedLabel(), retryB = UIButton(type: .system)
   private let face = Avatar(frame: CGRect(x: 0, y: 0, width: 27, height: 27))
-  private var lead: NSLayoutConstraint!, trail: NSLayoutConstraint!, photoH: NSLayoutConstraint!, photoW: NSLayoutConstraint!
+  private var lead: NSLayoutConstraint!, trail: NSLayoutConstraint!, photoH: NSLayoutConstraint!, mediaW: NSLayoutConstraint!
   private var wMine: NSLayoutConstraint!, wTheirs: NSLayoutConstraint!, top: NSLayoutConstraint!, stackTrail: NSLayoutConstraint!
   private var reactsLead: NSLayoutConstraint!, reactsTrail: NSLayoutConstraint!, bubbleBottom: NSLayoutConstraint!, reactsBottom: NSLayoutConstraint!
   private var msg: Msg?
+  private var media = false, caption = false, tailOn = false, isMine = false
   var onReplyTap: ((String) -> Void)?
   var onFileTap: ((Msg) -> Void)?
   var onRetry: ((Msg) -> Void)?
@@ -610,31 +646,69 @@ final class BubbleCell: UITableViewCell {
     nameL.font = .systemFont(ofSize: 15, weight: .semibold)
     roleL.font = .systemFont(ofSize: 12); roleL.textColor = Look.roleInk
     textL.font = .systemFont(ofSize: 17); textL.numberOfLines = 0
+    textL.isUserInteractionEnabled = true; textL.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(linkTap)))
     footL.font = .systemFont(ofSize: 12); footL.textAlignment = .right
     stamp.font = .systemFont(ofSize: 12); stamp.textAlignment = .right
-    quote.layer.cornerRadius = 8; quote.clipsToBounds = true
-    quoteBar.backgroundColor = Look.accent
-    quoteName.font = .systemFont(ofSize: 12.5, weight: .semibold); quoteText.font = .systemFont(ofSize: 13); quoteText.numberOfLines = 2
-    let qs = UIStackView(arrangedSubviews: [quoteName, quoteText]); qs.axis = .vertical; qs.spacing = 1
-    [quoteBar, qs].forEach { quote.addSubview($0); $0.translatesAutoresizingMaskIntoConstraints = false }
-    NSLayoutConstraint.activate([quoteBar.leadingAnchor.constraint(equalTo: quote.leadingAnchor), quoteBar.topAnchor.constraint(equalTo: quote.topAnchor), quoteBar.bottomAnchor.constraint(equalTo: quote.bottomAnchor), quoteBar.widthAnchor.constraint(equalToConstant: 3),
-                                 qs.leadingAnchor.constraint(equalTo: quoteBar.trailingAnchor, constant: 8), qs.trailingAnchor.constraint(equalTo: quote.trailingAnchor, constant: -8), qs.topAnchor.constraint(equalTo: quote.topAnchor, constant: 5), qs.bottomAnchor.constraint(equalTo: quote.bottomAnchor, constant: -5)])
+    // the quote
+    quote.backgroundColor = UIColor.black.withAlphaComponent(0.22); quote.layer.cornerRadius = 12; quote.layer.cornerCurve = .continuous; quote.clipsToBounds = true
+    quoteName.font = .systemFont(ofSize: 15, weight: .semibold); quoteText.font = .systemFont(ofSize: 14); quoteText.numberOfLines = 2
+    quoteThumb.contentMode = .scaleAspectFill; quoteThumb.clipsToBounds = true
+    let qs = UIStackView(arrangedSubviews: [quoteName, quoteText]); qs.axis = .vertical; qs.spacing = 0
+    [quoteBar, qs, quoteThumb].forEach { quote.addSubview($0); $0.translatesAutoresizingMaskIntoConstraints = false }
+    NSLayoutConstraint.activate([quoteBar.leadingAnchor.constraint(equalTo: quote.leadingAnchor), quoteBar.topAnchor.constraint(equalTo: quote.topAnchor), quoteBar.bottomAnchor.constraint(equalTo: quote.bottomAnchor), quoteBar.widthAnchor.constraint(equalToConstant: 4),
+                                 qs.leadingAnchor.constraint(equalTo: quoteBar.trailingAnchor, constant: 10), qs.trailingAnchor.constraint(equalTo: quoteThumb.leadingAnchor, constant: -10), qs.topAnchor.constraint(equalTo: quote.topAnchor, constant: 6), qs.bottomAnchor.constraint(equalTo: quote.bottomAnchor, constant: -8),
+                                 quoteThumb.trailingAnchor.constraint(equalTo: quote.trailingAnchor), quoteThumb.topAnchor.constraint(equalTo: quote.topAnchor), quoteThumb.bottomAnchor.constraint(equalTo: quote.bottomAnchor)])
+    quoteThumbW = quoteThumb.widthAnchor.constraint(equalToConstant: 0); quoteThumbW.isActive = true
     quote.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(quoteTap)))
-    photo.contentMode = .scaleAspectFill; photo.clipsToBounds = true; photo.layer.cornerRadius = 12; photo.backgroundColor = .tertiarySystemFill; photo.isUserInteractionEnabled = true
+    // the photo
+    photo.contentMode = .scaleAspectFill; photo.clipsToBounds = true; photo.backgroundColor = .tertiarySystemFill; photo.isUserInteractionEnabled = true
     photo.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(fileTap)))
-    fileIcon.image = UIImage(systemName: "doc.fill"); fileIcon.contentMode = .scaleAspectFit; fileIcon.widthAnchor.constraint(equalToConstant: 30).isActive = true
-    fileName.font = .systemFont(ofSize: 15, weight: .semibold); fileName.numberOfLines = 2; fileSize.font = .systemFont(ofSize: 12)
-    let fs = UIStackView(arrangedSubviews: [fileName, fileSize]); fs.axis = .vertical; fs.spacing = 2
-    fileRow.addArrangedSubview(fileIcon); fileRow.addArrangedSubview(fs); fileRow.spacing = 10; fileRow.alignment = .center
-    fileRow.isLayoutMarginsRelativeArrangement = true; fileRow.layoutMargins = UIEdgeInsets(top: 8, left: 8, bottom: 8, right: 8); fileRow.layer.cornerRadius = 10
-    fileRow.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(fileTap)))
-    play.tintColor = .white; play.layer.shadowOpacity = 0.35; play.layer.shadowRadius = 6; play.layer.shadowOffset = .zero
-    vlen.font = .monospacedDigitSystemFont(ofSize: 11.5, weight: .semibold); vlen.textColor = .white; vlen.backgroundColor = UIColor.black.withAlphaComponent(0.45); vlen.layer.cornerRadius = 8; vlen.layer.masksToBounds = true
-    [play, vlen].forEach { photo.addSubview($0); $0.translatesAutoresizingMaskIntoConstraints = false }
-    NSLayoutConstraint.activate([play.centerXAnchor.constraint(equalTo: photo.centerXAnchor), play.centerYAnchor.constraint(equalTo: photo.centerYAnchor),
-                                 vlen.leadingAnchor.constraint(equalTo: photo.leadingAnchor, constant: 8), vlen.bottomAnchor.constraint(equalTo: photo.bottomAnchor, constant: -8), vlen.heightAnchor.constraint(equalToConstant: 20)])
-    [nameL, roleL, quote, photo, fileRow, voice, textL, footL].forEach { stack.addArrangedSubview($0) }
-    stack.setCustomSpacing(2, after: roleL); stack.setCustomSpacing(4, after: quote); stack.setCustomSpacing(4, after: photo); stack.setCustomSpacing(4, after: fileRow)
+    diag.colors = [UIColor.black.withAlphaComponent(0.62).cgColor, UIColor.black.withAlphaComponent(0.28).cgColor, UIColor.clear.cgColor]
+    diag.locations = [0, 0.26, 0.46]; diag.startPoint = CGPoint(x: 0, y: 0); diag.endPoint = CGPoint(x: 0.75, y: 1)
+    foot.colors = [UIColor.clear.cgColor, UIColor.black.withAlphaComponent(0.45).cgColor]
+    photo.layer.addSublayer(diag); photo.layer.addSublayer(foot)
+    photoName.font = .systemFont(ofSize: 15, weight: .semibold); photoRole.font = .systemFont(ofSize: 12); photoRole.textColor = UIColor(white: 0.9, alpha: 1)
+    for l in [photoName, photoRole] { l.layer.shadowColor = UIColor.black.cgColor; l.layer.shadowOpacity = 0.5; l.layer.shadowRadius = 2; l.layer.shadowOffset = CGSize(width: 0, height: 1) }
+    let ps = UIStackView(arrangedSubviews: [photoName, photoRole]); ps.axis = .vertical; ps.alignment = .leading
+    playDisc.backgroundColor = UIColor(red: 0.96, green: 0.94, blue: 0.92, alpha: 0.85); playDisc.layer.cornerRadius = 25; playDisc.isUserInteractionEnabled = false
+    let tri = UIImageView(image: UIImage(systemName: "play.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 19, weight: .regular))); tri.tintColor = UIColor(white: 0.23, alpha: 1)
+    playDisc.addSubview(tri); tri.translatesAutoresizingMaskIntoConstraints = false
+    vlen.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular); vlen.textColor = .white
+    vlen.layer.shadowColor = UIColor.black.cgColor; vlen.layer.shadowOpacity = 0.6; vlen.layer.shadowRadius = 2; vlen.layer.shadowOffset = CGSize(width: 0, height: 1)
+    [ps, playDisc, vlen].forEach { photo.addSubview($0); $0.translatesAutoresizingMaskIntoConstraints = false }
+    NSLayoutConstraint.activate([ps.leadingAnchor.constraint(equalTo: photo.leadingAnchor, constant: 12), ps.topAnchor.constraint(equalTo: photo.topAnchor, constant: 8),
+                                 playDisc.widthAnchor.constraint(equalToConstant: 50), playDisc.heightAnchor.constraint(equalToConstant: 50),
+                                 playDisc.centerXAnchor.constraint(equalTo: photo.centerXAnchor), playDisc.centerYAnchor.constraint(equalTo: photo.centerYAnchor),
+                                 tri.centerXAnchor.constraint(equalTo: playDisc.centerXAnchor, constant: 2), tri.centerYAnchor.constraint(equalTo: playDisc.centerYAnchor),
+                                 vlen.leadingAnchor.constraint(equalTo: photo.leadingAnchor, constant: 10), vlen.bottomAnchor.constraint(equalTo: photo.bottomAnchor, constant: -7)])
+    photoH = photo.heightAnchor.constraint(equalToConstant: 180); photoH.priority = .init(999); photoH.isActive = true
+    // the card
+    card.backgroundColor = UIColor.black.withAlphaComponent(0.22); card.layer.cornerRadius = 14; card.layer.cornerCurve = .continuous
+    cardName.font = .systemFont(ofSize: 16); cardName.lineBreakMode = .byTruncatingMiddle; cardSize.font = .systemFont(ofSize: 13)
+    cardDown.image = UIImage(systemName: "arrow.down.circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22, weight: .light))
+    let cs = UIStackView(arrangedSubviews: [cardName, cardSize]); cs.axis = .vertical
+    [cardIcon, cs, cardDown].forEach { card.addSubview($0); $0.translatesAutoresizingMaskIntoConstraints = false }
+    NSLayoutConstraint.activate([card.heightAnchor.constraint(equalToConstant: 58),
+                                 cardIcon.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 11), cardIcon.centerYAnchor.constraint(equalTo: card.centerYAnchor),
+                                 cardIcon.widthAnchor.constraint(equalToConstant: 22), cardIcon.heightAnchor.constraint(equalToConstant: 29),
+                                 cs.leadingAnchor.constraint(equalTo: cardIcon.trailingAnchor, constant: 10), cs.centerYAnchor.constraint(equalTo: card.centerYAnchor),
+                                 cs.trailingAnchor.constraint(lessThanOrEqualTo: cardDown.leadingAnchor, constant: -10),
+                                 cardDown.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12), cardDown.centerYAnchor.constraint(equalTo: card.centerYAnchor)])
+    card.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(fileTap)))
+    // the link's box
+    linkBox.backgroundColor = UIColor.black.withAlphaComponent(0.22); linkBox.layer.cornerRadius = 12; linkBox.layer.cornerCurve = .continuous
+    linkSite.font = .systemFont(ofSize: 15, weight: .semibold); linkURL.font = .systemFont(ofSize: 14); linkURL.numberOfLines = 2; linkURL.lineBreakMode = .byCharWrapping
+    linkFoot.font = .systemFont(ofSize: 14)
+    [linkSite, linkURL, linkLine, linkFoot].forEach { linkBox.addSubview($0); $0.translatesAutoresizingMaskIntoConstraints = false }
+    NSLayoutConstraint.activate([linkSite.topAnchor.constraint(equalTo: linkBox.topAnchor, constant: 9), linkSite.leadingAnchor.constraint(equalTo: linkBox.leadingAnchor, constant: 12), linkSite.trailingAnchor.constraint(equalTo: linkBox.trailingAnchor, constant: -12),
+                                 linkURL.topAnchor.constraint(equalTo: linkSite.bottomAnchor), linkURL.leadingAnchor.constraint(equalTo: linkSite.leadingAnchor), linkURL.trailingAnchor.constraint(equalTo: linkSite.trailingAnchor),
+                                 linkLine.topAnchor.constraint(equalTo: linkURL.bottomAnchor, constant: 9), linkLine.leadingAnchor.constraint(equalTo: linkSite.leadingAnchor), linkLine.trailingAnchor.constraint(equalTo: linkSite.trailingAnchor), linkLine.heightAnchor.constraint(equalToConstant: 0.5),
+                                 linkFoot.topAnchor.constraint(equalTo: linkLine.bottomAnchor, constant: 8), linkFoot.leadingAnchor.constraint(equalTo: linkSite.leadingAnchor), linkFoot.trailingAnchor.constraint(equalTo: linkSite.trailingAnchor),
+                                 linkFoot.bottomAnchor.constraint(equalTo: linkBox.bottomAnchor, constant: -9)])
+    linkBox.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(linkTap)))
+    [nameL, roleL, photoWrap, quoteWrap, cardWrap, voice, linkWrap, textL, footL].forEach { stack.addArrangedSubview($0) }
+    stack.setCustomSpacing(2, after: roleL); stack.setCustomSpacing(6, after: photoWrap); stack.setCustomSpacing(7, after: quoteWrap)
+    stack.setCustomSpacing(7, after: cardWrap); stack.setCustomSpacing(7, after: linkWrap); stack.setCustomSpacing(2, after: nameL)
     bubble.addSubview(stack); bubble.addSubview(stamp); contentView.addSubview(bubble)
     face.isUserInteractionEnabled = false; contentView.addSubview(face)
     reacts.font = .systemFont(ofSize: 14); reacts.backgroundColor = Look.theirs; reacts.layer.cornerRadius = 13; reacts.layer.masksToBounds = true
@@ -647,16 +721,13 @@ final class BubbleCell: UITableViewCell {
     retryB.addAction(UIAction { [weak self] _ in if let m = self?.msg { self?.onRetry?(m) } }, for: .touchUpInside)
     contentView.addSubview(retryB)
     for v in [bubble, stack, stamp, face, reacts, sysL, retryB] as [UIView] { v.translatesAutoresizingMaskIntoConstraints = false }
-    // (yours: 17 from the right edge, at most 281 wide on a 393 phone; others': 44 from the left — their picture in it —
-    // at most 250)
     lead = bubble.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 44)
     trail = bubble.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -17)
     wMine = bubble.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 281 / 393)
     wTheirs = bubble.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 250 / 393)
+    mediaW = bubble.widthAnchor.constraint(equalToConstant: 262); mediaW.priority = .init(999)
     top = bubble.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 10)
     stackTrail = stack.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -11)
-    photoW = photo.widthAnchor.constraint(equalToConstant: 240); photoH = photo.heightAnchor.constraint(equalToConstant: 180)
-    photoW.priority = .init(999); photoH.priority = .init(999)
     reactsLead = reacts.leadingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: 12)
     reactsTrail = reacts.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -12)
     bubbleBottom = bubble.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -3)
@@ -668,83 +739,129 @@ final class BubbleCell: UITableViewCell {
       stamp.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -11), stamp.bottomAnchor.constraint(equalTo: bubble.bottomAnchor, constant: -6),
       face.widthAnchor.constraint(equalToConstant: 27), face.heightAnchor.constraint(equalToConstant: 27),
       face.trailingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: -10), face.bottomAnchor.constraint(equalTo: bubble.bottomAnchor),
-      photoW, photoH,
       reacts.topAnchor.constraint(equalTo: bubble.bottomAnchor, constant: -5), reacts.heightAnchor.constraint(equalToConstant: 26),
       sysL.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 13), sysL.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -3),
       sysL.centerXAnchor.constraint(equalTo: contentView.centerXAnchor), sysL.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.85),
       retryB.centerYAnchor.constraint(equalTo: bubble.centerYAnchor), retryB.trailingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: -6),
     ])
   }
+  private var quoteThumbW: NSLayoutConstraint!
   required init?(coder: NSCoder) { fatalError() }
   override func traitCollectionDidChange(_ p: UITraitCollection?) {
     super.traitCollectionDidChange(p)
     if traitCollection.hasDifferentColorAppearance(comparedTo: p) { reacts.layer.borderColor = Look.chatBg.resolvedColor(with: traitCollection).cgColor; if let m = msg { foot(m) } }
+  }
+  // a photo: its corners follow the bubble's (top 19; at the bottom 19, the tail's 4 — or square above words)
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    guard media else { bubble.fillTop = 0; return }
+    let r = photo.bounds
+    let bl: CGFloat = caption ? 0 : 19, br: CGFloat = caption ? 0 : 19
+    let m = (photo.layer.mask as? CAShapeLayer) ?? CAShapeLayer()
+    m.path = BubbleShape.rounded(r, 19, 19, br, bl).cgPath; photo.layer.mask = m
+    CATransaction.begin(); CATransaction.setDisableActions(true)
+    diag.frame = r; foot.frame = CGRect(x: 0, y: r.height - 44, width: r.width, height: 44)
+    CATransaction.commit()
+    // (the bubble's colour starts where the photo ends — no coloured edge round a photo)
+    bubble.fillTop = caption ? photo.convert(r, to: bubble).maxY - 1 : bubble.bounds.height
   }
   private var group: Group?, log: GroupLog?
 
   func set(_ m: Msg, group g: Group, log l: GroupLog, run: Run) {
     msg = m; group = g; log = l
     let T = Talk.shared, mine = m.by == T.me?.id
-    // a line about the group (made, added, left…): in the middle
+    isMine = mine
     let sys = m.kind == "sys"
     sysL.isHidden = !sys; bubble.isHidden = sys; reacts.isHidden = true; retryB.isHidden = !(mine && m.failed); face.isHidden = true
     bubbleBottom.isActive = false; reactsBottom.isActive = false
-    if sys { sysL.text = m.text; return }
+    if sys { sysL.text = m.text; media = false; return }
     top.constant = run.first ? 10 : 2
-    lead.isActive = !mine; trail.isActive = mine; wMine.isActive = mine; wTheirs.isActive = !mine
-    stackTrail.constant = mine ? -11 : -12
-    bubble.fill = mine ? Look.mine : Look.theirs
-    bubble.tail = (mine, run.last)
-    let ink: UIColor = mine ? .white : .label, dim: UIColor = mine ? Look.mineTime : Look.roleInk
-    // others' first of a run: the name in their Console colour, the role under it ("Client" in orange); their picture by the last
-    let showName = !mine && run.first
-    nameL.isHidden = !showName; roleL.isHidden = !showName
-    if showName {
-      let p = T.people[m.by]
-      nameL.text = p?.name ?? "Someone"; nameL.textColor = Look.person(m.by)
-      let client = p?.contact == true && !T.isContact
-      roleL.text = client ? "Client" : (p?.role ?? ""); roleL.isHidden = roleL.text?.isEmpty != false
-      roleL.textColor = client ? Look.clientInk : Look.roleInk; roleL.font = .systemFont(ofSize: 12, weight: client ? .semibold : .regular)
-    }
-    if !mine && run.last { face.isHidden = false; face.set(person: T.people[m.by]) }
-    // a reply's quote
-    quote.isHidden = m.reply == nil || m.deleted
-    if let r = m.reply {
-      quote.backgroundColor = UIColor.black.withAlphaComponent(0.22)
-      quoteBar.backgroundColor = Look.person(r.by)
-      quoteName.text = T.name(r.by); quoteName.textColor = mine ? .white : Look.person(r.by)
-      quoteText.text = r.text; quoteText.textColor = mine ? UIColor.white.withAlphaComponent(0.85) : .secondaryLabel
-    }
-    // a photo / a file (their own design comes with stage 2; here as before, in the new colours)
     let isVideo = !m.deleted && m.file != nil && m.kind == "video"
     let isPhoto = !m.deleted && m.file != nil && (m.kind == "photo" || isVideo)
     let isVoice = !m.deleted && m.file != nil && m.kind == "voice"
-    photo.isHidden = !isPhoto; photoW.isActive = isPhoto; photoH.isActive = isPhoto
-    play.isHidden = !isVideo; vlen.isHidden = !isVideo || m.file?.secs == nil
+    let isDoc = !m.deleted && m.file != nil && !isPhoto && !isVoice
+    media = isPhoto; caption = isPhoto && !m.text.isEmpty
+    lead.isActive = !mine; trail.isActive = mine
+    mediaW.constant = mine ? 236 : 262; mediaW.isActive = isPhoto
+    wMine.isActive = mine && !isPhoto; wTheirs.isActive = !mine && !isPhoto
+    stackTrail.constant = mine ? -11 : -12
+    bubble.fill = mine ? Look.mine : Look.theirs
+    tailOn = run.last && (!isPhoto || caption)
+    bubble.tail = (mine, tailOn)
+    let ink: UIColor = mine ? .white : .label, dim: UIColor = mine ? Look.mineTime : Look.roleInk
+    // the name: over a photo for one, else at the top (others', first of a run)
+    let showName = !mine && run.first
+    let p = T.people[m.by]
+    let client = p?.contact == true && !T.isContact
+    let role = client ? "Client" : (p?.role ?? "")
+    nameL.isHidden = !showName || isPhoto; roleL.isHidden = nameL.isHidden || role.isEmpty
+    photoName.isHidden = !(showName && isPhoto); photoRole.isHidden = photoName.isHidden || role.isEmpty; diag.isHidden = photoName.isHidden
+    for (n, r) in [(nameL, roleL), (photoName, photoRole)] {
+      n.text = p?.name ?? "Someone"; n.textColor = Look.person(m.by)
+      r.text = role; r.font = .systemFont(ofSize: 12, weight: client ? .semibold : .regular)
+    }
+    roleL.textColor = client ? Look.clientInk : Look.roleInk; photoRole.textColor = client ? Look.clientInk : UIColor(white: 0.9, alpha: 1)
+    if !mine && run.last { face.isHidden = false; face.set(person: p) }
+    // a reply's quote — the original's picture at the right when it was a photo
+    quoteWrap.isHidden = m.reply == nil || m.deleted
+    quoteWrap.reach(0, 8, 0, mine ? 7 : 8)
+    if let r = m.reply {
+      quoteBar.backgroundColor = Look.person(r.by)
+      quoteName.text = r.by == T.me?.id ? "You" : T.name(r.by); quoteName.textColor = mine ? .white : Look.person(r.by)
+      let cam = r.kind == "photo" || r.kind == "video"
+      let qt = NSMutableAttributedString()
+      if cam || r.kind == "voice" || r.kind == "file" {
+        let sym = r.kind == "voice" ? "mic.fill" : r.kind == "file" ? "doc.fill" : r.kind == "video" ? "video.fill" : "camera.fill"
+        qt.append(NSAttributedString(attachment: NSTextAttachment(image: UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 11))!.withTintColor(.secondaryLabel))))
+        qt.append(NSAttributedString(string: " "))
+      }
+      let words = r.text.isEmpty ? (r.kind == "photo" ? "Photo" : r.kind == "video" ? "Video" : r.kind == "voice" ? "Voice message" : r.kind == "file" ? "File" : "") : r.text
+      qt.append(NSAttributedString(string: words))
+      qt.addAttribute(.foregroundColor, value: mine ? UIColor.white.withAlphaComponent(0.8) : UIColor.secondaryLabel, range: NSRange(location: 0, length: qt.length))
+      quoteText.attributedText = qt
+      quoteThumb.image = nil; quoteThumbW.constant = 0
+      if cam, let o = l.msgs.first(where: { $0.id == r.id }), let f = o.file {
+        quoteThumbW.constant = 54
+        Net.shared.file(f.id) { [weak self] url in
+          guard let self = self, self.msg?.id == m.id, let url = url else { return }
+          if o.kind == "video" { BubbleCell.frame(url, f.id) { [weak self] i in if self?.msg?.id == m.id { self?.quoteThumb.image = i } } }
+          else { self.quoteThumb.image = UIImage(contentsOfFile: url.path) }
+        }
+      }
+    }
+    // a photo / a video — to the bubble's edges (reaching past the stack's padding)
+    photoWrap.isHidden = !isPhoto
+    playDisc.isHidden = !isVideo; vlen.isHidden = !isVideo || m.file?.secs == nil
     if isPhoto, let f = m.file {
-      let w: CGFloat = 240, ratio = CGFloat((f.h ?? 3) / max(1, f.w ?? 4))
-      photoW.constant = w; photoH.constant = min(320, max(120, w * ratio))
+      let w: CGFloat = mine ? 236 : 262, ratio = CGFloat((f.h ?? 3) / max(1, f.w ?? 4))
+      photoH.constant = min(330, max(120, w * ratio))
+      photoWrap.reach(8, 12, caption ? 0 : 7, mine ? 11 : 12)
       photo.image = nil
       if let s = f.secs { vlen.text = String(format: "%d:%02d", Int(s) / 60, Int(s) % 60) }
       if !isVideo || f.size <= 60 * 1024 * 1024 || FileManager.default.fileExists(atPath: Net.local(f.id).path) {
         Net.shared.file(f.id) { [weak self] url in
           guard let self = self, self.msg?.id == m.id, let url = url else { return }
           if isVideo { BubbleCell.frame(url, f.id) { [weak self] img in if self?.msg?.id == m.id { self?.photo.image = img } } }
-          else { self.photo.image = UIImage(contentsOfFile: url.path) }
+          else { self.photo.image = BubbleCell.picture(url, f.id) }
         }
       }
     }
+    foot.isHidden = !(isPhoto && !caption)
     voice.isHidden = !isVoice
     if isVoice, let f = m.file { voice.set(id: m.id, file: f, ink: ink, dim: dim) }
-    fileRow.isHidden = m.deleted || m.file == nil || isPhoto || isVoice
-    if let f = m.file, !isPhoto {
-      fileRow.backgroundColor = UIColor.black.withAlphaComponent(0.22)
-      fileIcon.image = UIImage(systemName: m.kind == "video" ? "play.rectangle.fill" : "doc.fill"); fileIcon.tintColor = ink
-      fileName.text = f.name; fileName.textColor = ink
-      fileSize.text = ByteCountFormatter.string(fromByteCount: Int64(f.size), countStyle: .file) + " · " + (f.name as NSString).pathExtension.uppercased(); fileSize.textColor = dim
+    // a document: the card, 4 from the bubble's edge
+    cardWrap.isHidden = !isDoc
+    cardWrap.reach(nameL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
+    if isDoc, let f = m.file {
+      let ext = (f.name as NSString).pathExtension.lowercased()
+      cardIcon.image = BubbleCell.docIcon(ext.isEmpty ? "file" : ext)
+      cardName.text = f.name; cardName.textColor = ink
+      cardSize.text = ByteCountFormatter.string(fromByteCount: Int64(f.size), countStyle: .file) + " · " + (ext.isEmpty ? "file" : ext); cardSize.textColor = dim
+      cardDown.isHidden = mine || FileManager.default.fileExists(atPath: Net.local(f.id).path); cardDown.tintColor = ink
     }
-    // the words — the time sits on their last line when it fits (room kept for it at the end, as WhatsApp)
+    // the words — the time sits on their last line when it fits (room kept for it at the end, as WhatsApp); a link: its box, and blue
     let a = NSMutableAttributedString()
+    link = nil
     if m.deleted {
       a.append(NSAttributedString(attachment: NSTextAttachment(image: UIImage(systemName: "nosign")!.withTintColor(dim))))
       a.append(NSAttributedString(string: " " + (mine ? "You deleted this message" : "This message was deleted"), attributes: [.font: UIFont.italicSystemFont(ofSize: 17), .foregroundColor: dim]))
@@ -758,29 +875,53 @@ final class BubbleCell: UITableViewCell {
           from = r.upperBound
         }
       }
+      if let d = BubbleCell.links, !m.text.isEmpty {
+        let ns = m.text as NSString
+        for hit in d.matches(in: m.text, range: NSRange(location: 0, length: ns.length)) {
+          guard let u = hit.url, u.scheme?.hasPrefix("http") == true else { continue }
+          if link == nil { link = u }
+          a.addAttributes([.foregroundColor: mine ? UIColor.white : Look.linkInk, .underlineStyle: NSUnderlineStyle.single.rawValue], range: hit.range)
+        }
+      }
+    }
+    linkWrap.isHidden = link == nil || isPhoto || isDoc
+    linkWrap.reach(nameL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
+    if let u = link {
+      let site = (u.host ?? "").replacingOccurrences(of: "www.", with: "")
+      let sub: UIColor = mine ? UIColor.white.withAlphaComponent(0.8) : .secondaryLabel
+      linkSite.text = site; linkSite.textColor = ink
+      linkURL.text = u.absoluteString; linkURL.textColor = sub
+      linkLine.backgroundColor = sub.withAlphaComponent(0.3)
+      let lf = NSMutableAttributedString(attachment: NSTextAttachment(image: UIImage(systemName: "link", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold))!.withTintColor(sub)))
+      lf.append(NSAttributedString(string: "  " + site, attributes: [.foregroundColor: sub])); linkFoot.attributedText = lf
     }
     let words = a.length > 0
     textL.isHidden = !words
-    footL.isHidden = words; stamp.isHidden = !words
+    footL.isHidden = true
+    stamp.isHidden = false
     foot(m)
     if words {
-      // (an invisible space as wide as the time at the end of the words: the time goes there, or onto its own line)
       let room = NSTextAttachment(); room.bounds = CGRect(x: 0, y: 0, width: ceil(stamp.intrinsicContentSize.width) + 10, height: 1)
       a.append(NSAttributedString(attachment: room))
       textL.attributedText = a
+    } else if !isPhoto {
+      // (a card or a voice message with no words: the time on its own line under it)
+      footL.isHidden = false; stamp.isHidden = true
     }
-    // reactions under the bubble: each emoji with its count
+    // reactions under the bubble: the emojis and how many
     let counts = Dictionary(grouping: m.reactions.values, by: { $0 }).map { ($0.key, $0.value.count) }.sorted { $0.1 > $1.1 }
     reacts.isHidden = counts.isEmpty || m.deleted
     reacts.text = counts.map { $0.0 }.joined() + (m.reactions.count > 1 ? " \(m.reactions.count)" : "")
     reactsLead.isActive = !mine; reactsTrail.isActive = mine
     if reacts.isHidden { bubbleBottom.isActive = true } else { reactsBottom.isActive = true }
+    setNeedsLayout()
   }
-  // the time inside — "Edited" before it, ✓✓ after it on yours (blue-white once everyone has read it; never for a client)
+  // the time inside — "Edited" before it, ✓✓ after it on yours; over a photo with no words: white, on its shadow
   private func foot(_ m: Msg) {
     guard let g = group, let l = log else { return }
     let T = Talk.shared, mine = m.by == T.me?.id
-    let dim: UIColor = mine ? Look.mineTime : Look.roleInk
+    let over = media && !caption
+    let dim: UIColor = over ? .white : mine ? Look.mineTime : Look.roleInk
     let f = NSMutableAttributedString(string: (m.edited && !m.deleted ? "Edited " : "") + Look.clock(m.at), attributes: [.foregroundColor: dim, .font: UIFont.systemFont(ofSize: 12)])
     if mine && !m.deleted {
       let others = g.members.filter { $0 != m.by }
@@ -790,12 +931,40 @@ final class BubbleCell: UITableViewCell {
       if m.pending {
         f.append(NSAttributedString(attachment: NSTextAttachment(image: UIImage(systemName: m.failed ? "exclamationmark.circle" : "clock", withConfiguration: UIImage.SymbolConfiguration(pointSize: 10, weight: .bold))!.withTintColor(dim.resolvedColor(with: traitCollection)))))
       } else {
-        let t = NSTextAttachment(image: Ticks.image((allSeen ? Look.readTick : Look.mineTime).resolvedColor(with: traitCollection)))
+        let c: UIColor = over ? .white : allSeen ? Look.readTick : Look.mineTime
+        let t = NSTextAttachment(image: Ticks.image(c.resolvedColor(with: traitCollection)))
         t.bounds = CGRect(x: 0, y: -1, width: 16, height: 10)
         f.append(NSAttributedString(attachment: t))
       }
     }
     footL.attributedText = f; stamp.attributedText = f
+    stamp.layer.shadowColor = UIColor.black.cgColor; stamp.layer.shadowOpacity = over ? 0.6 : 0; stamp.layer.shadowRadius = 2; stamp.layer.shadowOffset = CGSize(width: 0, height: 1)
+  }
+  static let links = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+  // a document's kind as the design draws it: a grey page with its corner turned, the kind in white on it
+  private static var icons: [String: UIImage] = [:]
+  static func docIcon(_ ext: String) -> UIImage {
+    let label = String(ext.prefix(4)).uppercased()
+    if let i = icons[label] { return i }
+    let i = UIGraphicsImageRenderer(size: CGSize(width: 22, height: 29)).image { _ in
+      let page = UIBezierPath(); page.move(to: CGPoint(x: 3, y: 0)); page.addLine(to: CGPoint(x: 14, y: 0)); page.addLine(to: CGPoint(x: 22, y: 8)); page.addLine(to: CGPoint(x: 22, y: 26))
+      page.addQuadCurve(to: CGPoint(x: 19, y: 29), controlPoint: CGPoint(x: 22, y: 29)); page.addLine(to: CGPoint(x: 3, y: 29)); page.addQuadCurve(to: CGPoint(x: 0, y: 26), controlPoint: CGPoint(x: 0, y: 29))
+      page.addLine(to: CGPoint(x: 0, y: 3)); page.addQuadCurve(to: CGPoint(x: 3, y: 0), controlPoint: CGPoint(x: 0, y: 0)); page.close()
+      UIColor.systemGray.setFill(); page.fill()
+      let fold = UIBezierPath(); fold.move(to: CGPoint(x: 14, y: 0)); fold.addLine(to: CGPoint(x: 14, y: 5)); fold.addQuadCurve(to: CGPoint(x: 17, y: 8), controlPoint: CGPoint(x: 14, y: 8)); fold.addLine(to: CGPoint(x: 22, y: 8)); fold.close()
+      UIColor.systemGray3.setFill(); fold.fill()
+      let s = NSAttributedString(string: label, attributes: [.font: UIFont.systemFont(ofSize: label.count > 3 ? 5.5 : 7, weight: .heavy), .foregroundColor: UIColor.white])
+      let sz = s.size(); s.draw(at: CGPoint(x: (22 - sz.width) / 2, y: 29 - 5 - sz.height))
+    }
+    icons[label] = i; return i
+  }
+  // a photo, shrunk once to the bubble's size and kept
+  private static let pictures = NSCache<NSString, UIImage>()
+  static func picture(_ url: URL, _ id: String) -> UIImage? {
+    if let i = pictures.object(forKey: id as NSString) { return i }
+    guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+          let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 800] as CFDictionary) else { return UIImage(contentsOfFile: url.path) }
+    let i = UIImage(cgImage: cg); pictures.setObject(i, forKey: id as NSString); return i
   }
   // a video's first frame (kept)
   private static let frames = NSCache<NSString, UIImage>()
@@ -812,9 +981,9 @@ final class BubbleCell: UITableViewCell {
   }
   @objc private func quoteTap() { if let r = msg?.reply { onReplyTap?(r.id) } }
   @objc private func fileTap() { if let m = msg { onFileTap?(m) } }
+  @objc private func linkTap() { if let u = link { UIApplication.shared.open(u) } }
   func flash() {
-    let c = bubble.fill
-    UIView.animate(withDuration: 0.2, animations: { self.bubble.alpha = 0.55 }) { _ in UIView.animate(withDuration: 0.6) { self.bubble.alpha = 1; self.bubble.fill = c } }
+    UIView.animate(withDuration: 0.2, animations: { self.bubble.alpha = 0.55 }) { _ in UIView.animate(withDuration: 0.6) { self.bubble.alpha = 1 } }
   }
 }
 
