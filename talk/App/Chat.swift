@@ -557,14 +557,14 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let acc: UIView = finding ? findAcc : bar
     guard isViewLoaded, view.window != nil, acc.window != nil else { return }
     kbOverlap = view.keyboardLayoutGuide.layoutFrame.height
-    keyUp = kbOverlap > 20
+    keyUp = kbOverlap > home + 20   // (the keyboard guide counts the home line when the keyboard is down)
     fitBottom()
   }
   @objc private func backInApp() { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.kbSettled() } }
   @objc private func kbMoved(_ n: Notification) {
     if let f = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue {
       kbOverlap = max(0, view.bounds.maxY - view.convert(f, from: nil).minY)
-      keyUp = kbOverlap > 20
+      keyUp = kbOverlap > home + 20   // (the keyboard guide counts the home line when the keyboard is down)
     }
     view.layoutIfNeeded(); fitBottom()
   }
