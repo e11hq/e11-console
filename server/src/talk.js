@@ -92,7 +92,8 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   const active = (u) => !!u && u.active !== false;
   const isFree = (u) => access.isFreelancer(u);
   const isBoss = (u) => access.isSuper(u) || access.isOffice(u);   // Super Admins and Office Admins
-  const ROLE = { admin: 'Admin', office_admin: 'Office Admin', account_manager: 'Account Manager', production: 'Production', social: 'Social',
+  const ROLE = { admin: 'Admin', office_admin: 'Office Admin', am: 'Account Manager', account_manager: 'Account Manager',   // (an Account Manager's role is 'am' — they showed no role: Haris 2026-11-13)
+    production: 'Production', social: 'Social',
     freelancer: 'Freelancer', finance_admin: 'Finance', finance_viewer: 'Finance' };
   const cdId = () => (store.get('meta', 'main') || {}).cdUserId || null;
   function roleOf(u) {
