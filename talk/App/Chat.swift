@@ -901,7 +901,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     //  the emojis popping in one after another)
     let show = { (b: CGRect) in
       guard self.reactBar === bar else { return }
-      bar.frame = CGRect(x: 14, y: max(w.safeAreaInsets.top + 8, b.minY - 62), width: w.bounds.width - 28, height: 54)
+      bar.frame = CGRect(x: 14, y: max(w.safeAreaInsets.top + 8, b.minY + BubblePreview.pad - 62), width: w.bounds.width - 28, height: 54)
       let from = CGPoint(x: mine ? b.maxX - 34 : b.minX + 34, y: b.minY), k: CGFloat = 0.2
       bar.alpha = 0
       bar.transform = CGAffineTransform(translationX: (from.x - bar.center.x) * (1 - k), y: (from.y - bar.center.y) * (1 - k)).scaledBy(x: k, y: k)
@@ -922,7 +922,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       guard self.reactBar === bar, pv.window != nil else { return }
       let b = pv.convert(pv.bounds, to: w)
       if !shown { shown = true; show(b); return }
-      let y = max(w.safeAreaInsets.top + 8, b.minY - 62)
+      let y = max(w.safeAreaInsets.top + 8, b.minY + BubblePreview.pad - 62)
       if abs(bar.frame.minY - y) > 1 { UIView.animate(withDuration: 0.2) { bar.frame.origin.y = y } }
     }
     // (the chat behind a little blurred while the message is held — Haris 2026-11-12)
@@ -2245,9 +2245,17 @@ final class FindBar: UIView {
 
 
 // the hold's preview (trial, Haris 2026-11-12): the bubble's picture at its own size — iPhone shrinks it if it won't fit
+// (a clear margin round it — iPhone rounds the preview's corners more on a big one and cut into a long message's bubble;
+//  the rounding now falls on the margin, Haris 2026-11-12)
 final class BubblePreview: UIViewController {
+  static let pad: CGFloat = 12
   private let img: UIImage
-  init(_ img: UIImage) { self.img = img; super.init(nibName: nil, bundle: nil); preferredContentSize = img.size }
+  init(_ img: UIImage) { self.img = img; super.init(nibName: nil, bundle: nil); preferredContentSize = CGSize(width: img.size.width + 2 * BubblePreview.pad, height: img.size.height + 2 * BubblePreview.pad) }
   required init?(coder: NSCoder) { fatalError() }
-  override func loadView() { let v = UIImageView(image: img); v.contentMode = .scaleAspectFit; v.backgroundColor = .clear; view = v }
+  override func loadView() {
+    let v = UIView(); v.backgroundColor = .clear
+    let iv = UIImageView(image: img); iv.contentMode = .scaleAspectFit; iv.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    iv.frame = CGRect(origin: .zero, size: preferredContentSize).insetBy(dx: BubblePreview.pad, dy: BubblePreview.pad)
+    v.addSubview(iv); view = v
+  }
 }
