@@ -638,7 +638,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private func canReply(_ m: Msg) -> Bool { m.kind != "sys" && !m.deleted && !m.pending }
   private func canInfo(_ m: Msg) -> Bool { m.kind != "sys" && !m.deleted && !m.pending && m.by == Talk.shared.me?.id }
   private lazy var keyTap = UITapGestureRecognizer(target: self, action: #selector(keyDown))
-  @objc private func keyDown() { bar.box.resignFirstResponder(); findBar.searchTextField.resignFirstResponder() }
+  // (searching: a tap on the chat puts the keyboard down and closes the search too — Haris 2026-11-12)
+  @objc private func keyDown() { if findBar.searchTextField.isFirstResponder { endFind() } else { bar.box.resignFirstResponder() } }
   // (while the keyboard is up, what's in the messages doesn't take touches — the tap above has them; scrolling and the
   // swipes are the list's own and go on)
   private var keyUp = false { didSet { if keyUp != oldValue { table.visibleCells.forEach { $0.contentView.isUserInteractionEnabled = !keyUp } } } }
