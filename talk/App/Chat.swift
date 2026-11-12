@@ -486,9 +486,12 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       swipeCell = nil; swipeMsg = nil
       if let h = hook {
         swipeArmed = false
-        let v = g.velocity(in: table).x, p = (-raw - 64) / W
-        let go = g.state == .ended && (v < -500 || (p > 0.3 && v < 300))
-        h.completionSpeed = 0.9
+        let v = g.velocity(in: table).x, p = max(0, min(1, (-raw - 64) / W))
+        let go = g.state == .ended && (v < -300 || (p > 0.25 && v < 300))
+        // (the rest of the way as quickly as the finger was going — never a slow crawl to the end)
+        let left = Double(go ? 1 - p : p), dur = 0.35 * left
+        let want = max(0.12, min(0.3, abs(v) > 50 ? left * Double(W) / Double(abs(v)) : 0.25))
+        h.completionSpeed = CGFloat(max(1, dur / want))
         if go { h.finish() } else { h.cancel() }
         return
       }
@@ -502,7 +505,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
   private func startHook(_ m: Msg, _ c: BubbleCell) {
     guard let n = navigationController else { return }
-    let h = UIPercentDrivenInteractiveTransition(); h.completionCurve = .easeOut
+    let h = UIPercentDrivenInteractiveTransition(); h.completionCurve = .easeOut; h.wantsInteractiveStart = true
     hook = h
     // (the navigation's delegate only for this one slide — with one there all the time, Apple's back swipe stopped)
     n.delegate = hookDelegate

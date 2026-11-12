@@ -299,20 +299,31 @@ final class HookSlide: NSObject, UINavigationControllerDelegate {
 // the push a finger drives (Message info hooked from a chat — WhatsApp's way, the design's board 27): Message info lies
 // under the chat, and the chat itself is slid away to the left with the finger, its shadow on the page it uncovers
 final class SlideIn: NSObject, UIViewControllerAnimatedTransitioning {
-  func transitionDuration(using c: UIViewControllerContextTransitioning?) -> TimeInterval { 0.4 }
-  func animateTransition(using c: UIViewControllerContextTransitioning) {
-    guard let from = c.view(forKey: .from), let to = c.view(forKey: .to), let toVC = c.viewController(forKey: .to) else { c.completeTransition(false); return }
+  private var animator: UIViewPropertyAnimator?
+  func transitionDuration(using c: UIViewControllerContextTransitioning?) -> TimeInterval { 0.35 }
+  func animateTransition(using c: UIViewControllerContextTransitioning) { interruptibleAnimator(using: c).startAnimation() }
+  // (one animator the finger drives frame by frame — Apple's way for an interactive slide; the shadow with its path set,
+  //  so it isn't worked out again on every frame: the slide was slow and stepped)
+  func interruptibleAnimator(using c: UIViewControllerContextTransitioning) -> UIViewImplicitlyAnimating {
+    if let a = animator { return a }
+    let a = UIViewPropertyAnimator(duration: transitionDuration(using: c), curve: .linear)
+    guard let from = c.view(forKey: .from), let to = c.view(forKey: .to), let toVC = c.viewController(forKey: .to) else {
+      a.addCompletion { _ in c.completeTransition(false) }; animator = a; return a
+    }
     let box = c.containerView, W = box.bounds.width
     to.frame = c.finalFrame(for: toVC)
     box.insertSubview(to, belowSubview: from)
     to.transform = CGAffineTransform(translationX: W * 0.3, y: 0)
     from.layer.shadowColor = UIColor.black.cgColor; from.layer.shadowOpacity = 0.18; from.layer.shadowRadius = 10; from.layer.shadowOffset = .zero
-    UIView.animate(withDuration: transitionDuration(using: c), delay: 0, options: [.curveLinear]) {
-      from.transform = CGAffineTransform(translationX: -W, y: 0); to.transform = .identity
-    } completion: { _ in
-      from.transform = .identity; to.transform = .identity; from.layer.shadowOpacity = 0
+    from.layer.shadowPath = UIBezierPath(rect: from.bounds).cgPath
+    a.addAnimations { from.transform = CGAffineTransform(translationX: -W, y: 0); to.transform = .identity }
+    a.addCompletion { _ in
+      from.transform = .identity; to.transform = .identity; from.layer.shadowOpacity = 0; from.layer.shadowPath = nil
       if c.transitionWasCancelled { to.removeFromSuperview() }
       c.completeTransition(!c.transitionWasCancelled)
     }
+    animator = a
+    return a
   }
+  func animationEnded(_ done: Bool) { animator = nil }
 }
