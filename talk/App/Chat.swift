@@ -54,6 +54,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       case .day(let s): let c = tv.dequeueReusableCell(withIdentifier: "d", for: ip) as! DayCell; c.set(s); return c
       case .msg(let id):
         let c = tv.dequeueReusableCell(withIdentifier: "b", for: ip) as! BubbleCell
+        c.contentView.isUserInteractionEnabled = !self.keyUp
         if let m = self.msgs[id], let g = Talk.shared.groups[self.group] { c.set(m, group: g, log: Talk.shared.log(self.group), run: self.runs[id] ?? Run()) }
         c.onReplyTap = { [weak self] rid in self?.jump(to: rid) }
         c.onFileTap = { [weak self, weak c] m in self?.openFrom = (m.kind == "photo" || m.kind == "video") ? c?.photo : nil; self?.open(m) }
@@ -66,6 +67,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     swipe.delegate = self; swipe.maximumNumberOfTouches = 1
     table.addGestureRecognizer(swipe)
     table.panGestureRecognizer.require(toFail: swipe)
+    // the keyboard rule (every page): while typing, a tap on the chat only puts the keyboard down — never opens a photo, a
+    // link or plays a voice note under the finger; the chat still scrolls, and dragging down takes the keyboard with it
+    keyTap.delegate = self; keyTap.cancelsTouchesInView = true
+    table.addGestureRecognizer(keyTap)
     // the title (the design): the group's picture, its name, its people — at the left after ‹; a tap: group info
     titleL.font = .systemFont(ofSize: 17, weight: .bold); subL.font = .systemFont(ofSize: 13); subL.textColor = .secondaryLabel
     titleL.lineBreakMode = .byTruncatingTail; subL.lineBreakMode = .byTruncatingTail
@@ -263,6 +268,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   @objc private func kbMoved(_ n: Notification) {
     if let f = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue {
       kbOverlap = max(0, view.bounds.maxY - view.convert(f, from: nil).minY)
+      keyUp = kbOverlap > bar.bounds.height + 20
     }
     view.layoutIfNeeded(); fitBottom()
   }
@@ -397,7 +403,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private var swipeMsg: Msg?, swipeArmed = false, swipeDx: CGFloat = 0
   private func canReply(_ m: Msg) -> Bool { m.kind != "sys" && !m.deleted && !m.pending }
   private func canInfo(_ m: Msg) -> Bool { m.kind != "sys" && !m.deleted && !m.pending && m.by == Talk.shared.me?.id }
+  private lazy var keyTap = UITapGestureRecognizer(target: self, action: #selector(keyDown))
+  @objc private func keyDown() { bar.box.resignFirstResponder() }
+  // (while the keyboard is up, what's in the messages doesn't take touches — the tap above has them; scrolling and the
+  // swipes are the list's own and go on)
+  private var keyUp = false { didSet { if keyUp != oldValue { table.visibleCells.forEach { $0.contentView.isUserInteractionEnabled = !keyUp } } } }
   func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+    if g === keyTap { return bar.box.isFirstResponder }
     guard g === swipe else { return true }
     let v = swipe.velocity(in: table)
     guard abs(v.x) > abs(v.y) * 1.3, bar.recording == false,
