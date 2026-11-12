@@ -611,7 +611,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (someone else's new message while the chat is open: E11 Console's soft arrive sound)
     if let last = Talk.shared.log(group).msgs.last, last.id != lastSeenId, last.by != Talk.shared.me?.id, last.kind != "sys", lastSeenId != nil, view.window != nil { ChatSound.arrive() }
     // (one of yours just sent: always to the end — Haris 2026-11-12: it stopped short, the new row measured only after)
-    let mineNew = Talk.shared.log(group).msgs.last.map { $0.id != lastSeenId && $0.by == Talk.shared.me?.id } ?? false
+    let mineNew = Talk.shared.log(group).msgs.last.map { $0.id != lastSeenId && $0.by == Talk.shared.me?.id && $0.kind != "sys" } ?? false   // (not a note of yours — "You pinned a message" took the chat to its end, Haris 2026-11-12)
     lastSeenId = Talk.shared.log(group).msgs.last?.id
     if near || mineNew {
       toBottom(true)
