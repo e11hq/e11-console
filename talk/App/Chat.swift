@@ -1307,14 +1307,16 @@ final class BubbleShape: UIView {
     guard tail, H >= 17 else { return p }
     // (the tail: the design's curve "M0 0 C0 9 3 14 10 17 H0 z", 10 × 17, 8 outside the bubble's edge)
     let t = UIBezierPath()
+    // (both tails drawn turning the same way as the bubble, and reaching past its small corner: the client's turned the
+    //  other way, so where the two overlapped they cancelled out — a black crack, Haris 2026-11-12)
     if mine {
-      t.move(to: CGPoint(x: W - 2, y: H - 17))
+      t.move(to: CGPoint(x: W - 5, y: H - 17)); t.addLine(to: CGPoint(x: W - 2, y: H - 17))
       t.addCurve(to: CGPoint(x: W + 8, y: H), controlPoint1: CGPoint(x: W - 2, y: H - 8), controlPoint2: CGPoint(x: W + 1, y: H - 3))
-      t.addLine(to: CGPoint(x: W - 2, y: H))
+      t.addLine(to: CGPoint(x: W - 5, y: H))
     } else {
-      t.move(to: CGPoint(x: 2, y: H - 17))
-      t.addCurve(to: CGPoint(x: -8, y: H), controlPoint1: CGPoint(x: 2, y: H - 8), controlPoint2: CGPoint(x: -1, y: H - 3))
-      t.addLine(to: CGPoint(x: 2, y: H))
+      t.move(to: CGPoint(x: -8, y: H))
+      t.addCurve(to: CGPoint(x: 2, y: H - 17), controlPoint1: CGPoint(x: -1, y: H - 3), controlPoint2: CGPoint(x: 2, y: H - 8))
+      t.addLine(to: CGPoint(x: 5, y: H - 17)); t.addLine(to: CGPoint(x: 5, y: H))
     }
     t.close(); p.append(t)
     return p
