@@ -540,7 +540,11 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private func jump(to id: String) {
     guard let ip = data.indexPath(for: .msg(id)) else { toast("That message isn’t on this phone any more"); return }
     table.scrollToRow(at: ip, at: .middle, animated: true)
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { (self.table.cellForRow(at: ip) as? BubbleCell)?.flash() }
+    // (a quote tapped, or opened from a search: the message pulses once in view, as the chat's search does — Haris 2026-11-12)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+      guard let self = self, let ip = self.data.indexPath(for: .msg(id)) else { return }
+      (self.table.cellForRow(at: ip) as? BubbleCell)?.pulse()
+    }
   }
 
   // ---------- sending ----------
@@ -1649,9 +1653,7 @@ final class BubbleCell: UITableViewCell {
     a.timingFunctions = [CAMediaTimingFunction(name: .easeOut), CAMediaTimingFunction(name: .easeInEaseOut), CAMediaTimingFunction(name: .easeOut)]
     bubble.layer.add(a, forKey: "pulse")
   }
-  func flash() {
-    UIView.animate(withDuration: 0.2, animations: { self.bubble.alpha = 0.55 }) { _ in UIView.animate(withDuration: 0.6) { self.bubble.alpha = 1 } }
-  }
+
 }
 
 // ---------- the message bar (Haris 2026-11-05 "like WhatsApp"): + · the box · camera · mic; typing → send ----------
