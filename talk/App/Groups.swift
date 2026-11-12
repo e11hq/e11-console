@@ -209,11 +209,24 @@ final class GroupInfoVC: UITableViewController, PHPickerViewControllerDelegate {
     tableView.tableHeaderView = head
   }
   private var headSig = 0
+  // (a new picture: on show at once, dimmed with Apple's spinner until it's in — Haris 2026-11-13)
+  private var picBusy = false
+  private lazy var picSpin: UIActivityIndicatorView = {
+    let s = UIActivityIndicatorView(style: .medium); s.color = .white; s.hidesWhenStopped = true
+    s.backgroundColor = UIColor.black.withAlphaComponent(0.35); s.layer.cornerRadius = 58; s.clipsToBounds = true
+    s.translatesAutoresizingMaskIntoConstraints = false; pic.addSubview(s)
+    NSLayoutConstraint.activate([s.leadingAnchor.constraint(equalTo: pic.leadingAnchor), s.trailingAnchor.constraint(equalTo: pic.trailingAnchor), s.topAnchor.constraint(equalTo: pic.topAnchor), s.bottomAnchor.constraint(equalTo: pic.bottomAnchor)])
+    return s
+  }()
+  private func picUploading(_ on: Bool, _ img: UIImage? = nil) {
+    picBusy = on
+    if on { if let i = img { pic.show(i) }; picSpin.startAnimating() } else { picSpin.stopAnimating(); headSig = 0; if let g = g { fillHead(g) } }
+  }
   private func fillHead(_ g: Group) {
     let T = Talk.shared, can = T.canManage(g)
     var h = Hasher(); h.combine(g.name); h.combine(g.pic); h.combine(g.members.count); h.combine(can); h.combine(g.muted); h.combine(T.clients[g.client]?.name); h.combine(T.clients[g.client]?.logo)
     let sig = h.finalize(); guard sig != headSig else { return }; headSig = sig
-    pic.set(group: g); nameL.text = g.name
+    if !picBusy { pic.set(group: g) }; nameL.text = g.name
     subL.text = [T.clients[g.client]?.name, "\(g.members.count) member\(g.members.count == 1 ? "" : "s")"].compactMap { $0 }.joined(separator: " · ")
     acts.arrangedSubviews.forEach { $0.removeFromSuperview() }
     acts.addArrangedSubview(card("magnifyingglass", "Search") { [weak self] in self?.search() })
@@ -336,6 +349,10 @@ final class GroupInfoVC: UITableViewController, PHPickerViewControllerDelegate {
       cfg = UIListContentConfiguration.cell(); cfg.text = "Delete Group"; cfg.textProperties.color = .systemRed
     }
     c.contentConfiguration = cfg
+    // (on a cell's first use Apple's content view is made only now, over the pictures and the strip put in before — they
+    //  showed only once the row was scrolled away and back: Haris 2026-11-13. The ring stays under Add Members' +.)
+    c.contentView.subviews.filter { $0.tag == 77 && $0.bounds.width != 40 }.forEach { c.contentView.bringSubviewToFront($0) }
+    c.contentView.subviews.filter { $0 is Avatar && $0.tag == 77 }.forEach { c.contentView.bringSubviewToFront($0) }
   }
   override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? {
     guard data.snapshot().sectionIdentifiers.indices.contains(s) else { return nil }
@@ -453,11 +470,14 @@ final class GroupInfoVC: UITableViewController, PHPickerViewControllerDelegate {
       let sq = UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in img.draw(in: CGRect(x: (side - img.size.width * s) / 2, y: (side - img.size.height * s) / 2, width: img.size.width * s, height: img.size.height * s)) }
       guard let d = sq.jpegData(compressionQuality: 0.85) else { return }
       DispatchQueue.main.async {
-        toast("Changing the picture…")
+        self.picUploading(true, sq)
         Net.shared.upload(d, name: "group.jpg", progress: { _ in }) { fid in
-          guard let fid = fid else { toast("The picture didn’t upload — try again"); return }
+          guard let fid = fid else { self.picUploading(false); toast("The picture didn’t upload — try again"); return }
           try? d.write(to: Net.local(fid))
-          self.simple(["act": "setPic", "group": self.group, "file": fid], done: "Picture changed")
+          Net.shared.act(["act": "setPic", "group": self.group, "file": fid]) { j in
+            if (j?["ok"] as? Bool) == true { Talk.shared.refresh(); Talk.shared.sync() } else { toast(j?["error"] as? String ?? "Couldn’t do that — try again") }
+            self.picUploading(false)
+          }
         }
       }
     }

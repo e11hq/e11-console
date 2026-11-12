@@ -608,6 +608,8 @@ final class Avatar: UIView {
       self.img.image = self.isLogo ? Avatar.inCircle(i) : i; self.img.isHidden = false; self.lbl.isHidden = true
     }
   }
+  // a picture straight in (one just picked, before it's uploaded)
+  func show(_ i: UIImage) { want = nil; img.image = i; img.isHidden = false; lbl.isHidden = true }
   // a logo drawn whole in the middle of a circle: its corners inside it, with a little room
   static func inCircle(_ i: UIImage, side: CGFloat = 120) -> UIImage {
     let s = i.size; guard s.width > 0, s.height > 0 else { return i }
