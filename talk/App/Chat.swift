@@ -2070,7 +2070,9 @@ final class BubbleCell: UITableViewCell {
             ctx.cgContext.restoreGState()
           }
           if i == 3 && more > 0 {
-            UIColor(white: 0, alpha: 0.45).setFill(); ctx.fill(r)
+            // (laid over the photo — a plain fill replaces what's there, so the photo was wiped and the square left dark,
+            //  Haris 2026-11-12: only with 5 or more, the "+N" square)
+            UIColor(white: 0, alpha: 0.45).setFill(); ctx.fill(r, blendMode: .normal)
             let s = NSAttributedString(string: "+\(more)", attributes: [.font: UIFont.systemFont(ofSize: 28, weight: .semibold), .foregroundColor: UIColor.white])
             let z = s.size(); s.draw(at: CGPoint(x: r.midX - z.width / 2, y: r.midY - z.height / 2))
           }
