@@ -145,7 +145,7 @@ final class MessageInfoVC: UIViewController {
     var newSigs: [String: Int] = [:]
     for k in s.itemIdentifiers where k != "msg" {
       let pid = String(k.dropFirst(2))
-      var h = Hasher(); h.combine(k.hasPrefix("r:") ? l.time(l.readAt, pid, id) : l.time(l.gotAt, pid, id)); h.combine(T.people[pid]?.name); h.combine(T.people[pid]?.photo)
+      var h = Hasher(); h.combine(k.hasPrefix("r:") ? l.time(l.readAt, pid, id) : l.time(l.gotAt, pid, id)); h.combine(T.people[pid]?.name); h.combine(T.people[pid]?.picture)
       newSigs[k] = h.finalize()
     }
     let old = data.snapshot()
@@ -169,14 +169,14 @@ final class MessageInfoVC: UIViewController {
   private static var faces: [String: UIImage] = [:]
   static func face(_ pid: String, loaded: @escaping () -> Void) -> UIImage {
     let p = Talk.shared.people[pid]
-    if let ph = p?.photo, let i = faces[ph] { return i }
+    if let ph = p?.picture, let i = faces[ph] { return i }
     let size = CGSize(width: 70, height: 70)
     let initials = UIGraphicsImageRenderer(size: size).image { _ in
       Look.person(pid).setFill(); UIBezierPath(ovalIn: CGRect(origin: .zero, size: size)).fill()
       let t = NSAttributedString(string: Look.initials(p?.name ?? ""), attributes: [.font: UIFont.systemFont(ofSize: 26, weight: .semibold), .foregroundColor: UIColor.white])
       let ts = t.size(); t.draw(at: CGPoint(x: (size.width - ts.width) / 2, y: (size.height - ts.height) / 2))
     }
-    if let ph = p?.photo {
+    if let ph = p?.picture {
       Net.shared.picture(ph) { i in
         guard let i = i else { return }
         let round = UIGraphicsImageRenderer(size: size).image { _ in UIBezierPath(ovalIn: CGRect(origin: .zero, size: size)).addClip(); i.draw(in: CGRect(origin: .zero, size: size)) }

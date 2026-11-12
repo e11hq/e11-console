@@ -167,7 +167,7 @@ final class VoiceView: UIView {
     rest = mine ? UIColor.white.withAlphaComponent(0.42) : Look.dyn(0x8E8E93, 0xB4B4B9)
     bars = VoiceRecorder.bars(file.wave)
     let T = Talk.shared, p = T.people[by]
-    pic.set(name: p?.name ?? "", color: Look.person(by), picture: p?.photo)
+    pic.set(name: p?.name ?? "", color: Look.person(by), picture: p?.picture)
     btn.tintColor = mine ? .white : .label
     len.textColor = mine ? Look.mineTime : Look.roleInk
     dot.backgroundColor = played

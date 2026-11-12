@@ -5,6 +5,10 @@ import UIKit
    Everything new comes as events (server/src/talk.js): applied here, kept on the phone, then the server is told
    (ack) so it can let them go. */
 struct Person { let id: String; let name: String; let role: String; let photo: String?; let color: String?; let gone: Bool; var contact: Bool = false; var client: String? = nil }
+// a person's picture: their E11 Console photo — a client contact's is their client's logo (Client Assets), else initials
+extension Person {
+  var picture: String? { contact ? client.flatMap { Talk.shared.clients[$0]?.logo } : photo }
+}
 struct Contact { let id: String; let name: String; let email: String; let client: String; let groups: Int }
 struct LinkedMac { let id: String; let name: String; let linkedAt: Double; let seenAt: Double }
 struct Client { let id: String; let name: String; let color: String?; let logo: String? }
@@ -523,7 +527,7 @@ final class Avatar: UIView {
     else { lbl.text = String(g.name.prefix(1)).uppercased(); backgroundColor = Look.hex(c?.color) ?? Look.accent; img.isHidden = true; lbl.isHidden = false; want = nil }
   }
   func set(client c: Client) { set(name: c.name, color: Look.hex(c.color) ?? Look.accent, picture: c.logo) }
-  func set(person p: Person?) { set(name: p?.name ?? "?", color: p.map { Look.person($0.id) } ?? Look.accent, picture: p?.photo) }
+  func set(person p: Person?) { set(name: p?.name ?? "?", color: p.map { Look.person($0.id) } ?? Look.accent, picture: p?.picture) }
 }
 
 // a short line at the bottom (as Console's toasts)
