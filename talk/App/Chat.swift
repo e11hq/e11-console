@@ -836,7 +836,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (the trial of Haris 2026-11-12: a preview of the bubble — iPhone places it where it fits with the menu, shrinking a
     //  tall one — iMessage's way; build 39 kept the bubble itself, slid up WhatsApp's way)
     let shot = (tv.cellForRow(at: ip) as? BubbleCell)?.bubble.snapshotView(afterScreenUpdates: false)
-    return UIContextMenuConfiguration(identifier: id as NSString, previewProvider: shot.map { v in { BubblePreview(v) } }) { [weak self] _ in self?.menu(m) }
+    return UIContextMenuConfiguration(identifier: id as NSString, previewProvider: shot.map { v in { [weak self] in let p = BubblePreview(v); self?.heldPreview = p; return p } }) { [weak self] _ in self?.menu(m) }
   }
   // opening and closing: from and back to the message's own place in the chat
   func tableView(_ tv: UITableView, previewForDismissingContextMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? { holdPreview(tv, c) }
@@ -959,7 +959,15 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (the preview's place read inside iPhone's own lift — where its final place is already set — and the strip shown
     //  there; read again as the lift ends and moved if iPhone placed it otherwise. Before, it was read a moment too early,
     //  from where the message started, and could land under the preview or over the menu — Haris 2026-11-12)
-    guard let a = animator, let pv = (a.previewViewController as? BubblePreview)?.shot else { show(cell.bubble.convert(cell.bubble.bounds, to: w)); return }
+    // (the chat behind a little blurred while the message is held — Haris 2026-11-12)
+    if let host = navigationController?.view {
+      let veil = UIVisualEffectView(effect: nil); veil.frame = host.bounds; veil.isUserInteractionEnabled = false
+      veil.autoresizingMask = [.flexibleWidth, .flexibleHeight]; host.addSubview(veil); holdVeil = veil
+      UIView.animate(withDuration: 0.3) { veil.effect = UIBlurEffect(style: .systemUltraThinMaterial) }
+    }
+    // (the preview we made, kept when iPhone asked for it — iPhone's own handle on it wasn't ours to read, and the strip
+    //  and the blur were skipped)
+    guard let a = animator, let pv = heldPreview?.shot else { show(cell.bubble.convert(cell.bubble.bounds, to: w)); return }
     var shown = false
     a.addAnimations { let b = pv.convert(pv.bounds, to: w); DispatchQueue.main.async { if !shown { shown = true; show(b) } } }
     a.addCompletion {
@@ -969,15 +977,11 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       let y = max(w.safeAreaInsets.top + 8, b.minY - 62)
       if abs(bar.frame.minY - y) > 1 { UIView.animate(withDuration: 0.2) { bar.frame.origin.y = y } }
     }
-    // (the chat behind a little blurred while the message is held — Haris 2026-11-12)
-    if let host = navigationController?.view {
-      let veil = UIVisualEffectView(effect: nil); veil.frame = host.bounds; veil.isUserInteractionEnabled = false
-      veil.autoresizingMask = [.flexibleWidth, .flexibleHeight]; host.addSubview(veil); holdVeil = veil
-      UIView.animate(withDuration: 0.3) { veil.effect = UIBlurEffect(style: .systemUltraThinMaterial) }
-    }
   }
   private var holdVeil: UIVisualEffectView?
+  private var heldPreview: BubblePreview?
   func tableView(_ tv: UITableView, willEndContextMenuInteraction c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
+    heldPreview = nil
     if let veil = holdVeil { holdVeil = nil; UIView.animate(withDuration: 0.25, animations: { veil.effect = nil }) { _ in veil.removeFromSuperview() } }
     if let bar = reactBar {
       reactBar = nil
