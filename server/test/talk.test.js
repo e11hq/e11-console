@@ -190,6 +190,13 @@ test('client contacts: added by Super / Office Admins only; E11 Talk only; their
   const kev = await (await fetch(base + '/api/talk/sync?after=0', { headers: KH })).json();
   assert.ok(!kev.events.some((e) => e.type === 'read'), 'no read receipts for clients');
   assert.ok((await sync('des')).events.some((e) => e.type === 'read' && e.by === k.id), 'staff see the client has seen it');
+  // Delivered to (Message info): a phone that has a message tells the group's others — the client sees it too; never about your own
+  const ds = await sync('des'); await ack('des', ds.last);
+  const kg = await (await fetch(base + '/api/talk/sync?after=0', { headers: KH })).json();
+  assert.ok(kg.events.some((e) => e.type === 'got' && e.by === 'u-des' && e.upto === m.id), 'the client sees it reached Yousef');
+  assert.ok(!(await sync('des', ds.last)).events.some((e) => e.type === 'got' && e.by === 'u-des'), 'not told about your own');
+  await fetch(base + '/api/talk/ack', { method: 'POST', headers: KH, body: JSON.stringify({ upto: kg.last }) });
+  assert.ok(!(await sync('des', ds.last)).events.some((e) => e.type === 'got' && e.by === k.id && e.upto === m.id), 'not for your own message');
   // the boss's list; removed: out of every group, and E11 Talk refuses them at once
   assert.ok((await state('off')).contacts.some((c) => c.id === k.id && c.groups === 1));
   assert.ok((await act('adm', { act: 'removeContact', id: k.id })).ok);

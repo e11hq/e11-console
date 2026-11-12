@@ -66,6 +66,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     addEvent: q('INSERT INTO events (grp, type, data, at, by) VALUES (?, ?, ?, ?, ?)'),
     wait: q('INSERT OR IGNORE INTO waiting (seq, uid) VALUES (?, ?)'),
     pending: q('SELECT e.seq, e.grp, e.type, e.data, e.at, e.by FROM waiting w JOIN events e ON e.seq = w.seq WHERE w.uid = ? AND w.seq > ? ORDER BY w.seq LIMIT ?'),
+    gotMsgs: q("SELECT e.grp, e.data FROM waiting w JOIN events e ON e.seq = w.seq WHERE w.uid = ? AND w.seq <= ? AND e.type = 'msg' AND (e.by IS NULL OR e.by <> w.uid) ORDER BY w.seq"),
     ack: q('DELETE FROM waiting WHERE uid = ? AND seq <= ?'),
     lastSeq: q('SELECT MAX(seq) AS s FROM events'),
     orphanEvents: q('SELECT seq FROM events WHERE seq NOT IN (SELECT seq FROM waiting)'),
@@ -267,6 +268,13 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   }
   // the phone has everything up to here: those wait no more; an event nobody waits for is gone, with its files
   function ack(u, upto) {
+    // (a person's phone has these messages: each group's other people get "got" up to the newest — Message info's
+    // Delivered to, Haris 2026-11-12; clients see it too. A linked Mac's copy doesn't count as the person's phone.)
+    if (!isMacId(u.id)) {
+      const last = new Map();
+      for (const r of Q.gotMsgs.all(u.id, Number(upto) || 0)) { try { const id = JSON.parse(r.data).id; if (id) last.set(r.grp, id); } catch {} }
+      for (const [gid, id] of last) { const g = Q.group.get(gid); if (g) emit(g, 'got', { upto: id }, u.id, memberIds(g).filter((m) => m !== u.id)); }
+    }
     Q.ack.run(u.id, Number(upto) || 0);
     sweep();
     return { ok: true };
