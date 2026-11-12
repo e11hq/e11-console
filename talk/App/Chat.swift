@@ -989,7 +989,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     guard case .msg(let id)? = data.itemIdentifier(for: ip), let m = msgs[id], m.kind != "sys" else { return nil }
     // (the trial of Haris 2026-11-12: a preview of the bubble — iPhone places it where it fits with the menu, shrinking a
     //  tall one — iMessage's way; build 39 kept the bubble itself, slid up WhatsApp's way)
-    let shot = (tv.cellForRow(at: ip) as? BubbleCell)?.bubble.snapshotView(afterScreenUpdates: false)
+    // (the bubble with its tail — the picture taken a little wider on the tail's side; the tail was cut off as it lifted and
+    //  came back after, Haris 2026-11-12)
+    let shot = (tv.cellForRow(at: ip) as? BubbleCell).flatMap { c -> UIView? in
+      let v = c.contentView.resizableSnapshotView(from: c.heldRect, afterScreenUpdates: false, withCapInsets: .zero)
+      if let v = v { let m = CAShapeLayer(); m.path = c.heldPath(origin: c.heldRect.origin).cgPath; v.layer.mask = m }
+      return v
+    }
     return UIContextMenuConfiguration(identifier: id as NSString, previewProvider: shot.map { v in { BubblePreview(v) } }) { [weak self] _ in self?.menu(m) }
   }
   // opening and closing: from and back to the message's own place in the chat
@@ -997,9 +1003,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   func tableView(_ tv: UITableView, previewForHighlightingContextMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? { holdPreview(tv, c) }
   private func holdPreview(_ tv: UITableView, _ c: UIContextMenuConfiguration) -> UITargetedPreview? {
     guard let id = c.identifier as? String, let ip = data.indexPath(for: .msg(id)), let cell = tv.cellForRow(at: ip) as? BubbleCell else { return nil }
+    // (the bubble's own shape, tail and all, lifting from the row — not a rounded box that cut the tail away)
     let p = UIPreviewParameters(); p.backgroundColor = .clear
-    p.visiblePath = UIBezierPath(roundedRect: cell.bubble.bounds, cornerRadius: 19)
-    return UITargetedPreview(view: cell.bubble, parameters: p)
+    p.visiblePath = cell.heldPath(origin: .zero)
+    return UITargetedPreview(view: cell.contentView, parameters: p)
   }
   // the design (board 33): the reactions on top, then Reply · Forward · Copy · Star · (line) · Delete — Forward comes with
   // the forward sheet (stage 5); yours also keep Edit (15 minutes) and Info, files Save / Share, as the app has them today
@@ -1395,6 +1402,15 @@ final class BubbleCell: UITableViewCell {
   private var reactsLead: NSLayoutConstraint!, reactsTrail: NSLayoutConstraint!, bubbleBottom: NSLayoutConstraint!, reactsBottom: NSLayoutConstraint!
   private var msg: Msg?
   private var media = false, caption = false, tailOn = false, isMine = false, framed = false, overPhoto = false, shownFile: String?
+  // held: the bubble with its tail, in the row's own space (shifted so `origin` is 0,0)
+  var heldRect: CGRect { let f = bubble.frame; return CGRect(x: f.minX - (tailOn && !isMine ? 10 : 0), y: f.minY, width: f.width + (tailOn ? 10 : 0), height: f.height) }
+  func heldPath(origin o: CGPoint) -> UIBezierPath {
+    let f = bubble.frame
+    let p = BubbleShape.path(f.size, mine: isMine, tail: tailOn)
+    if p.isEmpty { p.append(UIBezierPath(roundedRect: CGRect(origin: .zero, size: f.size), cornerRadius: 19)) }
+    p.apply(CGAffineTransform(translationX: f.minX - o.x, y: f.minY - o.y))
+    return p
+  }
   // "Forwarded" over a forwarded message (the design, board 32: italic, its arrow, in the time's colour)
   private let fwdL = UILabel()
   // the round forward button beside a photo, video, file or link (anyone's) — on the other side from the bubble
