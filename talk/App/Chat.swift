@@ -57,6 +57,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (the day chips are floating headers: on automatic Apple draws its firm frost with a line down past them — the chat
     //  gets Apple's soft frost instead, as E11 Console's comments, Haris 2026-11-10 / 2026-11-12)
     if #available(iOS 26.0, *) { table.topEdgeEffect.style = .soft }
+    // the chat's background (approved mock-up "E11 Talk — chat background", Haris 2026-11-12): our own soft line drawings
+    // with the E11. wordmark in outline, faint, standing still behind the messages — the list's own background view
+    let pattern = UIView(); pattern.backgroundColor = ChatVC.pattern; table.backgroundView = pattern
     view.addSubview(table)
     data = UITableViewDiffableDataSource<String, ChatItem>(tableView: table) { [weak self] tv, ip, item in
       guard let self = self else { return UITableViewCell() }
@@ -552,6 +555,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     if let s = n.sheetPresentationController { s.detents = [.large()]; s.prefersGrabberVisible = true }
     present(n, animated: true)
   }
+  // the pattern's tile in the chat's colours: dark lines at a tenth in light, white at a fifteenth in dark
+  static let pattern: UIColor = {
+    let tile = UIImage(named: "TalkPattern")
+    let light = tile.map { UIColor(patternImage: $0.withTintColor(UIColor(red: 60 / 255, green: 60 / 255, blue: 67 / 255, alpha: 0.10), renderingMode: .alwaysOriginal)) } ?? .clear
+    let dark = tile.map { UIColor(patternImage: $0.withTintColor(UIColor(white: 1, alpha: 0.065), renderingMode: .alwaysOriginal)) } ?? .clear
+    return UIColor { $0.userInterfaceStyle == .dark ? dark : light }
+  }()
   private func openInfo(_ m: Msg) { navigationController?.pushViewController(MessageInfoVC(group: group, id: m.id), animated: true) }
   private func startReply(_ m: Msg) { editingMsg = nil; replying = m; UIImpactFeedbackGenerator(style: .light).impactOccurred(); bar.box.becomeFirstResponder() }
 
