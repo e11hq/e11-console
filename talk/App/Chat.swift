@@ -8,13 +8,13 @@ import ImageIO
 
 /* A group's chat (the mockups — WhatsApp's way, in E11's colours with SF Symbols): bubbles with the time inside and
    ✓✓ (blue once everyone has seen it), names coloured with their role, a reply's quote (tap: up to the original), photos
-   and files, "Edited", "This message was deleted", reactions under the bubble. Swipe a message right to reply; hold it:
-   a row of reactions (six quick ones and + for any emoji) and Reply · Copy · Edit (15 minutes) · Info · Delete for
-   everyone (about 2 days) · Delete for me. The message bar: + (Photos, Camera, Files), the box, camera and mic; while
-   typing, the send button. */
+   and files, "Edited", "This message was deleted", reactions under the bubble. Swipe a message right to reply (the
+   keyboard opens); swipe your own left for Message info; hold it: Apple's lift, the reactions as Apple's palette (seven
+   and + for any emoji), then Reply · Copy · Star · (yours: Edit for 15 minutes, Info) · Delete (for everyone about 2 days,
+   for me). The message bar: + (Photos, Camera, Files), the box, camera and mic; while typing, the send button. */
 enum ChatItem: Hashable { case day(String), msg(String) }
 
-final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDataSource, QLPreviewControllerDelegate {
+final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDataSource, QLPreviewControllerDelegate, UIGestureRecognizerDelegate {
   let group: String
   private let table = UITableView(frame: .zero, style: .plain)
   private var data: UITableViewDiffableDataSource<Int, ChatItem>!
@@ -61,6 +61,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       }
     }
     data.defaultRowAnimation = .fade
+    // the swipes on a message (WhatsApp's, the design's boards 26 / 27): right — reply; your own left — Message info
+    swipe.delegate = self; swipe.maxNumberOfTouches = 1
+    table.addGestureRecognizer(swipe)
+    table.panGestureRecognizer.require(toFail: swipe)
     // the title (the design): the group's picture, its name, its people — at the left after ‹; a tap: group info
     titleL.font = .systemFont(ofSize: 17, weight: .bold); subL.font = .systemFont(ofSize: 13); subL.textColor = .secondaryLabel
     titleL.lineBreakMode = .byTruncatingTail; subL.lineBreakMode = .byTruncatingTail
@@ -373,13 +377,64 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   func numberOfPreviewItems(in c: QLPreviewController) -> Int { previewURL == nil ? 0 : 1 }
   func previewController(_ c: QLPreviewController, previewItemAt i: Int) -> QLPreviewItem { previewURL! as NSURL }
 
-  // ---------- swipe right: reply ----------
-  func tableView(_ tv: UITableView, leadingSwipeActionsConfigurationForRowAt ip: IndexPath) -> UISwipeActionsConfiguration? {
-    guard case .msg(let id)? = data.itemIdentifier(for: ip), let m = msgs[id], m.kind != "sys", !m.deleted, !m.pending else { return nil }
-    let a = UIContextualAction(style: .normal, title: nil) { [weak self] _, _, done in self?.startReply(m); done(true) }
-    a.image = UIImage(systemName: "arrowshape.turn.up.left.fill"); a.backgroundColor = Look.chatBg
-    let c = UISwipeActionsConfiguration(actions: [a]); c.performsFirstActionWithFullSwipe = true
-    return c
+  // ---------- the swipes: right — reply; your own left — Message info ----------
+  // (Apple has no part for a bubble that follows the finger and springs back, so it's a pan of ours; the reply's keyboard
+  // and the info page's push are Apple's own)
+  private lazy var swipe = UIPanGestureRecognizer(target: self, action: #selector(swiped(_:)))
+  private weak var swipeCell: BubbleCell?
+  private var swipeMsg: Msg?, swipeArmed = false, swipeDx: CGFloat = 0
+  private func canReply(_ m: Msg) -> Bool { m.kind != "sys" && !m.deleted && !m.pending }
+  private func canInfo(_ m: Msg) -> Bool { m.kind != "sys" && !m.deleted && !m.pending && m.by == Talk.shared.me?.id }
+  func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+    guard g === swipe else { return true }
+    let v = swipe.velocity(in: table)
+    guard abs(v.x) > abs(v.y) * 1.3, bar.recording == false,
+          let ip = table.indexPathForRow(at: swipe.location(in: table)), case .msg(let id)? = data.itemIdentifier(for: ip), let m = msgs[id] else { return false }
+    return v.x > 0 ? canReply(m) : canInfo(m)
+  }
+  @objc private func swiped(_ g: UIPanGestureRecognizer) {
+    switch g.state {
+    case .began:
+      guard let ip = table.indexPathForRow(at: g.location(in: table)), let c = table.cellForRow(at: ip) as? BubbleCell,
+            case .msg(let id)? = data.itemIdentifier(for: ip), let m = msgs[id] else { return }
+      swipeCell = c; swipeMsg = m; swipeArmed = false; swipeDx = 0
+    case .changed:
+      guard let c = swipeCell, let m = swipeMsg else { return }
+      let raw = g.translation(in: table).x
+      var dx = raw > 0 ? (canReply(m) ? raw : 0) : (canInfo(m) ? raw : 0)
+      // (as far as 64 with the finger, then it gives less and less)
+      let reach: CGFloat = dx > 0 ? 74 : 64
+      if abs(dx) > reach { dx = (dx > 0 ? 1 : -1) * (reach + (abs(dx) - reach) * 0.25) }
+      swipeDx = dx
+      c.slide(dx)
+      if dx < 0 { dimOthers(min(1, -dx / 64), but: c) } else if dx >= 0 { dimOthers(0, but: c) }
+      let armed = abs(dx) >= 60
+      if armed != swipeArmed {
+        swipeArmed = armed
+        if armed { UIImpactFeedbackGenerator(style: .light).impactOccurred(); if dx > 0 { c.pop() } }
+      }
+    case .ended, .cancelled, .failed:
+      guard let c = swipeCell, let m = swipeMsg else { return }
+      let go = swipeArmed && g.state == .ended, right = swipeDx > 0
+      swipeCell = nil; swipeMsg = nil; swipeArmed = false
+      if go && !right {
+        // Message info: the chat stays dimmed with the bubble moved while Apple's push slides the page in
+        openInfo(m) { [weak self] in c.settle(animated: false); self?.dimOthers(0, but: c) }
+      } else {
+        c.settle(animated: true)
+        UIView.animate(withDuration: 0.3) { self.dimOthers(0, but: c) }
+        if go { startReply(m) }
+      }
+    default: break
+    }
+  }
+  private func dimOthers(_ p: CGFloat, but c: UITableViewCell) {
+    for v in table.visibleCells where v !== c { v.contentView.alpha = 1 - 0.68 * p }
+  }
+  private func openInfo(_ m: Msg, after: (() -> Void)? = nil) {
+    let vc = MessageInfoVC(group: group, id: m.id)
+    navigationController?.pushViewController(vc, animated: true)
+    if let tc = navigationController?.transitionCoordinator { tc.animate(alongsideTransition: nil) { _ in after?() } } else { after?() }
   }
   private func startReply(_ m: Msg) { editingMsg = nil; replying = m; UIImpactFeedbackGenerator(style: .light).impactOccurred(); bar.box.becomeFirstResponder() }
 
@@ -394,27 +449,38 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     p.visiblePath = UIBezierPath(roundedRect: cell.bubble.bounds, cornerRadius: 19)
     return UITargetedPreview(view: cell.bubble, parameters: p)
   }
+  // the design (board 33): the reactions on top, then Reply · Forward · Copy · Star · (line) · Delete — Forward comes with
+  // the forward sheet (stage 5); yours also keep Edit (15 minutes) and Info, files Save / Share, as the app has them today
   private func menu(_ m: Msg) -> UIMenu {
     let T = Talk.shared, mine = m.by == T.me?.id
     let now = Date().timeIntervalSince1970 * 1000
     var items: [UIMenuElement] = []
     if !m.deleted && !m.pending {
-      let quick = ["👍", "❤️", "😂", "😮", "😢", "🙏"].map { e -> UIAction in
+      let quick = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🔥"].map { e -> UIAction in
         let on = m.reactions[T.me?.id ?? ""] == e
         return UIAction(title: e, image: ChatVC.emojiImage(e), state: on ? .on : .off) { [weak self] _ in self?.react(m, on ? nil : e) }
       }
-      let more = UIAction(title: "More", image: UIImage(systemName: "plus")) { [weak self] _ in self?.anyEmoji(m) }
-      let row = UIMenu(title: "", options: .displayInline, preferredElementSize: .small, children: quick + [more])
-      items.append(row)
-      items.append(UIAction(title: "Reply", image: UIImage(systemName: "arrowshape.turn.up.left")) { [weak self] _ in self?.startReply(m) })
-      if !m.text.isEmpty { items.append(UIAction(title: "Copy", image: UIImage(systemName: "doc.on.doc")) { _ in UIPasteboard.general.string = m.text; toast("Copied") }) }
+      let more = UIAction(title: "More Reactions", image: UIImage(systemName: "plus")) { [weak self] _ in self?.anyEmoji(m) }
+      if #available(iOS 17.0, *) {
+        items.append(UIMenu(title: "", options: [.displayInline, .displayAsPalette], children: quick + [more]))
+      } else {
+        items.append(UIMenu(title: "", options: .displayInline, preferredElementSize: .small, children: quick + [more]))
+      }
+      var acts: [UIMenuElement] = []
+      acts.append(UIAction(title: "Reply", image: UIImage(systemName: "arrowshape.turn.up.left")) { [weak self] _ in self?.startReply(m) })
+      if !m.text.isEmpty { acts.append(UIAction(title: "Copy", image: UIImage(systemName: "doc.on.doc")) { _ in UIPasteboard.general.string = m.text; toast("Copied") }) }
+      let starred = T.isStarred(group, m.id)
+      acts.append(UIAction(title: starred ? "Unstar" : "Star", image: UIImage(systemName: starred ? "star.slash" : "star")) { [weak self] _ in
+        guard let self = self else { return }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred(); Talk.shared.toggleStar(self.group, m)
+      })
       if mine && m.file == nil && now - m.at < 15 * 60000 {
-        items.append(UIAction(title: "Edit", subtitle: "15 minutes after sending", image: UIImage(systemName: "pencil")) { [weak self] _ in
+        acts.append(UIAction(title: "Edit", image: UIImage(systemName: "pencil")) { [weak self] _ in
           self?.replying = nil; self?.editingMsg = m; self?.bar.setReply(("Editing", m.text), editing: true); self?.bar.box.text = m.text; self?.bar.textChanged(); self?.bar.box.becomeFirstResponder()
         })
       }
       if let f = m.file {
-        items.append(UIAction(title: "Save / Share", image: UIImage(systemName: "square.and.arrow.up")) { [weak self] _ in
+        acts.append(UIAction(title: "Save / Share", image: UIImage(systemName: "square.and.arrow.up")) { [weak self] _ in
           Net.shared.file(f.id) { url in
             guard let url = url else { toast("That file isn’t on the server any more"); return }
             let named = FileManager.default.temporaryDirectory.appendingPathComponent(f.name)
@@ -423,17 +489,26 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
           }
         })
       }
-      if mine && !Talk.shared.isContact { items.append(UIAction(title: "Info", subtitle: "who has seen it", image: UIImage(systemName: "info.circle")) { [weak self] _ in self?.seenBy(m) }) }
+      if mine { acts.append(UIAction(title: "Info", image: UIImage(systemName: "info.circle")) { [weak self] _ in self?.openInfo(m) }) }
+      items.append(UIMenu(options: .displayInline, children: acts))
     }
-    var danger: [UIMenuElement] = []
+    items.append(UIMenu(options: .displayInline, children: [
+      UIAction(title: "Delete", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in self?.askDelete(m) }
+    ]))
+    return UIMenu(children: items)
+  }
+  // Delete: Apple's sheet — for everyone (yours, about 2 days after sending) or for me
+  private func askDelete(_ m: Msg) {
+    let mine = m.by == Talk.shared.me?.id, now = Date().timeIntervalSince1970 * 1000
+    let a = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
     if mine && !m.deleted && !m.pending && now - m.at < 2 * 86400000 {
-      danger.append(UIAction(title: "Delete for everyone", subtitle: "about 2 days after sending", image: UIImage(systemName: "trash"), attributes: .destructive) { _ in
+      a.addAction(UIAlertAction(title: "Delete for Everyone", style: .destructive) { _ in
         Net.shared.act(["act": "del", "msg": m.id]) { j in if (j?["ok"] as? Bool) == true { Talk.shared.sync() } else { toast(j?["error"] as? String ?? "Couldn’t delete it") } }
       })
     }
-    danger.append(UIAction(title: "Delete for me", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in guard let self = self else { return }; Talk.shared.deleteForMe(self.group, m) })
-    items.append(UIMenu(options: .displayInline, children: danger))
-    return UIMenu(children: items)
+    a.addAction(UIAlertAction(title: "Delete for Me", style: .destructive) { [weak self] _ in guard let self = self else { return }; Talk.shared.deleteForMe(self.group, m) })
+    a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+    present(a, animated: true)
   }
   static func emojiImage(_ e: String) -> UIImage {
     let s = NSAttributedString(string: e, attributes: [.font: UIFont.systemFont(ofSize: 26)])
@@ -455,17 +530,6 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       self?.react(m, String(first))
     })
     present(a, animated: true)
-  }
-  private func seenBy(_ m: Msg) {
-    let T = Talk.shared, l = T.log(group)
-    guard let g = T.groups[group], let idx = l.msgs.firstIndex(where: { $0.id == m.id }) else { return }
-    let others = g.members.filter { $0 != T.me?.id }
-    let seen = others.filter { p in l.readBy[p].flatMap { r in l.msgs.firstIndex { $0.id == r } }.map { $0 >= idx } ?? false }
-    let not = others.filter { !seen.contains($0) }
-    var s = seen.isEmpty ? "" : "Seen by: " + seen.map { T.name($0) }.joined(separator: ", ")
-    if !not.isEmpty { s += (s.isEmpty ? "" : "\n\n") + "Not seen yet: " + not.map { T.name($0) }.joined(separator: ", ") }
-    let a = UIAlertController(title: "Message info", message: s.isEmpty ? "Nobody else is in this group." : s, preferredStyle: .alert)
-    a.addAction(UIAlertAction(title: "OK", style: .default)); present(a, animated: true)
   }
 }
 
@@ -770,6 +834,47 @@ final class BubbleCell: UITableViewCell {
   }
   private var quoteThumbW: NSLayoutConstraint!
   required init?(coder: NSCoder) { fatalError() }
+  // ---------- the swipe (the design, board 26): the bubble follows the finger; to the right the grey circle with the
+  // white arrow comes in beside it and pops once it's far enough; let go — it all springs back ----------
+  private lazy var replyIcon: UIView = {
+    let v = UIView(frame: CGRect(x: 0, y: 0, width: 32, height: 32))
+    v.backgroundColor = UIColor(red: 142 / 255, green: 142 / 255, blue: 147 / 255, alpha: 0.55); v.layer.cornerRadius = 16; v.alpha = 0
+    v.isUserInteractionEnabled = false
+    let a = UIImageView(image: UIImage(systemName: "arrowshape.turn.up.left.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold)))
+    a.tintColor = .white; a.center = CGPoint(x: 16, y: 16); v.addSubview(a)
+    self.contentView.addSubview(v)
+    return v
+  }()
+  private var moving: [UIView] { [bubble, face, reacts, retryB] }
+  func slide(_ dx: CGFloat) {
+    let t = CGAffineTransform(translationX: dx, y: 0)
+    for v in moving { v.transform = t }
+    guard dx > 0 else { replyIcon.alpha = 0; return }
+    let p = min(1, dx / 64)
+    replyIcon.center = CGPoint(x: bubble.center.x - bubble.bounds.width / 2 - 22, y: bubble.center.y)
+    if !popping { replyIcon.transform = CGAffineTransform(translationX: 26 * p - 26 + dx, y: 0).scaledBy(x: 0.5 + 0.5 * p, y: 0.5 + 0.5 * p) }
+    replyIcon.alpha = p
+    iconDx = dx
+  }
+  private var popping = false, iconDx: CGFloat = 0
+  func pop() {
+    popping = true
+    let base = CGAffineTransform(translationX: iconDx, y: 0)
+    UIView.animate(withDuration: 0.12, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { self.replyIcon.transform = base.scaledBy(x: 1.18, y: 1.18) } completion: { _ in
+      UIView.animate(withDuration: 0.18, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { self.replyIcon.transform = CGAffineTransform(translationX: self.iconDx, y: 0) } completion: { _ in self.popping = false }
+    }
+  }
+  func settle(animated: Bool) {
+    let go = { for v in self.moving { v.transform = .identity }; self.replyIcon.alpha = 0 }
+    popping = false
+    if animated { UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.82, initialSpringVelocity: 0, options: [.allowUserInteraction], animations: go) } else { go() }
+  }
+  override func prepareForReuse() {
+    super.prepareForReuse()
+    for v in moving { v.transform = .identity }
+    replyIcon.alpha = 0
+    contentView.alpha = 1
+  }
   override func traitCollectionDidChange(_ p: UITraitCollection?) {
     super.traitCollectionDidChange(p)
     if traitCollection.hasDifferentColorAppearance(comparedTo: p) { reacts.layer.borderColor = Look.chatBg.resolvedColor(with: traitCollection).cgColor; if let m = msg { foot(m) } }
@@ -1034,6 +1139,7 @@ final class MessageBar: UIView, UITextViewDelegate {
   var onCancelReply: (() -> Void)?
   var onVoice: ((URL, Double, String) -> Void)?
   var onLayout: (() -> Void)?
+  var recording: Bool { rec.isRecording || rec.isPaused || locked }
   // @: the group's people (id, name); the ones picked while typing
   var people: [(String, String)] = []
   private var picked: [String: String] = [:]   // id → name

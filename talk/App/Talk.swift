@@ -39,6 +39,21 @@ struct GroupLog: Codable {
   var msgs: [Msg] = []
   var readBy: [String: String] = [:]   // person → the last message they've seen (id)
   var myRead: String?                   // the last message I've seen
+  // when each person read (and their phone got) up to which message — for Message info's times; the newest 300 each
+  var readAt: [String: [Mark]]? = nil
+  var gotAt: [String: [Mark]]? = nil
+  struct Mark: Codable { var upto: String; var at: Double }
+  // when a person read / got message `id` (the first mark at or after it), else nil
+  func time(_ marks: [String: [Mark]]?, _ p: String, _ id: String) -> Double? {
+    guard let ms = marks?[p], let i = msgs.firstIndex(where: { $0.id == id }) else { return nil }
+    let pos = Dictionary(msgs.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { a, _ in a })
+    return ms.first { (pos[$0.upto] ?? -1) >= i }?.at
+  }
+  // has a person read up to message `id`?
+  func read(_ p: String, _ id: String) -> Bool {
+    guard let r = readBy[p], let ri = msgs.firstIndex(where: { $0.id == r }), let i = msgs.firstIndex(where: { $0.id == id }) else { return false }
+    return ri >= i
+  }
 }
 
 extension Notification.Name {
@@ -68,6 +83,17 @@ final class Talk {
     return d
   }()
   private var stateFile: URL { dir.appendingPathComponent("state-\(Server.host).json") }
+  // ---------- starred messages (hold a message › Star; Settings › Starred Messages) ----------
+  struct Starred: Codable, Equatable { var group: String; var id: String; var by: String; var at: Double; var text: String; var kind: String; var starredAt: Double }
+  private var starFile: URL { dir.appendingPathComponent("starred-\(Server.host).json") }
+  private(set) lazy var starred: [Starred] = (try? Data(contentsOf: starFile)).flatMap { try? JSONDecoder().decode([Starred].self, from: $0) } ?? []
+  func isStarred(_ g: String, _ id: String) -> Bool { starred.contains { $0.group == g && $0.id == id } }
+  func toggleStar(_ g: String, _ m: Msg) {
+    if isStarred(g, m.id) { starred.removeAll { $0.group == g && $0.id == m.id } }
+    else { starred.insert(Starred(group: g, id: m.id, by: m.by, at: m.at, text: Talk.preview(m), kind: m.kind, starredAt: Date().timeIntervalSince1970 * 1000), at: 0) }
+    if let d = try? JSONEncoder().encode(starred) { try? d.write(to: starFile, options: .atomic) }
+    NotificationCenter.default.post(name: .talkGroup, object: g)
+  }
   private func logFile(_ g: String) -> URL { dir.appendingPathComponent("g-\(g).json") }
 
   // ---------- from the phone first (at once), then the server ----------
@@ -188,10 +214,18 @@ final class Talk {
       if let i = l.msgs.firstIndex(where: { $0.id == id }) {
         if let f = l.msgs[i].file { try? FileManager.default.removeItem(at: Net.local(f.id)) }
         l.msgs[i].deleted = true; l.msgs[i].text = ""; l.msgs[i].file = nil; l.msgs[i].reply = nil
+        if isStarred(g, id) { starred.removeAll { $0.group == g && $0.id == id }; if let d = try? JSONEncoder().encode(starred) { try? d.write(to: starFile, options: .atomic) } }
       }
     case "react":
       if let i = l.msgs.firstIndex(where: { $0.id == id }) { if let em = e["emoji"] as? String, !em.isEmpty { l.msgs[i].reactions[by] = em } else { l.msgs[i].reactions[by] = nil } }
-    case "read": if let up = e["upto"] as? String { l.readBy[by] = up }
+    case "read":
+      if let up = e["upto"] as? String {
+        l.readBy[by] = up
+        var marks = l.readAt ?? [:]; marks[by, default: []].append(.init(upto: up, at: at)); marks[by] = Array(marks[by]!.suffix(300)); l.readAt = marks
+      }
+    case "got":
+      // (a phone has the messages up to here — Message info's Delivered to)
+      if let up = e["upto"] as? String { var marks = l.gotAt ?? [:]; marks[by, default: []].append(.init(upto: up, at: at)); marks[by] = Array(marks[by]!.suffix(300)); l.gotAt = marks }
     default: return nil
     }
     logs[g] = l
@@ -364,7 +398,7 @@ final class Talk {
     try? FileManager.default.removeItem(at: dir); try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     try? FileManager.default.removeItem(at: Net.filesDir)
     UserDefaults.standard.removeObject(forKey: "talk_seq_" + Server.host)
-    VoiceHeard.clear()
+    VoiceHeard.clear(); starred = []
   }
 }
 
