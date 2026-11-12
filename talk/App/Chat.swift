@@ -1277,6 +1277,14 @@ final class BubbleCell: UITableViewCell {
   // emojis alone (WhatsApp's sizes, measured from Haris's screenshot, 2026-11-12): larger in the bubble — one at 46, two at
   // 28, three at 22 — the time on its own line under them; more — as words. (One in a bubble too, Haris 16:27.)
   private var emojis = 0
+  // the group's notes say people by their first name (Haris 2026-11-12): each full name the phone knows, longest first,
+  // becomes its first word — "Muhammad Haris Sharif added Haris Client" → "Muhammad added Haris"
+  static func firstNames(_ text: String) -> String {
+    var t = text
+    let names = Set(Talk.shared.people.values.map { $0.name }).filter { $0.contains(" ") }.sorted { $0.count > $1.count }
+    for n in names where t.contains(n) { t = t.replacingOccurrences(of: n, with: String(n.split(separator: " ").first ?? Substring(n))) }
+    return t
+  }
   static func emojiCount(_ s: String) -> Int {
     let cs = s.filter { !$0.isWhitespace }
     guard !cs.isEmpty, cs.count <= 3 else { return 0 }
@@ -1356,7 +1364,7 @@ final class BubbleCell: UITableViewCell {
     if sys {
       // (the group's notes as WhatsApp's, measured from Haris's screenshot: 12 on an 18 line, a small white pill — 2026-11-12)
       let ps = NSMutableParagraphStyle(); ps.minimumLineHeight = 18; ps.maximumLineHeight = 18; ps.alignment = .center
-      sysL.attributedText = NSAttributedString(string: m.text, attributes: [.font: UIFont.systemFont(ofSize: 12), .paragraphStyle: ps, .baselineOffset: (18 - UIFont.systemFont(ofSize: 12).lineHeight) / 4])
+      sysL.attributedText = NSAttributedString(string: BubbleCell.firstNames(m.text), attributes: [.font: UIFont.systemFont(ofSize: 12), .paragraphStyle: ps, .baselineOffset: (18 - UIFont.systemFont(ofSize: 12).lineHeight) / 4])
       media = false; return
     }
     top.constant = run.first ? 10 : 2
