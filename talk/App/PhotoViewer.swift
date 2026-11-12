@@ -141,13 +141,16 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     let whole = r == src.bounds
     guard let img = m.file.flatMap({ BubbleCell.cached($0.id) }) ?? (whole ? (src as? UIImageView)?.image : nil) else { return }
     let from = src.convert(r, to: w)
-    let fly = UIImageView(image: img); fly.contentMode = .scaleAspectFill; fly.clipsToBounds = true; fly.layer.cornerRadius = whole ? 19 : 0; fly.frame = from
+    // (the flying picture starts as the bubble's photo looks — its corners and its shades — and the photo in the bubble
+    //  is hidden meanwhile: nothing of it shows twice, nothing appears afterwards, Haris 2026-11-12)
+    let fly = PhotoViewerVC.flier(img, like: whole ? src : nil); fly.frame = from
     // (under the buttons — it flew over ☺︎ and Reply and cut them, Haris 2026-11-12)
     view.insertSubview(fly, aboveSubview: pager); pager.alpha = 0; back.alpha = 0; top.alpha = 0; foot.alpha = 0
+    if whole { src.alpha = 0 }
     let to = ZoomPage.fit(img.size, in: view.bounds)
     UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.88, initialSpringVelocity: 0) {
-      fly.frame = to; fly.layer.cornerRadius = 0; self.back.alpha = 1; self.top.alpha = 1; self.foot.alpha = 1
-    } completion: { _ in self.pager.alpha = 1; fly.removeFromSuperview() }
+      fly.frame = to; fly.layer.cornerRadius = 0; fly.shades.forEach { $0.alpha = 0 }; self.back.alpha = 1; self.top.alpha = 1; self.foot.alpha = 1
+    } completion: { _ in self.pager.alpha = 1; fly.removeFromSuperview(); src.alpha = 1 }
   }
 
   private func go(_ i: Int, animated: Bool) {
@@ -213,6 +216,26 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     default: break
     }
   }
+  // the flying picture: the photo, and — flying from or to a bubble — that photo's corners and its two shades (the name's
+  // diagonal, the time's at the bottom), as views that stretch with it
+  final class Flier: UIImageView { var shades: [UIView] = [] }
+  final class Shade: UIView { override class var layerClass: AnyClass { CAGradientLayer.self } }
+  static func flier(_ img: UIImage, like src: UIView?) -> Flier {
+    let f = Flier(image: img); f.contentMode = .scaleAspectFill; f.clipsToBounds = true
+    guard let src = src else { return f }
+    f.layer.cornerRadius = src.layer.cornerRadius; f.layer.cornerCurve = src.layer.cornerCurve; f.layer.maskedCorners = src.layer.maskedCorners
+    for l in src.layer.sublayers ?? [] {
+      guard let g = l as? CAGradientLayer, !g.isHidden, g.name == "diag" || g.name == "foot" else { continue }
+      let v = Shade(); v.isUserInteractionEnabled = false
+      let c = v.layer as! CAGradientLayer
+      c.colors = g.colors; c.locations = g.locations; c.startPoint = g.startPoint; c.endPoint = g.endPoint
+      if g.name == "diag" { v.frame = CGRect(origin: .zero, size: src.bounds.size); v.autoresizingMask = [.flexibleWidth, .flexibleHeight] }
+      else { v.frame = CGRect(x: 0, y: src.bounds.height - 44, width: src.bounds.width, height: 44); v.autoresizingMask = [.flexibleWidth, .flexibleTopMargin] }
+      f.frame = CGRect(origin: .zero, size: src.bounds.size)
+      f.addSubview(v); f.shades.append(v)
+    }
+    return f
+  }
   private func close(from page: ZoomPage? = nil) {
     let page = page ?? pages[safe: at]
     guard let page = page, let m = items[safe: at], let spot = source?(m), let w = spot.0.window else {
@@ -220,14 +243,18 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     }
     let src = spot.0, r = spot.1, whole = r == src.bounds
     let to = src.convert(r, to: w), from = page.image.convert(page.image.bounds, to: view)
-    let fly = UIImageView(image: page.image.image); fly.contentMode = .scaleAspectFill; fly.clipsToBounds = true; fly.frame = from
-    // (back into an album: into its own square, the grid left showing — the rest of the grid is still there)
+    guard let pic = page.image.image else { UIView.animate(withDuration: 0.2, animations: { self.view.alpha = 0 }) { _ in self.dismiss(animated: false) }; return }
+    // (it lands looking exactly as the bubble's photo — its corners, its shades growing in on the way — and then the real
+    //  one takes its place in the same frame: nothing reloads, Haris 2026-11-12. Back into an album: its own square.)
+    let fly = PhotoViewerVC.flier(pic, like: whole ? src : nil); fly.frame = from
+    let radius = fly.layer.cornerRadius; fly.layer.cornerRadius = 0; fly.shades.forEach { $0.alpha = 0 }
     view.insertSubview(fly, aboveSubview: pager); page.image.isHidden = true; if whole { src.alpha = 0 }
     UIView.animate(withDuration: 0.32, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0) {
-      fly.frame = to; fly.layer.cornerRadius = whole ? 19 : 0; self.back.alpha = 0; self.top.alpha = 0; self.foot.alpha = 0
-    } completion: { _ in self.dismiss(animated: false) }
-    // (the bubble itself — its shade and time — fading in as the picture lands, not popping in after it, Haris 2026-11-12)
-    UIView.animate(withDuration: 0.14, delay: 0.18, options: [.curveEaseOut]) { src.alpha = 1; fly.alpha = 0 }
+      fly.frame = to; fly.layer.cornerRadius = radius; fly.shades.forEach { $0.alpha = 1 }; self.back.alpha = 0; self.top.alpha = 0; self.foot.alpha = 0
+    } completion: { _ in
+      if whole { src.alpha = 1; self.dismiss(animated: false) }
+      else { UIView.animate(withDuration: 0.12, animations: { fly.alpha = 0 }) { _ in self.dismiss(animated: false) } }   // (an album's square: the grid's own picture under it)
+    }
   }
 
   // ---------- the foot's actions ----------
