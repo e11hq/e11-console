@@ -804,7 +804,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         let secs = CMTimeGetSeconds(a2.duration)
         guard let d = try? Data(contentsOf: src) else { toast("Couldn’t read that video"); return }
         let tmpId = "local-" + UUID().uuidString
-        let fname = (name as NSString).deletingPathExtension + ".mp4"
+        // (the name says what it really is — an MP4 when made into one, else the original's own kind)
+        let fname = ok ? (name as NSString).deletingPathExtension + ".mp4" : (name as NSString).deletingPathExtension + "." + (src.pathExtension.isEmpty ? "mov" : src.pathExtension.lowercased())
         Talk.shared.send(self.group, text: caption, reply: self.replying, file: Msg.FileRef(id: tmpId, name: fname, size: d.count, kind: "video", w: w, h: h, secs: secs.isFinite ? secs : nil), localFile: src, upload: d, album: album)
         self.replying = nil
         self.toBottom(true)
@@ -2012,10 +2013,16 @@ final class BubbleCell: UITableViewCell {
   static func frame(_ url: URL, _ id: String, _ done: @escaping (UIImage?) -> Void) {
     if let i = frames.object(forKey: id as NSString) { done(i); return }
     DispatchQueue.global(qos: .userInitiated).async {
-      let named = FileManager.default.temporaryDirectory.appendingPathComponent("v-\(Net.stableKey(id)).mp4")
-      if !FileManager.default.fileExists(atPath: named.path) { try? FileManager.default.copyItem(at: url, to: named) }
-      let g = AVAssetImageGenerator(asset: AVURLAsset(url: named)); g.appliesPreferredTrackTransform = true; g.maximumSize = CGSize(width: 720, height: 720)
-      let img = (try? g.copyCGImage(at: CMTime(seconds: 0.1, preferredTimescale: 600), actualTime: nil)).map { UIImage(cgImage: $0) }
+      // (read as an MP4, else as a QuickTime movie — a video that couldn't be made into an MP4 when sent went as it was,
+      //  and read with the wrong kind its first picture never came: the album's square stayed dark, Haris 2026-11-12)
+      var img: UIImage?
+      for ext in ["mp4", "mov", "m4v"] where img == nil {
+        let named = FileManager.default.temporaryDirectory.appendingPathComponent("v-\(Net.stableKey(id)).\(ext)")
+        if !FileManager.default.fileExists(atPath: named.path) { try? FileManager.default.copyItem(at: url, to: named) }
+        let g = AVAssetImageGenerator(asset: AVURLAsset(url: named)); g.appliesPreferredTrackTransform = true; g.maximumSize = CGSize(width: 720, height: 720)
+        g.requestedTimeToleranceBefore = .positiveInfinity; g.requestedTimeToleranceAfter = .positiveInfinity
+        img = ((try? g.copyCGImage(at: CMTime(seconds: 0.1, preferredTimescale: 600), actualTime: nil)) ?? (try? g.copyCGImage(at: .zero, actualTime: nil))).map { UIImage(cgImage: $0) }
+      }
       if let i = img { frames.setObject(i, forKey: id as NSString) }
       DispatchQueue.main.async { done(img) }
     }
