@@ -54,6 +54,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     table.frame = view.bounds; table.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     // (the room above and below the messages is ours to set: the bar at the top, the message bar at the bottom — fitBottom)
     table.contentInsetAdjustmentBehavior = .never
+    // (the day chips are floating headers: on automatic Apple draws its firm frost with a line down past them — the chat
+    //  gets Apple's soft frost instead, as E11 Console's comments, Haris 2026-11-10 / 2026-11-12)
+    if #available(iOS 26.0, *) { table.topEdgeEffect.style = .soft }
     view.addSubview(table)
     data = UITableViewDiffableDataSource<String, ChatItem>(tableView: table) { [weak self] tv, ip, item in
       guard let self = self else { return UITableViewCell() }
