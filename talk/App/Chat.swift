@@ -74,13 +74,17 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private var home: CGFloat { UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first?.safeAreaInsets.bottom ?? 0 }
   private func placeBars() {
     if #available(iOS 17.0, *) { view.keyboardLayoutGuide.usesBottomSafeArea = false }   // (iOS 16: the guide stops at the home line itself)
+    // (a little room between the box and the keyboard — it sat 4 above the keys, Haris 2026-11-12: "very thin"; only with
+    //  the keyboard up: down, the home line's room holds the bar — iOS 16's guide stops at the home line, so none there)
+    var gap: CGFloat = 0
+    if #available(iOS 17.0, *) { gap = 6 }
     for a in [bar, findAcc] as [UIView] {
       a.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(a)
-      let onKeys = a.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor); onKeys.priority = .init(999)
+      let onKeys = a.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -gap); onKeys.priority = .init(999)
       let aboveHome = a.bottomAnchor.constraint(lessThanOrEqualTo: view.bottomAnchor, constant: -home)
       homeLimits.append(aboveHome)
       NSLayoutConstraint.activate([a.leadingAnchor.constraint(equalTo: view.leadingAnchor), a.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-                                   a.bottomAnchor.constraint(lessThanOrEqualTo: view.keyboardLayoutGuide.topAnchor), onKeys, aboveHome])
+                                   a.bottomAnchor.constraint(lessThanOrEqualTo: view.keyboardLayoutGuide.topAnchor, constant: -gap), onKeys, aboveHome])
     }
     findAcc.isHidden = true
   }
