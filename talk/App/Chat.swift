@@ -164,6 +164,27 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   func scrollViewDidScroll(_ s: UIScrollView) {
     let away = s.contentOffset.y + s.bounds.height < s.contentSize.height - 160
     if (downB.alpha > 0) != away { UIView.animate(withDuration: 0.2) { self.downB.alpha = away ? 1 : 0 } }
+    chipsAwake()
+  }
+  /* The day chip stuck under the bar (WhatsApp's way, Haris 2026-11-12): there while the chat moves, it fades away a
+     moment after the chat stops, and comes back as soon as it moves again. Only the stuck one — a chip in its own place
+     between the messages always stays. (Apple's list keeps the chip stuck; the fade is Apple's view animation.) */
+  private var chipNap: DispatchWorkItem?
+  private func chipsAwake() {
+    for s in 0..<table.numberOfSections { if let h = table.headerView(forSection: s), h.alpha < 1 { UIView.animate(withDuration: 0.15) { h.alpha = 1 } } }
+    chipNap?.cancel()
+    let w = DispatchWorkItem { [weak self] in self?.chipsNap() }
+    chipNap = w
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.4, execute: w)
+  }
+  private func chipsNap() {
+    guard !table.isTracking, !table.isDecelerating else { chipsAwake(); return }
+    let top = table.contentOffset.y + table.adjustedContentInset.top
+    for s in 0..<table.numberOfSections {
+      // (stuck: the chip's own place has gone above the bar)
+      guard let h = table.headerView(forSection: s), table.rect(forSection: s).minY < top - 1, table.rect(forSection: s).maxY > top + 38 else { continue }
+      UIView.animate(withDuration: 0.35) { h.alpha = 0 }
+    }
   }
 
   @objc private func head() {
@@ -420,7 +441,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   // ---------- the day's chip: the section's header ----------
   func tableView(_ tv: UITableView, viewForHeaderInSection i: Int) -> UIView? {
     guard let id = data.snapshot().sectionIdentifiers[safe: i], let h = tv.dequeueReusableHeaderFooterView(withIdentifier: "d") as? DayHeader else { return nil }
-    h.set(dayOf[id] ?? id); return h
+    h.set(dayOf[id] ?? id); h.alpha = 1; return h
   }
   func tableView(_ tv: UITableView, heightForHeaderInSection i: Int) -> CGFloat { 38 }
 
