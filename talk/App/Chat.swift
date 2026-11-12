@@ -23,6 +23,11 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private var dayOf: [String: String] = [:]   // section → the words on its chip
   private var msgs: [String: Msg] = [:]
   private var sigs: [String: Int] = [:]
+  // (a row's identity: one of yours keeps the key it had while on its way — its id changes when the server has it, and
+  //  as a new row it was taken out and put in again, fading: the chat "redrawing" on every send, Haris 2026-11-12)
+  private var keyOf: [String: String] = [:], idOf: [String: String] = [:]
+  private func item(_ id: String) -> ChatItem { .msg(keyOf[id] ?? id) }
+  private func mid(_ key: String) -> String { idOf[key] ?? key }
   private var runs: [String: Run] = [:]
   private let bar = MessageBar()
   private var kb: CGFloat = 0
@@ -120,7 +125,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     data = UITableViewDiffableDataSource<String, ChatItem>(tableView: table) { [weak self] tv, ip, item in
       guard let self = self else { return UITableViewCell() }
       switch item {
-      case .msg(let id):
+      case .msg(let key):
+        let id = self.mid(key)
         let c = tv.dequeueReusableCell(withIdentifier: "b", for: ip) as! BubbleCell
         c.contentView.isUserInteractionEnabled = !self.keyUp
         c.find = self.findSet.contains(id) ? (self.findQ, id == self.findCur) : nil
@@ -364,7 +370,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
   // an older message asked for (a quote, a search): lined up down from a little above it first
   private func reach(_ id: String) {
-    guard data.indexPath(for: .msg(id)) == nil else { return }
+    guard data.indexPath(for: item(id)) == nil else { return }
     let all = Talk.shared.log(group).msgs
     guard let i = all.firstIndex(where: { $0.id == id }) else { return }
     shownFrom = all[max(0, i - 20)].id
@@ -573,18 +579,18 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   // (only the messages whose marks changed are set again — the same rows, the same heights)
   private func remark(_ ids: Set<String>) {
     var snap = data.snapshot()
-    let items = ids.map { ChatItem.msg($0) }.filter { snap.indexOfItem($0) != nil }
+    let items = ids.map { item($0) }.filter { snap.indexOfItem($0) != nil }
     guard !items.isEmpty else { return }
     snap.reconfigureItems(items)
     data.apply(snap, animatingDifferences: false)
   }
   private func bring(_ id: String) {
     reach(id)
-    guard let ip = data.indexPath(for: .msg(id)) else { return }
+    guard let ip = data.indexPath(for: item(id)) else { return }
     table.scrollToRow(at: ip, at: .middle, animated: true)
     // (the match found: its bubble pulses once it's in view — Haris 2026-11-12)
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-      guard let self = self, self.findCur == id, let ip = self.data.indexPath(for: .msg(id)) else { return }
+      guard let self = self, self.findCur == id, let ip = self.data.indexPath(for: item(id)) else { return }
       (self.table.cellForRow(at: ip) as? BubbleCell)?.pulse()
     }
   }
@@ -618,6 +624,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private func reload(animated: Bool) {
     let l = Talk.shared.log(group)
     var snap = NSDiffableDataSourceSnapshot<String, ChatItem>()
+    var newKeyOf: [String: String] = [:], newIdOf: [String: String] = [:]
     var lastDay = "", newSigs: [String: Int] = [:], items: [ChatItem] = [], section = "", newDayOf: [String: String] = [:]
     msgs = [:]
     // (a run: one person's messages one after another on the same day — the name on its first, the tail on its last)
@@ -657,12 +664,19 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       var h = Hasher(); h.combine(m.text); h.combine(m.edited); h.combine(m.deleted); h.combine(m.pending); h.combine(m.failed); h.combine(m.reactions); h.combine(m.file?.id); h.combine(m.link); h.combine(m.task); h.combine(newAlbums[m.id]?.map { $0.id + ($0.file?.id ?? "") })
       h.combine(newRuns[m.id]); h.combine(Talk.shared.people[m.by]?.color); h.combine(Talk.shared.people[m.by]?.role)
       if m.by == meId { h.combine(i <= readTo); h.combine(i <= gotTo) }
-      newSigs[m.id] = h.finalize()
-      items.append(.msg(m.id)); snap.appendItems([.msg(m.id)], toSection: section)
+      let key: String = {
+        if let k = keyOf[m.id] { return k }
+        if let c = m.cid, m.by == meId { return "c:" + c }
+        return m.id
+      }()
+      newKeyOf[m.id] = key; newIdOf[key] = m.id
+      newSigs[key] = h.finalize()
+      items.append(.msg(key)); snap.appendItems([.msg(key)], toSection: section)
     }
     runs = newRuns; dayOf = newDayOf; albums = newAlbums
     let old = data.snapshot()
-    snap.reconfigureItems(items.filter { if case .msg(let id) = $0 { return old.indexOfItem($0) != nil && sigs[id] != newSigs[id] }; return false })
+    keyOf = newKeyOf; idOf = newIdOf
+    snap.reconfigureItems(items.filter { if case .msg(let key) = $0 { return old.indexOfItem($0) != nil && sigs[key] != newSigs[key] }; return false })
     sigs = newSigs
     data.apply(snap, animatingDifferences: animated && old.numberOfItems > 0)
   }
@@ -724,11 +738,11 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private var scrolledAway: Bool { table.contentOffset.y + table.bounds.height < table.contentSize.height - 160 }
   private func jump(to id: String) {
     reach(id)
-    guard let ip = data.indexPath(for: .msg(id)) else { toast("That message isn’t on this phone any more"); return }
+    guard let ip = data.indexPath(for: item(id)) else { toast("That message isn’t on this phone any more"); return }
     table.scrollToRow(at: ip, at: .middle, animated: true)
     // (a quote tapped, or opened from a search: the message pulses once in view, as the chat's search does — Haris 2026-11-12)
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
-      guard let self = self, let ip = self.data.indexPath(for: .msg(id)) else { return }
+      guard let self = self, let ip = self.data.indexPath(for: item(id)) else { return }
       (self.table.cellForRow(at: ip) as? BubbleCell)?.pulse()
     }
   }
@@ -827,7 +841,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         // (the bubble showing it — an album's first stands for the album)
         let al = self.albums.first(where: { $0.value.contains { $0.id == x.id } })
         let id = al?.key ?? x.id
-        guard let ip = self.data.indexPath(for: .msg(id)), let c = self.table.cellForRow(at: ip) as? BubbleCell, c.window != nil else { return nil }
+        guard let ip = self.data.indexPath(for: item(id)), let c = self.table.cellForRow(at: ip) as? BubbleCell, c.window != nil else { return nil }
         // (in an album: its own square of the grid — the ones past four, the fourth's square with "+N")
         guard let k = al?.value.firstIndex(where: { $0.id == x.id }) else { return (c.photo, c.photo.bounds) }
         let i = min(k, 3), b = c.photo.bounds, t = (b.width - 2) / 2
@@ -890,7 +904,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     guard swipe.location(in: view).x > 28 else { return false }   // (the screen's edge: going back)
     let v = swipe.velocity(in: table)
     guard abs(v.x) > abs(v.y) * 1.3, bar.recording == false,
-          let ip = table.indexPathForRow(at: swipe.location(in: table)), case .msg(let id)? = data.itemIdentifier(for: ip), let m = msgs[id],
+          let ip = table.indexPathForRow(at: swipe.location(in: table)), case .msg(let key)? = data.itemIdentifier(for: ip), let m = msgs[mid(key)],
           let c = table.cellForRow(at: ip) as? BubbleCell,
           // (only from the bubble itself — elsewhere on the page the finger is the page's: Apple's back swipe)
           c.bubble.bounds.insetBy(dx: -6, dy: -4).contains(swipe.location(in: c.bubble)) else { return false }
@@ -907,7 +921,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     switch g.state {
     case .began:
       guard let ip = table.indexPathForRow(at: g.location(in: table)), let c = table.cellForRow(at: ip) as? BubbleCell,
-            case .msg(let id)? = data.itemIdentifier(for: ip), let m = msgs[id] else { return }
+            case .msg(let key)? = data.itemIdentifier(for: ip), let m = msgs[mid(key)] else { return }
       swipeCell = c; swipeMsg = m; swipeArmed = false; swipeDx = 0
     case .changed:
       guard let c = swipeCell, let m = swipeMsg else { return }
@@ -994,7 +1008,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
 
   // ---------- hold: reactions and the menu ----------
   func tableView(_ tv: UITableView, contextMenuConfigurationForRowAt ip: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
-    guard case .msg(let id)? = data.itemIdentifier(for: ip), let m = msgs[id], m.kind != "sys" else { return nil }
+    guard case .msg(let key)? = data.itemIdentifier(for: ip), let m = msgs[mid(key)], m.kind != "sys" else { return nil }
     // (the trial of Haris 2026-11-12: a preview of the bubble — iPhone places it where it fits with the menu, shrinking a
     //  tall one — iMessage's way; build 39 kept the bubble itself, slid up WhatsApp's way)
     // (the bubble with its tail — the picture taken a little wider on the tail's side; the tail was cut off as it lifted and
@@ -1004,13 +1018,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       if let v = v { let m = CAShapeLayer(); m.path = c.heldPath(origin: c.heldRect.origin).cgPath; v.layer.mask = m }
       return v
     }
-    return UIContextMenuConfiguration(identifier: id as NSString, previewProvider: shot.map { v in { BubblePreview(v) } }) { [weak self] _ in self?.menu(m) }
+    return UIContextMenuConfiguration(identifier: m.id as NSString, previewProvider: shot.map { v in { BubblePreview(v) } }) { [weak self] _ in self?.menu(m) }
   }
   // opening and closing: from and back to the message's own place in the chat
   func tableView(_ tv: UITableView, previewForDismissingContextMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? { holdPreview(tv, c) }
   func tableView(_ tv: UITableView, previewForHighlightingContextMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? { holdPreview(tv, c) }
   private func holdPreview(_ tv: UITableView, _ c: UIContextMenuConfiguration) -> UITargetedPreview? {
-    guard let id = c.identifier as? String, let ip = data.indexPath(for: .msg(id)), let cell = tv.cellForRow(at: ip) as? BubbleCell else { return nil }
+    guard let id = c.identifier as? String, let ip = data.indexPath(for: item(id)), let cell = tv.cellForRow(at: ip) as? BubbleCell else { return nil }
     // (the bubble's own shape, tail and all, lifting from the row — not a rounded box that cut the tail away)
     let p = UIPreviewParameters(); p.backgroundColor = .clear
     p.visiblePath = cell.heldPath(origin: cell.bubble.frame.origin)
@@ -1092,6 +1106,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
 
   private func react(_ m: Msg, _ e: String?) {
+    // (picked in the hold menu: put on once the menu has gone and the bubble is back in place — drawn while it was still
+    //  lifted, the bubble and its photo flashed, Haris 2026-11-12)
+    if holding { afterHold = { [weak self] in self?.react(m, e) }; return }
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     guard let me = Talk.shared.me?.id else { return }
     let g = group
@@ -1112,6 +1129,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   // ---------- holding a message: the chat behind a little blurred (Haris 2026-11-12); the reactions are the menu's own
   // top row — Apple's palette (mock-up "Talk reactions palette", Haris 2026-11-12: "This palette is much better") ----------
   func tableView(_ tv: UITableView, willDisplayContextMenu c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
+    holding = true
     guard let host = navigationController?.view else { return }
     let veil = UIVisualEffectView(effect: nil); veil.frame = host.bounds; veil.isUserInteractionEnabled = false
     veil.autoresizingMask = [.flexibleWidth, .flexibleHeight]; host.addSubview(veil); holdVeil = veil
@@ -1122,7 +1140,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     UIView.animate(withDuration: 0.25) { veil.alpha = 1 }
   }
   private var holdVeil: UIVisualEffectView?, holdBlur: UIViewPropertyAnimator?
+  private var holding = false, afterHold: (() -> Void)?
   func tableView(_ tv: UITableView, willEndContextMenuInteraction c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
+    let finish = { [weak self] in guard let self = self else { return }; self.holding = false; let f = self.afterHold; self.afterHold = nil; f?() }
+    if let a = animator { a.addCompletion(finish) } else { DispatchQueue.main.async(execute: finish) }
     if let veil = holdVeil {
       holdVeil = nil; let a = holdBlur; holdBlur = nil
       UIView.animate(withDuration: 0.25, animations: { veil.alpha = 0 }) { _ in a?.stopAnimation(true); veil.removeFromSuperview() }
@@ -1756,7 +1777,10 @@ final class BubbleCell: UITableViewCell {
         // (an album: a square of its first four, "+N" on the fourth for the rest)
         photoH.constant = w; playDisc.isHidden = true; vlen.isHidden = true
         drawAlbum(m, w)
-      } else if shownFile == f.id && photo.image != nil { } else if let k = known { photo.image = k; shownFile = f.id } else { photo.image = nil; shownFile = f.id }
+      } else if shownFile == f.id && photo.image != nil { }
+      // (one of yours, just through: the server's id for the same picture — kept as it is, not blanked and drawn again)
+      else if shownFile?.hasPrefix("local-") == true, let i = photo.image, !isVideo { BubbleCell.pictures.setObject(i, forKey: f.id as NSString); shownFile = f.id }
+      else if let k = known { photo.image = k; shownFile = f.id } else { photo.image = nil; shownFile = f.id }
       if album.count < 4, photo.image == nil, !isVideo || f.size <= 60 * 1024 * 1024 || FileManager.default.fileExists(atPath: Net.local(f.id).path) {
         Net.shared.file(f.id) { [weak self] url in
           guard let self = self, self.msg?.id == m.id, let url = url else { return }
