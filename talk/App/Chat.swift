@@ -440,7 +440,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     guard swipe.location(in: view).x > 28 else { return false }   // (the screen's edge: going back)
     let v = swipe.velocity(in: table)
     guard abs(v.x) > abs(v.y) * 1.3, bar.recording == false,
-          let ip = table.indexPathForRow(at: swipe.location(in: table)), case .msg(let id)? = data.itemIdentifier(for: ip), let m = msgs[id] else { return false }
+          let ip = table.indexPathForRow(at: swipe.location(in: table)), case .msg(let id)? = data.itemIdentifier(for: ip), let m = msgs[id],
+          let c = table.cellForRow(at: ip) as? BubbleCell,
+          // (only from the bubble itself — elsewhere on the page the finger is the page's: Apple's back swipe)
+          c.bubble.bounds.insetBy(dx: -6, dy: -4).contains(swipe.location(in: c.bubble)) else { return false }
     return v.x > 0 ? canReply(m) : canInfo(m)
   }
   /* Your own message swiped left (the design, board 27 — WhatsApp's): the bubble travels a little (64) as the chat dims,
