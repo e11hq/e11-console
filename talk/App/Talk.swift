@@ -456,7 +456,6 @@ enum Look {
   static let mine = dyn(0x2B5FA3, 0x2F7BFF)          // your bubbles
   static let theirs = dyn(0x262628, 0xFFFFFF)        // everyone else's
   static let chatBg = dyn(0x0A0A0A, 0xF2F2F7)        // behind the chat
-  static let barBg = dyn(0x141414, 0xF9F9F9)         // the message bar
   static let field = dyn(0x2B2B2B, 0xFFFFFF)         // the message box
   static let dayChip = dyn(0x1C1C1E, 0xFFFFFF)       // "Today", "Yesterday"
   static let downBtn = dyn(0x2C2C2E, 0xFFFFFF)       // the scroll-down button

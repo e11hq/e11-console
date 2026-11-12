@@ -1336,7 +1336,7 @@ final class MessageBar: UIView, UITextViewDelegate {
   override init(frame: CGRect) {
     super.init(frame: CGRect(x: 0, y: 0, width: 390, height: 52))
     autoresizingMask = .flexibleHeight
-    blur.backgroundColor = Look.barBg
+    blur.backgroundColor = Look.chatBg   // (WhatsApp's: the bar the chat's own colour, the box white with its hairline — Haris 2026-11-12)
     addSubview(blur)
     // (the design: + · the box with its smiley · camera · the mic in a round button — while typing, send in our blue)
     // (WhatsApp's weights and sizes, Haris 2026-11-12: + thin, the camera and smiley lighter and smaller — they looked
