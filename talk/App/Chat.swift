@@ -1517,7 +1517,8 @@ final class BubbleCell: UITableViewCell {
     if words && emojis > 0 {
       // (one at 46, two at 28, three at 22 — the time on its own line under them)
       let e = NSMutableAttributedString(string: m.text.trimmingCharacters(in: .whitespacesAndNewlines), attributes: [.font: UIFont.systemFont(ofSize: [46, 28, 22][emojis - 1])])
-      let room = NSTextAttachment(image: BubbleCell.clear); room.bounds = CGRect(x: 0, y: 0, width: 1, height: 16)
+      // (the time's own line as wide as the time, so the bubble holds it — a lone emoji is narrower than its time)
+      let room = NSTextAttachment(image: BubbleCell.clear); room.bounds = CGRect(x: 0, y: 0, width: ceil(stamp.intrinsicContentSize.width), height: 16)
       e.append(NSAttributedString(string: "\n")); e.append(NSAttributedString(attachment: room))
       textL.attributedText = e
     } else if words {
