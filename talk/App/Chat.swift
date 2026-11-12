@@ -2038,7 +2038,10 @@ final class EmojiBox: UITextView {
     let f = UITextField(frame: CGRect(x: 0, y: 0, width: 1, height: 1)); f.alpha = 0.011; f.isAccessibilityElement = false
     f.autocorrectionType = .no; f.keyboardAppearance = keyboardAppearance; return f
   }()
+  // (when we last asked for a keyboard — iPhone's own notices just after still name the old one)
+  private(set) var askedAt = Date.distantPast
   func swapKeyboard() {
+    askedAt = Date()
     guard isFirstResponder, let host = superview else { becomeFirstResponder(); return }
     if relay.superview == nil { host.insertSubview(relay, at: 0) }
     let sel = selectedRange
@@ -2138,7 +2141,9 @@ final class MessageBar: UIView, UITextViewDelegate {
     }, for: .touchUpInside)
     // (the keyboard changed with the 🌐 key: the button follows — ⌨︎ while the emojis are up, ☺︎ otherwise)
     NotificationCenter.default.addObserver(forName: UITextInputMode.currentInputModeDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
-      guard let self = self, self.box.isFirstResponder, !self.box.swapping, let now = self.box.shown else { return }
+      // (not right after we asked for one ourselves: the keyboard down, ☺︎ opened it on the emojis and this notice, naming
+      //  the letters it came up from, put the button back and the letters with it — Haris 2026-11-12)
+      guard let self = self, self.box.isFirstResponder, !self.box.swapping, Date().timeIntervalSince(self.box.askedAt) > 0.8, let now = self.box.shown else { return }
       let isEmoji = now.primaryLanguage == "emoji"
       if !isEmoji { self.box.typing = now }
       if self.box.emoji != isEmoji { self.box.emoji = isEmoji; self.setSmiley() }
