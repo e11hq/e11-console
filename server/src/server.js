@@ -779,6 +779,21 @@ export function createServer(cfg) {
 
     // E11 Talk (talk.js) — the chat app's own addresses: the team as everywhere, and client contacts (E11 Talk only)
     if (p.startsWith('/api/talk/')) { const tu = await talkWho(req, res); if (!tu) return; return talkRoute(req, res, p, url, tu); }
+    // (E11 Talk's pictures — people's photos and client logos — on Talk's own address, signed in as Talk is: Console's
+    //  file address asked for Console's sign-in, so Talk showed initials everywhere, Haris 2026-11-12. The team: what they
+    //  may read in E11 Console. A client contact: their own client's logo and the team's photos, nothing else.)
+    if (talkHost(req) && p.startsWith('/__file/') && (req.method === 'GET' || req.method === 'HEAD')) {
+      const tu = await talkWho(req, res); if (!tu) return;
+      const rel = p.slice('/__file/'.length);
+      let ok;
+      if (tu.contact) {
+        const pr = store.get('projects', String(tu.client || '')), cl = pr && pr.clientId ? store.get('clients', String(pr.clientId)) : null;
+        ok = (cl && cl.logo === rel) || store.list('users').some((x) => x.active !== false && x.avatar === rel);
+      } else ok = access.canReadFile(tu, rel);
+      if (!ok) return json(res, 403, { ok: false, error: 'Not allowed' });
+      if (url.searchParams.get('w')) return files.serveSized(req, res, rel, url.searchParams.get('w'));
+      return files.serve(req, res, rel);
+    }
 
     const u = await who(req, res);
     if (!u) return;
