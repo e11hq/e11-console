@@ -62,6 +62,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         c.onReplyTap = { [weak self] rid in self?.jump(to: rid) }
         c.onFileTap = { [weak self, weak c] m in self?.openFrom = (m.kind == "photo" || m.kind == "video") ? c?.photo : nil; self?.open(m) }
         c.onRetry = { [weak self] m in guard let self = self else { return }; Talk.shared.retry(self.group, m) }
+        c.onForward = { [weak self] m in self?.forward(m) }
         return c
       }
     }
@@ -434,9 +435,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     case .changed:
       guard let c = swipeCell, let m = swipeMsg else { return }
       if raw > 0 || hook == nil && !canInfo(m) {
-        // reply: with the finger to 74, then less and less
-        var dx = raw > 0 && canReply(m) ? raw : 0
-        if dx > 74 { dx = 74 + (dx - 74) * 0.25 }
+        // reply: the bubble with the finger as far as 64, and there it stops (as Message info's)
+        let dx = raw > 0 && canReply(m) ? min(raw, 64) : 0
         swipeDx = dx; c.slide(dx); dimOthers(0, but: c)
         let armed = dx >= 60
         if armed != swipeArmed { swipeArmed = armed; if armed { UIImpactFeedbackGenerator(style: .light).impactOccurred(); c.pop() } }
@@ -488,6 +488,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private func dimOthers(_ p: CGFloat, but c: UITableViewCell) {
     for v in table.visibleCells where v !== c { v.contentView.alpha = 1 - 0.68 * p }
   }
+  // Forward (the button beside a photo, video, file or link, or hold › Forward): the sheet of groups to send it to
+  private func forward(_ m: Msg) {
+    bar.box.resignFirstResponder()
+    let n = UINavigationController(rootViewController: ForwardVC(msg: m, from: group))
+    if let s = n.sheetPresentationController { s.detents = [.large()]; s.prefersGrabberVisible = true }
+    present(n, animated: true)
+  }
   private func openInfo(_ m: Msg) { navigationController?.pushViewController(MessageInfoVC(group: group, id: m.id), animated: true) }
   private func startReply(_ m: Msg) { editingMsg = nil; replying = m; UIImpactFeedbackGenerator(style: .light).impactOccurred(); bar.box.becomeFirstResponder() }
 
@@ -521,6 +528,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       }
       var acts: [UIMenuElement] = []
       acts.append(UIAction(title: "Reply", image: UIImage(systemName: "arrowshape.turn.up.left")) { [weak self] _ in self?.startReply(m) })
+      acts.append(UIAction(title: "Forward", image: UIImage(systemName: "arrowshape.turn.up.right")) { [weak self] _ in self?.forward(m) })
       if !m.text.isEmpty { acts.append(UIAction(title: "Copy", image: UIImage(systemName: "doc.on.doc")) { _ in UIPasteboard.general.string = m.text; toast("Copied") }) }
       let starred = T.isStarred(group, m.id)
       acts.append(UIAction(title: starred ? "Unstar" : "Star", image: UIImage(systemName: starred ? "star.slash" : "star")) { [weak self] _ in
@@ -798,7 +806,13 @@ final class BubbleCell: UITableViewCell {
   private var wMine: NSLayoutConstraint!, wTheirs: NSLayoutConstraint!, top: NSLayoutConstraint!, stackTrail: NSLayoutConstraint!
   private var reactsLead: NSLayoutConstraint!, reactsTrail: NSLayoutConstraint!, bubbleBottom: NSLayoutConstraint!, reactsBottom: NSLayoutConstraint!
   private var msg: Msg?
-  private var media = false, caption = false, tailOn = false, isMine = false
+  private var media = false, caption = false, tailOn = false, isMine = false, framed = false, overPhoto = false
+  // "Forwarded" over a forwarded message (the design, board 32: italic, its arrow, in the time's colour)
+  private let fwdL = UILabel()
+  // the round forward button beside a photo, video, file or link (anyone's) — on the other side from the bubble
+  let fwdB = UIButton(type: .custom)
+  var onForward: ((Msg) -> Void)?
+  private var fwdMine: NSLayoutConstraint!, fwdTheirs: NSLayoutConstraint!
   var onReplyTap: ((String) -> Void)?
   var onFileTap: ((Msg) -> Void)?
   var onRetry: ((Msg) -> Void)?
@@ -872,7 +886,8 @@ final class BubbleCell: UITableViewCell {
                                  linkFoot.topAnchor.constraint(equalTo: linkLine.bottomAnchor, constant: 8), linkFoot.leadingAnchor.constraint(equalTo: linkSite.leadingAnchor), linkFoot.trailingAnchor.constraint(equalTo: linkSite.trailingAnchor),
                                  linkFoot.bottomAnchor.constraint(equalTo: linkBox.bottomAnchor, constant: -9)])
     linkBox.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(linkTap)))
-    [nameL, roleL, photoWrap, quoteWrap, cardWrap, voice, linkWrap, textL, footL].forEach { stack.addArrangedSubview($0) }
+    [nameL, roleL, fwdL, photoWrap, quoteWrap, cardWrap, voice, linkWrap, textL, footL].forEach { stack.addArrangedSubview($0) }
+    stack.setCustomSpacing(4, after: fwdL)
     stack.setCustomSpacing(2, after: roleL); stack.setCustomSpacing(6, after: photoWrap); stack.setCustomSpacing(7, after: quoteWrap)
     stack.setCustomSpacing(7, after: cardWrap); stack.setCustomSpacing(7, after: linkWrap); stack.setCustomSpacing(2, after: nameL)
     bubble.addSubview(stack); bubble.addSubview(stamp); contentView.addSubview(bubble)
@@ -886,7 +901,15 @@ final class BubbleCell: UITableViewCell {
     retryB.setImage(UIImage(systemName: "exclamationmark.circle.fill"), for: .normal); retryB.tintColor = .systemRed
     retryB.addAction(UIAction { [weak self] _ in if let m = self?.msg { self?.onRetry?(m) } }, for: .touchUpInside)
     contentView.addSubview(retryB)
-    for v in [bubble, stack, stamp, face, reacts, sysL, retryB] as [UIView] { v.translatesAutoresizingMaskIntoConstraints = false }
+    fwdL.font = .italicSystemFont(ofSize: 14)
+    fwdB.backgroundColor = Look.downBtn; fwdB.layer.cornerRadius = 15
+    fwdB.setImage(UIImage(systemName: "arrowshape.turn.up.right.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold)), for: .normal)
+    fwdB.tintColor = .secondaryLabel; fwdB.accessibilityLabel = "Forward"
+    fwdB.addAction(UIAction { [weak self] _ in if let m = self?.msg { UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.onForward?(m) } }, for: .touchUpInside)
+    contentView.addSubview(fwdB)
+    for v in [bubble, stack, stamp, face, reacts, sysL, retryB, fwdB] as [UIView] { v.translatesAutoresizingMaskIntoConstraints = false }
+    fwdMine = fwdB.trailingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: -10)
+    fwdTheirs = fwdB.leadingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: 18)
     lead = bubble.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 44)
     trail = bubble.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -17)
     wMine = bubble.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 281 / 393)
@@ -909,6 +932,7 @@ final class BubbleCell: UITableViewCell {
       sysL.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 13), sysL.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -3),
       sysL.centerXAnchor.constraint(equalTo: contentView.centerXAnchor), sysL.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.85),
       retryB.centerYAnchor.constraint(equalTo: bubble.centerYAnchor), retryB.trailingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: -6),
+      fwdB.widthAnchor.constraint(equalToConstant: 30), fwdB.heightAnchor.constraint(equalToConstant: 30), fwdB.centerYAnchor.constraint(equalTo: bubble.centerYAnchor),
     ])
   }
   private var quoteThumbW: NSLayoutConstraint!
@@ -925,16 +949,18 @@ final class BubbleCell: UITableViewCell {
     self.contentView.addSubview(v)
     return v
   }()
-  private var moving: [UIView] { [bubble, face, reacts, retryB] }
+  private var moving: [UIView] { [bubble, face, reacts, retryB, fwdB] }
   func slide(_ dx: CGFloat) {
     let t = CGAffineTransform(translationX: dx, y: 0)
     for v in moving { v.transform = t }
     guard dx > 0 else { replyIcon.alpha = 0; return }
+    // (the reply: the arrow comes in at the screen's left edge, the forward button goes)
     let p = min(1, dx / 64)
-    replyIcon.center = CGPoint(x: bubble.center.x - bubble.bounds.width / 2 - 22, y: bubble.center.y)
-    if !popping { replyIcon.transform = CGAffineTransform(translationX: 26 * p - 26 + dx, y: 0).scaledBy(x: 0.5 + 0.5 * p, y: 0.5 + 0.5 * p) }
+    replyIcon.center = CGPoint(x: 28, y: bubble.center.y)
+    if !popping { replyIcon.transform = CGAffineTransform(scaleX: 0.5 + 0.5 * p, y: 0.5 + 0.5 * p) }
     replyIcon.alpha = p
-    iconDx = dx
+    fwdB.alpha = 1 - p
+    iconDx = 0
   }
   private var popping = false, iconDx: CGFloat = 0
   func pop() {
@@ -945,7 +971,7 @@ final class BubbleCell: UITableViewCell {
     }
   }
   func settle(animated: Bool) {
-    let go = { for v in self.moving { v.transform = .identity }; self.replyIcon.alpha = 0 }
+    let go = { for v in self.moving { v.transform = .identity }; self.replyIcon.alpha = 0; self.fwdB.alpha = 1 }
     popping = false
     if animated { UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.82, initialSpringVelocity: 0, options: [.allowUserInteraction], animations: go) } else { go() }
   }
@@ -964,8 +990,8 @@ final class BubbleCell: UITableViewCell {
   // photo's own size); the bubble's colour only under the words — none at all round a photo alone (it sat out from
   // under a photo as a coloured edge and a second tail: the old way read the sizes before they were laid out)
   private func shapePhoto() {
-    photo.layer.cornerRadius = media ? 19 : 0; photo.layer.cornerCurve = .continuous
-    photo.layer.maskedCorners = caption ? [.layerMinXMinYCorner, .layerMaxXMinYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+    photo.layer.cornerRadius = framed ? 14 : media ? 19 : 0; photo.layer.cornerCurve = .continuous
+    photo.layer.maskedCorners = caption && !framed ? [.layerMinXMinYCorner, .layerMaxXMinYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
     photo.layer.mask = nil
     bubble.fillTop = media ? (caption ? photoH.constant - 1 : .greatestFiniteMagnitude) : 0
   }
@@ -984,13 +1010,25 @@ final class BubbleCell: UITableViewCell {
     let isPhoto = !m.deleted && m.file != nil && (m.kind == "photo" || isVideo)
     let isVoice = !m.deleted && m.file != nil && m.kind == "voice"
     let isDoc = !m.deleted && m.file != nil && !isPhoto && !isVoice
-    media = isPhoto; caption = isPhoto && !m.text.isEmpty
+    // (a forwarded photo sits inside the bubble under "Forwarded", rounded 14, the bubble's colour round it)
+    framed = isPhoto && m.fwd == true
+    media = isPhoto && !framed; caption = isPhoto && !m.text.isEmpty; overPhoto = isPhoto && !caption
+    fwdL.isHidden = m.fwd != true || m.deleted
+    if !fwdL.isHidden {
+      let c: UIColor = mine ? Look.mineTime : Look.roleInk
+      let a = NSMutableAttributedString(attachment: NSTextAttachment(image: UIImage(systemName: "arrowshape.turn.up.right.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold))!.withTintColor(c.resolvedColor(with: traitCollection), renderingMode: .alwaysOriginal)))
+      a.append(NSAttributedString(string: " Forwarded", attributes: [.foregroundColor: c, .font: UIFont.italicSystemFont(ofSize: 14)]))
+      fwdL.attributedText = a
+    }
+    fwdB.isHidden = m.deleted || m.pending || !(isPhoto || isDoc)   // (a link: below, once it's found)
+    fwdB.alpha = 1
+    fwdMine.isActive = mine; fwdTheirs.isActive = !mine
     lead.isActive = !mine; trail.isActive = mine
     mediaW.constant = isVoice ? 292 : mine ? 236 : 262; mediaW.isActive = isPhoto || isVoice
     wMine.isActive = mine && !isPhoto && !isVoice; wTheirs.isActive = !mine && !isPhoto && !isVoice
     stackTrail.constant = mine ? -11 : -12
     bubble.fill = mine ? Look.mine : Look.theirs
-    tailOn = run.last && (!isPhoto || caption)
+    tailOn = run.last && (!isPhoto || caption || framed)
     bubble.tail = (mine, tailOn)
     let ink: UIColor = mine ? .white : .label, dim: UIColor = mine ? Look.mineTime : Look.roleInk
     // the name: over a photo for one, else at the top (others', first of a run)
@@ -998,8 +1036,8 @@ final class BubbleCell: UITableViewCell {
     let p = T.people[m.by]
     let client = p?.contact == true && !T.isContact
     let role = client ? "Client" : (p?.role ?? "")
-    nameL.isHidden = !showName || isPhoto; roleL.isHidden = nameL.isHidden || role.isEmpty
-    photoName.isHidden = !(showName && isPhoto); photoRole.isHidden = photoName.isHidden || role.isEmpty; diag.isHidden = photoName.isHidden
+    nameL.isHidden = !showName || (isPhoto && !framed); roleL.isHidden = nameL.isHidden || role.isEmpty
+    photoName.isHidden = !(showName && isPhoto && !framed); photoRole.isHidden = photoName.isHidden || role.isEmpty; diag.isHidden = photoName.isHidden
     for (n, r) in [(nameL, roleL), (photoName, photoRole)] {
       n.text = p?.name ?? "Someone"; n.textColor = Look.person(m.by)
       r.text = role; r.font = .systemFont(ofSize: 12, weight: client ? .semibold : .regular)
@@ -1039,7 +1077,7 @@ final class BubbleCell: UITableViewCell {
     if isPhoto, let f = m.file {
       let w: CGFloat = mine ? 236 : 262, ratio = CGFloat((f.h ?? 3) / max(1, f.w ?? 4))
       photoH.constant = min(330, max(120, w * ratio))
-      photoWrap.reach(8, 12, caption ? 0 : 7, mine ? 11 : 12)
+      if framed { photoWrap.reach(0, 8, caption ? 0 : 3, mine ? 7 : 8) } else { photoWrap.reach(8, 12, caption ? 0 : 7, mine ? 11 : 12) }
       photo.image = nil
       if let s = f.secs { vlen.text = String(format: "%d:%02d", Int(s) / 60, Int(s) % 60) }
       if !isVideo || f.size <= 60 * 1024 * 1024 || FileManager.default.fileExists(atPath: Net.local(f.id).path) {
@@ -1090,6 +1128,7 @@ final class BubbleCell: UITableViewCell {
       }
     }
     linkWrap.isHidden = link == nil || isPhoto || isDoc
+    if link != nil && !m.deleted && !m.pending { fwdB.isHidden = false }
     linkWrap.reach(nameL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
     if let u = link {
       let site = (u.host ?? "").replacingOccurrences(of: "www.", with: "")
@@ -1125,7 +1164,7 @@ final class BubbleCell: UITableViewCell {
   private func foot(_ m: Msg) {
     guard let g = group, let l = log else { return }
     let T = Talk.shared, mine = m.by == T.me?.id
-    let over = media && !caption
+    let over = overPhoto
     let dim: UIColor = over ? .white : mine ? Look.mineTime : Look.roleInk
     let f = NSMutableAttributedString(string: (m.edited && !m.deleted ? "Edited " : "") + Look.clock(m.at), attributes: [.foregroundColor: dim, .font: UIFont.systemFont(ofSize: 12)])
     if mine && !m.deleted {

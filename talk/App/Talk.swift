@@ -31,6 +31,7 @@ struct Msg: Codable, Equatable {
   var reactions: [String: String] = [:]   // person → emoji
   var pending: Bool = false               // (sent from here, not through yet)
   var failed: Bool = false
+  var fwd: Bool? = nil                    // (forwarded from another chat: "Forwarded" over it)
   struct FileRef: Codable, Equatable { var id: String; var name: String; var size: Int; var kind: String; var w: Double?; var h: Double?; var secs: Double?; var wave: String? = nil }
   struct Reply: Codable, Equatable { var id: String; var by: String; var text: String; var kind: String }
 }
@@ -202,7 +203,7 @@ final class Talk {
         return Msg.Reply(id: rid, by: r["by"] as? String ?? "", text: r["text"] as? String ?? "", kind: r["kind"] as? String ?? "text")
       }
       let m = Msg(id: id, cid: e["cid"] as? String, seq: seq, by: by, at: at, kind: e["kind"] as? String ?? "text", text: e["text"] as? String ?? "",
-                  file: f, reply: r, mentions: e["mentions"] as? [String] ?? [])
+                  file: f, reply: r, mentions: e["mentions"] as? [String] ?? [], fwd: (e["fwd"] as? Bool) == true ? true : nil)
       if let i = l.msgs.firstIndex(where: { $0.id == id || ($0.pending && m.cid != nil && $0.cid == m.cid) }) {
         // (one of mine sent from here: it keeps its place, with the server's id; a photo keeps the copy it was sent from)
         var keep = m; keep.reactions = l.msgs[i].reactions
@@ -234,17 +235,18 @@ final class Talk {
   }
 
   // ---------- sending from here: shown at once, then the server's copy takes its place ----------
-  func send(_ g: String, text: String, reply: Msg? = nil, mentions: [String] = [], file: Msg.FileRef? = nil, localFile: URL? = nil, upload: Data? = nil, progress: ((Double) -> Void)? = nil) {
+  func send(_ g: String, text: String, reply: Msg? = nil, mentions: [String] = [], file: Msg.FileRef? = nil, localFile: URL? = nil, upload: Data? = nil, fwd: Bool = false, progress: ((Double) -> Void)? = nil) {
     guard let me = me else { return }
     let cid = UUID().uuidString
     var l = log(g)
     var m = Msg(id: "local-" + cid, cid: cid, seq: Int.max, by: me.id, at: Date().timeIntervalSince1970 * 1000, kind: file?.kind ?? "text", text: text, file: file,
-                reply: reply.map { Msg.Reply(id: $0.id, by: $0.by, text: Talk.preview($0), kind: $0.kind) }, mentions: mentions, pending: true)
+                reply: reply.map { Msg.Reply(id: $0.id, by: $0.by, text: Talk.preview($0), kind: $0.kind) }, mentions: mentions, pending: true, fwd: fwd ? true : nil)
     if let lf = localFile, let f = file { try? FileManager.default.copyItem(at: lf, to: Net.local(f.id)) }
     l.msgs.append(m); logs[g] = l; saveSoon(g)
     NotificationCenter.default.post(name: .talkGroup, object: g); NotificationCenter.default.post(name: .talkChanged, object: nil)
     let go = { (fileId: String?) in
       var b: [String: Any] = ["act": "send", "group": g, "text": text, "cid": cid, "mentions": mentions]
+      if fwd { b["fwd"] = true }
       if let r = m.reply { b["reply"] = ["id": r.id, "by": r.by, "text": r.text, "kind": r.kind] }
       if let f = file, let fid = fileId { var fd: [String: Any] = ["id": fid, "kind": f.kind]; fd["w"] = f.w; fd["h"] = f.h; fd["secs"] = f.secs; fd["wave"] = f.wave; b["file"] = fd }
       Net.shared.act(b) { [weak self] j in
