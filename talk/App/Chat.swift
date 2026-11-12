@@ -57,9 +57,11 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     table.contentInsetAdjustmentBehavior = .never
     // (the day chips are floating headers: on automatic Apple draws its firm frost with a line down past them — the chat
     //  gets Apple's soft frost instead, as E11 Console's comments, Haris 2026-11-10 / 2026-11-12)
-    if #available(iOS 26.0, *) { table.topEdgeEffect.style = .soft }
-    // (the bar's own frost stays at the very top too — the edge effect alone went when nothing was under the bar)
+    // (WhatsApp's, Haris 2026-11-12: one steady frost the bar's own height, always there — no edge effect growing down
+    //  past the day chips; the stuck chip sits just under it)
+    if #available(iOS 26.0, *) { table.topEdgeEffect.isHidden = true }
     let barLook = UINavigationBarAppearance(); barLook.configureWithDefaultBackground()
+    barLook.backgroundEffect = UIBlurEffect(style: .systemChromeMaterial); barLook.shadowColor = .clear
     navigationItem.standardAppearance = barLook; navigationItem.scrollEdgeAppearance = barLook; navigationItem.compactScrollEdgeAppearance = barLook
     // the chat's background (approved mock-up "E11 Talk — chat background", Haris 2026-11-12): our own soft line drawings
     // with the E11. wordmark in outline, faint, standing still behind the messages — the list's own background view
