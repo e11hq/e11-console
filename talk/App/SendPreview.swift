@@ -24,6 +24,16 @@ final class SendPreviewVC: UIViewController, UIScrollViewDelegate, UITextFieldDe
   private let tools = UIStackView()
   private var foot: NSLayoutConstraint!
 
+  // (going away: the foot rides down with the page — held on the keyboard's guide, it stayed at the screen's foot while the
+  //  page slid away, then jumped off, Haris 2026-11-12)
+  override func viewWillDisappear(_ a: Bool) {
+    super.viewWillDisappear(a)
+    guard isBeingDismissed || navigationController?.isBeingDismissed == true else { return }
+    view.endEditing(true)
+    foot.isActive = false
+    foot = chip.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -12); foot.isActive = true
+    UIView.performWithoutAnimation { view.layoutIfNeeded() }
+  }
   init(items: [Item], to: String) { self.items = items; self.to = to; super.init(nibName: nil, bundle: nil); modalPresentationStyle = .fullScreen }
   required init?(coder: NSCoder) { fatalError() }
   override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
