@@ -1084,7 +1084,8 @@ final class BubbleCell: UITableViewCell {
     stack.setCustomSpacing(4, after: fwdL)
     stack.setCustomSpacing(2, after: roleL); stack.setCustomSpacing(6, after: photoWrap); stack.setCustomSpacing(7, after: quoteWrap)
     stack.setCustomSpacing(7, after: cardWrap); stack.setCustomSpacing(7, after: linkWrap); stack.setCustomSpacing(2, after: nameL)
-    bubble.addSubview(stack); bubble.addSubview(stamp); contentView.addSubview(bubble)
+    stampPill.backgroundColor = Look.theirs; stampPill.layer.cornerRadius = 9; stampPill.layer.cornerCurve = .continuous; stampPill.isHidden = true
+    bubble.addSubview(stack); bubble.addSubview(stampPill); bubble.addSubview(stamp); contentView.addSubview(bubble)
     face.isUserInteractionEnabled = false; contentView.addSubview(face)
     reacts.font = .systemFont(ofSize: 14); reacts.backgroundColor = Look.theirs; reacts.layer.cornerRadius = 13; reacts.layer.masksToBounds = true
     reacts.layer.borderWidth = 2; reacts.layer.borderColor = Look.chatBg.resolvedColor(with: traitCollection).cgColor
@@ -1101,7 +1102,7 @@ final class BubbleCell: UITableViewCell {
     fwdB.tintColor = .secondaryLabel; fwdB.accessibilityLabel = "Forward"
     fwdB.addAction(UIAction { [weak self] _ in if let m = self?.msg { UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.onForward?(m) } }, for: .touchUpInside)
     contentView.addSubview(fwdB)
-    for v in [bubble, stack, stamp, face, reacts, sysL, retryB, fwdB] as [UIView] { v.translatesAutoresizingMaskIntoConstraints = false }
+    for v in [bubble, stack, stamp, stampPill, face, reacts, sysL, retryB, fwdB] as [UIView] { v.translatesAutoresizingMaskIntoConstraints = false }
     fwdMine = fwdB.trailingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: -10)
     fwdTheirs = fwdB.leadingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: 18)
     lead = bubble.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 44)
@@ -1127,9 +1128,22 @@ final class BubbleCell: UITableViewCell {
       sysL.centerXAnchor.constraint(equalTo: contentView.centerXAnchor), sysL.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.85),
       retryB.centerYAnchor.constraint(equalTo: bubble.centerYAnchor), retryB.trailingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: -6),
       fwdB.widthAnchor.constraint(equalToConstant: 30), fwdB.heightAnchor.constraint(equalToConstant: 30), fwdB.centerYAnchor.constraint(equalTo: bubble.centerYAnchor),
+      stampPill.leadingAnchor.constraint(equalTo: stamp.leadingAnchor, constant: -7), stampPill.trailingAnchor.constraint(equalTo: stamp.trailingAnchor, constant: 7),
+      stampPill.topAnchor.constraint(equalTo: stamp.topAnchor, constant: -2), stampPill.bottomAnchor.constraint(equalTo: stamp.bottomAnchor, constant: 2),
     ])
   }
   private var quoteThumbW: NSLayoutConstraint!
+  // (a short message: the bubble as narrow as its words — a weak pull to nothing that the words hold out against;
+  //  the widest stays the design's — Haris 2026-11-12)
+  private lazy var tight: NSLayoutConstraint = { let c = bubble.widthAnchor.constraint(equalToConstant: 0); c.priority = .init(200); return c }()
+  // a single emoji on its own: big, with no bubble, the time in a small pill under it (WhatsApp's — Haris 2026-11-12)
+  private var big = false
+  private let stampPill = UIView()
+  static func oneEmoji(_ s: String) -> Bool {
+    let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard t.count == 1, let c = t.first, let f = c.unicodeScalars.first else { return false }
+    return f.properties.isEmojiPresentation || (f.properties.isEmoji && c.unicodeScalars.count > 1)
+  }
   static let clear = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1)).image { _ in }
   required init?(coder: NSCoder) { fatalError() }
   // ---------- the swipe (the design, board 26): the bubble follows the finger; to the right the grey circle with the
@@ -1204,6 +1218,9 @@ final class BubbleCell: UITableViewCell {
     let isPhoto = !m.deleted && m.file != nil && (m.kind == "photo" || isVideo)
     let isVoice = !m.deleted && m.file != nil && m.kind == "voice"
     let isDoc = !m.deleted && m.file != nil && !isPhoto && !isVoice
+    big = !m.deleted && m.file == nil && m.reply == nil && m.fwd != true && BubbleCell.oneEmoji(m.text)
+    stampPill.isHidden = !big
+    textL.preferredMaxLayoutWidth = UIScreen.main.bounds.width * (mine ? 281 : 250) / 393 - 24
     // (a forwarded photo sits inside the bubble under "Forwarded", rounded 14, the bubble's colour round it)
     framed = isPhoto && m.fwd == true
     media = isPhoto && !framed; caption = isPhoto && !m.text.isEmpty; overPhoto = isPhoto && !caption
@@ -1221,8 +1238,8 @@ final class BubbleCell: UITableViewCell {
     mediaW.constant = isVoice ? 292 : mine ? 236 : 262; mediaW.isActive = isPhoto || isVoice
     wMine.isActive = mine && !isPhoto && !isVoice; wTheirs.isActive = !mine && !isPhoto && !isVoice
     stackTrail.constant = mine ? -11 : -12
-    bubble.fill = mine ? Look.mine : Look.theirs
-    tailOn = run.last && (!isPhoto || caption || framed)
+    bubble.fill = big ? .clear : mine ? Look.mine : Look.theirs
+    tailOn = run.last && (!isPhoto || caption || framed) && !big
     bubble.tail = (mine, tailOn)
     let ink: UIColor = mine ? .white : .label, dim: UIColor = mine ? Look.mineTime : Look.roleInk
     // the name: over a photo for one, else at the top (others', first of a run)
@@ -1333,6 +1350,7 @@ final class BubbleCell: UITableViewCell {
       }
     }
     linkWrap.isHidden = link == nil || isPhoto || isDoc
+    tight.isActive = !isPhoto && !isVoice && !isDoc && link == nil
     if link != nil && !m.deleted && !m.pending { fwdB.isHidden = false }
     linkWrap.reach(nameL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
     if let u = link {
@@ -1349,7 +1367,13 @@ final class BubbleCell: UITableViewCell {
     footL.isHidden = true
     stamp.isHidden = false
     foot(m)
-    if words {
+    if words && big {
+      // (the emoji at 52, the time on its own line under it, in its pill)
+      let e = NSMutableAttributedString(string: m.text.trimmingCharacters(in: .whitespacesAndNewlines), attributes: [.font: UIFont.systemFont(ofSize: 52)])
+      let room = NSTextAttachment(image: BubbleCell.clear); room.bounds = CGRect(x: 0, y: 0, width: 1, height: 16)
+      e.append(NSAttributedString(string: "\n")); e.append(NSAttributedString(attachment: room))
+      textL.attributedText = e
+    } else if words {
       let room = NSTextAttachment(image: BubbleCell.clear); room.bounds = CGRect(x: 0, y: 0, width: ceil(stamp.intrinsicContentSize.width) + 10, height: 1)
       a.append(NSAttributedString(attachment: room))
       // (the design: 17 on a 22 line)
@@ -1373,7 +1397,7 @@ final class BubbleCell: UITableViewCell {
     guard let g = group, let l = log else { return }
     let T = Talk.shared, mine = m.by == T.me?.id
     let over = overPhoto
-    let dim: UIColor = over ? .white : mine ? Look.mineTime : Look.roleInk
+    let dim: UIColor = over ? .white : mine && !big ? Look.mineTime : Look.roleInk
     let f = NSMutableAttributedString(string: (m.edited && !m.deleted ? "Edited " : "") + Look.clock(m.at), attributes: [.foregroundColor: dim, .font: UIFont.systemFont(ofSize: 12)])
     if mine && !m.deleted {
       let others = g.members.filter { $0 != m.by }
@@ -1385,7 +1409,7 @@ final class BubbleCell: UITableViewCell {
       if m.pending {
         f.append(NSAttributedString(attachment: NSTextAttachment(image: UIImage(systemName: m.failed ? "exclamationmark.circle" : "clock", withConfiguration: UIImage.SymbolConfiguration(pointSize: 10, weight: .bold))!.withTintColor(dim.resolvedColor(with: traitCollection)))))
       } else {
-        let c: UIColor = allSeen ? Look.readTick : over ? .white : Look.mineTime
+        let c: UIColor = allSeen ? (big ? Look.rgb(0x2F7BFF) : Look.readTick) : over ? .white : big ? Look.roleInk : Look.mineTime
         let t = NSTextAttachment(image: Ticks.image(c.resolvedColor(with: traitCollection), double: allSeen || allGot))
         t.bounds = CGRect(x: 0, y: -1, width: 16, height: 10)
         f.append(NSAttributedString(attachment: t))
