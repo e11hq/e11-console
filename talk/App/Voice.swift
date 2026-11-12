@@ -11,6 +11,13 @@ final class VoiceRecorder: NSObject {
   private(set) var url: URL?
   var onTick: ((TimeInterval) -> Void)?
   var isRecording: Bool { rec?.isRecording == true }
+  private(set) var isPaused = false
+  // locked: the red pause stops the recording for a moment, the mic picks it up again
+  @discardableResult func togglePause() -> Bool {
+    guard let r = rec else { return false }
+    if isPaused { r.record(); isPaused = false } else { r.pause(); isPaused = true }
+    return isPaused
+  }
 
   func start(_ done: @escaping (Bool) -> Void) {
     AVAudioSession.sharedInstance().requestRecordPermission { ok in
@@ -27,6 +34,7 @@ final class VoiceRecorder: NSObject {
         self.rec = r; self.url = u; self.levels = []
         self.timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
           guard let self = self, let r = self.rec else { return }
+          guard !self.isPaused else { return }
           r.updateMeters()
           self.levels.append(max(0, min(1, (r.averagePower(forChannel: 0) + 50) / 50)))
           self.onTick?(r.currentTime)
@@ -39,7 +47,7 @@ final class VoiceRecorder: NSObject {
   func stop(keep: Bool) -> (URL, Double, String)? {
     timer?.invalidate(); timer = nil
     let secs = rec?.currentTime ?? 0
-    rec?.stop(); rec = nil
+    rec?.stop(); rec = nil; isPaused = false
     try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     guard keep, let u = url, secs >= 0.7 else { if let u = url { try? FileManager.default.removeItem(at: u) }; url = nil; return nil }
     url = nil
@@ -100,34 +108,72 @@ final class VoicePlayer: NSObject, AVAudioPlayerDelegate {
   func audioPlayerDidFinishPlaying(_ p: AVAudioPlayer, successfully: Bool) { stop() }
 }
 
-// in the bubble: ▶︎ / ❚❚, the bars (filled as far as it has played), the length
+// the locked recording's live waveform: the last bars, newest on the right
+final class LiveWave: UIView {
+  var levels: [Float] = [] { didSet { setNeedsDisplay() } }
+  override init(frame: CGRect) { super.init(frame: frame); backgroundColor = .clear; isOpaque = false; contentMode = .redraw }
+  required init?(coder: NSCoder) { fatalError() }
+  override func draw(_ r: CGRect) {
+    guard let c = UIGraphicsGetCurrentContext() else { return }
+    let n = Int(bounds.width / 4), shown = Array(levels.suffix(n))
+    c.setFillColor(UIColor.secondaryLabel.cgColor)
+    for (i, l) in shown.enumerated() {
+      let h = max(3, CGFloat(l) * bounds.height), x = bounds.width - CGFloat(shown.count - i) * 4
+      c.addPath(UIBezierPath(roundedRect: CGRect(x: x, y: (bounds.height - h) / 2, width: 2, height: h), cornerRadius: 1).cgPath)
+    }
+    c.fillPath()
+  }
+}
+
+// voice messages heard on this phone (the mic badge turns blue, as WhatsApp)
+enum VoiceHeard {
+  private static let key = "talk.voiceHeard"
+  private static var set = Set(UserDefaults.standard.stringArray(forKey: key) ?? [])
+  static func has(_ id: String) -> Bool { set.contains(id) }
+  static func add(_ id: String) {
+    guard !set.contains(id) else { return }
+    set.insert(id); UserDefaults.standard.set(Array(set.suffix(2000)), forKey: key)
+  }
+}
+
+/* In the bubble (the approved design, board 21 — WhatsApp's voice bubble in our blue): the sender's picture with the mic
+   badge (grey, blue once heard), ▶︎ / ❚❚, the bars with the dot moving along as it plays, the length under the bars.
+   No width of its own: the bubble's width (292) gives it. */
 final class VoiceView: UIView {
-  private let btn = UIButton(type: .system), len = UILabel()
+  private let btn = UIButton(type: .system), len = UILabel(), pic = Avatar(), badge = UIImageView(), dot = UIView()
   private var bars: [CGFloat] = []
-  private var id = "", fileId = "", secs: Double = 0
-  private var ink: UIColor = .label, dim: UIColor = .secondaryLabel
+  private var id = "", fileId = "", secs: Double = 0, mine = false
+  private var played: UIColor = .label, rest: UIColor = .secondaryLabel
   private var loading = false
   override init(frame: CGRect) {
     super.init(frame: frame)
-    backgroundColor = .clear
+    backgroundColor = .clear; isOpaque = false; contentMode = .redraw
     btn.addAction(UIAction { [weak self] _ in self?.tap() }, for: .touchUpInside)
     len.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-    addSubview(btn); addSubview(len)
+    pic.isUserInteractionEnabled = false
+    badge.image = UIImage(systemName: "mic.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold)); badge.contentMode = .center
+    badge.layer.shadowColor = UIColor.black.cgColor; badge.layer.shadowOpacity = 0.25; badge.layer.shadowRadius = 1; badge.layer.shadowOffset = .zero
+    dot.layer.cornerRadius = 6; dot.isUserInteractionEnabled = false
+    [pic, badge, btn, len, dot].forEach { addSubview($0) }
     NotificationCenter.default.addObserver(self, selector: #selector(update), name: VoicePlayer.changed, object: nil)
-    heightAnchor.constraint(equalToConstant: 40).isActive = true
-    widthAnchor.constraint(equalToConstant: 230).isActive = true
+    let h = heightAnchor.constraint(equalToConstant: 56); h.priority = .init(999); h.isActive = true
   }
   required init?(coder: NSCoder) { fatalError() }
-  func set(id: String, file: Msg.FileRef, ink: UIColor, dim: UIColor) {
-    self.id = id; fileId = file.id; secs = file.secs ?? 0
-    self.ink = ink; self.dim = dim
+  func set(id: String, file: Msg.FileRef, by: String, mine: Bool) {
+    self.id = id; fileId = file.id; secs = file.secs ?? 0; self.mine = mine
+    played = mine ? .white : Look.dyn(0x5AA9FF, 0x007AFF)
+    rest = mine ? UIColor.white.withAlphaComponent(0.42) : Look.dyn(0x8E8E93, 0xB4B4B9)
     bars = VoiceRecorder.bars(file.wave)
-    btn.tintColor = ink
-    len.textColor = dim
+    let T = Talk.shared, p = T.people[by]
+    pic.set(name: p?.name ?? "", color: Look.person(by), picture: p?.photo)
+    btn.tintColor = mine ? .white : .label
+    len.textColor = mine ? Look.mineTime : Look.roleInk
+    dot.backgroundColor = played
     update()
   }
   private func tap() {
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    if !mine { VoiceHeard.add(id) }
     if VoicePlayer.shared.playing == id { VoicePlayer.shared.toggle(id, url: Net.local(fileId)); return }
     loading = true; update()
     Net.shared.file(fileId) { [weak self] url in
@@ -137,28 +183,41 @@ final class VoiceView: UIView {
       VoicePlayer.shared.toggle(self.id, url: url)
     }
   }
+  private var progress: CGFloat { VoicePlayer.shared.playing == id ? CGFloat(VoicePlayer.shared.progress) : 0 }
   @objc private func update() {
-    let mine = VoicePlayer.shared.playing == id
-    let sym = loading ? "arrow.down.circle" : (mine && VoicePlayer.shared.isPlaying ? "pause.fill" : "play.fill")
-    btn.setImage(UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .semibold)), for: .normal)
-    let p = mine ? VoicePlayer.shared.progress : 0
-    let shown = mine ? secs * p : secs
+    let on = VoicePlayer.shared.playing == id
+    let sym = loading ? "arrow.down.circle" : (on && VoicePlayer.shared.isPlaying ? "pause.fill" : "play.fill")
+    btn.setImage(UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 24, weight: .regular)), for: .normal)
+    let shown = on ? secs * Double(progress) : secs
     len.text = String(format: "%d:%02d", Int(shown) / 60, Int(shown) % 60)
+    badge.tintColor = mine || VoiceHeard.has(id) ? Look.dyn(0x5AA9FF, 0x2F7BFF) : Look.dyn(0x8E8E93, 0x8E8E93)
+    if mine { badge.tintColor = .white }
+    placeDot()
     setNeedsDisplay()
+  }
+  private var x0: CGFloat { 96 }
+  private var x1: CGFloat { bounds.width - 4 }
+  private func placeDot() {
+    CATransaction.begin(); CATransaction.setDisableActions(true)
+    dot.frame = CGRect(x: x0 + (x1 - x0) * progress - 6, y: 20 - 6, width: 12, height: 12)
+    CATransaction.commit()
   }
   override func layoutSubviews() {
     super.layoutSubviews()
-    btn.frame = CGRect(x: 0, y: 4, width: 32, height: 32)
-    len.frame = CGRect(x: bounds.width - 38, y: 12, width: 38, height: 16)
+    pic.frame = CGRect(x: 0, y: 2, width: 44, height: 44)
+    badge.frame = CGRect(x: 28, y: 30, width: 18, height: 18)
+    btn.frame = CGRect(x: 50, y: 4, width: 36, height: 36)
+    len.frame = CGRect(x: x0, y: 36, width: 60, height: 16)
+    placeDot()
   }
   override func draw(_ r: CGRect) {
     guard let c = UIGraphicsGetCurrentContext(), !bars.isEmpty else { return }
-    let x0: CGFloat = 40, x1 = bounds.width - 44, w = (x1 - x0) / CGFloat(bars.count)
-    let p = VoicePlayer.shared.playing == id ? CGFloat(VoicePlayer.shared.progress) : 0
-    for (i, b) in bars.enumerated() {
-      let h = max(3, b * 26), x = x0 + CGFloat(i) * w
-      c.setFillColor((CGFloat(i) / CGFloat(bars.count) < p ? ink : dim.withAlphaComponent(0.55)).cgColor)
-      c.addPath(UIBezierPath(roundedRect: CGRect(x: x, y: (bounds.height - h) / 2, width: max(1.5, w - 1.5), height: h), cornerRadius: 1).cgPath)
+    let n = max(1, Int((x1 - x0 + 2) / 4)), p = progress
+    for i in 0..<n {
+      let b = bars[min(bars.count - 1, i * bars.count / n)]
+      let h = max(3, b * 24), x = x0 + CGFloat(i) * 4
+      c.setFillColor((CGFloat(i) / CGFloat(n) < p ? played : rest).cgColor)
+      c.addPath(UIBezierPath(roundedRect: CGRect(x: x, y: 20 - h / 2, width: 2, height: h), cornerRadius: 1).cgPath)
       c.fillPath()
     }
   }

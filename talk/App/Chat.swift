@@ -517,6 +517,9 @@ enum ChatSound {
     if let id = ids[name], id != 0 { AudioServicesPlaySystemSound(id) }
   }
   static func send() { play("chat-send") }
+  // the voice note's own (Haris 2026-11-11): recording starts, a recording dropped into the bin
+  static func voiceStart() { play("voice-start") }
+  static func voiceCancel() { play("voice-cancel") }
   static func arrive() {
     guard Date().timeIntervalSince(lastArrive) > 1.2 else { return }
     lastArrive = Date(); play("chat-arrive")
@@ -688,7 +691,8 @@ final class BubbleCell: UITableViewCell {
     cardDown.image = UIImage(systemName: "arrow.down.circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22, weight: .light))
     let cs = UIStackView(arrangedSubviews: [cardName, cardSize]); cs.axis = .vertical
     [cardIcon, cs, cardDown].forEach { card.addSubview($0); $0.translatesAutoresizingMaskIntoConstraints = false }
-    NSLayoutConstraint.activate([card.heightAnchor.constraint(equalToConstant: 58),
+    let ch = card.heightAnchor.constraint(equalToConstant: 58); ch.priority = .init(999)
+    NSLayoutConstraint.activate([ch,
                                  cardIcon.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 11), cardIcon.centerYAnchor.constraint(equalTo: card.centerYAnchor),
                                  cardIcon.widthAnchor.constraint(equalToConstant: 22), cardIcon.heightAnchor.constraint(equalToConstant: 29),
                                  cs.leadingAnchor.constraint(equalTo: cardIcon.trailingAnchor, constant: 10), cs.centerYAnchor.constraint(equalTo: card.centerYAnchor),
@@ -782,8 +786,8 @@ final class BubbleCell: UITableViewCell {
     let isDoc = !m.deleted && m.file != nil && !isPhoto && !isVoice
     media = isPhoto; caption = isPhoto && !m.text.isEmpty
     lead.isActive = !mine; trail.isActive = mine
-    mediaW.constant = mine ? 236 : 262; mediaW.isActive = isPhoto
-    wMine.isActive = mine && !isPhoto; wTheirs.isActive = !mine && !isPhoto
+    mediaW.constant = isVoice ? 292 : mine ? 236 : 262; mediaW.isActive = isPhoto || isVoice
+    wMine.isActive = mine && !isPhoto && !isVoice; wTheirs.isActive = !mine && !isPhoto && !isVoice
     stackTrail.constant = mine ? -11 : -12
     bubble.fill = mine ? Look.mine : Look.theirs
     tailOn = run.last && (!isPhoto || caption)
@@ -848,7 +852,7 @@ final class BubbleCell: UITableViewCell {
     }
     foot.isHidden = !(isPhoto && !caption)
     voice.isHidden = !isVoice
-    if isVoice, let f = m.file { voice.set(id: m.id, file: f, ink: ink, dim: dim) }
+    if isVoice, let f = m.file { voice.set(id: m.id, file: f, by: m.by, mine: mine) }
     // a document: the card, 4 from the bubble's edge
     cardWrap.isHidden = !isDoc
     cardWrap.reach(nameL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
@@ -904,8 +908,8 @@ final class BubbleCell: UITableViewCell {
       let room = NSTextAttachment(); room.bounds = CGRect(x: 0, y: 0, width: ceil(stamp.intrinsicContentSize.width) + 10, height: 1)
       a.append(NSAttributedString(attachment: room))
       textL.attributedText = a
-    } else if !isPhoto {
-      // (a card or a voice message with no words: the time on its own line under it)
+    } else if !isPhoto && !isVoice {
+      // (a card with no words: the time on its own line under it; a voice message keeps it at its bottom right)
       footL.isHidden = false; stamp.isHidden = true
     }
     // reactions under the bubble: the emojis and how many
@@ -1017,8 +1021,14 @@ final class MessageBar: UIView, UITextViewDelegate {
   private var mentionQ: (NSRange, String)?
   // the voice message being recorded: red dot, time, "‹ Slide to cancel"
   private let rec = VoiceRecorder()
-  private let recV = UIView(), recDot = UIView(), recTime = UILabel(), recHint = UILabel()
-  private var recCancelled = false, recStartX: CGFloat = 0
+  // recording (the approved design, boards 21 / 29–31): holding — the red mic, the time, "Slide to cancel ‹", the lock pill
+  // above the mic; slid left — the mic flips into the bin; pulled up — locked: the time and the live waveform, then
+  // delete · pause · send
+  private let recV = UIView(), recMic = UIImageView(), recTime = UILabel(), recHint = UILabel()
+  private let pill = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterial)), pillLock = UIImageView(), pillUp = UIImageView()
+  private let binBody = UIImageView(), binLid = UIImageView()
+  private let lockedV = UIView(), lockedTime = UILabel(), live = LiveWave(), trashB = UIButton(type: .system), pauseB = UIButton(type: .system), lockedSend = UIButton(type: .system)
+  private var recCancelled = false, recStart: CGPoint = .zero, locked = false
   private var boxH: CGFloat = 32
 
   override init(frame: CGRect) {
@@ -1057,12 +1067,39 @@ final class MessageBar: UIView, UITextViewDelegate {
     mic.addGestureRecognizer(hold)
     mic.addAction(UIAction { _ in toast("Hold to record, let go to send") }, for: .touchUpInside)
     recV.backgroundColor = .clear; recV.isHidden = true
-    recDot.backgroundColor = .systemRed; recDot.layer.cornerRadius = 5
-    recTime.font = .monospacedDigitSystemFont(ofSize: 16, weight: .regular)
-    recHint.text = "‹ Slide to cancel"; recHint.font = .systemFont(ofSize: 15); recHint.textColor = .secondaryLabel; recHint.textAlignment = .center
-    [recDot, recTime, recHint].forEach { recV.addSubview($0) }
-    addSubview(recV)
-    rec.onTick = { [weak self] t in self?.recTime.text = String(format: "%d:%02d", Int(t) / 60, Int(t) % 60) }
+    recMic.image = UIImage(systemName: "mic.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .regular)); recMic.tintColor = .systemRed
+    recMic.contentMode = .center
+    for l in [recTime, lockedTime] { l.font = .monospacedDigitSystemFont(ofSize: 20, weight: .regular); l.textColor = .label }
+    recHint.text = "Slide to cancel ‹"; recHint.font = .systemFont(ofSize: 17); recHint.textColor = .secondaryLabel; recHint.textAlignment = .center
+    [recTime, recHint].forEach { recV.addSubview($0) }
+    addSubview(recV); addSubview(recMic)
+    pill.layer.cornerRadius = 20; pill.clipsToBounds = true; pill.alpha = 0; pill.isUserInteractionEnabled = false
+    pillLock.image = UIImage(systemName: "lock.open", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)); pillLock.tintColor = .label; pillLock.contentMode = .center
+    pillUp.image = UIImage(systemName: "chevron.up", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold)); pillUp.tintColor = .secondaryLabel; pillUp.contentMode = .center
+    pill.contentView.addSubview(pillLock); pill.contentView.addSubview(pillUp)
+    binBody.image = MessageBar.bin(lid: false); binLid.image = MessageBar.bin(lid: true)
+    [binBody, binLid].forEach { $0.tintColor = .secondaryLabel; $0.alpha = 0; addSubview($0) }
+    binLid.layer.anchorPoint = CGPoint(x: 0.08, y: 0.9)
+    lockedV.isHidden = true; lockedV.backgroundColor = .clear
+    trashB.setImage(UIImage(systemName: "trash", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .regular)), for: .normal); trashB.tintColor = .label
+    trashB.accessibilityLabel = "Delete the recording"
+    pauseB.setImage(UIImage(systemName: "pause.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .bold)), for: .normal); pauseB.tintColor = .systemRed
+    pauseB.layer.borderWidth = 2; pauseB.layer.borderColor = UIColor.systemRed.cgColor; pauseB.layer.cornerRadius = 17; pauseB.accessibilityLabel = "Pause the recording"
+    var ls = UIButton.Configuration.filled()
+    ls.image = UIImage(systemName: "paperplane.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold))
+    ls.baseBackgroundColor = Look.rgb(0x2F7BFF); ls.baseForegroundColor = .white; ls.cornerStyle = .capsule; ls.contentInsets = .zero
+    lockedSend.configuration = ls; lockedSend.accessibilityLabel = "Send"
+    [lockedTime, live, trashB, pauseB, lockedSend].forEach { lockedV.addSubview($0) }
+    addSubview(lockedV); addSubview(pill)
+    trashB.addAction(UIAction { [weak self] _ in self?.cancelRecording() }, for: .touchUpInside)
+    pauseB.addAction(UIAction { [weak self] _ in self?.togglePause() }, for: .touchUpInside)
+    lockedSend.addAction(UIAction { [weak self] _ in self?.endRecording(send: true) }, for: .touchUpInside)
+    rec.onTick = { [weak self] t in
+      guard let self = self else { return }
+      let s = String(format: "%d:%02d", Int(t) / 60, Int(t) % 60)
+      self.recTime.text = s; self.lockedTime.text = s
+      if self.locked { self.live.levels = self.rec.levels }
+    }
     mentionV.axis = .vertical; mentionV.isHidden = true
     addSubview(mentionV)
     sendB.addAction(UIAction { [weak self] _ in self?.sendNow() }, for: .touchUpInside)
@@ -1082,7 +1119,7 @@ final class MessageBar: UIView, UITextViewDelegate {
   required init?(coder: NSCoder) { fatalError() }
   // (the bar stays above the home indicator when the keyboard is down)
   private var mentionH: CGFloat { mentionV.isHidden ? 0 : CGFloat(mentionV.arrangedSubviews.count) * 44 }
-  override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: boxH + 14 + (replyV.isHidden ? 0 : 46) + mentionH + safeAreaInsets.bottom) }
+  override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: (locked ? 83 : boxH + 14) + (replyV.isHidden ? 0 : 46) + mentionH + safeAreaInsets.bottom) }
   override func safeAreaInsetsDidChange() { super.safeAreaInsetsDidChange(); invalidateIntrinsicContentSize() }
   override func layoutSubviews() {
     super.layoutSubviews()
@@ -1104,40 +1141,145 @@ final class MessageBar: UIView, UITextViewDelegate {
     sendB.frame = CGRect(x: W - 41, y: by, width: 32, height: 32)
     cam.frame = CGRect(x: W - 79, y: by, width: 32, height: 32); mic.frame = CGRect(x: W - 41, y: by, width: 32, height: 32)
     sendB.isHidden = !typing; cam.isHidden = typing; mic.isHidden = typing
-    recV.frame = CGRect(x: 8, y: y, width: W - 60, height: 36)
-    recDot.frame = CGRect(x: 10, y: 13, width: 10, height: 10)
-    recTime.frame = CGRect(x: 28, y: 0, width: 60, height: 36)
-    recHint.frame = CGRect(x: 90, y: 0, width: recV.bounds.width - 100, height: 36)
+    recV.frame = CGRect(x: 0, y: y, width: W - 60, height: 32)
+    recTime.frame = CGRect(x: 42, y: 0, width: 70, height: 32)
+    recHint.frame = CGRect(x: 0, y: 0, width: W, height: 32)
+    if recMic.transform == .identity { recMic.frame = CGRect(x: 10, y: y, width: 26, height: 32) }
+    pill.frame = CGRect(x: W - 44, y: y - 101, width: 40, height: 132)
+    pillLock.frame = CGRect(x: 0, y: 10, width: 40, height: 22); pillUp.frame = CGRect(x: 0, y: 34, width: 40, height: 14)
+    binBody.bounds = CGRect(x: 0, y: 0, width: 22, height: 18); binLid.bounds = CGRect(x: 0, y: 0, width: 22, height: 8)
+    if binBody.alpha == 0 { binBody.center = CGPoint(x: 23, y: y + 25); binLid.center = CGPoint(x: 23 - 9.24, y: y + 13.2) }
+    lockedV.frame = CGRect(x: 0, y: top, width: W, height: 83)
+    lockedTime.frame = CGRect(x: 16, y: 10, width: 64, height: 24)
+    live.frame = CGRect(x: 80, y: 11, width: W - 96, height: 22)
+    trashB.frame = CGRect(x: 10, y: 44, width: 40, height: 40)
+    pauseB.frame = CGRect(x: W / 2 - 17, y: 47, width: 34, height: 34)
+    lockedSend.frame = CGRect(x: W - 56, y: 42, width: 44, height: 44)
   }
   @objc private func micHold(_ g: UILongPressGestureRecognizer) {
     switch g.state {
     case .began:
-      recCancelled = false; recStartX = g.location(in: self).x
+      recCancelled = false; locked = false; recStart = g.location(in: self)
       UIImpactFeedbackGenerator(style: .medium).impactOccurred()
       rec.start { [weak self] ok in
         guard let self = self else { return }
         guard ok else { toast("Allow the microphone for E11 Talk in Settings to record"); return }
-        self.recTime.text = "0:00"
-        self.recV.isHidden = false; self.box.isHidden = true; self.smiley.isHidden = true; self.plus.isHidden = true; self.cam.isHidden = true
-        self.recDot.alpha = 1
-        UIView.animate(withDuration: 0.6, delay: 0, options: [.repeat, .autoreverse]) { self.recDot.alpha = 0.2 }
+        ChatSound.voiceStart()
+        self.recTime.text = "0:00"; self.lockedTime.text = "0:00"
+        self.recV.isHidden = false; self.recV.alpha = 0; self.recMic.alpha = 0
+        self.recHint.transform = CGAffineTransform(translationX: 60, y: 0)
+        self.pill.transform = CGAffineTransform(translationX: 0, y: 40).scaledBy(x: 1, y: 0.4)
+        self.pillLock.image = UIImage(systemName: "lock.open", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
+        // (the box, + and camera slide away left; the time, the hint and the pill come in; the mic grows under the finger)
+        UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0) {
+          for v in [self.box, self.smiley, self.plus, self.cam] as [UIView] { v.alpha = 0; v.transform = CGAffineTransform(translationX: -60, y: 0) }
+          self.recV.alpha = 1; self.recMic.alpha = 1; self.recHint.transform = .identity
+          self.pill.alpha = 1; self.pill.transform = .identity
+          self.mic.transform = CGAffineTransform(scaleX: 1.25, y: 1.25)
+        }
+        UIView.animate(withDuration: 0.6, delay: 0.3, options: [.repeat, .autoreverse, .allowUserInteraction]) { self.recMic.alpha = 0.35 }
       }
     case .changed:
-      let x = g.location(in: self).x - recStartX
-      recHint.alpha = max(0.2, 1 + x / 120)
-      if x < -110, !recCancelled { recCancelled = true; UINotificationFeedbackGenerator().notificationOccurred(.warning); endRecording(send: false) }
-    case .ended: if !recCancelled { endRecording(send: true) }
-    case .cancelled, .failed: if !recCancelled { endRecording(send: false) }
+      guard rec.isRecording, !recCancelled, !locked else { return }
+      let p = g.location(in: self), dx = p.x - recStart.x, dy = p.y - recStart.y
+      if dy < -12 && dy < dx {
+        // pulling up: the mic rises into the pill, the pill shortens; far enough — locked
+        mic.transform = CGAffineTransform(translationX: 0, y: max(dy, -82)).scaledBy(x: 1.15, y: 1.15)
+        pill.transform = CGAffineTransform(translationX: 0, y: max(dy, -82) * 0.08).scaledBy(x: 1, y: max(0.62, 1 + dy / 220))
+        if dy < -82 { lock() }
+      } else {
+        recHint.transform = CGAffineTransform(translationX: min(0, dx), y: 0); recHint.alpha = max(0, 1 + dx / 140)
+        if dx < -120 { cancelRecording() }
+      }
+    case .ended: if !recCancelled && !locked { endRecording(send: true) }
+    case .cancelled, .failed: if !recCancelled && !locked { endRecording(send: false) }
     default: break
     }
   }
+  // pulled up into the lock: it shuts, the pill goes, the bar opens to the locked recording
+  private func lock() {
+    locked = true
+    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+    pillLock.image = UIImage(systemName: "lock.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
+    live.levels = rec.levels
+    lockedV.isHidden = false; lockedV.alpha = 0; lockedV.transform = CGAffineTransform(translationX: 0, y: 40)
+    invalidateIntrinsicContentSize()
+    UIView.animate(withDuration: 0.4, delay: 0.1, usingSpringWithDamping: 0.9, initialSpringVelocity: 0) {
+      self.pill.alpha = 0; self.mic.alpha = 0; self.recV.alpha = 0; self.recMic.alpha = 0
+      self.lockedV.alpha = 1; self.lockedV.transform = .identity
+      self.superview?.layoutIfNeeded(); self.layoutIfNeeded()
+    }
+  }
+  private func togglePause() {
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    let paused = rec.togglePause()
+    pauseB.setImage(UIImage(systemName: paused ? "mic.fill" : "pause.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .bold)), for: .normal)
+  }
+  // slid left (or the bin while locked): the recording goes — the red mic flips up and drops into the bin, the bin sinks
+  private func cancelRecording() {
+    guard !recCancelled else { return }
+    recCancelled = true
+    UINotificationFeedbackGenerator().notificationOccurred(.warning)
+    _ = rec.stop(keep: false)
+    let wasLocked = locked
+    recMic.layer.removeAllAnimations(); recMic.alpha = 1
+    let start = recMic.center
+    binBody.alpha = 0; binLid.alpha = 0
+    binBody.transform = CGAffineTransform(translationX: 0, y: 46); binLid.transform = CGAffineTransform(translationX: 0, y: 46)
+    UIView.animate(withDuration: 0.2) {
+      self.recV.alpha = 0; self.pill.alpha = 0; self.mic.transform = .identity; self.lockedV.alpha = 0
+    }
+    UIView.animateKeyframes(withDuration: 1.25, delay: wasLocked ? 0.1 : 0, options: [.calculationModeCubic]) {
+      UIView.addKeyframe(withRelativeStartTime: 0, relativeDuration: 0.35) {
+        self.recMic.center = CGPoint(x: start.x, y: start.y - 70); self.recMic.transform = CGAffineTransform(rotationAngle: -.pi)
+        self.binBody.alpha = 1; self.binLid.alpha = 1; self.binBody.transform = .identity; self.binLid.transform = .identity
+      }
+      UIView.addKeyframe(withRelativeStartTime: 0.3, relativeDuration: 0.1) { self.binLid.transform = CGAffineTransform(rotationAngle: -0.95) }
+      UIView.addKeyframe(withRelativeStartTime: 0.35, relativeDuration: 0.2) {
+        self.recMic.center = CGPoint(x: self.binBody.center.x, y: self.binBody.center.y); self.recMic.transform = CGAffineTransform(rotationAngle: -2 * .pi).scaledBy(x: 0.5, y: 0.5)
+      }
+      UIView.addKeyframe(withRelativeStartTime: 0.55, relativeDuration: 0.02) { self.recMic.alpha = 0 }
+      UIView.addKeyframe(withRelativeStartTime: 0.55, relativeDuration: 0.1) { self.binLid.transform = .identity }
+      UIView.addKeyframe(withRelativeStartTime: 0.7, relativeDuration: 0.3) {
+        self.binBody.transform = CGAffineTransform(translationX: 0, y: 60); self.binLid.transform = CGAffineTransform(translationX: 0, y: 60)
+        self.binBody.alpha = 0; self.binLid.alpha = 0
+      }
+    } completion: { _ in
+      self.recMic.transform = .identity; self.recMic.center = start
+      self.backToBox()
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ChatSound.voiceCancel() }
+  }
   private func endRecording(send: Bool) {
-    recDot.layer.removeAllAnimations()
-    recV.isHidden = true; box.isHidden = false; smiley.isHidden = false; plus.isHidden = false; recHint.alpha = 1
-    setNeedsLayout()
-    guard rec.isRecording else { return }
-    if let r = rec.stop(keep: send) { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onVoice?(r.0, r.1, r.2) }
+    recMic.layer.removeAllAnimations()
+    let r = rec.isRecording || rec.isPaused ? rec.stop(keep: send) : nil
+    UIView.animate(withDuration: 0.2) { self.recV.alpha = 0; self.recMic.alpha = 0; self.pill.alpha = 0; self.lockedV.alpha = 0; self.mic.transform = .identity }
+    backToBox()
+    if let r = r { UIImpactFeedbackGenerator(style: .light).impactOccurred(); ChatSound.send(); onVoice?(r.0, r.1, r.2) }
     else if send { toast("Hold longer to record") }
+  }
+  // the box, + and camera slide back
+  private func backToBox() {
+    locked = false
+    recV.isHidden = true; lockedV.isHidden = true
+    recHint.alpha = 1; recHint.transform = .identity
+    pauseB.setImage(UIImage(systemName: "pause.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .bold)), for: .normal)
+    invalidateIntrinsicContentSize()
+    UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0) {
+      for v in [self.box, self.smiley, self.plus, self.cam, self.mic] as [UIView] { v.alpha = 1; v.transform = .identity }
+      self.superview?.layoutIfNeeded(); self.layoutIfNeeded()
+    }
+  }
+  // the bin as the design draws it — its body, and its lid apart so it can open
+  static func bin(lid: Bool) -> UIImage {
+    let size = lid ? CGSize(width: 22, height: 8) : CGSize(width: 22, height: 18)
+    return UIGraphicsImageRenderer(size: size).image { _ in
+      let p = UIBezierPath()
+      if lid { p.move(to: CGPoint(x: 1, y: 7)); p.addLine(to: CGPoint(x: 21, y: 7)); p.move(to: CGPoint(x: 8, y: 7)); p.addLine(to: CGPoint(x: 8, y: 4)); p.addLine(to: CGPoint(x: 14, y: 4)); p.addLine(to: CGPoint(x: 14, y: 7)) }
+      else { p.move(to: CGPoint(x: 3, y: 1)); p.addLine(to: CGPoint(x: 4.3, y: 16.2)); p.addLine(to: CGPoint(x: 17.7, y: 16.2)); p.addLine(to: CGPoint(x: 19, y: 1)); p.move(to: CGPoint(x: 8.5, y: 5)); p.addLine(to: CGPoint(x: 8.5, y: 13)); p.move(to: CGPoint(x: 13.5, y: 5)); p.addLine(to: CGPoint(x: 13.5, y: 13)) }
+      p.lineWidth = 1.8; p.lineCapStyle = .round; p.lineJoinStyle = .round
+      UIColor.black.setStroke(); p.stroke()
+    }.withRenderingMode(.alwaysTemplate)
   }
   func textViewDidChange(_ t: UITextView) { textChanged(); findMention() }
   func textViewDidChangeSelection(_ t: UITextView) { findMention() }
