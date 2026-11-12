@@ -207,13 +207,22 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private func coverTitle() {
     guard let n = navigationController, let tc = transitionCoordinator else { return }
     let rowBottom = (n.view.window?.safeAreaInsets.top ?? n.view.safeAreaInsets.top) + { if #available(iOS 26.0, *) { return 54 } else { return 44 } }()
-    let deep = max(0, n.navigationBar.frame.maxY - rowBottom)
-    guard deep > 1 else { return }
-    let cover = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
-    cover.isUserInteractionEnabled = false
-    cover.frame = CGRect(x: 0, y: rowBottom, width: n.view.bounds.width, height: deep)
-    n.view.insertSubview(cover, aboveSubview: n.navigationBar)
-    tc.animate(alongsideTransition: { _ in cover.frame.size.height = 0 }, completion: { _ in cover.removeFromSuperview() })
+    let full = n.navigationBar.frame.maxY, W = n.view.bounds.width
+    guard full - rowBottom > 1 else { return }
+    // (WhatsApp's, frame by frame: at the first moment one frost from the very top down past the list's search bar, thick
+    //  enough that the big title and the search don't show through; then it settles to the chat's bar. Two pieces of the
+    //  one frost: the top behind Apple's bar (the chat's name and buttons on it), the rest over the folding title.)
+    let thick = UIColor { Look.chatBg.resolvedColor(with: $0).withAlphaComponent(0.8) }, thin = UIColor { Look.chatBg.resolvedColor(with: $0).withAlphaComponent(0) }
+    let piece = { (y: CGFloat, h: CGFloat) -> UIVisualEffectView in
+      let v = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial)); v.isUserInteractionEnabled = false
+      v.contentView.backgroundColor = thick; v.frame = CGRect(x: 0, y: y, width: W, height: h); return v
+    }
+    let upper = piece(0, rowBottom), lower = piece(rowBottom, full - rowBottom)
+    n.view.insertSubview(upper, belowSubview: n.navigationBar); n.view.insertSubview(lower, aboveSubview: n.navigationBar)
+    tc.animate(alongsideTransition: { _ in
+      lower.frame.size.height = 0
+      upper.contentView.backgroundColor = thin; lower.contentView.backgroundColor = thin
+    }, completion: { _ in upper.removeFromSuperview(); lower.removeFromSuperview() })
   }
   static var open: String?
   override func viewDidLayoutSubviews() {
