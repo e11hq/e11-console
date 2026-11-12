@@ -32,7 +32,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private var downBottom: NSLayoutConstraint!
 
   private var focus: String?   // (opened from a search result: that message, highlighted)
-  init(group: String, focus: String? = nil) { self.group = group; self.focus = focus; super.init(nibName: nil, bundle: nil); hidesBottomBarWhenPushed = true }
+  init(group: String, focus: String? = nil) { self.group = group; self.focus = focus; super.init(nibName: nil, bundle: nil); if #unavailable(iOS 18) { hidesBottomBarWhenPushed = true } }
   required init?(coder: NSCoder) { fatalError() }
   override var canBecomeFirstResponder: Bool { true }
   override var inputAccessoryView: UIView? { bar }
@@ -45,7 +45,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     table.delegate = self; table.estimatedRowHeight = 60; table.rowHeight = UITableView.automaticDimension
     table.register(BubbleCell.self, forCellReuseIdentifier: "b"); table.register(DayCell.self, forCellReuseIdentifier: "d")
     table.frame = view.bounds; table.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-    table.contentInsetAdjustmentBehavior = .automatic
+    // (the room above and below the messages is ours to set: the bar at the top, the message bar at the bottom — fitBottom)
+    table.contentInsetAdjustmentBehavior = .never
     view.addSubview(table)
     data = UITableViewDiffableDataSource<Int, ChatItem>(tableView: table) { [weak self] tv, ip, item in
       guard let self = self else { return UITableViewCell() }
@@ -156,7 +157,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // a client group, to staff: the band under the bar and the box's hint — the client can see what's written here
     let shared = g.withClient && !T.isContact
     bar.placeholder = shared ? "Message — client can see this" : ""
-    if clientLine.isHidden == shared { clientLine.isHidden = !shared; table.contentInset.top = shared ? 30 : 0; table.verticalScrollIndicatorInsets.top = table.contentInset.top }
+    if clientLine.isHidden == shared { clientLine.isHidden = !shared; fitBottom() }
     // (@: the group's people)
     bar.people = g.members.filter { $0 != T.me?.id }.compactMap { id in T.people[id].map { (id, $0.name) } }
   }
@@ -257,17 +258,28 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
      it) covers, measured from where the bar really is — the keyboard's notice alone missed the bar's first showing (the
      chat scrolled to its end before the bar came) and its height changes, so the latest messages sat behind it and
      couldn't be scrolled out. Called on every keyboard move and whenever the bar is laid out. */
-  @objc private func kbMoved(_ n: Notification) { view.layoutIfNeeded(); fitBottom() }
+  // how much of the page the keyboard covers (with the message bar on it); 0 while it's down
+  private var kbOverlap: CGFloat = 0
+  @objc private func kbMoved(_ n: Notification) {
+    if let f = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue {
+      kbOverlap = max(0, view.bounds.maxY - view.convert(f, from: nil).minY)
+    }
+    view.layoutIfNeeded(); fitBottom()
+  }
+  override func viewSafeAreaInsetsDidChange() { super.viewSafeAreaInsetsDidChange(); fitBottom() }
   private func fitBottom() {
-    guard isViewLoaded, bar.window != nil, let screen = view.window?.screen else { return }
-    let r = view.convert(bar.convert(bar.bounds, to: screen.coordinateSpace), from: screen.coordinateSpace)
-    let cover = max(0, view.bounds.maxY - r.minY)
+    guard isViewLoaded else { return }
+    // the top: under Apple's bar (and the client band); the bottom: the message bar, or the keyboard with it on top —
+    // the bar's own height counts even before the keyboard says anything (it sits at the very bottom, home line included)
+    let top = view.safeAreaInsets.top + (clientLine.isHidden ? 0 : 30)
+    if table.contentInset.top != top { table.contentInset.top = top; table.verticalScrollIndicatorInsets.top = top }
+    let cover = max(kbOverlap, bar.bounds.height)
     guard abs(cover - kb) > 0.5 else { return }
     let wasAtEnd = table.contentOffset.y + table.bounds.height >= table.contentSize.height + table.adjustedContentInset.bottom - 40
     let grew = cover > kb
     kb = cover
-    table.contentInset.bottom = max(0, cover - view.safeAreaInsets.bottom) + 8
-    table.verticalScrollIndicatorInsets.bottom = table.contentInset.bottom
+    table.contentInset.bottom = cover + 8
+    table.verticalScrollIndicatorInsets.bottom = cover
     downBottom.constant = -(cover + 25)
     if grew && (wasAtEnd || !scrolledAway) { toBottom(false) }
   }

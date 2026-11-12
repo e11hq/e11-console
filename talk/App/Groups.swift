@@ -153,7 +153,7 @@ final class ClientPickVC: UITableViewController, UISearchResultsUpdating {
 // ---------- group info ----------
 final class GroupInfoVC: UITableViewController, PHPickerViewControllerDelegate {
   let group: String
-  init(group: String) { self.group = group; super.init(style: .insetGrouped); hidesBottomBarWhenPushed = true }
+  init(group: String) { self.group = group; super.init(style: .insetGrouped); if #unavailable(iOS 18) { hidesBottomBarWhenPushed = true } }
   required init?(coder: NSCoder) { fatalError() }
   private var g: Group? { Talk.shared.groups[group] }
   private enum Act { case addPeople, rename, picture, mute, pin, makeMeAdmin, leave, delete }

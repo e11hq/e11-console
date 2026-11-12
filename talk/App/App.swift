@@ -120,18 +120,25 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     let settings = UINavigationController(rootViewController: SettingsVC())
     settings.navigationBar.prefersLargeTitles = true
     settings.tabBarItem = UITabBarItem(title: "Settings", image: UIImage(systemName: "gearshape"), selectedImage: UIImage(systemName: "gearshape.fill"))
+    // (a chat and the pages under it: Apple's tab bar goes once the page has arrived and comes back as the slide back
+    // begins — never "hide when pushed", which snapped the big title into the bar; Settings' pages keep it)
+    groups.delegate = tabFollow; clients.delegate = tabFollow
     t.viewControllers = [groups, clients, settings]
     tabs = t
     NotificationCenter.default.addObserver(self, selector: #selector(badge), name: .talkChanged, object: nil)
     shape()
     return t
   }
-  // a client contact sees one list of their chats (no tab bar); staff see the three tabs
-  private var contactMode = false
+  private let tabFollow = TabBarFollow()
+  // a client contact sees one list of their chats (no tab bar); staff see the three tabs. Checked on every count change, so
+  // it acts only when the kind of account changes — it used to put the tab bar back whenever a message or a read came in,
+  // there behind an open chat's message box
+  private var contactMode = false, shaped = false
   @objc private func shape() {
     guard let t = tabs else { return }
     let c = Talk.shared.isContact
-    if c != contactMode || t.tabBar.isHidden != c {
+    if c != contactMode || !shaped {
+      shaped = true
       contactMode = c
       t.tabBar.isHidden = c
       if c { t.selectedIndex = 0; (t.viewControllers?.first as? UINavigationController)?.popToRootViewController(animated: false) }
@@ -250,5 +257,19 @@ final class SettingsVC: UITableViewController {
       a.addAction(UIAlertAction(title: "Sign out", style: .destructive) { _ in SceneDelegate.current?.signOutNow() })
       a.addAction(UIAlertAction(title: "Cancel", style: .cancel)); present(a, animated: true)
     }
+  }
+}
+
+// the tab bar beside a pushed chat (Console's way, its lesson 2026-11-08): hidden with Apple's call once the page has
+// arrived, back as the slide back to the tab's first screen begins (and hidden again if that slide is called off)
+final class TabBarFollow: NSObject, UINavigationControllerDelegate {
+  func navigationController(_ n: UINavigationController, willShow vc: UIViewController, animated: Bool) {
+    guard #available(iOS 18, *), let t = n.tabBarController, !Talk.shared.isContact, vc === n.viewControllers.first else { return }
+    t.setTabBarHidden(false, animated: true)
+    n.transitionCoordinator?.notifyWhenInteractionChanges { c in if c.isCancelled { t.setTabBarHidden(true, animated: true) } }
+  }
+  func navigationController(_ n: UINavigationController, didShow vc: UIViewController, animated: Bool) {
+    guard #available(iOS 18, *), let t = n.tabBarController, !Talk.shared.isContact, vc !== n.viewControllers.first else { return }
+    t.setTabBarHidden(true, animated: true)
   }
 }

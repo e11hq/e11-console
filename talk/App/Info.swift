@@ -13,7 +13,7 @@ final class MessageInfoVC: UIViewController {
   private let bubbleCell = BubbleCell(style: .default, reuseIdentifier: nil)
   private lazy var bubbleH = bubbleCell.heightAnchor.constraint(equalToConstant: 60)
 
-  init(group: String, id: String) { self.group = group; self.id = id; super.init(nibName: nil, bundle: nil); hidesBottomBarWhenPushed = true }
+  init(group: String, id: String) { self.group = group; self.id = id; super.init(nibName: nil, bundle: nil); if #unavailable(iOS 18) { hidesBottomBarWhenPushed = true } }
   required init?(coder: NSCoder) { fatalError() }
 
   override func viewDidLoad() {
