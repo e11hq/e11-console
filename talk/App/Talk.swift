@@ -35,6 +35,7 @@ struct Msg: Codable, Equatable {
   var reactions: [String: String] = [:]   // person → emoji
   var pending: Bool = false               // (sent from here, not through yet)
   var failed: Bool = false
+  var goneForMe: Bool? = nil             // (deleted for me: "You deleted this message" stays in its place)
   var fwd: Bool? = nil                    // (forwarded from another chat: "Forwarded" over it)
   struct FileRef: Codable, Equatable { var id: String; var name: String; var size: Int; var kind: String; var w: Double?; var h: Double?; var secs: Double?; var wave: String? = nil }
   struct Reply: Codable, Equatable { var id: String; var by: String; var text: String; var kind: String }
@@ -314,8 +315,15 @@ final class Talk {
     return was
   }
   func putBack(_ g: String, _ m: Msg) { local(g, m.id) { $0 = m } }
+  // deleted for me: it stays in its place as "You deleted this message" (Haris 2026-11-12), its words and file gone from
+  // this phone; one never sent (still on its way, or failed) simply goes
   func deleteForMe(_ g: String, _ m: Msg) {
-    var l = log(g); l.msgs.removeAll { $0.id == m.id }; logs[g] = l; saveSoon(g)
+    var l = log(g)
+    if m.pending { l.msgs.removeAll { $0.id == m.id } }
+    else if let i = l.msgs.firstIndex(where: { $0.id == m.id }) {
+      l.msgs[i].deleted = true; l.msgs[i].goneForMe = true; l.msgs[i].text = ""; l.msgs[i].file = nil; l.msgs[i].reply = nil; l.msgs[i].reactions = [:]
+    }
+    logs[g] = l; saveSoon(g)
     if let f = m.file { try? FileManager.default.removeItem(at: Net.local(f.id)) }
     NotificationCenter.default.post(name: .talkGroup, object: g); NotificationCenter.default.post(name: .talkChanged, object: nil)
   }

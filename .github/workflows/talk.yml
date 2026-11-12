@@ -52,6 +52,12 @@ jobs:
             echo "--- its log"; xcrun simctl spawn "$DEV" log show --style compact --start "$START" --predicate 'process == "E11Talk"' 2>/dev/null | grep -viE "BoringSSL|nw_|CoreAnalytics" | tail -60
             echo "--- crash reports"; ls -t ~/Library/Logs/DiagnosticReports/E11Talk* 2>/dev/null | head -1 | xargs -I{} head -80 {}; } > "$RUNNER_TEMP/talk-check.log" 2>&1
           cat "$RUNNER_TEMP/talk-check.log" | head -20
+          # (a chat opened on the tabs, no account needed: is the tab bar gone beside it?)
+          xcrun simctl terminate "$DEV" ae.e11.talk.ios; sleep 1
+          START2=$(date '+%Y-%m-%d %H:%M:%S')
+          xcrun simctl launch "$DEV" ae.e11.talk.ios -chatcheck
+          sleep 8; xcrun simctl io "$DEV" screenshot "$RUNNER_TEMP/talk-chatcheck.png"
+          { echo "--- chat check"; xcrun simctl spawn "$DEV" log show --style compact --start "$START2" --predicate 'process == "E11Talk"' 2>/dev/null | grep "chatcheck" | tail -10; } >> "$RUNNER_TEMP/talk-check.log" 2>&1
           xcrun simctl terminate "$DEV" ae.e11.talk.ios; xcrun simctl shutdown "$DEV"; true
       - name: Sign and keep on this Mac
         env:
@@ -75,4 +81,4 @@ jobs:
         run: |
           gh release view talk-selftest >/dev/null 2>&1 || gh release create talk-selftest --prerelease --title "E11 Talk self-check" --notes "Latest E11 Talk build results." --target "$GITHUB_SHA"
           if [ -s "$RUNNER_TEMP/talk-archive-full.log" ]; then { grep -E "error|Error|failed" "$RUNNER_TEMP/talk-archive-full.log" | head -60; echo ---; tail -40 "$RUNNER_TEMP/talk-archive-full.log"; } > "$RUNNER_TEMP/talk-archive.log"; fi
-          for f in talk-build.log talk-archive.log talk-start.png talk-signin.png talk-check.log; do [ -s "$RUNNER_TEMP/$f" ] && gh release upload talk-selftest "$RUNNER_TEMP/$f" --clobber; done; true
+          for f in talk-build.log talk-archive.log talk-start.png talk-signin.png talk-chatcheck.png talk-check.log; do [ -s "$RUNNER_TEMP/$f" ] && gh release upload talk-selftest "$RUNNER_TEMP/$f" --clobber; done; true

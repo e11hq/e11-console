@@ -57,6 +57,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (the day chips are floating headers: on automatic Apple draws its firm frost with a line down past them — the chat
     //  gets Apple's soft frost instead, as E11 Console's comments, Haris 2026-11-10 / 2026-11-12)
     if #available(iOS 26.0, *) { table.topEdgeEffect.style = .soft }
+    // (the bar's own frost stays at the very top too — the edge effect alone went when nothing was under the bar)
+    let barLook = UINavigationBarAppearance(); barLook.configureWithDefaultBackground()
+    navigationItem.standardAppearance = barLook; navigationItem.scrollEdgeAppearance = barLook; navigationItem.compactScrollEdgeAppearance = barLook
     // the chat's background (approved mock-up "E11 Talk — chat background", Haris 2026-11-12): our own soft line drawings
     // with the E11. wordmark in outline, faint, standing still behind the messages — the list's own background view
     let pattern = UIView(); pattern.backgroundColor = ChatVC.pattern; table.backgroundView = pattern
@@ -178,7 +181,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     chipNap?.cancel()
     let w = DispatchWorkItem { [weak self] in self?.chipsNap() }
     chipNap = w
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.4, execute: w)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: w)
   }
   private func chipsNap() {
     guard !table.isTracking, !table.isDecelerating else { chipsAwake(); return }
@@ -186,7 +189,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     for s in 0..<table.numberOfSections {
       // (stuck: the chip's own place has gone above the bar)
       guard let h = table.headerView(forSection: s), table.rect(forSection: s).minY < top - 1, table.rect(forSection: s).maxY > top + 38 else { continue }
-      UIView.animate(withDuration: 0.35) { h.alpha = 0 }
+      UIView.animate(withDuration: 0.25) { h.alpha = 0 }
     }
   }
 
@@ -557,9 +560,15 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
   // the pattern's tile in the chat's colours: dark lines at a tenth in light, white at a fifteenth in dark
   static let pattern: UIColor = {
-    let tile = UIImage(named: "TalkPattern")
-    let light = tile.map { UIColor(patternImage: $0.withTintColor(UIColor(red: 60 / 255, green: 60 / 255, blue: 67 / 255, alpha: 0.10), renderingMode: .alwaysOriginal)) } ?? .clear
-    let dark = tile.map { UIColor(patternImage: $0.withTintColor(UIColor(white: 1, alpha: 0.065), renderingMode: .alwaysOriginal)) } ?? .clear
+    // (drawn once per look at the phone's own scale, its line colour solid and the strength given as the drawing's
+    //  opacity — the tint's own alpha didn't come through, the pattern far stronger than the mock-up)
+    func tile(_ ink: UIColor, _ alpha: CGFloat) -> UIColor {
+      guard let t = UIImage(named: "TalkPattern")?.withTintColor(ink, renderingMode: .alwaysOriginal) else { return .clear }
+      let f = UIGraphicsImageRendererFormat(); f.scale = UIScreen.main.scale; f.opaque = false
+      let img = UIGraphicsImageRenderer(size: CGSize(width: 288, height: 288), format: f).image { _ in t.draw(in: CGRect(x: 0, y: 0, width: 288, height: 288), blendMode: .normal, alpha: alpha) }
+      return UIColor(patternImage: img)
+    }
+    let light = tile(UIColor(red: 60 / 255, green: 60 / 255, blue: 67 / 255, alpha: 1), 0.07), dark = tile(.white, 0.045)
     return UIColor { $0.userInterfaceStyle == .dark ? dark : light }
   }()
   private func openInfo(_ m: Msg) { navigationController?.pushViewController(MessageInfoVC(group: group, id: m.id), animated: true) }
@@ -1193,7 +1202,7 @@ final class BubbleCell: UITableViewCell {
     link = nil
     if m.deleted {
       a.append(NSAttributedString(attachment: NSTextAttachment(image: UIImage(systemName: "nosign")!.withTintColor(dim))))
-      a.append(NSAttributedString(string: " " + (mine ? "You deleted this message" : "This message was deleted"), attributes: [.font: UIFont.italicSystemFont(ofSize: 17), .foregroundColor: dim]))
+      a.append(NSAttributedString(string: " " + (mine || m.goneForMe == true ? "You deleted this message" : "This message was deleted"), attributes: [.font: UIFont.italicSystemFont(ofSize: 17), .foregroundColor: dim]))
     } else {
       a.append(NSAttributedString(string: m.text, attributes: [.font: UIFont.systemFont(ofSize: 17), .foregroundColor: ink]))
       for id in m.mentions {
@@ -1375,10 +1384,10 @@ final class MessageBar: UIView, UITextViewDelegate {
     // (WhatsApp's weights and sizes, Haris 2026-11-12: + thin, the camera and smiley lighter and smaller — they looked
     //  heavy and squeezed)
     let sym = { (n: String, size: CGFloat, w: UIImage.SymbolWeight) in UIImage(systemName: n, withConfiguration: UIImage.SymbolConfiguration(pointSize: size, weight: w)) }
-    plus.setImage(sym("plus", 20, .light), for: .normal); cam.setImage(sym("camera", 18, .regular), for: .normal)
+    plus.setImage(sym("plus", 18, .light), for: .normal); cam.setImage(sym("camera", 16, .regular), for: .normal)
     [plus, cam].forEach { $0.tintColor = .label; addSubview($0) }
     var mc = UIButton.Configuration.filled()
-    mc.image = UIImage(systemName: "mic", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .medium))
+    mc.image = UIImage(systemName: "mic", withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .regular))
     mc.baseBackgroundColor = .label; mc.baseForegroundColor = .systemBackground; mc.cornerStyle = .capsule; mc.contentInsets = .zero
     mic.configuration = mc
     var sc = UIButton.Configuration.filled()
@@ -1387,7 +1396,7 @@ final class MessageBar: UIView, UITextViewDelegate {
     sendB.configuration = sc
     mic.accessibilityLabel = "Hold to record a voice message"; sendB.accessibilityLabel = "Send"
     [mic, sendB].forEach { addSubview($0) }
-    smiley.setImage(sym("face.smiling", 17, .regular), for: .normal); smiley.tintColor = .label; smiley.accessibilityLabel = "Emoji"
+    smiley.setImage(sym("face.smiling", 15, .regular), for: .normal); smiley.tintColor = .label; smiley.accessibilityLabel = "Emoji"
     smiley.addAction(UIAction { [weak self] _ in
       guard let self = self else { return }
       self.box.emoji.toggle()

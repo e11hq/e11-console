@@ -75,8 +75,25 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     NotificationCenter.default.addObserver(self, selector: #selector(refused), name: .talkRefused, object: nil)
     Net.shared.onNews = { Talk.shared.sync() }
     if let r = options.notificationResponse, let g = (r.notification.request.content.userInfo["e11"] as? [String: Any])?["groupId"] as? String { wantGroup = g }
+    #if DEBUG
+    // (the build's own check in the simulator, no account needed: the tabs, a chat opened on them — is the tab bar gone?)
+    if ProcessInfo.processInfo.arguments.contains("-chatcheck") { chatCheck(); return }
+    #endif
     start()
   }
+  #if DEBUG
+  private func chatCheck() {
+    let t = mainTabs(); window?.rootViewController = t
+    func say(_ what: String) {
+      if #available(iOS 18, *) { NSLog("chatcheck \(what): isTabBarHidden=\(t.isTabBarHidden) tabBar.isHidden=\(t.tabBar.isHidden) tabBar.alpha=\(t.tabBar.alpha) tabBar.frame=\(NSCoder.string(for: t.tabBar.frame)) window=\(NSCoder.string(for: t.view.bounds))") }
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+      say("list")
+      (t.viewControllers?.first as? UINavigationController)?.pushViewController(ChatVC(group: "check"), animated: true)
+      DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { say("chat") }
+    }
+  }
+  #endif
   private func start() {
     guard let w = window else { return }
     guard Net.shared.signedIn else { showSignIn(); return }
