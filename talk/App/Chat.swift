@@ -452,13 +452,15 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     }
   }
   @objc private func pinTap() { if let id = shownPin?.id { jump(to: id) } }
+  private var pinAsked = false, pinAskedId: String?
   private func setPin(_ m: Msg, on: Bool) {
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    pinAsked = true; pinAskedId = on ? m.id : nil
     // (shows at once; the server's answer then stands)
     if on { showPin(Group.Pin(id: m.id, by: m.by, text: Talk.preview(m), kind: m.kind, pinnedBy: Talk.shared.me?.id ?? "")) } else { showPin(nil) }
     Net.shared.act(["act": "pinMsg", "msg": m.id, "on": on, "text": Talk.preview(m), "kind": m.kind]) { [weak self] j in
       if (j?["ok"] as? Bool) == true { Talk.shared.sync() }
-      else { DispatchQueue.main.async { if let g = self?.group { self?.showPin(Talk.shared.groups[g]?.pin) }; toast(j?["error"] as? String ?? "Couldn’t pin it") } }
+      else { DispatchQueue.main.async { self?.pinAsked = false; if let g = self?.group { self?.showPin(Talk.shared.groups[g]?.pin) }; toast(j?["error"] as? String ?? "Couldn’t pin it") } }
     }
   }
 
@@ -480,9 +482,12 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let shared = g.withClient && !T.isContact
     bar.placeholder = shared ? "Message — client can see this" : ""
     if clientLine.isHidden == shared { clientLine.isHidden = !shared; pinTop.constant = shared ? 30 : 0; fitBottom() }
-    showPin(g.pin)
+    // (a pin just made here stands until the server's copy says the same — an update in between, still without it, took
+    //  the bar away and brought it back: a flash, Haris 2026-11-12)
     // (@: the group's people)
     bar.people = g.members.filter { $0 != T.me?.id }.compactMap { id in T.people[id].map { (id, $0.name) } }
+    if pinAsked { if g.pin?.id == pinAskedId { pinAsked = false } else { return } }
+    showPin(g.pin)
   }
   // ---------- search inside the chat (the design's board "Search in a chat"): the field and its own ✕ in Apple's bar;
   // above the keyboard ˄ ˅ in a glass capsule and "2 of 3 matches"; every match marked in the messages, the one shown
