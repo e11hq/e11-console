@@ -971,11 +971,18 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     guard let host = navigationController?.view else { return }
     let veil = UIVisualEffectView(effect: nil); veil.frame = host.bounds; veil.isUserInteractionEnabled = false
     veil.autoresizingMask = [.flexibleWidth, .flexibleHeight]; host.addSubview(veil); holdVeil = veil
-    UIView.animate(withDuration: 0.3) { veil.effect = UIBlurEffect(style: .systemUltraThinMaterial) }
+    // (a lighter blur — Apple's own, held a third of the way, Haris 2026-11-12: "reduce the blur")
+    let a = UIViewPropertyAnimator(duration: 1, curve: .linear) { veil.effect = UIBlurEffect(style: .systemUltraThinMaterial) }
+    a.pausesOnCompletion = true; holdBlur = a
+    veil.alpha = 0; a.fractionComplete = 0.3
+    UIView.animate(withDuration: 0.25) { veil.alpha = 1 }
   }
-  private var holdVeil: UIVisualEffectView?
+  private var holdVeil: UIVisualEffectView?, holdBlur: UIViewPropertyAnimator?
   func tableView(_ tv: UITableView, willEndContextMenuInteraction c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
-    if let veil = holdVeil { holdVeil = nil; UIView.animate(withDuration: 0.25, animations: { veil.effect = nil }) { _ in veil.removeFromSuperview() } }
+    if let veil = holdVeil {
+      holdVeil = nil; let a = holdBlur; holdBlur = nil
+      UIView.animate(withDuration: 0.25, animations: { veil.alpha = 0 }) { _ in a?.stopAnimation(true); veil.removeFromSuperview() }
+    }
   }
   // the reactions row: six quick ones (the one you gave marked) and + for any emoji
   private func reactRow(_ m: Msg) -> UIMenuElement {
@@ -988,7 +995,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     acts.append(UIAction(title: "More Reactions", image: UIImage(systemName: "plus")) { [weak self] _ in
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { self?.anyEmoji(m) }
     })
-    if #available(iOS 17.0, *) { return UIMenu(options: .displayAsPalette, children: acts) }
+    // (inline as well — on its own it was a row with › that opened the reactions, Haris 2026-11-12)
+    if #available(iOS 17.0, *) { return UIMenu(options: [.displayInline, .displayAsPalette], children: acts) }
     return UIMenu(title: "React", image: UIImage(systemName: "face.smiling"), children: acts)
   }
 
