@@ -168,6 +168,19 @@ final class Talk {
   // ---------- events ----------
   private var syncing = false, again = false
   var holdSync = false   // (a new phone deciding whether to restore from iCloud: nothing comes in until it has)
+  // the files of new messages onto this phone, three at a time; ok when every one arrived
+  private func fetch(_ ids: [String], _ done: @escaping (Bool) -> Void) {
+    guard !ids.isEmpty else { done(true); return }
+    var left = ids, running = 0, failed = false
+    func next() {
+      if left.isEmpty && running == 0 { done(!failed); return }
+      while running < 3, let id = left.first {
+        left.removeFirst(); running += 1
+        Net.shared.fetch(id) { ok in running -= 1; if !ok { failed = true }; next() }
+      }
+    }
+    next()
+  }
   func sync(_ done: (() -> Void)? = nil) {
     if holdSync { done?(); return }
     if syncing { again = true; done?(); return }
@@ -181,11 +194,25 @@ final class Talk {
       for e in evs { if let g = self.apply(e, &groupChanged) { touched.insert(g) } }
       self.flush()
       let last = j["last"] as? Int ?? self.lastSeq
-      if last > self.lastSeq { self.lastSeq = last; Net.shared.post("/api/talk/ack", ["upto": last]) }
       touched.forEach { NotificationCenter.default.post(name: .talkGroup, object: $0) }
       if !touched.isEmpty { NotificationCenter.default.post(name: .talkChanged, object: nil); self.badge() }
       if groupChanged { self.refresh() }
-      if (j["more"] as? Bool) == true || self.again { self.again = false; self.sync(done) } else { done?() }
+      /* "Got it" only once the photos, videos, voice notes and files that came are on this phone: the server lets a
+         message's file go as soon as every phone has said so — said before the file was fetched, it was gone ("That file
+         isn't on the server any more", Haris 2026-11-12). A file that can't be fetched now: nothing said, so the same
+         messages come again on the next sync and it's tried again. */
+      let files = evs.compactMap { e -> String? in
+        guard (e["type"] as? String) == "msg", let f = e["file"] as? [String: Any], let id = f["id"] as? String, !id.hasPrefix("local-"),
+              !FileManager.default.fileExists(atPath: Net.local(id).path) else { return nil }
+        return id
+      }
+      self.syncing = true
+      self.fetch(files) { [weak self] ok in
+        guard let self = self else { return }
+        self.syncing = false
+        if ok, last > self.lastSeq { self.lastSeq = last; Net.shared.post("/api/talk/ack", ["upto": last]) }
+        if ok && ((j["more"] as? Bool) == true || self.again) { self.again = false; self.sync(done) } else { self.again = false; done?() }
+      }
     }
   }
   private func apply(_ e: [String: Any], _ groupChanged: inout Bool) -> String? {

@@ -132,6 +132,17 @@ final class Net {
       DispatchQueue.main.async { done(FileManager.default.fileExists(atPath: to.path) ? to : nil) }
     }.resume()
   }
+  // a new message's file onto the phone before saying it arrived: true once it's here — or the server has none to give
+  // (gone, refused); false only when it couldn't be reached, to be tried again
+  func fetch(_ id: String, _ done: @escaping (Bool) -> Void) {
+    let to = Net.local(id)
+    if FileManager.default.fileExists(atPath: to.path) { done(true); return }
+    session.downloadTask(with: request("/api/talk/file/" + id)) { tmp, resp, _ in
+      let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+      if code == 200, let tmp = tmp { try? FileManager.default.removeItem(at: to); try? FileManager.default.moveItem(at: tmp, to: to) }
+      DispatchQueue.main.async { done(code == 200 || (400..<500).contains(code)) }
+    }.resume()
+  }
   // E11 Console's pictures (people's photos, client logos) — the same server
   private let pics = NSCache<NSString, UIImage>()
   func picture(_ path: String?, _ done: @escaping (UIImage?) -> Void) {
