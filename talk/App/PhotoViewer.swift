@@ -37,6 +37,10 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     view.addSubview(pager)
     pages = items.map { ZoomPage(msg: $0) }
     pages.forEach { pager.addSubview($0) }
+    // (the one opened and its neighbours: their pictures there from the first frame — read now if the chat hadn't)
+    for i in max(0, at - 1)...min(items.count - 1, at + 1) where pages[i].image.image == nil {
+      if let f = items[i].file { pages[i].image.image = ZoomPage.quick(items[i], f) }
+    }
 
     // the top: ‹ · who and when · •••
     func glass(_ b: UIButton, _ sym: String, _ label: String) {
@@ -80,7 +84,7 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
       // (the chat's own small picture when it has one — there at once; else a small one made off the main thread, not the
       //  whole photo: the strip came in late, Haris 2026-11-12)
       if let f = m.file {
-        if let i = BubbleCell.cached(f.id) { b.setImage(i, for: .normal) } else { ZoomPage.thumb(m, f) { img in b.setImage(img, for: .normal) } }
+        if let i = BubbleCell.cached(f.id) ?? ZoomPage.small(m, f) { b.setImage(i, for: .normal) } else { ZoomPage.thumb(m, f) { img in b.setImage(img, for: .normal) } }
       }
       stripRow.addArrangedSubview(b)
     }
@@ -139,7 +143,9 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     guard let m = items[safe: at], let spot = source?(m), let w = spot.0.window else { return }
     let src = spot.0, r = spot.1
     let whole = r == src.bounds
-    guard let img = m.file.flatMap({ BubbleCell.cached($0.id) }) ?? (whole ? (src as? UIImageView)?.image : nil) else { return }
+    // (an album's photo: its own picture read now from the phone — an album keeps only its grid, so there was nothing to
+    //  fly and the viewer stood black until the photo was read, Haris 2026-11-12)
+    guard let img = m.file.flatMap({ ZoomPage.quick(m, $0) }) ?? (whole ? (src as? UIImageView)?.image : nil) else { return }
     let from = src.convert(r, to: w)
     // (the flying picture starts as the bubble's photo looks — its corners and its shades — and the photo in the bubble
     //  is hidden meanwhile: nothing of it shows twice, nothing appears afterwards, Haris 2026-11-12)
@@ -341,6 +347,23 @@ final class ZoomPage: UIScrollView, UIScrollViewDelegate {
     return CGRect(x: b.midX - w / 2, y: b.midY - h / 2, width: w, height: h)
   }
   // a small picture for the strip, made off the main thread
+  // the chat's picture of it, or — a photo already on the phone — read now at the chat's size (kept for next time)
+  static func quick(_ m: Msg, _ f: Msg.FileRef) -> UIImage? {
+    if let i = BubbleCell.cached(f.id) { return i }
+    let u = Net.local(f.id)
+    guard m.kind == "photo", FileManager.default.fileExists(atPath: u.path) else { return nil }
+    return BubbleCell.picture(u, f.id)
+  }
+  // the strip's picture of a photo already on the phone, read now — small, so the whole strip is there as it opens
+  private static let smalls = NSCache<NSString, UIImage>()
+  static func small(_ m: Msg, _ f: Msg.FileRef) -> UIImage? {
+    if let i = smalls.object(forKey: f.id as NSString) { return i }
+    let u = Net.local(f.id)
+    guard m.kind == "photo", FileManager.default.fileExists(atPath: u.path),
+          let src = CGImageSourceCreateWithURL(u as CFURL, nil),
+          let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 120] as CFDictionary) else { return nil }
+    let i = UIImage(cgImage: cg); smalls.setObject(i, forKey: f.id as NSString); return i
+  }
   static func thumb(_ m: Msg, _ f: Msg.FileRef, _ done: @escaping (UIImage?) -> Void) {
     Net.shared.file(f.id) { url in
       guard let url = url else { DispatchQueue.main.async { done(nil) }; return }
