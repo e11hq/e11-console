@@ -1768,8 +1768,12 @@ final class BubbleCell: UITableViewCell {
    asked for through the text view's input mode. */
 final class EmojiBox: UITextView {
   var emoji = false
+  // (the keyboard you were typing on, given back when the emojis go — iPhone otherwise picked the next one in your list,
+  //  Arabic here; Haris 2026-11-12)
+  var typing: UITextInputMode?
   override var textInputMode: UITextInputMode? {
     if emoji, let m = UITextInputMode.activeInputModes.first(where: { $0.primaryLanguage == "emoji" }) { return m }
+    if let t = typing, UITextInputMode.activeInputModes.contains(t) { return t }
     return super.textInputMode
   }
 }
@@ -1777,6 +1781,16 @@ final class EmojiBox: UITextView {
 final class MessageBar: UIView, UITextViewDelegate {
   let box = EmojiBox()
   private let smiley = UIButton(type: .system)
+  // (the keyboard put away: next time the box opens on the letters, the button back to the smiley)
+  func textViewDidEndEditing(_ t: UITextView) { if box.emoji { box.emoji = false; setSmiley() } }
+  // the box's button: the smiley, or the keyboard while the emojis are up (WhatsApp's), crossfading
+  private func setSmiley() {
+    let name = box.emoji ? "keyboard" : "face.smiling"
+    UIView.transition(with: smiley, duration: 0.15, options: .transitionCrossDissolve) {
+      self.smiley.setImage(UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .regular)), for: .normal)
+    }
+    smiley.accessibilityLabel = box.emoji ? "Keyboard" : "Emoji"
+  }
   private let plus = UIButton(type: .system), cam = UIButton(type: .system), mic = UIButton(type: .system), sendB = UIButton(type: .system)
   private let place = UILabel()
   var placeholder = "Message" { didSet { place.text = placeholder } }
@@ -1832,9 +1846,17 @@ final class MessageBar: UIView, UITextViewDelegate {
     smiley.setImage(sym("face.smiling", 15, .regular), for: .normal); smiley.tintColor = .label; smiley.accessibilityLabel = "Emoji"
     smiley.addAction(UIAction { [weak self] _ in
       guard let self = self else { return }
-      self.box.emoji.toggle()
+      if !self.box.emoji, self.box.isFirstResponder, let now = self.box.textInputMode, now.primaryLanguage != "emoji" { self.box.typing = now }
+      self.box.emoji.toggle(); self.setSmiley()
       if self.box.isFirstResponder { self.box.reloadInputViews() } else { self.box.becomeFirstResponder() }
     }, for: .touchUpInside)
+    // (the keyboard changed with the 🌐 key: the button follows — ⌨︎ while the emojis are up, ☺︎ otherwise)
+    NotificationCenter.default.addObserver(forName: UITextInputMode.currentInputModeDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+      guard let self = self, self.box.isFirstResponder, let now = self.box.textInputMode else { return }
+      let isEmoji = now.primaryLanguage == "emoji"
+      if !isEmoji { self.box.typing = now }
+      if self.box.emoji != isEmoji { self.box.emoji = isEmoji; self.setSmiley() }
+    }
     plus.showsMenuAsPrimaryAction = true
     plus.menu = UIMenu(children: [
       UIAction(title: "Photos", image: UIImage(systemName: "photo.on.rectangle")) { [weak self] _ in self?.onPlus?("photos") },
