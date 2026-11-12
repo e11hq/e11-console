@@ -1773,7 +1773,9 @@ final class EmojiBox: UITextView {
   var typing: UITextInputMode?
   override var textInputMode: UITextInputMode? {
     if emoji, let m = UITextInputMode.activeInputModes.first(where: { $0.primaryLanguage == "emoji" }) { return m }
-    if let t = typing, UITextInputMode.activeInputModes.contains(t) { return t }
+    // (matched by its language — iPhone hands out a new object for the same keyboard each time, so the one kept was never
+    //  found again and iPhone went to the next language)
+    if let t = typing?.primaryLanguage, let m = UITextInputMode.activeInputModes.first(where: { $0.primaryLanguage == t }) { return m }
     return super.textInputMode
   }
 }
