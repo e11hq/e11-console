@@ -1330,7 +1330,7 @@ final class MessageBar: UIView, UITextViewDelegate {
   private let place = UILabel()
   var placeholder = "Message" { didSet { place.text = placeholder } }
   private let replyV = UIView(), replyName = UILabel(), replyText = UILabel(), replyX = UIButton(type: .system), replyBar = UIView()
-  private let blur = UIView()
+  private let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
   var onSend: ((String, [String]) -> Void)?
   var onPlus: ((String) -> Void)?
   var onCancelReply: (() -> Void)?
@@ -1357,7 +1357,9 @@ final class MessageBar: UIView, UITextViewDelegate {
   override init(frame: CGRect) {
     super.init(frame: CGRect(x: 0, y: 0, width: 390, height: 52))
     autoresizingMask = .flexibleHeight
-    blur.backgroundColor = Look.chatBg   // (WhatsApp's: the bar the chat's own colour, the box white with its hairline — Haris 2026-11-12)
+    // (WhatsApp's: a frost in the chat's own colour — what scrolls behind shows through softly; the box white with its
+    //  hairline — Haris 2026-11-12. Apple's blur, tinted with the page's colour.)
+    blur.contentView.backgroundColor = UIColor { Look.chatBg.resolvedColor(with: $0).withAlphaComponent(0.62) }
     addSubview(blur)
     // (the design: + · the box with its smiley · camera · the mic in a round button — while typing, send in our blue)
     // (WhatsApp's weights and sizes, Haris 2026-11-12: + thin, the camera and smiley lighter and smaller — they looked
