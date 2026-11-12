@@ -46,6 +46,15 @@ test('test site: the owner uses the app as a team member until switching back', 
   assert.equal((await call(OWNER, '/api/me')).body.user.id, 'u-owner');
 });
 
+test('E11 Talk never follows View as: always the owner themselves', async () => {
+  const call = await start('1.5.4-test.131');
+  assert.equal((await call(OWNER, '/api/view-as', { userId: 'u-am' })).status, 200);
+  assert.equal((await call(OWNER, '/api/me')).body.user.id, 'u-am', 'E11 Console as the AM');
+  const st = (await call(OWNER, '/api/talk/state')).body;
+  assert.equal(st.me.id, 'u-owner', 'E11 Talk stays the owner');
+  await call(OWNER, '/api/view-as', { userId: null });
+});
+
 test('only the owner, and never on the live site', async () => {
   const call = await start('1.5.4-test.130');
   assert.equal((await call(ADMIN2, '/api/view-as', { userId: 'u-am' })).status, 403, 'another Admin cannot');

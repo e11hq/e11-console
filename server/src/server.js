@@ -538,7 +538,9 @@ export function createServer(cfg) {
   async function talkWho(req, res) {
     let id;
     try { id = review ? review.identify(req) : talkHost(req) ? await talkAuth.identify(req) : await auth.identify(req); } catch (e) { json(res, 401, { ok: false, error: e.message }); return null; }
-    if (review || access.userByEmail(id.email)) return who(req, res, id);
+    // (E11 Talk is always the account signed in on the phone — never View as on the test site, never Owner view on live:
+    //  Haris 2026-11-11; View as had turned Talk into that person — their chats shown, the phone's notifications moved)
+    if (review || access.userByEmail(id.email)) { const w = await who(req, res, id); return w ? (req.realUser || w) : null; }
     const k = talkNow().contactByEmail(id.email);
     if (k) return k;
     json(res, 403, { ok: false, error: 'No E11 Talk account for ' + id.email });
