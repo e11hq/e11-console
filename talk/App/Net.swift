@@ -190,7 +190,15 @@ private final class StreamDelegate: NSObject, URLSessionDataDelegate {
   let news: () -> Void, ended: () -> Void
   init(_ news: @escaping () -> Void, ended: @escaping () -> Void) { self.news = news; self.ended = ended }
   func urlSession(_ s: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-    if String(decoding: data, as: UTF8.self).contains("event: talk") { news() }
+    let text = String(decoding: data, as: UTF8.self)
+    if text.contains("event: talk") { news() }
+    // (someone typing: passed straight on by the server, nothing kept — step 5)
+    for block in text.components(separatedBy: "\n\n") where block.contains("event: typing") {
+      guard let line = block.split(separator: "\n").first(where: { $0.hasPrefix("data: ") }),
+            let j = try? JSONSerialization.jsonObject(with: Data(line.dropFirst(6).utf8)) as? [String: Any],
+            let g = j["group"] as? String, let by = j["by"] as? String else { continue }
+      DispatchQueue.main.async { Talk.shared.typed(g, by) }
+    }
   }
   func urlSession(_ s: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) { ended() }
 }

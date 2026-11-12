@@ -157,9 +157,20 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     spotW = titleSpot.widthAnchor.constraint(equalToConstant: 200)
     NSLayoutConstraint.activate([spotW, titleSpot.heightAnchor.constraint(equalToConstant: 39)])
     setBarButtons()
-    bar.onSend = { [weak self] t, ms in self?.send(t, mentions: ms) }
+    bar.onSend = { [weak self] t, ms, task in self?.send(t, mentions: ms, task: task) }
+    // (step 5: the others see "… is typing"; # finds E11 Console's tasks for a staff group)
+    bar.onTyping = { [weak self] in guard let self = self else { return }; Net.shared.act(["act": "typing", "group": self.group]) }
+    bar.onFindTasks = { [weak self] q, done in
+      guard let self = self else { return }
+      Net.shared.act(["act": "tasks", "group": self.group, "q": q]) { j in
+        let ts = ((j?["tasks"] as? [[String: Any]]) ?? []).compactMap { Msg.TaskCard($0) }
+        DispatchQueue.main.async { done(ts) }
+      }
+    }
+    bar.onPickTask = { [weak self] _ in self?.editingMsg = nil; self?.replying = nil }
+    NotificationCenter.default.addObserver(self, selector: #selector(typingChanged(_:)), name: .talkTyping, object: nil)
     bar.onPlus = { [weak self] k in self?.attach(k) }
-    bar.onCancelReply = { [weak self] in self?.editingMsg = nil; self?.replying = nil; self?.bar.setReply(nil, editing: false) }
+    bar.onCancelReply = { [weak self] in self?.editingMsg = nil; self?.replying = nil; self?.bar.setTask(nil); self?.bar.setReply(nil, editing: false) }
     bar.onVoice = { [weak self] url, secs, wave in self?.sendVoice(url, secs: secs, wave: wave) }
     NotificationCenter.default.addObserver(self, selector: #selector(changed(_:)), name: .talkGroup, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(head), name: .talkChanged, object: nil)
@@ -356,6 +367,42 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     }
   }
 
+  // ---------- typing (step 5, the design's board 32): "Omar is typing…" in our blue under the group's name, in place of
+  // the people, crossfading; the dots bubble at the end of the chat ----------
+  private var membersLine = ""
+  @objc private func typingChanged(_ n: Notification) { if (n.object as? String) == group { showTyping(animated: true) } }
+  private func showTyping(animated: Bool) {
+    let line = Talk.shared.typingLine(group)
+    let text = line ?? membersLine, ink: UIColor = line == nil ? .secondaryLabel : Look.accent
+    if subL.text != text || subL.textColor != ink {
+      if animated { UIView.transition(with: subL, duration: 0.2, options: .transitionCrossDissolve) { self.subL.text = text; self.subL.textColor = ink } }
+      else { subL.text = text; subL.textColor = ink }
+    }
+    setDots(Talk.shared.typers(group).first, animated: animated)
+  }
+  private var dotsFor: String?
+  private func setDots(_ who: String?, animated: Bool) {
+    guard who != dotsFor else { return }
+    let was = dotsFor; dotsFor = who
+    if let who = who {
+      let v = (table.tableFooterView as? TypingDots) ?? TypingDots(frame: CGRect(x: 0, y: 0, width: table.bounds.width, height: 44))
+      v.set(person: Talk.shared.people[who])
+      if table.tableFooterView !== v {
+        let atEnd = table.contentOffset.y + table.bounds.height >= table.contentSize.height + table.adjustedContentInset.bottom - 60
+        v.alpha = 0; UIView.performWithoutAnimation { table.tableFooterView = v; table.layoutIfNeeded() }
+        UIView.animate(withDuration: animated ? 0.25 : 0) { v.alpha = 1 }
+        if atEnd { toBottom(animated) }
+      }
+    } else if was != nil, let v = table.tableFooterView as? TypingDots {
+      UIView.animate(withDuration: animated ? 0.2 : 0, animations: { v.alpha = 0 }) { [weak self] _ in
+        guard let self = self, self.dotsFor == nil, self.table.tableFooterView === v else { return }
+        let y = self.table.contentOffset.y
+        UIView.performWithoutAnimation { self.table.tableFooterView = nil; self.table.layoutIfNeeded() }
+        self.table.contentOffset.y = min(y, max(-self.table.adjustedContentInset.top, self.table.contentSize.height + self.table.adjustedContentInset.bottom - self.table.bounds.height))
+      }
+    }
+  }
+
   @objc private func head() {
     guard let g = Talk.shared.groups[group] else { return }
     let T = Talk.shared
@@ -365,7 +412,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let others = g.members.filter { $0 != T.me?.id }.compactMap { T.people[$0] }
     let clients = others.filter { $0.contact }.map { p in p.client.flatMap { T.clients[$0]?.name }.map { "\(p.name) (\($0))" } ?? p.name }
     let team = others.filter { !$0.contact }.map { $0.name }
-    subL.text = (clients + team + ["You"]).joined(separator: ", ")
+    membersLine = (clients + team + ["You"]).joined(separator: ", ")
+    showTyping(animated: false)
+    // (# tasks: staff groups only — never with a client, never for a client contact)
+    bar.tasksAllowed = !g.withClient && !T.isContact
     spotW?.constant = min(titleV.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).width, max(140, UIScreen.main.bounds.width - 150))
     // a client group, to staff: the band under the bar and the box's hint — the client can see what's written here
     let shared = g.withClient && !T.isContact
@@ -539,7 +589,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         newDayOf[section] = d; snap.appendSections([section])
       }
       msgs[m.id] = m
-      var h = Hasher(); h.combine(m.text); h.combine(m.edited); h.combine(m.deleted); h.combine(m.pending); h.combine(m.failed); h.combine(m.reactions); h.combine(m.file?.id); h.combine(m.link); h.combine(newAlbums[m.id]?.map { $0.id + ($0.file?.id ?? "") })
+      var h = Hasher(); h.combine(m.text); h.combine(m.edited); h.combine(m.deleted); h.combine(m.pending); h.combine(m.failed); h.combine(m.reactions); h.combine(m.file?.id); h.combine(m.link); h.combine(m.task); h.combine(newAlbums[m.id]?.map { $0.id + ($0.file?.id ?? "") })
       h.combine(newRuns[m.id]); h.combine(Talk.shared.people[m.by]?.color); h.combine(Talk.shared.people[m.by]?.role)
       if m.by == meId { h.combine(i <= readTo); h.combine(i <= gotTo) }
       newSigs[m.id] = h.finalize()
@@ -619,13 +669,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
 
   // ---------- sending ----------
-  private func send(_ text: String, mentions: [String] = []) {
+  private func send(_ text: String, mentions: [String] = [], task: Msg.TaskCard? = nil) {
     if let e = editingMsg {
       editingMsg = nil; bar.setReply(nil, editing: false)
       Net.shared.act(["act": "edit", "msg": e.id, "text": text]) { j in if (j?["ok"] as? Bool) == true { Talk.shared.sync() } else { toast(j?["error"] as? String ?? "Couldn’t edit it") } }
       return
     }
-    Talk.shared.send(group, text: text, reply: replying, mentions: mentions)
+    Talk.shared.send(group, text: text, reply: replying, mentions: mentions, task: task)
     replying = nil
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     toBottom(true)
@@ -875,7 +925,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     return UIColor { $0.userInterfaceStyle == .dark ? dark : light }
   }()
   private func openInfo(_ m: Msg) { navigationController?.pushViewController(MessageInfoVC(group: group, id: m.id), animated: true) }
-  private func startReply(_ m: Msg) { editingMsg = nil; replying = m; UIImpactFeedbackGenerator(style: .light).impactOccurred(); bar.box.becomeFirstResponder() }
+  private func startReply(_ m: Msg) { editingMsg = nil; bar.setTask(nil); replying = m; UIImpactFeedbackGenerator(style: .light).impactOccurred(); bar.box.becomeFirstResponder() }
 
   // ---------- hold: reactions and the menu ----------
   func tableView(_ tv: UITableView, contextMenuConfigurationForRowAt ip: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
@@ -913,7 +963,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       })
       if mine && m.file == nil && now - m.at < 15 * 60000 {
         acts.append(UIAction(title: "Edit", image: UIImage(systemName: "pencil")) { [weak self] _ in
-          self?.replying = nil; self?.editingMsg = m; self?.bar.setReply(("Edit message", m.text), editing: true); self?.bar.box.text = m.text; self?.bar.textChanged(); self?.bar.box.becomeFirstResponder()
+          self?.bar.setTask(nil); self?.replying = nil; self?.editingMsg = m; self?.bar.setReply(("Edit message", m.text), editing: true); self?.bar.box.text = m.text; self?.bar.textChanged(); self?.bar.box.becomeFirstResponder()
         })
       }
       if let f = m.file {
@@ -1264,6 +1314,9 @@ final class BubbleCell: UITableViewCell {
   private let linkImg = UIImageView(), linkPlay = UIView()
   private var linkImgH: NSLayoutConstraint!, linkImgOff: NSLayoutConstraint!, wideCard = false
   private lazy var linkWrap = Bleed(linkBox)
+  // (an E11 Console task shared with # — the design's board 37)
+  private let taskCard = TaskCardView()
+  private lazy var taskWrap = Bleed(taskCard)
   private var link: URL?
   private let voice = VoiceView()
   private let reacts = InsetLabel(dx: 8, dy: 0), sysL = InsetLabel(dx: 12, dy: 3), retryB = UIButton(type: .system)
@@ -1369,7 +1422,8 @@ final class BubbleCell: UITableViewCell {
                                  linkFoot.topAnchor.constraint(equalTo: linkLine.bottomAnchor, constant: 8), linkFoot.leadingAnchor.constraint(equalTo: linkSite.leadingAnchor), linkFoot.trailingAnchor.constraint(equalTo: linkSite.trailingAnchor),
                                  linkFoot.bottomAnchor.constraint(equalTo: linkBox.bottomAnchor, constant: -9)])
     linkBox.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(linkTap)))
-    [nameL, roleL, fwdL, photoWrap, quoteWrap, cardWrap, voice, linkWrap, textL, footL].forEach { stack.addArrangedSubview($0) }
+    [nameL, roleL, fwdL, photoWrap, quoteWrap, cardWrap, voice, linkWrap, taskWrap, textL, footL].forEach { stack.addArrangedSubview($0) }
+    stack.setCustomSpacing(7, after: taskWrap)
     stack.setCustomSpacing(4, after: fwdL)
     stack.setCustomSpacing(2, after: roleL); stack.setCustomSpacing(6, after: photoWrap); stack.setCustomSpacing(7, after: quoteWrap)
     stack.setCustomSpacing(7, after: cardWrap); stack.setCustomSpacing(7, after: linkWrap); stack.setCustomSpacing(2, after: nameL)
@@ -1689,6 +1743,11 @@ final class BubbleCell: UITableViewCell {
         else { linkImg.image = nil; Net.shared.file(id) { [weak self] url in guard let self = self, self.msg?.id == m.id, let url = url else { return }; self.linkImg.image = UIImage(contentsOfFile: url.path) } }
       } else { linkImg.image = nil }
     } else { linkImgOff.isActive = true; linkImgH.isActive = false }
+    taskWrap.isHidden = m.task == nil || m.deleted
+    if let t = m.task, !m.deleted {
+      taskWrap.reach(nameL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
+      taskCard.set(t, mine: mine, ink: ink); wideCard = true
+    }
     let words = a.length > 0
     textL.isHidden = !words
     footL.isHidden = true
@@ -1927,7 +1986,7 @@ final class MessageBar: UIView, UITextViewDelegate {
   private let editIcon = UIImageView(image: UIImage(systemName: "pencil", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)))
   private(set) var editing = false
   private let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
-  var onSend: ((String, [String]) -> Void)?
+  var onSend: ((String, [String], Msg.TaskCard?) -> Void)?
   var onPlus: ((String) -> Void)?
   var onCancelReply: (() -> Void)?
   var onVoice: ((URL, Double, String) -> Void)?
@@ -2074,7 +2133,7 @@ final class MessageBar: UIView, UITextViewDelegate {
     editIcon.frame = CGRect(x: 10, y: 12, width: 24, height: 28)
     replyName.frame = CGRect(x: tx, y: 7, width: W - 52 - tx, height: 19); replyText.frame = CGRect(x: tx, y: 27, width: W - 52 - tx, height: 19)
     replyX.frame = CGRect(x: W - 46, y: 6, width: 40, height: 40)
-    let typing = !box.text.isEmpty
+    let typing = !box.text.isEmpty || pickedTask != nil   // (a task picked: send shows, words or not)
     // (the design's places: + at 10, the box from 46, camera and mic at the right; the buttons stay level with the box's last line)
     let y = top + 9, by = y + boxH - 31   // (the design: the box 9 from the bar's top, the buttons 1 above it)
     plus.frame = CGRect(x: 10, y: by, width: 32, height: 32)
@@ -2256,20 +2315,62 @@ final class MessageBar: UIView, UITextViewDelegate {
       UIColor.black.setStroke(); p.stroke()
     }.withRenderingMode(.alwaysTemplate)
   }
-  func textViewDidChange(_ t: UITextView) { textChanged(); findMention() }
+  func textViewDidChange(_ t: UITextView) {
+    textChanged(); findMention()
+    // (typing: the others told, at most every 3 seconds while words are going in — step 5)
+    if !box.text.isEmpty, Date().timeIntervalSince(lastTyped) > 3 { lastTyped = Date(); onTyping?() }
+  }
+  private var lastTyped = Date.distantPast
+  var onTyping: (() -> Void)?
+  // # (staff groups only): E11 Console's tasks, asked for as the words after # change; the one picked goes with the message
+  var tasksAllowed = false
+  var onFindTasks: ((String, @escaping ([Msg.TaskCard]) -> Void) -> Void)?
+  var onPickTask: ((Msg.TaskCard) -> Void)?
+  private(set) var pickedTask: Msg.TaskCard?
+  private var taskQ: String?, taskList: [Msg.TaskCard] = []
+  func setTask(_ t: Msg.TaskCard?) {
+    pickedTask = t
+    if let t = t { setReply(("Task" + (t.client.isEmpty ? "" : " · " + t.client), t.title), editing: false); replyName.text = "☑︎  " + (replyName.text ?? "") }
+    else if replyName.text?.hasPrefix("☑︎") == true { setReply(nil, editing: false) }
+    textChanged()
+  }
   func textViewDidChangeSelection(_ t: UITextView) { findMention() }
   // "@ki" just before the cursor: the people whose name starts so — tap one to put "@Kiran Rao " in
   private func findMention() {
     let ns = box.text as NSString, caret = box.selectedRange.location
     guard caret <= ns.length, !people.isEmpty else { showMentions([]); return }
     let before = ns.substring(to: caret)
-    guard let at = before.range(of: "@", options: .backwards) else { showMentions([]); return }
+    // (# — the tasks; whichever of @ and # is nearer the cursor)
+    let hash = tasksAllowed ? before.range(of: "#", options: .backwards) : nil
+    let atR = before.range(of: "@", options: .backwards)
+    if let h = hash, atR == nil || h.lowerBound > atR!.lowerBound {
+      let word = String(before[h.upperBound...])
+      let startOK = h.lowerBound == before.startIndex || before[before.index(before: h.lowerBound)].isWhitespace
+      guard startOK, !word.contains("\n"), word.count <= 30 else { showMentions([]); return }
+      mentionQ = (NSRange(h.lowerBound..<before.endIndex, in: before), word)
+      findTasks(word); return
+    }
+    taskQ = nil
+    guard let at = atR else { showMentions([]); return }
     let word = String(before[at.upperBound...])
     let startOK = at.lowerBound == before.startIndex || before[before.index(before: at.lowerBound)].isWhitespace
     guard startOK, !word.contains("\n"), word.count <= 20 else { showMentions([]); return }
     mentionQ = (NSRange(at.lowerBound..<before.endIndex, in: before), word)
     let q = word.lowercased()
     showMentions(people.filter { q.isEmpty || $0.1.lowercased().hasPrefix(q) || $0.1.lowercased().contains(" " + q) }.prefix(4).map { $0 })
+  }
+  private func findTasks(_ q: String) {
+    guard q != taskQ else { return }
+    taskQ = q
+    // (asked a moment after the last letter — not for every one)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+      guard let self = self, self.taskQ == q else { return }
+      self.onFindTasks?(q) { [weak self] ts in
+        guard let self = self, self.taskQ == q else { return }
+        self.taskList = ts
+        self.showMentions(ts.prefix(5).map { ("#" + $0.id, $0.title) })
+      }
+    }
   }
   private func showMentions(_ list: [(String, String)]) {
     // (the same people: nothing touched — rows made again only when who's in the list changes, without animation)
@@ -2281,6 +2382,7 @@ final class MessageBar: UIView, UITextViewDelegate {
   private func fillMentions(_ list: [(String, String)]) {
     mentionV.arrangedSubviews.forEach { $0.removeFromSuperview() }
     for (id, name) in list {
+      if id.hasPrefix("#"), let t = taskList.first(where: { "#" + $0.id == id }) { mentionV.addArrangedSubview(taskRow(t)); continue }
       // (each person with their role under the name, as the design's board 37)
       var c = UIButton.Configuration.plain()
       c.title = name; c.baseForegroundColor = .label; c.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 60, bottom: 0, trailing: 16)
@@ -2297,6 +2399,29 @@ final class MessageBar: UIView, UITextViewDelegate {
     }
     mentionBox.isHidden = list.isEmpty
     setNeedsLayout(); onLayout?()
+  }
+  // a task in the # list: its title, the client and status under it, the task symbol in its status colour
+  private func taskRow(_ t: Msg.TaskCard) -> UIButton {
+    var c = UIButton.Configuration.plain()
+    c.title = t.title; c.baseForegroundColor = .label; c.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 60, bottom: 0, trailing: 16)
+    c.titleLineBreakMode = .byTruncatingTail
+    c.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { var a = $0; a.font = .systemFont(ofSize: 17, weight: .medium); return a }
+    c.subtitle = [t.client, t.status].filter { !$0.isEmpty }.joined(separator: " · "); c.titlePadding = 1
+    c.subtitleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { var a = $0; a.font = .systemFont(ofSize: 13); a.foregroundColor = .secondaryLabel; return a }
+    let b = UIButton(configuration: c); b.contentHorizontalAlignment = .leading
+    b.heightAnchor.constraint(equalToConstant: 52).isActive = true
+    let i = UIImageView(image: UIImage(systemName: t.done ? "checkmark.circle.fill" : "checklist", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)))
+    i.tintColor = Look.hex(t.color) ?? .secondaryLabel; i.contentMode = .center; i.frame = CGRect(x: 14, y: 8, width: 36, height: 36)
+    i.backgroundColor = .tertiarySystemFill; i.layer.cornerRadius = 9; i.layer.cornerCurve = .continuous; i.isUserInteractionEnabled = false; b.addSubview(i)
+    b.addAction(UIAction { [weak self] _ in self?.pickTask(t) }, for: .touchUpInside)
+    return b
+  }
+  private func pickTask(_ t: Msg.TaskCard) {
+    guard let r = mentionQ?.0 else { return }
+    box.text = (box.text as NSString).replacingCharacters(in: r, with: "")
+    box.selectedRange = NSRange(location: r.location, length: 0)
+    taskQ = nil; UISelectionFeedbackGenerator().selectionChanged()
+    showMentions([]); onPickTask?(t); setTask(t)
   }
   private func pick(_ id: String, _ name: String) {
     guard let r = mentionQ?.0 else { return }
@@ -2316,11 +2441,12 @@ final class MessageBar: UIView, UITextViewDelegate {
   }
   private func sendNow() {
     let t = box.text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !t.isEmpty else { return }
+    guard !t.isEmpty || pickedTask != nil else { return }
     // (the people picked with @ whose name is still in the words)
     let ms = picked.filter { t.contains("@" + $0.value) }.map { $0.key }
-    box.text = ""; picked = [:]; showMentions([]); textChanged()
-    onSend?(t, ms)
+    let task = pickedTask
+    box.text = ""; picked = [:]; showMentions([]); if task != nil { setTask(nil) }; textChanged()
+    onSend?(t, ms, task)
   }
   func setReply(_ r: (String, String)?, editing: Bool, ink: UIColor = Look.accent) {
     replyV.isHidden = r == nil
@@ -2462,4 +2588,81 @@ final class BubblePreview: UIViewController {
   required init?(coder: NSCoder) { fatalError() }
   override func loadView() { let v = UIView(); v.backgroundColor = .clear; v.addSubview(shot); view = v }
   override func viewDidLayoutSubviews() { super.viewDidLayoutSubviews(); shot.center = CGPoint(x: view.bounds.midX, y: view.bounds.midY) }
+}
+
+// the dots bubble while someone types (the design's board 32): their picture, three dots breathing in turn
+final class TypingDots: UIView {
+  private let face = Avatar(frame: CGRect(x: 7, y: 9, width: 27, height: 27)), bub = UIView(), dots = (0..<3).map { _ in UIView() }
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    bub.backgroundColor = Look.theirs; bub.layer.cornerRadius = 17; bub.layer.cornerCurve = .continuous
+    bub.frame = CGRect(x: 44, y: 4, width: 58, height: 34); addSubview(bub); addSubview(face)
+    for (i, d) in dots.enumerated() {
+      d.backgroundColor = .secondaryLabel; d.layer.cornerRadius = 3.5; d.frame = CGRect(x: 14 + CGFloat(i) * 12, y: 13.5, width: 7, height: 7); bub.addSubview(d)
+      let a = CABasicAnimation(keyPath: "opacity"); a.fromValue = 1; a.toValue = 0.3; a.duration = 0.45; a.autoreverses = true; a.repeatCount = .infinity
+      a.beginTime = CACurrentMediaTime() + Double(i) * 0.15; a.isRemovedOnCompletion = false; d.layer.add(a, forKey: "breath")
+    }
+    isAccessibilityElement = true; accessibilityLabel = "Typing"
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  func set(person: Person?) { face.set(person: person) }
+}
+
+// a task in a message (the design's board 37): "TASK · CLIENT", its title, the status in its colour, the due day and the
+// people's faces, then "Open in E11 Console ›" — the whole card opens it there (its /t/ link)
+final class TaskCardView: UIView {
+  private let head = UILabel(), title = UILabel(), status = PadLabel(), due = UILabel(), faces = UIStackView(), line = UIView(), open = UILabel()
+  private var url: URL?
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    backgroundColor = UIColor.black.withAlphaComponent(0.22); layer.cornerRadius = 15; layer.cornerCurve = .continuous; clipsToBounds = true
+    head.font = .systemFont(ofSize: 12, weight: .semibold); title.font = .systemFont(ofSize: 16, weight: .semibold); title.numberOfLines = 2
+    status.font = .systemFont(ofSize: 12, weight: .semibold); status.layer.cornerRadius = 5; status.layer.masksToBounds = true; status.textColor = .black
+    due.font = .systemFont(ofSize: 13); faces.spacing = -6
+    open.font = .systemFont(ofSize: 15, weight: .semibold)
+    let row = UIStackView(arrangedSubviews: [status, due, UIView(), faces]); row.spacing = 8; row.alignment = .center
+    let col = UIStackView(arrangedSubviews: [head, title, row, line, open]); col.axis = .vertical; col.spacing = 5
+    col.setCustomSpacing(8, after: row); col.setCustomSpacing(8, after: line)
+    addSubview(col); col.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([col.topAnchor.constraint(equalTo: topAnchor, constant: 10), col.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
+                                 col.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12), col.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+                                 line.heightAnchor.constraint(equalToConstant: 0.5)])
+    addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tap)))
+    isAccessibilityElement = true; accessibilityTraits = .link
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  func set(_ t: Msg.TaskCard, mine: Bool, ink: UIColor) {
+    let sub: UIColor = mine ? UIColor.white.withAlphaComponent(0.8) : .secondaryLabel
+    let mark = NSTextAttachment(image: UIImage(systemName: "checkmark.square", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold))!.withTintColor(sub))
+    let h = NSMutableAttributedString(attachment: mark)
+    h.append(NSAttributedString(string: "  TASK" + (t.client.isEmpty ? "" : " · " + t.client.uppercased()), attributes: [.foregroundColor: sub, .kern: 0.4]))
+    head.attributedText = h
+    title.text = t.title; title.textColor = ink
+    status.text = t.status; status.backgroundColor = Look.hex(t.color) ?? .systemGray; status.isHidden = t.status.isEmpty
+    due.textColor = sub; due.text = TaskCardView.dueText(t.due); due.isHidden = due.text == nil
+    faces.arrangedSubviews.forEach { $0.removeFromSuperview() }
+    for id in t.people.prefix(3) {
+      let a = Avatar(frame: CGRect(x: 0, y: 0, width: 22, height: 22)); a.set(person: Talk.shared.people[id])
+      a.translatesAutoresizingMaskIntoConstraints = false
+      a.widthAnchor.constraint(equalToConstant: 22).isActive = true; a.heightAnchor.constraint(equalToConstant: 22).isActive = true
+      faces.addArrangedSubview(a)
+    }
+    line.backgroundColor = sub.withAlphaComponent(0.3)
+    open.text = "Open in E11 Console ›"; open.textColor = ink
+    url = t.url
+    accessibilityLabel = "Task: \(t.title), \(t.status). Open in E11 Console"
+  }
+  static func dueText(_ d: String?) -> String? {
+    guard let d = d else { return nil }
+    let i = DateFormatter(); i.dateFormat = "yyyy-MM-dd"; i.locale = Locale(identifier: "en_US_POSIX")
+    guard let day = i.date(from: String(d.prefix(10))) else { return nil }
+    let o = DateFormatter(); o.dateFormat = "EEE, d MMM"
+    return "Due " + o.string(from: day)
+  }
+  @objc private func tap() { if let u = url { UIApplication.shared.open(u) } }
+}
+// a label with room around its words (the status pill)
+final class PadLabel: UILabel {
+  override var intrinsicContentSize: CGSize { let s = super.intrinsicContentSize; return CGSize(width: s.width + 12, height: s.height + 4) }
+  override func drawText(in r: CGRect) { super.drawText(in: r.insetBy(dx: 6, dy: 2)) }
 }

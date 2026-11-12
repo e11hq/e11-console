@@ -40,6 +40,20 @@ struct Msg: Codable, Equatable {
   var fwd: Bool? = nil                    // (forwarded from another chat: "Forwarded" over it)
   var album: String? = nil              // (photos and videos sent together: one album in the chat — Haris 2026-11-12)
   var link: LinkPrev? = nil               // (a link's preview, made on the sender's phone — option B, Haris 2026-11-12)
+  var task: TaskCard? = nil               // (an E11 Console task shared with # — staff groups only; the card the server made)
+  struct TaskCard: Codable, Equatable, Hashable {
+    var id: String; var title: String; var client: String; var status: String; var color: String; var due: String?; var done: Bool; var people: [String]
+    init?(_ j: [String: Any]?) {
+      guard let j = j, let id = j["id"] as? String else { return nil }
+      self.id = id; title = j["title"] as? String ?? "Task"; client = j["client"] as? String ?? ""; status = j["status"] as? String ?? ""
+      color = j["color"] as? String ?? "#87909e"; due = j["due"] as? String; done = (j["done"] as? Bool) == true; people = j["people"] as? [String] ?? []
+    }
+    // the task's own link — it opens in E11 Console (its app takes /t/ links; the website otherwise)
+    var url: URL? {
+      let files = Server.host.contains("test") ? "files-test.e11hq.com" : "files.e11hq.com"
+      return URL(string: "https://\(files)/t/" + (id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id))
+    }
+  }
   struct LinkPrev: Codable, Equatable, Hashable { var url: String; var title: String?; var site: String?; var video: Bool; var img: String?; var icon: String? }
   struct FileRef: Codable, Equatable { var id: String; var name: String; var size: Int; var kind: String; var w: Double?; var h: Double?; var secs: Double?; var wave: String? = nil }
   struct Reply: Codable, Equatable { var id: String; var by: String; var text: String; var kind: String }
@@ -69,6 +83,7 @@ struct GroupLog: Codable {
 extension Notification.Name {
   static let talkChanged = Notification.Name("talk.changed")        // the lists
   static let talkGroup = Notification.Name("talk.group")            // object: group id — its messages
+  static let talkTyping = Notification.Name("talk.typing")          // object: group id — who is typing there changed
   static let talkGone = Notification.Name("talk.gone")              // object: group id
   static let talkRefused = Notification.Name("talk.refused")        // object: the server's words
 }
@@ -246,6 +261,9 @@ final class Talk {
       var m = Msg(id: id, cid: e["cid"] as? String, seq: seq, by: by, at: at, kind: e["kind"] as? String ?? "text", text: e["text"] as? String ?? "",
                   file: f, reply: r, mentions: e["mentions"] as? [String] ?? [], fwd: (e["fwd"] as? Bool) == true ? true : nil)
       m.album = e["album"] as? String
+      m.task = Msg.TaskCard(e["task"] as? [String: Any])
+      // (their message is here: they've stopped typing)
+      DispatchQueue.main.async { Talk.shared.stoppedTyping(g, by) }
       if let k = e["link"] as? [String: Any], let u = k["url"] as? String {
         m.link = Msg.LinkPrev(url: u, title: k["title"] as? String, site: k["site"] as? String, video: (k["video"] as? Bool) == true,
                               img: (k["img"] as? [String: Any])?["id"] as? String, icon: (k["icon"] as? [String: Any])?["id"] as? String)
@@ -281,13 +299,13 @@ final class Talk {
   }
 
   // ---------- sending from here: shown at once, then the server's copy takes its place ----------
-  func send(_ g: String, text: String, reply: Msg? = nil, mentions: [String] = [], file: Msg.FileRef? = nil, localFile: URL? = nil, upload: Data? = nil, fwd: Bool = false, album: String? = nil, progress: ((Double) -> Void)? = nil) {
+  func send(_ g: String, text: String, reply: Msg? = nil, mentions: [String] = [], file: Msg.FileRef? = nil, localFile: URL? = nil, upload: Data? = nil, fwd: Bool = false, album: String? = nil, task: Msg.TaskCard? = nil, progress: ((Double) -> Void)? = nil) {
     guard let me = me else { return }
     let cid = UUID().uuidString
     var l = log(g)
     var m = Msg(id: "local-" + cid, cid: cid, seq: Int.max, by: me.id, at: Date().timeIntervalSince1970 * 1000, kind: file?.kind ?? "text", text: text, file: file,
                 reply: reply.map { Msg.Reply(id: $0.id, by: $0.by, text: Talk.preview($0), kind: $0.kind) }, mentions: mentions, pending: true, fwd: fwd ? true : nil)
-    m.album = album
+    m.album = album; m.task = task
     if let lf = localFile, let f = file { try? FileManager.default.copyItem(at: lf, to: Net.local(f.id)) }
     l.msgs.append(m); logs[g] = l; saveSoon(g)
     NotificationCenter.default.post(name: .talkGroup, object: g); NotificationCenter.default.post(name: .talkChanged, object: nil)
@@ -296,6 +314,7 @@ final class Talk {
       var b: [String: Any] = ["act": "send", "group": g, "text": text, "cid": cid, "mentions": mentions]
       if let lb = linkBody { b["link"] = lb }
       if let a = album { b["album"] = a }
+      if let t = task { b["task"] = ["id": t.id] }
       if fwd { b["fwd"] = true }
       if let r = m.reply { b["reply"] = ["id": r.id, "by": r.by, "text": r.text, "kind": r.kind] }
       if let f = file, let fid = fileId { var fd: [String: Any] = ["id": fid, "kind": f.kind]; fd["w"] = f.w; fd["h"] = f.h; fd["secs"] = f.secs; fd["wave"] = f.wave; b["file"] = fd }
@@ -312,7 +331,7 @@ final class Talk {
         m.file?.id = fid
         go(fid)
       }
-    } else if file == nil, !fwd, let u = LinkPrevMaker.firstLink(text) {
+    } else if file == nil, !fwd, task == nil, let u = LinkPrevMaker.firstLink(text) {
       // (words with a link: its preview made here first — the picture and the site's icon sent up as files — then the
       //  message with it; the clock shows meanwhile, and the message goes without a preview if none comes)
       LinkPrevMaker.make(u) { [weak self] prev, img, icon in
@@ -443,7 +462,7 @@ final class Talk {
     case "video": return m.text.isEmpty ? "🎥 Video" : "🎥 " + m.text
     case "voice": return "🎤 Voice message"
     case "file": return "📄 " + (m.file?.name ?? "File")
-    default: return m.text
+    default: if let t = m.task, m.text.isEmpty { return "☑️ " + t.title }; return m.text
     }
   }
   // ---------- for the iCloud backup (Backup.swift) ----------
@@ -637,5 +656,43 @@ enum LinkPrevMaker {
     let k = min(1, w / max(1, i.size.width)), size = CGSize(width: i.size.width * k, height: i.size.height * k)
     let f = UIGraphicsImageRendererFormat(); f.scale = 1
     return UIGraphicsImageRenderer(size: size, format: f).image { _ in i.draw(in: CGRect(origin: .zero, size: size)) }
+  }
+}
+
+// ---------- typing (step 5, Haris 2026-11-12): told by the server as it happens, kept only here, for 5 seconds unless told
+// again; gone at once when their message comes ----------
+extension Talk {
+  private static var typingNow: [String: [String: Double]] = [:]
+  func typed(_ g: String, _ by: String) {
+    guard by != me?.id else { return }
+    let was = typers(g)
+    Talk.typingNow[g, default: [:]][by] = Date().timeIntervalSince1970 + 5
+    if typers(g) != was { NotificationCenter.default.post(name: .talkTyping, object: g) }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 5.1) { [weak self] in self?.expireTyping(g) }
+  }
+  func stoppedTyping(_ g: String, _ by: String) {
+    guard Talk.typingNow[g]?.removeValue(forKey: by) != nil else { return }
+    NotificationCenter.default.post(name: .talkTyping, object: g)
+  }
+  private func expireTyping(_ g: String) {
+    let t = Date().timeIntervalSince1970
+    let gone = (Talk.typingNow[g] ?? [:]).filter { $0.value <= t }.map { $0.key }
+    guard !gone.isEmpty else { return }
+    gone.forEach { Talk.typingNow[g]?.removeValue(forKey: $0) }
+    NotificationCenter.default.post(name: .talkTyping, object: g)
+  }
+  func typers(_ g: String) -> [String] {
+    let t = Date().timeIntervalSince1970
+    return (Talk.typingNow[g] ?? [:]).filter { $0.value > t }.map { $0.key }.sorted()
+  }
+  // "Omar is typing…", "Lana and Nadia are typing…", "Lana and 2 others are typing…" — first names
+  func typingLine(_ g: String) -> String? {
+    let ns = typers(g).map { String(name($0).split(separator: " ").first ?? "Someone") }
+    switch ns.count {
+    case 0: return nil
+    case 1: return "\(ns[0]) is typing…"
+    case 2: return "\(ns[0]) and \(ns[1]) are typing…"
+    default: return "\(ns[0]) and \(ns.count - 1) others are typing…"
+    }
   }
 }

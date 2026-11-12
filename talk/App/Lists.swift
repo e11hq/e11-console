@@ -44,8 +44,14 @@ final class ChatRowCell: UITableViewCell {
     let v = UIImageView(image: UIImage(systemName: n, withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold)))
     v.tintColor = .tertiaryLabel; return v
   }
-  func show(title t: String, sub s: String, time tm: String, unread: Int, pinned: Bool, muted: Bool, chip: String? = nil) {
-    title.text = t; sub.text = s; time.text = tm
+  func show(title t: String, sub s: String, time tm: String, unread: Int, pinned: Bool, muted: Bool, chip: String? = nil, typing: Bool = false) {
+    title.text = t; time.text = tm
+    // (someone typing: the last line becomes "Omar is typing…" in our blue, crossfading — the design's board 33)
+    let ink: UIColor = typing ? Look.accent : .secondaryLabel
+    if sub.text != s || sub.textColor != ink {
+      if window != nil && sub.text != nil { UIView.transition(with: sub, duration: 0.2, options: .transitionCrossDissolve) { self.sub.text = s; self.sub.textColor = ink } }
+      else { sub.text = s; sub.textColor = ink }
+    }
     chipL.text = chip; chipL.isHidden = chip == nil
     time.textColor = unread > 0 ? Look.accent : .secondaryLabel
     badge.isHidden = unread == 0; badge.text = unread > 99 ? "99+" : "\(unread)"
@@ -87,6 +93,18 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
     search.searchResultsUpdater = self; search.obscuresBackgroundDuringPresentation = false
     navigationItem.searchController = search; navigationItem.hidesSearchBarWhenScrolling = false
     NotificationCenter.default.addObserver(self, selector: #selector(changed), name: .talkChanged, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(typingChanged(_:)), name: .talkTyping, object: nil)
+  }
+  // (typing: only that group's row and its client's row drawn again)
+  @objc func typingChanged(_ n: Notification) {
+    guard let gid = n.object as? String else { return }
+    let cid = Talk.shared.groups[gid]?.client
+    var snap = data.snapshot()
+    let rows = snap.itemIdentifiers.filter { r in
+      switch r { case .group(let id): return id == gid; case .client(let id): return id == cid; default: return false }
+    }
+    guard !rows.isEmpty else { return }
+    snap.reconfigureItems(rows); data.apply(snap, animatingDifferences: false)
   }
   override func viewWillAppear(_ a: Bool) { super.viewWillAppear(a); reload(animated: false) }
   @objc func changed() { reload(animated: view.window != nil) }
@@ -109,9 +127,10 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
       guard let g = T.groups[id] else { return }
       c.avatar.set(group: g)
       let m = T.last(id)
-      let line = m.map { ($0.kind == "sys" ? "" : "\(T.name($0.by)): ") + Talk.preview($0) } ?? "No messages yet"
+      let typing = T.typingLine(id)
+      let line = typing ?? m.map { ($0.kind == "sys" ? "" : "\(T.name($0.by)): ") + Talk.preview($0) } ?? "No messages yet"
       let pinned = (g.withClient ? T.pinnedClientGroups : T.pinnedGroups).contains(id)
-      c.show(title: g.name, sub: line, time: Look.time(T.activity(g)), unread: T.unread(id), pinned: pinned, muted: g.muted, chip: g.withClient && !T.isContact ? "With Client" : nil)
+      c.show(title: g.name, sub: line, time: Look.time(T.activity(g)), unread: T.unread(id), pinned: pinned, muted: g.muted, chip: g.withClient && !T.isContact ? "With Client" : nil, typing: typing != nil)
     case .found(let gid, let mid):
       guard let g = T.groups[gid], let m = T.log(gid).msgs.first(where: { $0.id == mid }) else { return }
       c.avatar.set(group: g)
@@ -121,9 +140,11 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
       c.avatar.set(client: cl)
       let gs = T.groups(of: id, withClient: clientsTab)
       let newest = gs.first.flatMap { g in T.last(g.id).map { (g, $0) } }
-      let line = newest.map { (_, m) in (m.kind == "sys" ? "" : "\(T.name(m.by)): ") + Talk.preview(m) } ?? "\(gs.count) group\(gs.count == 1 ? "" : "s")"
-      c.show(title: cl.name, sub: clientsTab && newest == nil ? "\(gs.count) group\(gs.count == 1 ? "" : "s") with the client" : line, time: Look.time(T.clientActivity(id, withClient: clientsTab)),
-             unread: T.clientUnread(id, withClient: clientsTab), pinned: !clientsTab && T.pinnedClients.contains(id), muted: false)
+      // (someone typing in one of its groups: that, on the client's line too)
+      let typing = gs.lazy.compactMap { T.typingLine($0.id) }.first
+      let line = typing ?? newest.map { (_, m) in (m.kind == "sys" ? "" : "\(T.name(m.by)): ") + Talk.preview(m) } ?? "\(gs.count) group\(gs.count == 1 ? "" : "s")"
+      c.show(title: cl.name, sub: typing == nil && clientsTab && newest == nil ? "\(gs.count) group\(gs.count == 1 ? "" : "s") with the client" : line, time: Look.time(T.clientActivity(id, withClient: clientsTab)),
+             unread: T.clientUnread(id, withClient: clientsTab), pinned: !clientsTab && T.pinnedClients.contains(id), muted: false, typing: typing != nil)
     }
   }
   func tableView(_ tv: UITableView, heightForHeaderInSection s: Int) -> CGFloat {
