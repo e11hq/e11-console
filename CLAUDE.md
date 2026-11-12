@@ -124,6 +124,9 @@ match, never our own drawing). Light and dark follow the iPhone. Decisions: proj
 **E11 Talk is always the account E11 Console is signed in as (Haris 2026-11-11 23:55):** never a different account on the
 same phone; no "Use Another Account" in Talk (dropped, Haris 23:55) — to change account, sign out of E11 Console. Client contacts (no Console)
 sign in to Talk only, with Console's sign-in steps (email, password; first time the admin's sign-in code + new password).
+**E11 Talk builds — the same way as Console's (Haris 2026-11-12 07:57):** quick builds while working (talk.yml: built,
+started once in the simulator, signed and kept — about 2 minutes); a brief self-test of the app runs as the last step,
+before a release. Still only on his "build"; TestFlight only on his yes.
 **E11 Talk never follows "View as" (Haris 2026-11-11 23:39):** "View as…" is only for E11 Console — E11 Talk always stays
 on the main account signed in on the phone (it switched Talk to that person before and cost Haris his own chats, 17:04).
 And a backup is always restorable from Settings → Chat Backup (not only on a new phone).
