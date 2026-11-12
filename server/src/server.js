@@ -78,7 +78,7 @@ export function createServer(cfg) {
   // E11 Talk (talk.js): its own database, its own phones for notifications (the same Apple key, its own app)
   const talkApns = createApns({ store, keyFile: cfg.apnsKeyFile, keyId: cfg.apnsKeyId, teamId: cfg.apnsTeamId, topic: cfg.talkTopic || 'ae.e11.talk.ios', kvPrefix: 'talk-apns', hosts: cfg.apnsHosts, connectOpts: cfg.apnsConnectOpts });
   let talk = null;
-  const talkNow = () => talk || (talk = createTalk({ dataDir, store, access, apns: talkApns, dbFile: cfg.talkDbFile, now: cfg.now || (() => Date.now()) }));
+  const talkNow = () => talk || (talk = createTalk({ dataDir, store, access, apns: talkApns, dbFile: cfg.talkDbFile, now: cfg.now || (() => Date.now()), links: () => fileLinks }));
   { const webSend = webPush.sendTo;
     webPush.sendTo = async (userId, msg, opts) => {
       // (the iPhone app: expense claims only as rules.js onPhone says — everyone's own claim approved / paid / added, the

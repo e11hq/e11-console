@@ -24,7 +24,7 @@ const PHONE_MS = 30 * 86400000;         // a linked Mac goes when its phone hasn
 const rid = (p) => p + '-' + crypto.randomBytes(8).toString('hex');
 const clip = (s, n) => String(s == null ? '' : s).slice(0, n);
 
-export function createTalk({ dataDir, store, access, apns = null, now = () => Date.now(), dbFile }) {
+export function createTalk({ dataDir, store, access, apns = null, now = () => Date.now(), dbFile, links = () => null }) {
   const file = dbFile || path.join(dataDir, 'db', 'talk.sqlite');
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
   const relay = path.join(dataDir, 'talk-relay');
@@ -384,6 +384,27 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     return all.slice(0, 20).map(taskCard);
   }
 
+  // ---------- our own E11 links in a message (Haris 2026-11-12): a task's link becomes its card (staff groups only); a file's
+  // or a Client Assets folder's link its name, kind and "E11 Console" — read here, as no phone can read those pages ----------
+  const E11_LINK = /https?:\/\/files(?:-test)?\.e11hq\.com\/([tfd])\/([A-Za-z0-9_%.-]{1,120})/i;
+  function e11Link(u, g, text) {
+    const m = E11_LINK.exec(String(text || '')); if (!m) return null;
+    const kind = m[1].toLowerCase(), tok = decodeURIComponent(m[2]), url = m[0];
+    if (kind === 't') {
+      if (isContact(u) || withClient(g)) return null;
+      const tk = store.get('tasks', tok);
+      return seeTask(u, tk) ? { task: taskCard(tk) } : null;
+    }
+    const L = links(); if (!L) return null;
+    if (kind === 'd') {
+      const r = L.resolveFolder(tok); if (!r || !r.live) return null;
+      return { link: { url, title: r.hit.f.name, site: 'E11 Console · Folder', video: false, img: null, icon: null, e11: 'folder' } };
+    }
+    const r = L.resolveToken(tok); if (!r || !r.live) return null;
+    const a = r.hit.att || {};
+    return { link: { url, title: a.name || 'File', site: 'E11 Console · File', video: false, img: null, icon: null, e11: 'file' } };
+  }
+
   function act(u, b) {
     const t = now();
     if (isContact(u) && !CONTACT_ACTS.has(String(b.act || ''))) return bad('Not allowed', 403);
@@ -551,6 +572,9 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         }
         // (a task shared with # — staff groups only, a task this person sees; its card made here)
         let task = null;
+        // (one of our own links in the words: its card from here)
+        const own = !file && !(b.task && typeof b.task === 'object') ? e11Link(u, g, text) : null;
+        if (own && own.task) task = own.task;
         if (b.task && typeof b.task === 'object') {
           if (isContact(u) || withClient(g)) return bad('Tasks aren’t shared in a group with a client', 403);
           const tk = store.get('tasks', String(b.task.id || ''));
@@ -562,8 +586,8 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         const reply = b.reply && typeof b.reply === 'object' ? { id: clip(b.reply.id, 40), by: clip(b.reply.by, 40), text: clip(b.reply.text, 200), kind: clip(b.reply.kind, 10) } : null;
         // a link's preview, made on the sender's phone (Apple's link reader there): the address, title, site, whether it's a
         // video, and its picture and site icon as files that phone uploaded (Haris 2026-11-12, option B)
-        let link = null;
-        if (!file && b.link && typeof b.link === 'object' && /^https?:\/\//i.test(String(b.link.url || ''))) {
+        let link = own && own.link ? own.link : null;
+        if (!link && !file && b.link && typeof b.link === 'object' && /^https?:\/\//i.test(String(b.link.url || ''))) {
           const own = (x) => { const f = x && typeof x === 'object' ? Q.getFile.get(String(x.id || '')) : null; return f && f.by === u.id && f.done ? { id: f.id } : null; };
           link = { url: clip(b.link.url, 2000), title: clip(b.link.title || '', 300) || null, site: clip(b.link.site || '', 120) || null,
             video: b.link.video === true, img: own(b.link.img), icon: own(b.link.icon) };
@@ -635,6 +659,13 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         const [g, e] = needGroup(u, b.group); if (e) return e;
         typing(g, u.id);
         return { ok: true };
+      }
+      // the task cards in a chat as they are now (a card keeps up with its task — Haris 2026-11-12)
+      case 'taskCards': {
+        const [g, e] = needGroup(u, b.group); if (e) return e;
+        if (isContact(u) || withClient(g)) return { ok: true, cards: [] };
+        const ids = (Array.isArray(b.ids) ? b.ids : []).slice(0, 200).map(String);
+        return { ok: true, cards: ids.map((id) => store.get('tasks', id)).filter((t) => seeTask(u, t)).map(taskCard) };
       }
       case 'tasks': {
         const [g, e] = needGroup(u, b.group); if (e) return e;

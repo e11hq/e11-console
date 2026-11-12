@@ -316,3 +316,14 @@ test('a pinned message: anyone in the group, one at a time, until unpinned or re
   await act('des', { act: 'del', msg: b2.id });
   assert.equal((await state('adm')).groups.find((x) => x.id === g).pin, null, 'deleted for everyone: the pin goes too');
 });
+
+test('a task card keeps up with its task; a task link in the words becomes its card (staff groups only)', async () => {
+  const g = (await act('adm', { act: 'newGroup', client: 'p1', name: 'Live cards', members: ['u-des'] })).group.id;
+  app.store.apply([{ kind: 'tasks', id: 't-live', data: { id: 't-live', projectId: 'p1', parentId: null, title: 'Old title', done: false, assignees: [] } }], 'test');
+  const s = await act('adm', { act: 'send', group: g, text: 'see https://files-test.e11hq.com/t/t-live' });
+  const ev = (await sync('des')).events.find((e) => e.id === s.id);
+  assert.equal(ev.task && ev.task.id, 't-live', 'the link became the card');
+  app.store.apply([{ kind: 'tasks', id: 't-live', data: { id: 't-live', projectId: 'p1', parentId: null, title: 'New title', done: true, assignees: [] } }], 'test');
+  const r = await act('adm', { act: 'taskCards', group: g, ids: ['t-live', 'nope'] });
+  assert.ok(r.ok && r.cards.length === 1 && r.cards[0].title === 'New title' && r.cards[0].done === true, 'as it is now');
+});
