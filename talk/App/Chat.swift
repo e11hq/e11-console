@@ -50,7 +50,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
      page shows at the keyboard's rounded corners. (It was the keyboard's own accessory before.) While searching, the
      bar of matches takes its place (the design's board "Search in a chat"). */
   private var homeLimits: [NSLayoutConstraint] = []
-  private let topFrost = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
+  private let topFrost = ChatVC.frost()
+  // the chat's top frost (Haris 2026-11-12, b): Apple's blur, tinted thick with the chat's colour — nothing shows through
+  static func frost() -> UIVisualEffectView {
+    let v = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial)); v.isUserInteractionEnabled = false
+    v.contentView.backgroundColor = UIColor { Look.chatBg.resolvedColor(with: $0).withAlphaComponent(0.8) }
+    return v
+  }
   private var home: CGFloat { UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first?.safeAreaInsets.bottom ?? 0 }
   private func placeBars() {
     if #available(iOS 17.0, *) { view.keyboardLayoutGuide.usesBottomSafeArea = false }   // (iOS 16: the guide stops at the home line itself)
@@ -212,17 +218,18 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (WhatsApp's, frame by frame: at the first moment one frost from the very top down past the list's search bar, thick
     //  enough that the big title and the search don't show through; then it settles to the chat's bar. Two pieces of the
     //  one frost: the top behind Apple's bar (the chat's name and buttons on it), the rest over the folding title.)
-    let thick = UIColor { Look.chatBg.resolvedColor(with: $0).withAlphaComponent(0.8) }, thin = UIColor { Look.chatBg.resolvedColor(with: $0).withAlphaComponent(0) }
+    // (the same frost as the chat's own top — ChatVC.frost — so the hand-off at the end can't be seen; it only shrinks)
     let piece = { (y: CGFloat, h: CGFloat) -> UIVisualEffectView in
-      let v = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial)); v.isUserInteractionEnabled = false
-      v.contentView.backgroundColor = thick; v.frame = CGRect(x: 0, y: y, width: W, height: h); return v
+      let v = ChatVC.frost(); v.frame = CGRect(x: 0, y: y, width: W, height: h); return v
     }
+    // (the list's search bar goes the moment the cover comes, so it can't show again as the cover settles; back as it
+    //  always is once the chat has arrived — the way back is Apple's, as usual)
+    let searchBar = (tc.viewController(forKey: .from)?.navigationItem.searchController?.searchBar)
+    searchBar?.alpha = 0
     let upper = piece(0, rowBottom), lower = piece(rowBottom, full - rowBottom)
     n.view.insertSubview(upper, belowSubview: n.navigationBar); n.view.insertSubview(lower, aboveSubview: n.navigationBar)
-    tc.animate(alongsideTransition: { _ in
-      lower.frame.size.height = 0
-      upper.contentView.backgroundColor = thin; lower.contentView.backgroundColor = thin
-    }, completion: { _ in upper.removeFromSuperview(); lower.removeFromSuperview() })
+    tc.animate(alongsideTransition: { _ in lower.frame.size.height = 0 },
+               completion: { _ in upper.removeFromSuperview(); lower.removeFromSuperview(); searchBar?.alpha = 1 })
   }
   static var open: String?
   override func viewDidLayoutSubviews() {
