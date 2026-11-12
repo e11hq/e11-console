@@ -1974,6 +1974,9 @@ final class MessageBar: UIView, UITextViewDelegate {
         guard self.holding else { _ = self.rec.stop(keep: false); return }
         ChatSound.voiceStart()
         self.recTime.text = "0:00"; self.lockedTime.text = "0:00"
+        self.bringSubviewToFront(self.mic)   // (the mic at the pill's foot, on top of it — WhatsApp's; it went behind the pill)
+        self.pillUp.transform = .identity; self.pillUp.alpha = 1
+        self.shimmer(true); self.bob(true)
         self.recV.isHidden = false; self.recV.alpha = 0; self.recMic.alpha = 0
         self.recHint.transform = CGAffineTransform(translationX: 60, y: 0)
         self.pill.transform = CGAffineTransform(translationX: 0, y: 40).scaledBy(x: 1, y: 0.4)
@@ -1991,9 +1994,10 @@ final class MessageBar: UIView, UITextViewDelegate {
       guard rec.isRecording, !recCancelled, !locked else { return }
       let p = g.location(in: self), dx = p.x - recStart.x, dy = p.y - recStart.y
       if dy < -12 && dy < dx {
-        // pulling up: the mic rises into the pill, the pill shortens; far enough — locked
+        // pulling up: the mic rises up the pill to the lock — the pill and its lock stay as they are (they were squeezed
+        //  before), the chevron fades as the mic nears; far enough — locked (WhatsApp's, Haris 2026-11-12)
         mic.transform = CGAffineTransform(translationX: 0, y: max(dy, -82)).scaledBy(x: 1.15, y: 1.15)
-        pill.transform = CGAffineTransform(translationX: 0, y: max(dy, -82) * 0.08).scaledBy(x: 1, y: max(0.62, 1 + dy / 220))
+        pillUp.alpha = max(0, 1 + dy / 60)
         if dy < -82 { lock() }
       } else {
         recHint.transform = CGAffineTransform(translationX: min(0, dx), y: 0); recHint.alpha = max(0, 1 + dx / 140)
@@ -2004,11 +2008,31 @@ final class MessageBar: UIView, UITextViewDelegate {
     default: break
     }
   }
+  // "Slide to cancel" with a light passing over it, right to left, the way to slide (WhatsApp's)
+  private func shimmer(_ on: Bool) {
+    guard on else { recHint.layer.mask = nil; return }
+    let g = CAGradientLayer(); g.frame = recHint.bounds.insetBy(dx: -40, dy: 0)
+    g.startPoint = CGPoint(x: 0, y: 0.5); g.endPoint = CGPoint(x: 1, y: 0.5)
+    g.colors = [UIColor(white: 0, alpha: 0.45).cgColor, UIColor.black.cgColor, UIColor(white: 0, alpha: 0.45).cgColor]
+    g.locations = [1, 1.12, 1.24]
+    let a = CABasicAnimation(keyPath: "locations"); a.fromValue = [1, 1.12, 1.24]; a.toValue = [-0.24, -0.12, 0]
+    a.duration = 1.8; a.repeatCount = .infinity
+    g.add(a, forKey: "sweep"); recHint.layer.mask = g
+  }
+  // the chevron over the lock nudging up and back, inviting the slide up
+  private func bob(_ on: Bool) {
+    pillUp.layer.removeAnimation(forKey: "bob")
+    guard on else { return }
+    let a = CABasicAnimation(keyPath: "transform.translation.y"); a.fromValue = 0; a.toValue = -4
+    a.duration = 0.6; a.autoreverses = true; a.repeatCount = .infinity; a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+    pillUp.layer.add(a, forKey: "bob")
+  }
   // pulled up into the lock: it shuts, the pill goes, the bar opens to the locked recording
   private func lock() {
     locked = true
     UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
     pillLock.image = UIImage(systemName: "lock.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
+    shimmer(false); bob(false)
     live.levels = rec.levels
     lockedV.isHidden = false; lockedV.alpha = 0; lockedV.transform = CGAffineTransform(translationX: 0, y: 40)
     invalidateIntrinsicContentSize()
@@ -2025,6 +2049,7 @@ final class MessageBar: UIView, UITextViewDelegate {
   }
   // slid left (or the bin while locked): the recording goes — the red mic flips up and drops into the bin, the bin sinks
   private func cancelRecording() {
+    shimmer(false); bob(false)
     guard !recCancelled else { return }
     recCancelled = true
     UINotificationFeedbackGenerator().notificationOccurred(.warning)
@@ -2059,6 +2084,7 @@ final class MessageBar: UIView, UITextViewDelegate {
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ChatSound.voiceCancel() }
   }
   private func endRecording(send: Bool) {
+    shimmer(false); bob(false)
     recMic.layer.removeAllAnimations()
     let r = rec.isRecording || rec.isPaused ? rec.stop(keep: send) : nil
     UIView.animate(withDuration: 0.2) { self.recV.alpha = 0; self.recMic.alpha = 0; self.pill.alpha = 0; self.lockedV.alpha = 0; self.mic.transform = .identity }
