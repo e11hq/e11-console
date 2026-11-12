@@ -1185,7 +1185,7 @@ final class BubbleCell: UITableViewCell {
     footL.font = .systemFont(ofSize: 12); footL.textAlignment = .right
     stamp.font = .systemFont(ofSize: 12); stamp.textAlignment = .right
     // the quote
-    quote.backgroundColor = UIColor.black.withAlphaComponent(0.22); quote.layer.cornerRadius = 12; quote.layer.cornerCurve = .continuous; quote.clipsToBounds = true
+    quote.backgroundColor = UIColor.black.withAlphaComponent(0.22); quote.layer.cornerRadius = 15; quote.layer.cornerCurve = .continuous; quote.clipsToBounds = true
     quoteName.font = .systemFont(ofSize: 15, weight: .semibold); quoteText.font = .systemFont(ofSize: 14); quoteText.numberOfLines = 2
     quoteThumb.contentMode = .scaleAspectFill; quoteThumb.clipsToBounds = true
     // (the picture fills the quote's height, never sets it — a photo's own size made the quote as tall as the photo)
@@ -1236,7 +1236,7 @@ final class BubbleCell: UITableViewCell {
                                  cardDown.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12), cardDown.centerYAnchor.constraint(equalTo: card.centerYAnchor)])
     card.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(fileTap)))
     // the link's box
-    linkBox.backgroundColor = UIColor.black.withAlphaComponent(0.22); linkBox.layer.cornerRadius = 12; linkBox.layer.cornerCurve = .continuous
+    linkBox.backgroundColor = UIColor.black.withAlphaComponent(0.22); linkBox.layer.cornerRadius = 15; linkBox.layer.cornerCurve = .continuous
     linkSite.font = .systemFont(ofSize: 15, weight: .semibold); linkURL.font = .systemFont(ofSize: 14); linkURL.numberOfLines = 2; linkURL.lineBreakMode = .byCharWrapping
     linkFoot.font = .systemFont(ofSize: 14)
     [linkSite, linkURL, linkLine, linkFoot].forEach { linkBox.addSubview($0); $0.translatesAutoresizingMaskIntoConstraints = false }
@@ -1437,18 +1437,25 @@ final class BubbleCell: UITableViewCell {
     if !mine && run.last { face.isHidden = false; face.set(person: p) }
     // a reply's quote — the original's picture at the right when it was a photo
     quoteWrap.isHidden = m.reply == nil || m.deleted
-    quoteWrap.reach(0, 8, 0, mine ? 7 : 8)
+    // (4 from the bubble's edge all round when it's at the top — the same as at its sides — its corners the bubble's own,
+    //  4 in: 15 inside 19; Haris 2026-11-12)
+    quoteWrap.reach(nameL.isHidden && fwdL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
     if let r = m.reply {
       quoteBar.backgroundColor = Look.person(r.by)
       quoteName.text = r.by == T.me?.id ? "You" : T.name(r.by); quoteName.textColor = mine ? .white : Look.person(r.by)
       let cam = r.kind == "photo" || r.kind == "video"
       let qt = NSMutableAttributedString()
+      // (the kind's symbol in the quote's own words' colour — it was a faint grey, hard to see on the blue — and the emoji
+      //  the quote's words came with taken off, so it isn't shown twice)
+      let ink: UIColor = (mine ? UIColor.white.withAlphaComponent(0.8) : UIColor.secondaryLabel).resolvedColor(with: traitCollection)
       if cam || r.kind == "voice" || r.kind == "file" {
         let sym = r.kind == "voice" ? "mic.fill" : r.kind == "file" ? "doc.fill" : r.kind == "video" ? "video.fill" : "camera.fill"
-        qt.append(NSAttributedString(attachment: NSTextAttachment(image: UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 11))!.withTintColor(.secondaryLabel))))
+        qt.append(NSAttributedString(attachment: NSTextAttachment(image: UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .medium))!.withTintColor(ink, renderingMode: .alwaysOriginal))))
         qt.append(NSAttributedString(string: " "))
       }
-      let words = r.text.isEmpty ? (r.kind == "photo" ? "Photo" : r.kind == "video" ? "Video" : r.kind == "voice" ? "Voice message" : r.kind == "file" ? "File" : "") : r.text
+      var said = r.text
+      for e in ["📷 ", "🎥 ", "🎤 ", "📄 "] where said.hasPrefix(e) { said = String(said.dropFirst(e.count)) }
+      let words = said.isEmpty ? (r.kind == "photo" ? "Photo" : r.kind == "video" ? "Video" : r.kind == "voice" ? "Voice message" : r.kind == "file" ? "File" : "") : said
       qt.append(NSAttributedString(string: words))
       qt.addAttribute(.foregroundColor, value: mine ? UIColor.white.withAlphaComponent(0.8) : UIColor.secondaryLabel, range: NSRange(location: 0, length: qt.length))
       quoteText.attributedText = qt
