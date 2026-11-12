@@ -529,6 +529,11 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     guard case .msg(let id)? = data.itemIdentifier(for: ip), let m = msgs[id], m.kind != "sys" else { return nil }
     return UIContextMenuConfiguration(identifier: id as NSString, previewProvider: nil) { [weak self] _ in self?.menu(m) }
   }
+  // closing: the message goes back into its own place in the chat — the row showing it now (the old way let it fade
+  // out at the top and pop back in a moment later)
+  func tableView(_ tv: UITableView, previewForDismissingContextMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? {
+    tableView(tv, previewForHighlightingContextMenuWithConfiguration: c)
+  }
   func tableView(_ tv: UITableView, previewForHighlightingContextMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? {
     guard let id = c.identifier as? String, let ip = data.indexPath(for: .msg(id)), let cell = tv.cellForRow(at: ip) as? BubbleCell else { return nil }
     let p = UIPreviewParameters(); p.backgroundColor = .clear
