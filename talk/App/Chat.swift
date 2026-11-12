@@ -533,7 +533,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     navigationItem.titleView = nil
     navigationItem.hidesBackButton = false
   }
-  private func startFind() {
+  func startFind() {
     guard !finding else { return }
     findBar.placeholder = "Search in this chat"; findBar.delegate = self; findBar.text = ""
     bar.box.resignFirstResponder(); bar.isHidden = true; findAcc.isHidden = false

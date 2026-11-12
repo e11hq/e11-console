@@ -152,122 +152,247 @@ final class ClientPickVC: UITableViewController, UISearchResultsUpdating {
 
 // ---------- group info ----------
 final class GroupInfoVC: UITableViewController, PHPickerViewControllerDelegate {
+  /* Group Info — the approved design's boards 23 and 24 (Haris 2026-11-12: "Start Group Info"). Apple's inset list:
+     the picture, name and "client · N members" with Search · Mute · Edit; Photos, Files and Links with the latest four;
+     the members (Admin chip, a client in orange, You), + Add Members; Mute and Make Me Admin; Second Admin with what it
+     means; Leave and Delete, then who made it and when. Rows kept by what they show — only a row that changed is drawn again. */
   let group: String
   init(group: String) { self.group = group; super.init(style: .insetGrouped); hidesBottomBarWhenPushed = true }
   required init?(coder: NSCoder) { fatalError() }
   private var g: Group? { Talk.shared.groups[group] }
-  private enum Act { case addPeople, rename, picture, mute, pin, makeMeAdmin, leave, delete }
-  private var actions: [Act] {
-    guard let g = g else { return [] }
-    let T = Talk.shared
-    var a: [Act] = [.mute, .pin]
-    if T.canManage(g) { a = [.addPeople, .rename, .picture] + a }
-    if T.boss && !T.isAdmin(g) { a.append(.makeMeAdmin) }
-    return a
-  }
+  enum Row: Hashable { case media, member(String), addMembers, mute, makeMeAdmin, second, leave, delete }
+  private var data: UITableViewDiffableDataSource<Int, Row>!
+  private var sigs: [Row: Int] = [:]
+  private let head = UIView(), pic = Avatar(frame: CGRect(x: 0, y: 0, width: 116, height: 116)), nameL = UILabel(), subL = UILabel()
+  private let acts = UIStackView()
   private var members: [String] {
     guard let g = g else { return [] }
+    let me = Talk.shared.me?.id
     return g.members.sorted { a, b in
       let aa = g.admins.contains(a), ba = g.admins.contains(b)
       if aa != ba { return aa }
+      if (a == me) != (b == me) { return b == me }   // (You last)
       return Talk.shared.name(a) < Talk.shared.name(b)
     }
   }
   override func viewDidLoad() {
     super.viewDidLoad()
-    title = "Group info"
+    navigationItem.title = "Group Info"; navigationItem.largeTitleDisplayMode = .never
+    tableView.register(UITableViewCell.self, forCellReuseIdentifier: "c")
+    tableView.sectionHeaderTopPadding = 8
+    data = UITableViewDiffableDataSource(tableView: tableView) { [weak self] tv, ip, row in
+      let c = tv.dequeueReusableCell(withIdentifier: "c", for: ip); self?.fill(c, row); return c
+    }
+    data.defaultRowAnimation = .fade
+    buildHead()
     NotificationCenter.default.addObserver(self, selector: #selector(changed), name: .talkChanged, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(gone(_:)), name: .talkGone, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(changed), name: .talkGroup, object: group)
+    reload(animated: false)
   }
-  @objc private func changed() { if g == nil { navigationController?.popToRootViewController(animated: true); return }; tableView.reloadData() }
+  @objc private func changed() { if g == nil { navigationController?.popToRootViewController(animated: true); return }; reload(animated: view.window != nil) }
   @objc private func gone(_ n: Notification) { if (n.object as? String) == group { navigationController?.popToRootViewController(animated: true) } }
 
-  override func numberOfSections(in tv: UITableView) -> Int { 4 }
-  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int {
-    guard g != nil else { return 0 }
-    return [1, actions.count, members.count, Talk.shared.canManage(g!) ? 2 : 1][s]
+  // the top: the picture, the name, "client · N members", and Search · Mute · Edit as three cards
+  private func buildHead() {
+    pic.translatesAutoresizingMaskIntoConstraints = false
+    nameL.font = .systemFont(ofSize: 26, weight: .bold); nameL.textAlignment = .center; nameL.numberOfLines = 2
+    subL.font = .systemFont(ofSize: 15); subL.textColor = .secondaryLabel; subL.textAlignment = .center
+    acts.axis = .horizontal; acts.distribution = .fillEqually; acts.spacing = 10
+    let col = UIStackView(arrangedSubviews: [pic, nameL, subL, acts]); col.axis = .vertical; col.alignment = .center; col.spacing = 4
+    col.setCustomSpacing(12, after: pic); col.setCustomSpacing(16, after: subL)
+    col.translatesAutoresizingMaskIntoConstraints = false; head.addSubview(col)
+    NSLayoutConstraint.activate([pic.widthAnchor.constraint(equalToConstant: 116), pic.heightAnchor.constraint(equalToConstant: 116),
+      col.topAnchor.constraint(equalTo: head.topAnchor, constant: 4), col.leadingAnchor.constraint(equalTo: head.leadingAnchor, constant: 20),
+      col.trailingAnchor.constraint(equalTo: head.trailingAnchor, constant: -20), col.bottomAnchor.constraint(equalTo: head.bottomAnchor, constant: -4),
+      acts.widthAnchor.constraint(equalTo: col.widthAnchor), acts.heightAnchor.constraint(equalToConstant: 62)])
+    tableView.tableHeaderView = head
   }
-  override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? { s == 2 ? "\(members.count) people" : nil }
-  override func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat { ip.section == 0 ? 190 : ip.section == 2 ? 58 : 48 }
-  override func tableView(_ tv: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
-    let c = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
-    guard let g = g else { return c }
-    let T = Talk.shared
-    switch ip.section {
-    case 0:
-      c.selectionStyle = .none; c.backgroundColor = .clear
-      let a = Avatar(frame: CGRect(x: (tv.bounds.width - 32 - 96) / 2, y: 6, width: 96, height: 96)); a.set(group: g); c.contentView.addSubview(a)
-      let n = UILabel(frame: CGRect(x: 10, y: 110, width: tv.bounds.width - 52, height: 30)); n.text = g.name; n.font = .systemFont(ofSize: 22, weight: .bold); n.textAlignment = .center
-      let s = UILabel(frame: CGRect(x: 10, y: 142, width: tv.bounds.width - 52, height: 40)); s.numberOfLines = 2; s.textAlignment = .center; s.font = .systemFont(ofSize: 14); s.textColor = .secondaryLabel
-      s.text = "\(T.clients[g.client]?.name ?? "") · made by \(T.name(g.creator)) · \(Look.day(g.createdAt))"
-      [n, s].forEach { c.contentView.addSubview($0) }
-    case 1:
-      var cfg = c.defaultContentConfiguration()
-      switch actions[ip.row] {
-      case .addPeople: cfg.text = "Add people"; cfg.image = UIImage(systemName: "person.badge.plus")
-      case .rename: cfg.text = "Rename group"; cfg.image = UIImage(systemName: "pencil")
-      case .picture: cfg.text = g.pic == nil ? "Change picture" : "Change picture"; cfg.image = UIImage(systemName: "photo")
-      case .mute:
-        cfg.text = g.muted ? "Muted" : "Mute"; cfg.image = UIImage(systemName: g.muted ? "bell.slash.fill" : "bell.slash")
-        cfg.secondaryText = g.muted ? ((g.mutedUntil ?? 0) > 8e15 ? "Always — an @mention still notifies you" : "Until " + Look.time(g.mutedUntil ?? 0, short: true)) : nil
-        c.accessoryView = muteButton(g)
-      case .pin:
-        let on = T.pinnedGroups.contains(group)
-        cfg.text = on ? "Unpin" : "Pin"; cfg.image = UIImage(systemName: on ? "pin.slash" : "pin"); cfg.secondaryText = "Pinned groups stay above your clients — up to 5"
-      case .makeMeAdmin: cfg.text = "Make me admin"; cfg.image = UIImage(systemName: "star"); cfg.secondaryText = "As a Super Admin / Office Admin"
-      default: break
+  private var headSig = 0
+  private func fillHead(_ g: Group) {
+    let T = Talk.shared, can = T.canManage(g)
+    var h = Hasher(); h.combine(g.name); h.combine(g.pic); h.combine(g.members.count); h.combine(can); h.combine(g.muted); h.combine(T.clients[g.client]?.name); h.combine(T.clients[g.client]?.logo)
+    let sig = h.finalize(); guard sig != headSig else { return }; headSig = sig
+    pic.set(group: g); nameL.text = g.name
+    subL.text = [T.clients[g.client]?.name, "\(g.members.count) member\(g.members.count == 1 ? "" : "s")"].compactMap { $0 }.joined(separator: " · ")
+    acts.arrangedSubviews.forEach { $0.removeFromSuperview() }
+    acts.addArrangedSubview(card("magnifyingglass", "Search") { [weak self] in self?.search() })
+    acts.addArrangedSubview(card(g.muted ? "bell.slash" : "bell", g.muted ? "Muted" : "Mute") { [weak self] in if let g = self?.g { self?.muteSheet(g) } })
+    if can { acts.addArrangedSubview(card("pencil", "Edit") { [weak self] in if let g = self?.g { self?.edit(g) } }) }
+    let w = tableView.bounds.width > 0 ? tableView.bounds.width : view.bounds.width
+    let size = head.systemLayoutSizeFitting(CGSize(width: w, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel)
+    head.frame = CGRect(x: 0, y: 0, width: w, height: size.height); tableView.tableHeaderView = head
+  }
+  // one of the three: its symbol in our blue over its name, on the rows' own colour
+  private func card(_ sym: String, _ title: String, _ act: @escaping () -> Void) -> UIButton {
+    var c = UIButton.Configuration.filled()
+    c.baseBackgroundColor = .secondarySystemGroupedBackground; c.baseForegroundColor = .label
+    c.image = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .regular)); c.imagePlacement = .top; c.imagePadding = 6
+    c.imageColorTransformer = UIConfigurationColorTransformer { _ in Look.accent }
+    c.attributedTitle = AttributedString(title, attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 14)]))
+    c.background.cornerRadius = 14; c.cornerStyle = .fixed
+    return UIButton(configuration: c, primaryAction: UIAction { _ in act() })
+  }
+
+  private func reload(animated: Bool) {
+    guard let g = g else { return }
+    let T = Talk.shared, me = T.me?.id ?? "", can = T.canManage(g)
+    fillHead(g)
+    var snap = NSDiffableDataSourceSnapshot<Int, Row>()
+    var newSigs: [Row: Int] = [:]
+    func add(_ sec: Int, _ rows: [Row]) { snap.appendSections([sec]); snap.appendItems(rows, toSection: sec) }
+    add(0, [.media])
+    add(1, members.map { Row.member($0) } + (can ? [.addMembers] : []))
+    add(2, [.mute] + (T.boss && !T.isAdmin(g) ? [.makeMeAdmin] : []))
+    if (g.creator == me && g.creatorAdmin) || T.boss { add(3, [.second]) }
+    add(4, [.leave] + (can ? [.delete] : []))
+    for r in snap.itemIdentifiers {
+      var h = Hasher()
+      switch r {
+      case .media: h.combine(mediaCount()); h.combine(latestPics().map { $0.id })
+      case .member(let id): h.combine(T.name(id)); h.combine(T.people[id]?.role); h.combine(g.admins.contains(id)); h.combine(T.people[id]?.picture); h.combine(T.people[id]?.contact)
+      case .mute: h.combine(g.muted); h.combine(g.mutedUntil)
+      case .second: h.combine(g.second)
+      default: h.combine(0)
       }
-      cfg.imageProperties.tintColor = Look.accent; cfg.textProperties.color = Look.accent; cfg.secondaryTextProperties.color = .secondaryLabel
-      c.contentConfiguration = cfg
-    case 2:
-      let id = members[ip.row], p = T.people[id]
-      var cfg = c.defaultContentConfiguration()
-      cfg.text = T.name(id); cfg.secondaryText = p?.role; cfg.secondaryTextProperties.color = .secondaryLabel
-      cfg.image = UIImage(systemName: "circle.fill"); cfg.imageProperties.tintColor = .clear; cfg.imageProperties.reservedLayoutSize = CGSize(width: 40, height: 40)
-      c.contentConfiguration = cfg
-      let a = Avatar(frame: CGRect(x: 16, y: 9, width: 40, height: 40)); a.set(person: p); c.contentView.addSubview(a)
-      if g.admins.contains(id) {
-        let chip = PaddedLabel(); chip.text = id == g.creator ? "Creator · Admin" : "Admin"; chip.font = .systemFont(ofSize: 12, weight: .semibold); chip.textColor = Look.accent
-        chip.backgroundColor = Look.accent.withAlphaComponent(0.12); chip.layer.cornerRadius = 9; chip.layer.masksToBounds = true
-        chip.sizeToFit(); chip.frame.size = CGSize(width: chip.frame.width, height: 22); c.accessoryView = chip
-      }
-    default:
-      var cfg = c.defaultContentConfiguration()
-      cfg.text = ip.row == 0 ? "Leave group" : "Delete group"; cfg.textProperties.color = .systemRed
-      cfg.image = UIImage(systemName: ip.row == 0 ? "rectangle.portrait.and.arrow.right" : "trash"); cfg.imageProperties.tintColor = .systemRed
-      c.contentConfiguration = cfg
+      newSigs[r] = h.finalize()
     }
-    return c
+    let old = data.snapshot()
+    snap.reconfigureItems(snap.itemIdentifiers.filter { old.indexOfItem($0) != nil && sigs[$0] != newSigs[$0] })
+    sigs = newSigs
+    data.apply(snap, animatingDifferences: animated)
   }
-  private func muteButton(_ g: Group) -> UIView? { nil }
+
+  // what the chat holds: photos and videos, files, and messages with links — from this phone's own copy
+  private func mediaCount() -> Int {
+    Talk.shared.log(group).msgs.filter { !$0.deleted && ($0.file != nil || $0.link != nil) }.count
+  }
+  private func latestPics() -> [Msg] {
+    Array(Talk.shared.log(group).msgs.filter { !$0.deleted && ($0.kind == "photo" || $0.kind == "video") && $0.file != nil }.suffix(4).reversed())
+  }
+
+  private func fill(_ c: UITableViewCell, _ row: Row) {
+    guard let g = g else { return }
+    let T = Talk.shared, me = T.me?.id ?? ""
+    c.contentView.subviews.filter { $0.tag == 77 }.forEach { $0.removeFromSuperview() }
+    c.accessoryView = nil; c.accessoryType = .none; c.selectionStyle = .default
+    var cfg = UIListContentConfiguration.valueCell()
+    switch row {
+    case .media:
+      cfg = UIListContentConfiguration.valueCell(); cfg.text = "Photos, Files and Links"; cfg.secondaryText = "\(mediaCount())"
+      cfg.directionalLayoutMargins.bottom = 96
+      c.accessoryType = .disclosureIndicator
+      let strip = UIStackView(); strip.tag = 77; strip.axis = .horizontal; strip.spacing = 8; strip.distribution = .fillEqually
+      for m in latestPics() {
+        let iv = UIImageView(); iv.contentMode = .scaleAspectFill; iv.clipsToBounds = true; iv.layer.cornerRadius = 8; iv.layer.cornerCurve = .continuous
+        iv.backgroundColor = .tertiarySystemFill
+        if let f = m.file { if let i = BubbleCell.cached(f.id) ?? ZoomPage.small(m, f) { iv.image = i } else { ZoomPage.thumb(m, f) { iv.image = $0 } } }
+        strip.addArrangedSubview(iv)
+      }
+      while strip.arrangedSubviews.count < 4 { let v = UIView(); strip.addArrangedSubview(v) }
+      strip.translatesAutoresizingMaskIntoConstraints = false; c.contentView.addSubview(strip)
+      NSLayoutConstraint.activate([strip.leadingAnchor.constraint(equalTo: c.contentView.leadingAnchor, constant: 16), strip.trailingAnchor.constraint(equalTo: c.contentView.trailingAnchor, constant: -16),
+                                   strip.bottomAnchor.constraint(equalTo: c.contentView.bottomAnchor, constant: -12), strip.heightAnchor.constraint(equalToConstant: 76)])
+      strip.isHidden = latestPics().isEmpty
+      if latestPics().isEmpty { cfg.directionalLayoutMargins.bottom = 11 }
+    case .member(let id):
+      let p = T.people[id]
+      cfg = UIListContentConfiguration.subtitleCell()
+      cfg.text = id == me ? "You" : T.name(id)
+      cfg.secondaryText = p?.contact == true ? "Client" : p?.role
+      cfg.secondaryTextProperties.color = p?.contact == true ? Look.clientInk : .secondaryLabel
+      cfg.secondaryTextProperties.font = p?.contact == true ? .systemFont(ofSize: 14, weight: .semibold) : .systemFont(ofSize: 14)
+      cfg.textProperties.font = .systemFont(ofSize: 17)
+      cfg.image = UIImage(); cfg.imageProperties.reservedLayoutSize = CGSize(width: 40, height: 40); cfg.imageToTextPadding = 14
+      cfg.directionalLayoutMargins.top = 9; cfg.directionalLayoutMargins.bottom = 9
+      let a = Avatar(frame: CGRect(x: 16, y: 9, width: 40, height: 40)); a.tag = 77; a.isUserInteractionEnabled = false; a.set(person: p); c.contentView.addSubview(a)
+      if g.admins.contains(id) {
+        let chip = ChipLabel(); chip.text = "Admin"; chip.font = .systemFont(ofSize: 13, weight: .semibold); chip.textColor = .systemGreen
+        chip.backgroundColor = UIColor.systemGreen.withAlphaComponent(0.16); chip.layer.cornerRadius = 7; chip.layer.masksToBounds = true
+        chip.sizeToFit(); c.accessoryView = chip
+      }
+      c.selectionStyle = id == me ? .none : .default
+    case .addMembers:
+      cfg = UIListContentConfiguration.cell(); cfg.text = "Add Members"; cfg.textProperties.color = Look.accent
+      cfg.image = UIImage(systemName: "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
+      cfg.imageProperties.tintColor = Look.accent; cfg.imageProperties.reservedLayoutSize = CGSize(width: 40, height: 40); cfg.imageToTextPadding = 14
+      let ring = UIView(frame: CGRect(x: 16, y: 0, width: 40, height: 40)); ring.tag = 77; ring.isUserInteractionEnabled = false
+      ring.backgroundColor = Look.accent.withAlphaComponent(0.16); ring.layer.cornerRadius = 20
+      c.contentView.insertSubview(ring, at: 0)
+      ring.translatesAutoresizingMaskIntoConstraints = false
+      NSLayoutConstraint.activate([ring.leadingAnchor.constraint(equalTo: c.contentView.leadingAnchor, constant: 16), ring.centerYAnchor.constraint(equalTo: c.contentView.centerYAnchor),
+                                   ring.widthAnchor.constraint(equalToConstant: 40), ring.heightAnchor.constraint(equalToConstant: 40)])
+    case .mute:
+      cfg.text = "Mute"; cfg.secondaryText = !g.muted ? "Off" : (g.mutedUntil ?? 0) > 8e15 ? "Always" : "Until " + Look.time(g.mutedUntil ?? 0, short: true)
+      c.accessoryType = .disclosureIndicator
+    case .makeMeAdmin:
+      cfg = UIListContentConfiguration.cell(); cfg.text = "Make Me Admin"; cfg.textProperties.color = Look.accent
+    case .second:
+      cfg.text = "Second Admin"; cfg.secondaryText = g.second.map { T.name($0) } ?? "None"
+      c.accessoryType = .disclosureIndicator
+    case .leave:
+      cfg = UIListContentConfiguration.cell(); cfg.text = "Leave Group"; cfg.textProperties.color = .systemRed
+    case .delete:
+      cfg = UIListContentConfiguration.cell(); cfg.text = "Delete Group"; cfg.textProperties.color = .systemRed
+    }
+    c.contentConfiguration = cfg
+  }
+  override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? {
+    guard data.snapshot().sectionIdentifiers.indices.contains(s) else { return nil }
+    return data.snapshot().sectionIdentifiers[s] == 1 ? "\(g?.members.count ?? 0) Members" : nil
+  }
+  override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
+    guard let g = g, data.snapshot().sectionIdentifiers.indices.contains(s) else { return nil }
+    switch data.snapshot().sectionIdentifiers[s] {
+    case 3: return "The creator picks one second admin. Admins change the picture and name, add and remove people, and can delete the group."
+    case 4:
+      let f = DateFormatter(); f.dateStyle = .short
+      return "Created by \(Talk.shared.name(g.creator)), \(f.string(from: Date(timeIntervalSince1970: g.createdAt / 1000))). Messages delete themselves after 90 days."
+    default: return nil
+    }
+  }
   override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) {
     tv.deselectRow(at: ip, animated: true)
-    guard let g = g else { return }
-    switch ip.section {
-    case 1:
-      switch actions[ip.row] {
-      case .addPeople: navigationController?.pushViewController(AddPeopleVC(group: group), animated: true)
-      case .rename: rename(g)
-      case .picture: changePicture()
-      case .mute: muteSheet(g)
-      case .pin:
-        let on = Talk.shared.pinnedGroups.contains(group)
-        Net.shared.act(["act": "pin", "id": group, "on": !on]) { j in
-          if (j?["full"] as? Bool) == true { toast("Pinned is full — unpin one from the Groups list first") } else { Talk.shared.refresh() }
-        }
-      case .makeMeAdmin: simple(["act": "makeMeAdmin", "group": group], done: "You’re an admin of this group")
-      default: break
-      }
-    case 2: personSheet(members[ip.row], g, at: tv.cellForRow(at: ip))
-    case 3:
-      if ip.row == 0 { GroupActions.leave(group, from: self) }
-      else {
-        let a = UIAlertController(title: "Delete “\(g.name)”?", message: "It goes for everyone in it. Messages already on their phones stay there until they’re cleared.", preferredStyle: .actionSheet)
-        a.addAction(UIAlertAction(title: "Delete group", style: .destructive) { [weak self] _ in self?.simple(["act": "deleteGroup", "group": self?.group ?? ""], done: "Group deleted") })
-        a.addAction(UIAlertAction(title: "Cancel", style: .cancel)); present(a, animated: true)
-      }
-    default: break
+    guard let g = g, let row = data.itemIdentifier(for: ip) else { return }
+    switch row {
+    case .media: break   // (its own page: the next step, mock-up first)
+    case .member(let id): personSheet(id, g, at: tv.cellForRow(at: ip))
+    case .addMembers: navigationController?.pushViewController(AddPeopleVC(group: group), animated: true)
+    case .mute: muteSheet(g)
+    case .makeMeAdmin: simple(["act": "makeMeAdmin", "group": group], done: "You’re an admin of this group")
+    case .second: secondSheet(g, at: tv.cellForRow(at: ip))
+    case .leave: GroupActions.leave(group, from: self)
+    case .delete:
+      let a = UIAlertController(title: "Delete “\(g.name)”?", message: "The group and its messages go for everyone in it.", preferredStyle: .alert)
+      a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+      a.addAction(UIAlertAction(title: "Delete", style: .destructive) { [weak self] _ in self?.simple(["act": "deleteGroup", "group": self?.group ?? ""], done: "Group deleted") })
+      present(a, animated: true)
     }
+  }
+  // Search: back to the chat, its own search open
+  private func search() {
+    guard let nav = navigationController, let chat = nav.viewControllers.last(where: { ($0 as? ChatVC)?.group == group }) as? ChatVC else { return }
+    nav.popToViewController(chat, animated: true)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { chat.startFind() }
+  }
+  // Edit (for now the picture and the name — its own sheet is step 1e)
+  private func edit(_ g: Group) {
+    let a = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
+    a.addAction(UIAlertAction(title: "Change Picture", style: .default) { [weak self] _ in self?.changePicture() })
+    a.addAction(UIAlertAction(title: "Rename Group", style: .default) { [weak self] _ in self?.rename(g) })
+    a.addAction(UIAlertAction(title: "Cancel", style: .cancel)); present(a, animated: true)
+  }
+  // the second admin: any of the team in the group (not a client), or none
+  private func secondSheet(_ g: Group, at cell: UITableViewCell?) {
+    let T = Talk.shared
+    let a = UIAlertController(title: "Second Admin", message: nil, preferredStyle: .actionSheet)
+    for id in members where id != g.creator && T.people[id]?.contact != true {
+      a.addAction(UIAlertAction(title: T.name(id) + (g.second == id ? " ✓" : ""), style: .default) { [weak self] _ in self?.simple(["act": "setSecond", "group": g.id, "id": id]) })
+    }
+    if g.second != nil { a.addAction(UIAlertAction(title: "None", style: .destructive) { [weak self] _ in self?.simple(["act": "setSecond", "group": g.id, "id": NSNull()]) }) }
+    a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+    a.popoverPresentationController?.sourceView = cell
+    present(a, animated: true)
   }
   private func simple(_ b: [String: Any], done: String? = nil) {
     Net.shared.act(b) { j in
