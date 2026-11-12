@@ -259,10 +259,22 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     //  it away — right over the chat's name; an empty title view in its place for the slide, Haris 2026-11-12)
     let hadTitleView = fromItem?.titleView
     if hadTitleView == nil { fromItem?.titleView = UIView() }
-    let upper = piece(0, rowBottom), lower = piece(rowBottom, full - rowBottom)
+    // (the shrinking piece is the frost's colour without a blur — a blur whose size changes frame by frame flickered a dark
+    //  line at its edge on the phone's screen, Haris 2026-11-12; the still piece above keeps the frost)
+    let upper = piece(0, rowBottom), lower = UIView(frame: CGRect(x: 0, y: rowBottom, width: W, height: full - rowBottom))
+    lower.isUserInteractionEnabled = false
+    lower.backgroundColor = UIColor { Look.chatBg.resolvedColor(with: $0) }
+    // (and the list's bar line under its bar for the slide — it showed at the bar's foot as the title folded)
+    let looks = [fromItem?.standardAppearance, fromItem?.scrollEdgeAppearance, fromItem?.compactAppearance]
+    for (i, a) in looks.enumerated() {
+      let b = (a ?? n.navigationBar.standardAppearance).copy(); b.shadowColor = .clear
+      if i == 0 { fromItem?.standardAppearance = b } else if i == 1 { fromItem?.scrollEdgeAppearance = b } else { fromItem?.compactAppearance = b }
+    }
     n.view.insertSubview(upper, belowSubview: titleV); n.view.insertSubview(lower, aboveSubview: n.navigationBar)
     tc.animate(alongsideTransition: { _ in lower.frame.size.height = 0 },
-               completion: { [weak self] _ in upper.removeFromSuperview(); lower.removeFromSuperview(); searchBar?.alpha = 1; if hadTitleView == nil { fromItem?.titleView = nil }; self?.pinTitle() })
+               completion: { [weak self] _ in upper.removeFromSuperview(); lower.removeFromSuperview(); searchBar?.alpha = 1; if hadTitleView == nil { fromItem?.titleView = nil }
+                 fromItem?.standardAppearance = looks[0]; fromItem?.scrollEdgeAppearance = looks[1]; fromItem?.compactAppearance = looks[2]
+                 self?.pinTitle() })
   }
   static var open: String?
   override func viewDidLayoutSubviews() {
