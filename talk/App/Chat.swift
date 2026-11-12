@@ -404,7 +404,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
           let ip = table.indexPathForRow(at: swipe.location(in: table)), case .msg(let id)? = data.itemIdentifier(for: ip), let m = msgs[id] else { return false }
     return v.x > 0 ? canReply(m) : canInfo(m)
   }
+  /* Your own message swiped left (the design, board 27 — WhatsApp's): the bubble travels a little (64) as the chat dims,
+     then the finger hooks Message info itself — the page comes in with the finger and goes where the finger leaves it
+     (far enough or flicked: it arrives; else it slides back, the bubble and the chat as they were). Apple has no push
+     a finger can drive, so this one slide is ours (SlideIn), the way Apple's own push looks. */
+  private(set) var hook: UIPercentDrivenInteractiveTransition?
   @objc private func swiped(_ g: UIPanGestureRecognizer) {
+    let raw = g.translation(in: table).x, W = max(1, view.bounds.width)
     switch g.state {
     case .began:
       guard let ip = table.indexPathForRow(at: g.location(in: table)), let c = table.cellForRow(at: ip) as? BubbleCell,
@@ -412,42 +418,62 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       swipeCell = c; swipeMsg = m; swipeArmed = false; swipeDx = 0
     case .changed:
       guard let c = swipeCell, let m = swipeMsg else { return }
-      let raw = g.translation(in: table).x
-      var dx = raw > 0 ? (canReply(m) ? raw : 0) : (canInfo(m) ? raw : 0)
-      // (as far as 64 with the finger, then it gives less and less)
-      let reach: CGFloat = dx > 0 ? 74 : 64
-      if abs(dx) > reach { dx = (dx > 0 ? 1 : -1) * (reach + (abs(dx) - reach) * 0.25) }
-      swipeDx = dx
-      c.slide(dx)
-      if dx < 0 { dimOthers(min(1, -dx / 64), but: c) } else if dx >= 0 { dimOthers(0, but: c) }
-      let armed = abs(dx) >= 60
-      if armed != swipeArmed {
-        swipeArmed = armed
-        if armed { UIImpactFeedbackGenerator(style: .light).impactOccurred(); if dx > 0 { c.pop() } }
+      if raw > 0 || hook == nil && !canInfo(m) {
+        // reply: with the finger to 74, then less and less
+        var dx = raw > 0 && canReply(m) ? raw : 0
+        if dx > 74 { dx = 74 + (dx - 74) * 0.25 }
+        swipeDx = dx; c.slide(dx); dimOthers(0, but: c)
+        let armed = dx >= 60
+        if armed != swipeArmed { swipeArmed = armed; if armed { UIImpactFeedbackGenerator(style: .light).impactOccurred(); c.pop() } }
+        return
       }
+      // Message info: the bubble to 64 at most, then the page follows the finger
+      let dx = max(raw, -64)
+      swipeDx = dx; c.slide(dx); dimOthers(min(1, -dx / 64), but: c)
+      let beyond = -raw - 64
+      if beyond > 0 {
+        if hook == nil { startHook(m, c) }
+        hook?.update(min(0.99, beyond / W))
+      } else { hook?.update(0) }
     case .ended, .cancelled, .failed:
       guard let c = swipeCell, let m = swipeMsg else { return }
-      let go = swipeArmed && g.state == .ended, right = swipeDx > 0
-      swipeCell = nil; swipeMsg = nil; swipeArmed = false
-      if go && !right {
-        // Message info: the chat stays dimmed with the bubble moved while Apple's push slides the page in
-        openInfo(m) { [weak self] in c.settle(animated: false); self?.dimOthers(0, but: c) }
-      } else {
-        c.settle(animated: true)
-        UIView.animate(withDuration: 0.3) { self.dimOthers(0, but: c) }
-        if go { startReply(m) }
+      swipeCell = nil; swipeMsg = nil
+      if let h = hook {
+        swipeArmed = false
+        let v = g.velocity(in: table).x, p = (-raw - 64) / W
+        let go = g.state == .ended && (v < -500 || (p > 0.3 && v < 300))
+        h.completionSpeed = 0.9
+        if go { h.finish() } else { h.cancel() }
+        return
       }
+      let go = swipeArmed && g.state == .ended && swipeDx > 0
+      swipeArmed = false
+      c.settle(animated: true)
+      UIView.animate(withDuration: 0.3) { self.dimOthers(0, but: c) }
+      if go { startReply(m) }
     default: break
+    }
+  }
+  private func startHook(_ m: Msg, _ c: BubbleCell) {
+    guard let n = navigationController, n.delegate is TabBarFollow else { return }
+    let h = UIPercentDrivenInteractiveTransition(); h.completionCurve = .easeOut
+    hook = h
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    n.pushViewController(MessageInfoVC(group: group, id: m.id), animated: true)
+    n.transitionCoordinator?.animate(alongsideTransition: nil) { [weak self] ctx in
+      guard let self = self else { return }
+      self.hook = nil
+      if ctx.isCancelled {
+        UIView.animate(withDuration: 0.3) { self.dimOthers(0, but: c) }
+        c.settle(animated: true)
+        self.becomeFirstResponder()   // (the message bar back as the page slides away)
+      } else { c.settle(animated: false); self.dimOthers(0, but: c) }
     }
   }
   private func dimOthers(_ p: CGFloat, but c: UITableViewCell) {
     for v in table.visibleCells where v !== c { v.contentView.alpha = 1 - 0.68 * p }
   }
-  private func openInfo(_ m: Msg, after: (() -> Void)? = nil) {
-    let vc = MessageInfoVC(group: group, id: m.id)
-    navigationController?.pushViewController(vc, animated: true)
-    if let tc = navigationController?.transitionCoordinator { tc.animate(alongsideTransition: nil) { _ in after?() } } else { after?() }
-  }
+  private func openInfo(_ m: Msg) { navigationController?.pushViewController(MessageInfoVC(group: group, id: m.id), animated: true) }
   private func startReply(_ m: Msg) { editingMsg = nil; replying = m; UIImpactFeedbackGenerator(style: .light).impactOccurred(); bar.box.becomeFirstResponder() }
 
   // ---------- hold: reactions and the menu ----------

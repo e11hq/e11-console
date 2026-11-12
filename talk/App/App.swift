@@ -263,6 +263,13 @@ final class SettingsVC: UITableViewController {
 // the tab bar beside a pushed chat (Console's way, its lesson 2026-11-08): hidden with Apple's call once the page has
 // arrived, back as the slide back to the tab's first screen begins (and hidden again if that slide is called off)
 final class TabBarFollow: NSObject, UINavigationControllerDelegate {
+  // (a chat's Message info hooked by the finger: our slide, driven by it — else Apple's own push)
+  func navigationController(_ n: UINavigationController, animationControllerFor op: UINavigationController.Operation, from: UIViewController, to: UIViewController) -> UIViewControllerAnimatedTransitioning? {
+    op == .push && (from as? ChatVC)?.hook != nil ? SlideIn() : nil
+  }
+  func navigationController(_ n: UINavigationController, interactionControllerFor a: UIViewControllerAnimatedTransitioning) -> UIViewControllerInteractiveTransitioning? {
+    a is SlideIn ? n.viewControllers.compactMap { $0 as? ChatVC }.last?.hook : nil
+  }
   func navigationController(_ n: UINavigationController, willShow vc: UIViewController, animated: Bool) {
     guard #available(iOS 18, *), let t = n.tabBarController, !Talk.shared.isContact, vc === n.viewControllers.first else { return }
     t.setTabBarHidden(false, animated: true)
@@ -271,5 +278,28 @@ final class TabBarFollow: NSObject, UINavigationControllerDelegate {
   func navigationController(_ n: UINavigationController, didShow vc: UIViewController, animated: Bool) {
     guard #available(iOS 18, *), let t = n.tabBarController, !Talk.shared.isContact, vc !== n.viewControllers.first else { return }
     t.setTabBarHidden(true, animated: true)
+  }
+}
+
+// the push a finger drives (Message info hooked from a chat): the new page in from the right edge, the chat going a third
+// of the way left under a light shade — as Apple's own push
+final class SlideIn: NSObject, UIViewControllerAnimatedTransitioning {
+  func transitionDuration(using c: UIViewControllerContextTransitioning?) -> TimeInterval { 0.4 }
+  func animateTransition(using c: UIViewControllerContextTransitioning) {
+    guard let from = c.view(forKey: .from), let to = c.view(forKey: .to), let toVC = c.viewController(forKey: .to) else { c.completeTransition(false); return }
+    let box = c.containerView, W = box.bounds.width
+    to.frame = c.finalFrame(for: toVC)
+    let shade = UIView(frame: from.bounds); shade.backgroundColor = UIColor.black.withAlphaComponent(0.12); shade.alpha = 0
+    from.addSubview(shade)
+    box.addSubview(to)
+    to.transform = CGAffineTransform(translationX: W, y: 0)
+    to.layer.shadowColor = UIColor.black.cgColor; to.layer.shadowOpacity = 0.12; to.layer.shadowRadius = 8; to.layer.shadowOffset = .zero
+    UIView.animate(withDuration: transitionDuration(using: c), delay: 0, options: [.curveLinear]) {
+      to.transform = .identity; from.transform = CGAffineTransform(translationX: -W * 0.3, y: 0); shade.alpha = 1
+    } completion: { _ in
+      from.transform = .identity; shade.removeFromSuperview(); to.layer.shadowOpacity = 0
+      if c.transitionWasCancelled { to.removeFromSuperview() }
+      c.completeTransition(!c.transitionWasCancelled)
+    }
   }
 }
