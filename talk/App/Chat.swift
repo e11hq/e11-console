@@ -647,6 +647,7 @@ final class BubbleShape: UIView {
     let W = s.width, H = s.height, R = min(r, H / 2, W / 2)
     let small: CGFloat = 4
     let br = mine && tail ? small : R, bl = !mine && tail ? small : R
+    guard top < H - 1 else { return UIBezierPath() }   // (a photo alone: no colour round it)
     let p = rounded(CGRect(x: 0, y: top, width: W, height: max(0, H - top)), top > 0 ? 0 : R, top > 0 ? 0 : R, br, bl)
     guard tail, H >= 17 else { return p }
     // (the tail: the design's curve "M0 0 C0 9 3 14 10 17 H0 z", 10 × 17, 8 outside the bubble's edge)
@@ -662,6 +663,30 @@ final class BubbleShape: UIView {
     }
     t.close(); p.append(t)
     return p
+  }
+}
+
+// the photo in a bubble: its two shades (the name's diagonal, the time's at the bottom) follow its own size
+final class PhotoView: UIImageView {
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    CATransaction.begin(); CATransaction.setDisableActions(true)
+    for l in layer.sublayers ?? [] {
+      if l.name == "diag" { l.frame = bounds } else if l.name == "foot" { l.frame = CGRect(x: 0, y: bounds.height - 44, width: bounds.width, height: 44) }
+    }
+    CATransaction.commit()
+  }
+}
+// words with room round them that Auto Layout knows about (the reactions pill, a group's note) — the old label drew its
+// words inset inside a size that had no room for them, so they were cut away and the pill showed blank
+final class InsetLabel: UILabel {
+  private let dx: CGFloat, dy: CGFloat
+  init(dx: CGFloat, dy: CGFloat) { self.dx = dx; self.dy = dy; super.init(frame: .zero) }
+  required init?(coder: NSCoder) { fatalError() }
+  override func drawText(in r: CGRect) { super.drawText(in: r.insetBy(dx: dx, dy: dy)) }
+  override func textRect(forBounds b: CGRect, limitedToNumberOfLines n: Int) -> CGRect {
+    let r = super.textRect(forBounds: b.insetBy(dx: dx, dy: dy), limitedToNumberOfLines: n)
+    return r.insetBy(dx: -dx, dy: -dy)
   }
 }
 
@@ -702,7 +727,7 @@ final class BubbleCell: UITableViewCell {
   private let quote = UIView(), quoteBar = UIView(), quoteName = UILabel(), quoteText = UILabel(), quoteThumb = UIImageView()
   private lazy var quoteWrap = Bleed(quote)
   // a photo / video: to the bubble's edges; someone else's name over it on a diagonal shadow; the time over a bottom one
-  let photo = UIImageView()
+  let photo = PhotoView()
   private lazy var photoWrap = Bleed(photo)
   private let photoName = UILabel(), photoRole = UILabel(), diag = CAGradientLayer(), foot = CAGradientLayer()
   private let playDisc = UIView(), vlen = UILabel()
@@ -714,7 +739,7 @@ final class BubbleCell: UITableViewCell {
   private lazy var linkWrap = Bleed(linkBox)
   private var link: URL?
   private let voice = VoiceView()
-  private let reacts = PaddedLabel(), sysL = PaddedLabel(), retryB = UIButton(type: .system)
+  private let reacts = InsetLabel(dx: 8, dy: 0), sysL = InsetLabel(dx: 14, dy: 6), retryB = UIButton(type: .system)
   private let face = Avatar(frame: CGRect(x: 0, y: 0, width: 27, height: 27))
   private var lead: NSLayoutConstraint!, trail: NSLayoutConstraint!, photoH: NSLayoutConstraint!, mediaW: NSLayoutConstraint!
   private var wMine: NSLayoutConstraint!, wTheirs: NSLayoutConstraint!, top: NSLayoutConstraint!, stackTrail: NSLayoutConstraint!
@@ -752,6 +777,7 @@ final class BubbleCell: UITableViewCell {
     diag.colors = [UIColor.black.withAlphaComponent(0.62).cgColor, UIColor.black.withAlphaComponent(0.28).cgColor, UIColor.clear.cgColor]
     diag.locations = [0, 0.26, 0.46]; diag.startPoint = CGPoint(x: 0, y: 0); diag.endPoint = CGPoint(x: 0.75, y: 1)
     foot.colors = [UIColor.clear.cgColor, UIColor.black.withAlphaComponent(0.45).cgColor]
+    diag.name = "diag"; foot.name = "foot"
     photo.layer.addSublayer(diag); photo.layer.addSublayer(foot)
     photoName.font = .systemFont(ofSize: 15, weight: .semibold); photoRole.font = .systemFont(ofSize: 12); photoRole.textColor = UIColor(white: 0.9, alpha: 1)
     for l in [photoName, photoRole] { l.layer.shadowColor = UIColor.black.cgColor; l.layer.shadowOpacity = 0.5; l.layer.shadowRadius = 2; l.layer.shadowOffset = CGSize(width: 0, height: 1) }
@@ -833,6 +859,7 @@ final class BubbleCell: UITableViewCell {
     ])
   }
   private var quoteThumbW: NSLayoutConstraint!
+  static let clear = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1)).image { _ in }
   required init?(coder: NSCoder) { fatalError() }
   // ---------- the swipe (the design, board 26): the bubble follows the finger; to the right the grey circle with the
   // white arrow comes in beside it and pops once it's far enough; let go — it all springs back ----------
@@ -880,18 +907,14 @@ final class BubbleCell: UITableViewCell {
     if traitCollection.hasDifferentColorAppearance(comparedTo: p) { reacts.layer.borderColor = Look.chatBg.resolvedColor(with: traitCollection).cgColor; if let m = msg { foot(m) } }
   }
   // a photo: its corners follow the bubble's (top 19; at the bottom 19, the tail's 4 — or square above words)
-  override func layoutSubviews() {
-    super.layoutSubviews()
-    guard media else { bubble.fillTop = 0; return }
-    let r = photo.bounds
-    let bl: CGFloat = caption ? 0 : 19, br: CGFloat = caption ? 0 : 19
-    let m = (photo.layer.mask as? CAShapeLayer) ?? CAShapeLayer()
-    m.path = BubbleShape.rounded(r, 19, 19, br, bl).cgPath; photo.layer.mask = m
-    CATransaction.begin(); CATransaction.setDisableActions(true)
-    diag.frame = r; foot.frame = CGRect(x: 0, y: r.height - 44, width: r.width, height: 44)
-    CATransaction.commit()
-    // (the bubble's colour starts where the photo ends — no coloured edge round a photo)
-    bubble.fillTop = caption ? photo.convert(r, to: bubble).maxY - 1 : bubble.bounds.height
+  // a photo: rounded 19 at the top, and at the bottom too when no words follow (Apple's corner mask, so it follows the
+  // photo's own size); the bubble's colour only under the words — none at all round a photo alone (it sat out from
+  // under a photo as a coloured edge and a second tail: the old way read the sizes before they were laid out)
+  private func shapePhoto() {
+    photo.layer.cornerRadius = media ? 19 : 0; photo.layer.cornerCurve = .continuous
+    photo.layer.maskedCorners = caption ? [.layerMinXMinYCorner, .layerMaxXMinYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+    photo.layer.mask = nil
+    bubble.fillTop = media ? (caption ? photoH.constant - 1 : .greatestFiniteMagnitude) : 0
   }
   private var group: Group?, log: GroupLog?
 
@@ -974,6 +997,7 @@ final class BubbleCell: UITableViewCell {
         }
       }
     }
+    shapePhoto()
     foot.isHidden = !(isPhoto && !caption)
     voice.isHidden = !isVoice
     if isVoice, let f = m.file { voice.set(id: m.id, file: f, by: m.by, mine: mine) }
@@ -1029,7 +1053,7 @@ final class BubbleCell: UITableViewCell {
     stamp.isHidden = false
     foot(m)
     if words {
-      let room = NSTextAttachment(); room.bounds = CGRect(x: 0, y: 0, width: ceil(stamp.intrinsicContentSize.width) + 10, height: 1)
+      let room = NSTextAttachment(image: BubbleCell.clear); room.bounds = CGRect(x: 0, y: 0, width: ceil(stamp.intrinsicContentSize.width) + 10, height: 1)
       a.append(NSAttributedString(attachment: room))
       textL.attributedText = a
     } else if !isPhoto && !isVoice {
@@ -1194,7 +1218,7 @@ final class MessageBar: UIView, UITextViewDelegate {
     mic.addAction(UIAction { _ in toast("Hold to record, let go to send") }, for: .touchUpInside)
     recV.backgroundColor = .clear; recV.isHidden = true
     recMic.image = UIImage(systemName: "mic.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .regular)); recMic.tintColor = .systemRed
-    recMic.contentMode = .center
+    recMic.contentMode = .center; recMic.alpha = 0
     for l in [recTime, lockedTime] { l.font = .monospacedDigitSystemFont(ofSize: 20, weight: .regular); l.textColor = .label }
     recHint.text = "Slide to cancel ‹"; recHint.font = .systemFont(ofSize: 17); recHint.textColor = .secondaryLabel; recHint.textAlignment = .center
     [recTime, recHint].forEach { recV.addSubview($0) }
