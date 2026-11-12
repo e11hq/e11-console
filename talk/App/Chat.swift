@@ -430,8 +430,18 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     reload(animated: true)
     // (someone else's new message while the chat is open: E11 Console's soft arrive sound)
     if let last = Talk.shared.log(group).msgs.last, last.id != lastSeenId, last.by != Talk.shared.me?.id, last.kind != "sys", lastSeenId != nil, view.window != nil { ChatSound.arrive() }
+    // (one of yours just sent: always to the end — Haris 2026-11-12: it stopped short, the new row measured only after)
+    let mineNew = Talk.shared.log(group).msgs.last.map { $0.id != lastSeenId && $0.by == Talk.shared.me?.id } ?? false
     lastSeenId = Talk.shared.log(group).msgs.last?.id
-    if near { toBottom(true) }
+    if near || mineNew {
+      toBottom(true)
+      // (once the new row has its real height, the rest of the way if it fell short)
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+        guard let self = self, !self.table.isTracking else { return }
+        let end = self.table.contentSize.height + self.table.adjustedContentInset.bottom - self.table.bounds.height
+        if end - self.table.contentOffset.y > 2 { self.toBottom(true) }
+      }
+    }
     if view.window != nil, UIApplication.shared.applicationState == .active { Talk.shared.markRead(group) }
   }
   // each message kept by its id; only one that shows something new is drawn again
@@ -1162,6 +1172,9 @@ final class BubbleCell: UITableViewCell {
     quote.backgroundColor = UIColor.black.withAlphaComponent(0.22); quote.layer.cornerRadius = 12; quote.layer.cornerCurve = .continuous; quote.clipsToBounds = true
     quoteName.font = .systemFont(ofSize: 15, weight: .semibold); quoteText.font = .systemFont(ofSize: 14); quoteText.numberOfLines = 2
     quoteThumb.contentMode = .scaleAspectFill; quoteThumb.clipsToBounds = true
+    // (the picture fills the quote's height, never sets it — a photo's own size made the quote as tall as the photo)
+    quoteThumb.setContentCompressionResistancePriority(.init(1), for: .vertical); quoteThumb.setContentHuggingPriority(.init(1), for: .vertical)
+    quoteThumb.setContentCompressionResistancePriority(.init(1), for: .horizontal)
     let qs = UIStackView(arrangedSubviews: [quoteName, quoteText]); qs.axis = .vertical; qs.spacing = 0
     [quoteBar, qs, quoteThumb].forEach { quote.addSubview($0); $0.translatesAutoresizingMaskIntoConstraints = false }
     NSLayoutConstraint.activate([quoteBar.leadingAnchor.constraint(equalTo: quote.leadingAnchor), quoteBar.topAnchor.constraint(equalTo: quote.topAnchor), quoteBar.bottomAnchor.constraint(equalTo: quote.bottomAnchor), quoteBar.widthAnchor.constraint(equalToConstant: 4),
