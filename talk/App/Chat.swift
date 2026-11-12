@@ -1849,8 +1849,10 @@ final class BubbleCell: UITableViewCell {
     let a = NSMutableAttributedString()
     link = nil
     if m.deleted {
-      a.append(NSAttributedString(attachment: NSTextAttachment(image: UIImage(systemName: "nosign")!.withTintColor(dim))))
-      a.append(NSAttributedString(string: " " + (mine || m.goneForMe == true ? "You deleted this message" : "This message was deleted"), attributes: [.font: UIFont.italicSystemFont(ofSize: 17), .foregroundColor: dim]))
+      // smaller than a message's words (15, its sign 13), as WhatsApp — Haris 2026-11-12
+      let sign = UIImage(systemName: "nosign", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13))!.withTintColor(dim)
+      a.append(NSAttributedString(attachment: NSTextAttachment(image: sign)))
+      a.append(NSAttributedString(string: " " + (mine || m.goneForMe == true ? "You deleted this message" : "This message was deleted"), attributes: [.font: UIFont.italicSystemFont(ofSize: 15), .foregroundColor: dim]))
     } else {
       a.append(NSAttributedString(string: m.text, attributes: [.font: UIFont.systemFont(ofSize: 17), .foregroundColor: ink]))
       for id in m.mentions {
