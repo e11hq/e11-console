@@ -518,6 +518,11 @@ tried again by themselves and given to every list showing that person. The full 
 (its stable); main's 3a81fe3 (Finance-only search finds no tasks) is on test only. Next: the App Store screenshots — the
 approved Style F Dark frames with real captures from the App Review copy (project doc `claude/app-store-screenshots-plan.md`),
 then the release.
+**THE iPHONE APP — LOCKED at build 1693 (Haris, 2026-11-12 22:45: "lock e11 console after test flight"):** commit 2791fda,
+branches `stable/ios-1693` and `locked/ios-app-1693` (never moved or deleted; 1690's stay as history). 1693 = 1690 + links
+from another app (E11 Talk) opening their task / file / folder every time (waits until the app is active), and a Client
+Assets folder link going to the Clients tab to open there. Quick build, no simulator self-test (Haris: "No not full test").
+Nothing changes in its look, behaviour or code without telling Haris first and his yes.
 **The App Store release waits for E11 Talk (Haris, 2026-11-11 20:16: "3"):** the Talk button (E11 Day, Clients) does nothing
 yet — App Review would reject a button that does nothing (2.1) — so E11 Console and E11 Talk are sent for review together,
 Talk's button opening the real app; it stays as it is until then (not hidden, not changed). The screenshots keep it.
