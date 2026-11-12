@@ -18,7 +18,7 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
 
   private let back = UIView(), pager = UIScrollView()
   private var pages: [ZoomPage] = []
-  private let top = UIView(), foot = UIView()
+  private let top = UIView(), foot = UIView(), topShade = Shade()
   private let who = UILabel(), when = UILabel(), backB = UIButton(type: .system), moreB = UIButton(type: .system)
   private let cap = UILabel(), reacts = UIButton(type: .system), smile = UIButton(type: .system), replyB = UIButton(type: .system)
   private let strip = UIScrollView(), stripRow = UIStackView(), tools = UIStackView()
@@ -34,6 +34,9 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     view.backgroundColor = .clear
     back.backgroundColor = .black; back.frame = view.bounds; back.autoresizingMask = [.flexibleWidth, .flexibleHeight]; view.addSubview(back)
     pager.isPagingEnabled = true; pager.showsHorizontalScrollIndicator = false; pager.delegate = self; pager.contentInsetAdjustmentBehavior = .never
+    // (Apple's shade under the status bar came in by itself a moment after the photo — popping, Haris 2026-11-12; it's off,
+    //  and the top carries its own soft shade instead, fading in and out with the buttons)
+    if #available(iOS 26.0, *) { pager.topEdgeEffect.isHidden = true; pager.bottomEdgeEffect.isHidden = true }
     view.addSubview(pager)
     pages = items.map { ZoomPage(msg: $0) }
     pages.forEach { pager.addSubview($0) }
@@ -102,6 +105,9 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     let row = UIStackView(arrangedSubviews: [reacts, smile, UIView(), replyB]); row.axis = .horizontal; row.spacing = 10; row.alignment = .center
     [cap, row, strip, tools].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; foot.addSubview($0) }
     [top, foot].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; view.addSubview($0) }
+    let g0 = topShade.layer as! CAGradientLayer
+    g0.colors = [UIColor(white: 0, alpha: 0.5).cgColor, UIColor(white: 0, alpha: 0.18).cgColor, UIColor.clear.cgColor]; g0.locations = [0, 0.55, 1]
+    topShade.isUserInteractionEnabled = false; top.clipsToBounds = false; top.insertSubview(topShade, at: 0)
 
     let g = view.safeAreaLayoutGuide
     NSLayoutConstraint.activate([
@@ -129,6 +135,7 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
   }
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
+    topShade.frame = CGRect(x: 0, y: -top.frame.minY, width: view.bounds.width, height: top.frame.maxY + 30)
     pager.frame = view.bounds
     for (i, p) in pages.enumerated() { p.frame = CGRect(x: CGFloat(i) * view.bounds.width, y: 0, width: view.bounds.width, height: view.bounds.height) }
     pager.contentSize = CGSize(width: view.bounds.width * CGFloat(pages.count), height: view.bounds.height)
@@ -300,6 +307,7 @@ final class ZoomPage: UIScrollView, UIScrollViewDelegate {
     self.msg = msg; super.init(frame: .zero)
     delegate = self; minimumZoomScale = 1; maximumZoomScale = 4; showsVerticalScrollIndicator = false; showsHorizontalScrollIndicator = false
     contentInsetAdjustmentBehavior = .never; bouncesZoom = true
+    if #available(iOS 26.0, *) { topEdgeEffect.isHidden = true; bottomEdgeEffect.isHidden = true }
     image.contentMode = .scaleAspectFit; addSubview(image)
     doubleTap.numberOfTapsRequired = 2; doubleTap.addTarget(self, action: #selector(zoom(_:))); addGestureRecognizer(doubleTap)
     // (the chat's own picture at once, the full one taking its place when it's read — the page was empty a moment)
