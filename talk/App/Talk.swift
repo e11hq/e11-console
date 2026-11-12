@@ -57,7 +57,7 @@ struct Msg: Codable, Equatable {
       return URL(string: "https://\(files)/t/" + (id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id))
     }
   }
-  struct LinkPrev: Codable, Equatable, Hashable { var url: String; var title: String?; var site: String?; var video: Bool; var img: String?; var icon: String?; var e11: String? = nil; var pic: String? = nil }   // (pic: an E11 link's picture, its page's own — a web address)   // (e11: one of our own links — "file" / "folder", its card from the server)
+  struct LinkPrev: Codable, Equatable, Hashable { var url: String; var title: String?; var site: String?; var video: Bool; var img: String?; var icon: String?; var e11: String? = nil; var pic: String? = nil; var client: String? = nil; var sub: String? = nil; var state: String? = nil }   // (client / sub / state: an E11 link's live card — "ok", "off", "gone")   // (pic: an E11 link's picture, its page's own — a web address)   // (e11: one of our own links — "file" / "folder", its card from the server)
   struct FileRef: Codable, Equatable { var id: String; var name: String; var size: Int; var kind: String; var w: Double?; var h: Double?; var secs: Double?; var wave: String? = nil }
   struct Reply: Codable, Equatable { var id: String; var by: String; var text: String; var kind: String }
 }
@@ -273,6 +273,7 @@ final class Talk {
         m.link = Msg.LinkPrev(url: u, title: k["title"] as? String, site: k["site"] as? String, video: (k["video"] as? Bool) == true,
                               img: (k["img"] as? [String: Any])?["id"] as? String, icon: (k["icon"] as? [String: Any])?["id"] as? String, e11: k["e11"] as? String,
                               pic: (k["pic"] as? String).flatMap { $0.hasPrefix("https://") ? $0 : nil })
+        m.link?.client = k["client"] as? String; m.link?.sub = k["sub"] as? String; m.link?.state = k["state"] as? String
       }
       if let i = l.msgs.firstIndex(where: { $0.id == id || ($0.pending && m.cid != nil && $0.cid == m.cid) }) {
         // (one of mine sent from here: it keeps its place, with the server's id; a photo keeps the copy it was sent from)
@@ -712,6 +713,31 @@ extension Talk {
     case 1: return "\(ns[0]) is typing…"
     case 2: return "\(ns[0]) and \(ns[1]) are typing…"
     default: return "\(ns[0]) and \(ns.count - 1) others are typing…"
+    }
+  }
+}
+
+// ---------- E11 link cards as their files and folders are now (Haris 2026-11-13): asked for with the task cards ----------
+extension Talk {
+  private static var liveLinks: [String: Msg.LinkPrev] = [:]
+  func liveLink(_ l: Msg.LinkPrev) -> Msg.LinkPrev { l.e11 == nil ? l : Talk.liveLinks[l.url] ?? l }
+  static func linkCard(_ k: [String: Any]) -> Msg.LinkPrev? {
+    guard let u = k["url"] as? String else { return nil }
+    var l = Msg.LinkPrev(url: u, title: k["title"] as? String, site: k["site"] as? String, video: false, img: nil, icon: nil, e11: k["e11"] as? String,
+                         pic: (k["pic"] as? String).flatMap { $0.hasPrefix("https://") ? $0 : nil })
+    l.client = k["client"] as? String; l.sub = k["sub"] as? String; l.state = k["state"] as? String
+    return l
+  }
+  func refreshLinks(_ g: String) {
+    let urls = Array(Set(log(g).msgs.compactMap { $0.deleted ? nil : ($0.link?.e11 != nil ? $0.link?.url : nil) }))
+    guard !urls.isEmpty else { return }
+    Net.shared.act(["act": "linkCards", "group": g, "urls": urls]) { j in
+      let cards = ((j?["cards"] as? [[String: Any]]) ?? []).compactMap { Talk.linkCard($0) }
+      DispatchQueue.main.async {
+        var changed = false
+        for c in cards where Talk.liveLinks[c.url] != c { Talk.liveLinks[c.url] = c; changed = true }
+        if changed { NotificationCenter.default.post(name: .talkGroup, object: g) }
+      }
     }
   }
 }

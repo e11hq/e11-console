@@ -262,7 +262,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (arrived: the chat's end where it really is — a last message whose height settled during the slide (a task card)
     //  was left half under the message bar, Haris 2026-11-12)
     if !scrolledAway, focus == nil, !table.isDragging, !table.isDecelerating { toBottom(false) }
-    Talk.shared.refreshTasks(group)
+    Talk.shared.refreshTasks(group); Talk.shared.refreshLinks(group)
     Talk.shared.markRead(group)
     ChatVC.open = group
   }
@@ -409,7 +409,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   // the people, crossfading; the dots bubble at the end of the chat ----------
   private var membersLine = ""
   // (a task changed in E11 Console: this chat's task cards asked for again, if it's on screen)
-  @objc private func tasksChanged() { if view.window != nil { Talk.shared.refreshTasks(group) } }
+  @objc private func tasksChanged() { if view.window != nil { Talk.shared.refreshTasks(group); Talk.shared.refreshLinks(group) } }
   @objc private func typingChanged(_ n: Notification) { if (n.object as? String) == group { showTyping(animated: true) } }
   private func showTyping(animated: Bool) {
     let line = Talk.shared.typingLine(group)
@@ -666,7 +666,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         newDayOf[section] = d; snap.appendSections([section])
       }
       msgs[m.id] = m
-      var h = Hasher(); h.combine(m.text); h.combine(m.edited); h.combine(m.deleted); h.combine(m.pending); h.combine(m.failed); h.combine(m.reactions); h.combine(m.file?.id); h.combine(m.link); h.combine(m.task.map { Talk.shared.liveTask($0) }); h.combine(newAlbums[m.id]?.map { $0.id + ($0.file?.id ?? "") })
+      var h = Hasher(); h.combine(m.text); h.combine(m.edited); h.combine(m.deleted); h.combine(m.pending); h.combine(m.failed); h.combine(m.reactions); h.combine(m.file?.id); h.combine(m.link.map { Talk.shared.liveLink($0) }); h.combine(m.task.map { Talk.shared.liveTask($0) }); h.combine(newAlbums[m.id]?.map { $0.id + ($0.file?.id ?? "") })
       h.combine(newRuns[m.id]); h.combine(Talk.shared.people[m.by]?.color); h.combine(Talk.shared.people[m.by]?.role)
       if m.by == meId { h.combine(i <= readTo); h.combine(i <= gotTo) }
       let key: String = {
@@ -708,7 +708,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     keyUp = kbOverlap > home + 20   // (the keyboard guide counts the home line when the keyboard is down)
     fitBottom()
   }
-  @objc private func backInApp() { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.kbSettled() }; if view.window != nil { Talk.shared.refreshTasks(group) } }
+  @objc private func backInApp() { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.kbSettled() }; if view.window != nil { Talk.shared.refreshTasks(group); Talk.shared.refreshLinks(group) } }
   @objc private func kbMoved(_ n: Notification) {
     if let f = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue {
       kbOverlap = max(0, view.bounds.maxY - view.convert(f, from: nil).minY)
@@ -1052,9 +1052,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       // (three at a time, then More… — Apple's own submenu with its back row, page after page — Haris 2026-11-12;
       //  Delete stays at the end of the first page, in red)
       var acts: [UIMenuElement] = []
+      // (an E11 file or folder card: Open in E11 Console first, and Copy Link — the mock-up, Haris 2026-11-13)
+      let card = m.link.map { T.liveLink($0) }.flatMap { $0.e11 != nil && ($0.state ?? "ok") == "ok" ? $0 : nil }
+      if let c = card, let u = URL(string: c.url) { acts.append(UIAction(title: "Open in E11 Console", image: UIImage(systemName: c.e11 == "folder" ? "folder" : "doc")) { _ in UIApplication.shared.open(u) }) }
       acts.append(UIAction(title: "Reply", image: UIImage(systemName: "arrowshape.turn.up.left")) { [weak self] _ in self?.startReply(m) })
+      if let c = card { acts.append(UIAction(title: "Copy Link", image: UIImage(systemName: "link")) { _ in UIPasteboard.general.string = c.url; toast("Copied") }) }
       let fwd = UIAction(title: "Forward", image: UIImage(systemName: "arrowshape.turn.up.right")) { [weak self] _ in self?.forward(m) }
-      if !m.text.isEmpty { acts.append(UIAction(title: "Copy", image: UIImage(systemName: "doc.on.doc")) { _ in UIPasteboard.general.string = m.text; toast("Copied") }) }
+      if !m.text.isEmpty, card == nil || m.text.trimmingCharacters(in: .whitespacesAndNewlines) != card?.url { acts.append(UIAction(title: "Copy", image: UIImage(systemName: "doc.on.doc")) { _ in UIPasteboard.general.string = m.text; toast("Copied") }) }
       let pinned = T.groups[group]?.pin?.id == m.id || shownPin?.id == m.id
       acts.append(UIAction(title: pinned ? "Unpin" : "Pin", image: UIImage(systemName: pinned ? "pin.slash" : "pin")) { [weak self] _ in self?.setPin(m, on: !pinned) })
       if m.text.isEmpty { acts.insert(fwd, at: 1) }
@@ -1475,6 +1479,8 @@ final class BubbleCell: UITableViewCell {
   private lazy var linkWrap = Bleed(linkBox)
   // (an E11 Console task shared with # — the design's board 37)
   private let taskCard = TaskCardView()
+  private let e11Card = E11CardView()
+  private lazy var e11Wrap = Bleed(e11Card)
   private lazy var taskWrap = Bleed(taskCard)
   private var link: URL?
   private let voice = VoiceView()
@@ -1590,8 +1596,8 @@ final class BubbleCell: UITableViewCell {
                                  linkFoot.topAnchor.constraint(equalTo: linkLine.bottomAnchor, constant: 8), linkFoot.leadingAnchor.constraint(equalTo: linkSite.leadingAnchor), linkFoot.trailingAnchor.constraint(equalTo: linkSite.trailingAnchor),
                                  linkFoot.bottomAnchor.constraint(equalTo: linkBox.bottomAnchor, constant: -9)])
     linkBox.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(linkTap)))
-    [nameL, roleL, fwdL, photoWrap, quoteWrap, cardWrap, voice, linkWrap, taskWrap, textL, footL].forEach { stack.addArrangedSubview($0) }
-    stack.setCustomSpacing(7, after: taskWrap)
+    [nameL, roleL, fwdL, photoWrap, quoteWrap, cardWrap, voice, linkWrap, e11Wrap, taskWrap, textL, footL].forEach { stack.addArrangedSubview($0) }
+    stack.setCustomSpacing(7, after: taskWrap); stack.setCustomSpacing(7, after: e11Wrap)
     stack.setCustomSpacing(4, after: fwdL)
     stack.setCustomSpacing(2, after: roleL); stack.setCustomSpacing(6, after: photoWrap); stack.setCustomSpacing(7, after: quoteWrap)
     stack.setCustomSpacing(7, after: cardWrap); stack.setCustomSpacing(7, after: linkWrap); stack.setCustomSpacing(2, after: nameL)
@@ -1926,6 +1932,12 @@ final class BubbleCell: UITableViewCell {
         }
       } else { linkImg.image = nil }
     } else { linkImgOff.isActive = true; linkImgH.isActive = false }
+    // (an E11 file or folder link: its live card, as a task's — the link's own box not shown)
+    if let l = m.link, l.e11 != nil, !m.deleted {
+      linkWrap.isHidden = true; e11Wrap.isHidden = false
+      e11Wrap.reach(nameL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
+      e11Card.set(Talk.shared.liveLink(l), mine: mine, ink: ink, msg: m.id) { [weak self] in self?.msg?.id }; wideCard = true
+    } else { e11Wrap.isHidden = true }
     taskWrap.isHidden = m.task == nil || m.deleted
     if let t = m.task, !m.deleted {
       taskWrap.reach(nameL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
@@ -2862,6 +2874,80 @@ final class TaskCardView: UIView {
     return "Due " + o.string(from: day)
   }
   @objc private func tap() { if let u = url { UIApplication.shared.open(u) } }
+}
+// an E11 file or folder link as a live card (mock-up "Talk — E11 link cards", Haris 2026-11-13: the picture across the
+// top, only the client): the picture, FILE / FOLDER · CLIENT, its name, what it is, Open in E11 Console ›. Turned off or
+// deleted: a quiet line saying so, nothing to tap
+final class E11CardView: UIView {
+  private let pic = UIImageView(), head = UILabel(), title = UILabel(), sub = UILabel(), line = UIView(), open = UILabel()
+  private let col = UIStackView(), quiet = UIStackView(), qIcon = UIImageView(), qTitle = UILabel(), qSub = UILabel()
+  private var picH: NSLayoutConstraint!, picOff: NSLayoutConstraint!
+  private var url: URL?, live = true
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    backgroundColor = UIColor.black.withAlphaComponent(0.22); layer.cornerRadius = 15; layer.cornerCurve = .continuous; clipsToBounds = true
+    pic.contentMode = .scaleAspectFill; pic.clipsToBounds = true; pic.backgroundColor = UIColor.black.withAlphaComponent(0.12)
+    head.font = .systemFont(ofSize: 12, weight: .semibold); title.font = .systemFont(ofSize: 16, weight: .semibold); title.numberOfLines = 2
+    sub.font = .systemFont(ofSize: 13); open.font = .systemFont(ofSize: 15, weight: .semibold)
+    [head, title, sub, line, open].forEach { col.addArrangedSubview($0) }
+    col.axis = .vertical; col.spacing = 4; col.setCustomSpacing(10, after: sub); col.setCustomSpacing(10, after: line)
+    qTitle.font = .systemFont(ofSize: 15, weight: .semibold); qSub.font = .systemFont(ofSize: 13)
+    let qText = UIStackView(arrangedSubviews: [qTitle, qSub]); qText.axis = .vertical; qText.spacing = 2
+    [qIcon, qText].forEach { quiet.addArrangedSubview($0) }; quiet.spacing = 10; quiet.alignment = .center
+    qIcon.contentMode = .scaleAspectFit; qIcon.setContentHuggingPriority(.required, for: .horizontal)
+    [pic, col, quiet].forEach { addSubview($0); $0.translatesAutoresizingMaskIntoConstraints = false }
+    picH = pic.heightAnchor.constraint(equalTo: pic.widthAnchor, multiplier: 1 / 1.91); picH.priority = .init(999)
+    picOff = pic.heightAnchor.constraint(equalToConstant: 0)
+    NSLayoutConstraint.activate([pic.topAnchor.constraint(equalTo: topAnchor), pic.leadingAnchor.constraint(equalTo: leadingAnchor), pic.trailingAnchor.constraint(equalTo: trailingAnchor), picOff,
+      col.topAnchor.constraint(equalTo: pic.bottomAnchor, constant: 10), col.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12), col.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+      col.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10), line.heightAnchor.constraint(equalToConstant: 0.5),
+      quiet.topAnchor.constraint(equalTo: topAnchor, constant: 10), quiet.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12), quiet.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
+      qIcon.widthAnchor.constraint(equalToConstant: 22), qIcon.heightAnchor.constraint(equalToConstant: 22)])
+    addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tap)))
+    isAccessibilityElement = true; accessibilityTraits = .link
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  private var quietBottom: NSLayoutConstraint?
+  func set(_ l: Msg.LinkPrev, mine: Bool, ink: UIColor, msg: String, still: @escaping () -> String?) {
+    let subInk: UIColor = mine ? UIColor.white.withAlphaComponent(0.8) : .secondaryLabel
+    let folder = l.e11 == "folder", state = l.state ?? "ok"
+    live = state == "ok"; url = URL(string: l.url)
+    col.isHidden = !live; quiet.isHidden = live
+    quietBottom?.isActive = false
+    if !live {
+      // (turned off or deleted: the name and a line saying so — nothing to open)
+      picH.isActive = false; picOff.isActive = true; pic.image = nil
+      qIcon.image = UIImage(systemName: state == "off" ? "nosign" : "trash")?.withTintColor(subInk, renderingMode: .alwaysOriginal)
+      qTitle.text = l.title ?? (folder ? "Folder" : "File"); qTitle.textColor = ink.withAlphaComponent(0.85)
+      qSub.text = state == "off" ? "This link was turned off" : folder ? "This folder was deleted" : "This file was deleted"; qSub.textColor = subInk
+      quietBottom = quiet.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12); quietBottom?.isActive = true
+      col.isHidden = true
+      accessibilityLabel = "\(qTitle.text ?? ""). \(qSub.text ?? "")"
+      return
+    }
+    let hasPic = l.pic != nil
+    picOff.isActive = !hasPic; picH.isActive = hasPic
+    let logo = l.pic?.hasSuffix("/view") == true
+    pic.contentMode = logo ? .scaleAspectFit : .scaleAspectFill
+    if let p = l.pic {
+      pic.image = nil
+      Net.shared.picture(p, max: logo ? 600 : 160) { [weak self] i in
+        guard let self = self, still() == msg else { return }
+        self.pic.image = logo ? i.map { BubbleCell.padded($0) } : i
+      }
+    }
+    let mark = NSTextAttachment(image: UIImage(systemName: folder ? "folder" : "doc", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold))!.withTintColor(subInk))
+    let h = NSMutableAttributedString(attachment: mark)
+    let c = (l.client ?? "").uppercased()
+    h.append(NSAttributedString(string: "  " + (folder ? "FOLDER" : "FILE") + (c.isEmpty ? "" : " · " + c), attributes: [.foregroundColor: subInk, .kern: 0.4]))
+    head.attributedText = h
+    title.text = l.title; title.textColor = ink
+    sub.text = l.sub; sub.textColor = subInk; sub.isHidden = (l.sub ?? "").isEmpty
+    line.backgroundColor = subInk.withAlphaComponent(0.3)
+    open.text = "Open in E11 Console ›"; open.textColor = ink
+    accessibilityLabel = "\(folder ? "Folder" : "File"): \(l.title ?? ""). Open in E11 Console"
+  }
+  @objc private func tap() { if live, let u = url { UIApplication.shared.open(u) } }
 }
 // a label with room around its words (the status pill)
 final class PadLabel: UILabel {
