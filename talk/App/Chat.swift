@@ -108,6 +108,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     NotificationCenter.default.addObserver(self, selector: #selector(head), name: .talkChanged, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(gone(_:)), name: .talkGone, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(kbMoved(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
+    // (once the keyboard has settled, and back from another app: what it covers measured from where the bar really is —
+    //  the notices around leaving the app left the latest message under the bar, unable to scroll out — Haris 2026-11-12)
+    NotificationCenter.default.addObserver(self, selector: #selector(kbSettled), name: UIResponder.keyboardDidChangeFrameNotification, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(backInApp), name: UIApplication.didBecomeActiveNotification, object: nil)
     // ("Client can see this group" — the design: a thin orange band right under the bar, always there in a client group)
     let cl = UILabel(); cl.font = .systemFont(ofSize: 13, weight: .semibold); cl.textColor = Look.clientInk; cl.textAlignment = .center
     let eyeImg = UIImage(systemName: "eye", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold))!.withRenderingMode(.alwaysTemplate)
@@ -364,6 +368,14 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
      couldn't be scrolled out. Called on every keyboard move and whenever the bar is laid out. */
   // how much of the page the keyboard covers (with the message bar on it); 0 while it's down
   private var kbOverlap: CGFloat = 0
+  @objc private func kbSettled() {
+    let acc: UIView = finding ? findAcc : bar
+    guard isViewLoaded, view.window != nil, acc.window != nil else { return }
+    kbOverlap = max(0, view.bounds.maxY - view.convert(acc.bounds, from: acc).minY)
+    keyUp = kbOverlap > acc.bounds.height + 20
+    fitBottom()
+  }
+  @objc private func backInApp() { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.kbSettled() } }
   @objc private func kbMoved(_ n: Notification) {
     if let f = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue {
       kbOverlap = max(0, view.bounds.maxY - view.convert(f, from: nil).minY)
@@ -1226,6 +1238,8 @@ final class BubbleCell: UITableViewCell {
     let isDoc = !m.deleted && m.file != nil && !isPhoto && !isVoice
     emojis = !m.deleted && m.file == nil && m.reply == nil && m.fwd != true ? BubbleCell.emojiCount(m.text) : 0
     big = emojis == 1
+    // (only a photo has the photo's height — a text bubble on a cell that last showed a photo grew to it, Haris 2026-11-12)
+    photoH.isActive = isPhoto
     stampPill.backgroundColor = mine ? Look.mine : Look.theirs
     stampPill.isHidden = !big
     textL.preferredMaxLayoutWidth = UIScreen.main.bounds.width * (mine ? 281 : 250) / 393 - 24
