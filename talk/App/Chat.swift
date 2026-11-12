@@ -222,6 +222,16 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   // above the keyboard ˄ ˅ in a glass capsule and "2 of 3 matches"; every match marked in the messages, the one shown
   // brighter. Earlier = up, later = down; it starts on the newest. ----------
   private let findBar = UISearchBar()
+  // (the field level with the round ✕ beside it: the search bar 44 high, centred in the bar's middle — on its own as the
+  //  title it sat about 8 lower than the ✕, Haris 2026-11-12)
+  private lazy var findBox: UIView = {
+    final class Box: UIView { override var intrinsicContentSize: CGSize { CGSize(width: UIView.layoutFittingExpandedSize.width, height: 44) } }
+    let b = Box()
+    b.addSubview(findBar); findBar.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([findBar.leadingAnchor.constraint(equalTo: b.leadingAnchor), findBar.trailingAnchor.constraint(equalTo: b.trailingAnchor),
+                                 findBar.centerYAnchor.constraint(equalTo: b.centerYAnchor), findBar.heightAnchor.constraint(equalToConstant: 44)])
+    return b
+  }()
   private lazy var findAcc: FindBar = {
     let f = FindBar()
     f.up.addAction(UIAction { [weak self] _ in self?.step(-1) }, for: .touchUpInside)
@@ -249,7 +259,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     findAcc.show(0, 0, typed: false)
     navigationItem.leftBarButtonItems = nil
     navigationItem.hidesBackButton = true
-    navigationItem.titleView = findBar
+    navigationItem.titleView = findBox
     let close = UIBarButtonItem(title: nil, image: UIImage(systemName: "xmark"), primaryAction: UIAction { [weak self] _ in self?.endFind() }, menu: nil)
     close.accessibilityLabel = "Close the search"
     navigationItem.rightBarButtonItems = [close]
