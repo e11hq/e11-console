@@ -1771,6 +1771,7 @@ final class BubbleCell: UITableViewCell {
   }
   // a photo, shrunk once to the bubble's size and kept
   private static let pictures = NSCache<NSString, UIImage>()
+  static func cached(_ id: String) -> UIImage? { pictures.object(forKey: id as NSString) ?? frames.object(forKey: id as NSString) }
   static func picture(_ url: URL, _ id: String) -> UIImage? {
     if let i = pictures.object(forKey: id as NSString) { return i }
     guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),

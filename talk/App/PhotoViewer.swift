@@ -1,5 +1,6 @@
 import UIKit
 import AVKit
+import ImageIO
 
 /* A photo or video opened (the approved boards "A photo opened" and "Opening a photo" of the E11 Talk design): out of its
    bubble onto black; the sender and the date at the top with ‹ and •••; pinch or double-tap to zoom; swipe sideways
@@ -74,7 +75,11 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
       let b = UIButton(type: .custom); b.tag = i; b.imageView?.contentMode = .scaleAspectFill; b.clipsToBounds = true; b.layer.cornerRadius = 4
       b.widthAnchor.constraint(equalToConstant: 26).isActive = true; b.heightAnchor.constraint(equalToConstant: 36).isActive = true
       b.addAction(UIAction { [weak self] a in guard let t = (a.sender as? UIView)?.tag else { return }; self?.go(t, animated: false) }, for: .touchUpInside)
-      if let f = m.file { ZoomPage.picture(m, f) { img in b.setImage(img, for: .normal) } }
+      // (the chat's own small picture when it has one — there at once; else a small one made off the main thread, not the
+      //  whole photo: the strip came in late, Haris 2026-11-12)
+      if let f = m.file {
+        if let i = BubbleCell.cached(f.id) { b.setImage(i, for: .normal) } else { ZoomPage.thumb(m, f) { img in b.setImage(img, for: .normal) } }
+      }
       stripRow.addArrangedSubview(b)
     }
     stripRow.translatesAutoresizingMaskIntoConstraints = false; strip.addSubview(stripRow)
@@ -131,7 +136,8 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     guard let m = items[safe: at], let src = source?(m), let w = src.window, let img = (src as? UIImageView)?.image else { return }
     let from = src.convert(src.bounds, to: w)
     let fly = UIImageView(image: img); fly.contentMode = .scaleAspectFill; fly.clipsToBounds = true; fly.layer.cornerRadius = 19; fly.frame = from
-    view.addSubview(fly); pager.alpha = 0; back.alpha = 0; top.alpha = 0; foot.alpha = 0
+    // (under the buttons — it flew over ☺︎ and Reply and cut them, Haris 2026-11-12)
+    view.insertSubview(fly, aboveSubview: pager); pager.alpha = 0; back.alpha = 0; top.alpha = 0; foot.alpha = 0
     let to = ZoomPage.fit(img.size, in: view.bounds)
     UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.88, initialSpringVelocity: 0) {
       fly.frame = to; fly.layer.cornerRadius = 0; self.back.alpha = 1; self.top.alpha = 1; self.foot.alpha = 1
@@ -200,10 +206,12 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     }
     let to = src.convert(src.bounds, to: w), from = page.image.convert(page.image.bounds, to: view)
     let fly = UIImageView(image: page.image.image); fly.contentMode = .scaleAspectFill; fly.clipsToBounds = true; fly.frame = from
-    view.addSubview(fly); page.image.isHidden = true; src.alpha = 0
+    view.insertSubview(fly, aboveSubview: pager); page.image.isHidden = true; src.alpha = 0
     UIView.animate(withDuration: 0.32, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0) {
       fly.frame = to; fly.layer.cornerRadius = 19; self.back.alpha = 0; self.top.alpha = 0; self.foot.alpha = 0
-    } completion: { _ in src.alpha = 1; self.dismiss(animated: false) }
+    } completion: { _ in self.dismiss(animated: false) }
+    // (the bubble itself — its shade and time — fading in as the picture lands, not popping in after it, Haris 2026-11-12)
+    UIView.animate(withDuration: 0.14, delay: 0.18, options: [.curveEaseOut]) { src.alpha = 1; fly.alpha = 0 }
   }
 
   // ---------- the foot's actions ----------
@@ -284,6 +292,17 @@ final class ZoomPage: UIScrollView, UIScrollViewDelegate {
     guard size.width > 0, size.height > 0 else { return b }
     let k = min(b.width / size.width, b.height / size.height), w = size.width * k, h = size.height * k
     return CGRect(x: b.midX - w / 2, y: b.midY - h / 2, width: w, height: h)
+  }
+  // a small picture for the strip, made off the main thread
+  static func thumb(_ m: Msg, _ f: Msg.FileRef, _ done: @escaping (UIImage?) -> Void) {
+    Net.shared.file(f.id) { url in
+      guard let url = url else { DispatchQueue.main.async { done(nil) }; return }
+      if m.kind == "video" { BubbleCell.frame(url, f.id) { i in DispatchQueue.main.async { done(i) } }; return }
+      DispatchQueue.global(qos: .userInitiated).async {
+        let i = CGImageSourceCreateWithURL(url as CFURL, nil).flatMap { CGImageSourceCreateThumbnailAtIndex($0, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 120] as CFDictionary) }.map { UIImage(cgImage: $0) }
+        DispatchQueue.main.async { done(i) }
+      }
+    }
   }
   static func picture(_ m: Msg, _ f: Msg.FileRef, _ done: @escaping (UIImage?) -> Void) {
     Net.shared.file(f.id) { url in DispatchQueue.main.async {
