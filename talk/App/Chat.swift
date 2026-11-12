@@ -597,16 +597,6 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let now = Date().timeIntervalSince1970 * 1000
     var items: [UIMenuElement] = []
     if !m.deleted && !m.pending {
-      let quick = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🔥"].map { e -> UIAction in
-        let on = m.reactions[T.me?.id ?? ""] == e
-        return UIAction(title: e, image: ChatVC.emojiImage(e), state: on ? .on : .off) { [weak self] _ in self?.react(m, on ? nil : e) }
-      }
-      let more = UIAction(title: "More Reactions", image: UIImage(systemName: "plus")) { [weak self] _ in self?.anyEmoji(m) }
-      if #available(iOS 17.0, *) {
-        items.append(UIMenu(title: "", options: [.displayInline, .displayAsPalette], children: quick + [more]))
-      } else {
-        items.append(UIMenu(title: "", options: .displayInline, preferredElementSize: .small, children: quick + [more]))
-      }
       var acts: [UIMenuElement] = []
       acts.append(UIAction(title: "Reply", image: UIImage(systemName: "arrowshape.turn.up.left")) { [weak self] _ in self?.startReply(m) })
       acts.append(UIAction(title: "Forward", image: UIImage(systemName: "arrowshape.turn.up.right")) { [weak self] _ in self?.forward(m) })
@@ -654,11 +644,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
     present(a, animated: true)
   }
-  static func emojiImage(_ e: String) -> UIImage {
-    let s = NSAttributedString(string: e, attributes: [.font: UIFont.systemFont(ofSize: 26)])
-    let size = s.size()
-    return UIGraphicsImageRenderer(size: size).image { _ in s.draw(at: .zero) }.withRenderingMode(.alwaysOriginal)
-  }
+
   private func react(_ m: Msg, _ e: String?) {
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     guard let me = Talk.shared.me?.id else { return }
@@ -671,15 +657,53 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
   // + : any emoji, from iPhone's emoji keyboard
   private func anyEmoji(_ m: Msg) {
-    let a = UIAlertController(title: "React", message: "Pick any emoji", preferredStyle: .alert)
-    a.addTextField { t in t.placeholder = "😀"; t.textAlignment = .center; t.font = .systemFont(ofSize: 28) }
-    a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-    a.addAction(UIAlertAction(title: "React", style: .default) { [weak self] _ in
-      guard let t = a.textFields?.first?.text?.trimmingCharacters(in: .whitespaces), let first = t.first, first.unicodeScalars.contains(where: { $0.properties.isEmoji && $0.value > 0x238C }) else { return }
-      self?.react(m, String(first))
-    })
-    present(a, animated: true)
+    let v = EmojiSheet(mine: m.reactions[Talk.shared.me?.id ?? ""]) { [weak self] e in self?.react(m, e) }
+    let n = UINavigationController(rootViewController: v)
+    if let sh = n.sheetPresentationController { sh.detents = [.medium(), .large()]; sh.prefersGrabberVisible = true }
+    present(n, animated: true)
   }
+
+  // ---------- the reactions bar beside Apple's hold menu (approved mock-up "E11 Talk — hold a message", Haris
+  // 2026-11-12): ours — a glass capsule above the held message: the seven quick ones, then the ones you used lately (no
+  // twice), scrolling sideways; + pinned at its end opens the emoji sheet. Apple's lift and menu below it. ----------
+  private var reactBar: ReactBar?
+  func tableView(_ tv: UITableView, willDisplayContextMenu c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
+    guard let id = c.identifier as? String, let m = msgs[id], !m.deleted, !m.pending, m.kind != "sys",
+          let ip = data.indexPath(for: .msg(id)), let cell = tv.cellForRow(at: ip) as? BubbleCell, let w = view.window else { return }
+    let me = Talk.shared.me?.id ?? ""
+    let bar = ReactBar(mine: m.reactions[me]) { [weak self, weak tv] e in
+      guard let self = self else { return }
+      if let e = e { self.react(m, m.reactions[me] == e ? nil : e) } else { self.pendingMore = m }
+      tv?.contextMenuInteraction?.dismissMenu()
+    }
+    // (where Apple will show the lifted message: where it is, moved up as far as the menu below it needs)
+    let b = cell.bubble.convert(cell.bubble.bounds, to: w)
+    let rows = CGFloat(menu(m).children.flatMap { ($0 as? UIMenu)?.children ?? [$0] }.count)
+    let menuH = rows * 44 + 30, bottom = w.bounds.height - w.safeAreaInsets.bottom - 12
+    let lift = max(0, b.maxY + 12 + menuH - bottom)
+    var y = b.minY - lift - 62
+    if y < w.safeAreaInsets.top + 8 { y = w.safeAreaInsets.top + 8 }
+    bar.frame = CGRect(x: 14, y: y, width: w.bounds.width - 28, height: 54)
+    bar.alpha = 0; bar.transform = CGAffineTransform(translationX: 0, y: 14).scaledBy(x: 0.92, y: 0.92)
+    reactBar = bar
+    DispatchQueue.main.async {
+      w.addSubview(bar)
+      UIView.animate(withDuration: 0.42, delay: 0.04, usingSpringWithDamping: 0.78, initialSpringVelocity: 0) { bar.alpha = 1; bar.transform = .identity }
+    }
+  }
+  func tableView(_ tv: UITableView, willEndContextMenuInteraction c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
+    if let bar = reactBar {
+      reactBar = nil
+      UIView.animate(withDuration: 0.2, animations: { bar.alpha = 0; bar.transform = CGAffineTransform(scaleX: 0.92, y: 0.92) }) { _ in bar.removeFromSuperview() }
+    }
+    if let m = pendingMore {
+      pendingMore = nil
+      animator?.addCompletion { [weak self] in self?.anyEmoji(m) }
+      if animator == nil { anyEmoji(m) }
+    }
+  }
+  private var pendingMore: Msg?
+
 }
 
 extension ChatVC: UISearchBarDelegate {
@@ -1696,5 +1720,104 @@ final class MessageBar: UIView, UITextViewDelegate {
     replyBar.backgroundColor = editing ? .systemOrange : ink; replyName.textColor = editing ? .systemOrange : ink
     if r == nil && editing == false && box.text.isEmpty == false && replyName.text == "Editing" { box.text = ""; textChanged() }
     invalidateIntrinsicContentSize(); setNeedsLayout()
+  }
+}
+
+// the reactions you used lately on this phone (newest first) — for the bar after the seven quick ones
+enum RecentReactions {
+  private static let key = "talk.recentReactions"
+  static let quick = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🔥"]
+  static var list: [String] { (UserDefaults.standard.stringArray(forKey: key) ?? []) }
+  static func used(_ e: String) {
+    var l = list.filter { $0 != e }; l.insert(e, at: 0)
+    UserDefaults.standard.set(Array(l.prefix(24)), forKey: key)
+  }
+  // the bar's emojis: the seven, then the lately used that aren't among them — never one twice
+  static var bar: [String] { quick + list.filter { !quick.contains($0) } }
+}
+
+// the glass capsule: Apple's glass (iOS 26; a thick material before), the emojis scrolling sideways, + at its end
+final class ReactBar: UIView {
+  private let glass: UIVisualEffectView
+  private let scroll = UIScrollView(), row = UIStackView(), plus = UIButton(type: .system)
+  private let pick: (String?) -> Void
+  init(mine: String?, pick: @escaping (String?) -> Void) {
+    self.pick = pick
+    if #available(iOS 26.0, *) { glass = UIVisualEffectView(effect: UIGlassEffect()) } else { glass = UIVisualEffectView(effect: UIBlurEffect(style: .systemThickMaterial)) }
+    super.init(frame: .zero)
+    glass.layer.cornerRadius = 27; glass.layer.cornerCurve = .continuous; glass.clipsToBounds = true
+    layer.shadowColor = UIColor.black.cgColor; layer.shadowOpacity = 0.14; layer.shadowRadius = 14; layer.shadowOffset = CGSize(width: 0, height: 6)
+    addSubview(glass)
+    scroll.showsHorizontalScrollIndicator = false; scroll.alwaysBounceHorizontal = true
+    row.axis = .horizontal; row.spacing = 2; row.alignment = .center
+    for e in RecentReactions.bar {
+      let b = UIButton(type: .custom)
+      b.setTitle(e, for: .normal); b.titleLabel?.font = .systemFont(ofSize: 27)
+      b.widthAnchor.constraint(equalToConstant: 42).isActive = true; b.heightAnchor.constraint(equalToConstant: 42).isActive = true
+      b.layer.cornerRadius = 21
+      if e == mine { b.backgroundColor = UIColor.label.withAlphaComponent(0.1) }
+      b.accessibilityLabel = "React " + e
+      b.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); RecentReactions.used(e); self?.pick(e) }, for: .touchUpInside)
+      row.addArrangedSubview(b)
+    }
+    scroll.addSubview(row); glass.contentView.addSubview(scroll)
+    var pc = UIButton.Configuration.gray()
+    pc.image = UIImage(systemName: "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .medium)); pc.cornerStyle = .capsule; pc.contentInsets = .zero
+    pc.baseForegroundColor = .label
+    plus.configuration = pc; plus.accessibilityLabel = "More reactions"
+    plus.addAction(UIAction { [weak self] _ in self?.pick(nil) }, for: .touchUpInside)
+    glass.contentView.addSubview(plus)
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    glass.frame = bounds
+    layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: 27).cgPath
+    plus.frame = CGRect(x: bounds.width - 48, y: 7, width: 40, height: 40)
+    scroll.frame = CGRect(x: 6, y: 0, width: bounds.width - 58, height: bounds.height)
+    let w = row.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).width
+    row.frame = CGRect(x: 0, y: 6, width: w, height: 42); scroll.contentSize = CGSize(width: w, height: bounds.height)
+  }
+}
+
+// + : Apple's sheet — the seven quick reactions on top, iPhone's own emoji keyboard under them (search, Frequently Used,
+// every category); any emoji: it reacts and the sheet goes
+final class EmojiSheet: UIViewController, UITextViewDelegate {
+  private let mine: String?, done: (String) -> Void
+  private let box = EmojiBox()
+  init(mine: String?, done: @escaping (String) -> Void) { self.mine = mine; self.done = done; super.init(nibName: nil, bundle: nil) }
+  required init?(coder: NSCoder) { fatalError() }
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    view.backgroundColor = .systemGroupedBackground
+    title = "React"
+    navigationItem.rightBarButtonItem = UIBarButtonItem(systemItem: .done, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
+    let row = UIStackView(); row.axis = .horizontal; row.distribution = .equalSpacing; row.alignment = .center
+    for e in RecentReactions.quick {
+      let b = UIButton(type: .custom); b.setTitle(e, for: .normal); b.titleLabel?.font = .systemFont(ofSize: 32)
+      b.layer.cornerRadius = 22; if e == mine { b.backgroundColor = UIColor.label.withAlphaComponent(0.1) }
+      b.widthAnchor.constraint(equalToConstant: 44).isActive = true; b.heightAnchor.constraint(equalToConstant: 44).isActive = true
+      b.addAction(UIAction { [weak self] _ in self?.chose(e) }, for: .touchUpInside)
+      row.addArrangedSubview(b)
+    }
+    row.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(row)
+    // (the box only brings iPhone's emoji keyboard up; what's typed into it is the reaction)
+    box.emoji = true; box.delegate = self; box.alpha = 0.02; box.autocorrectionType = .no
+    box.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(box)
+    NSLayoutConstraint.activate([
+      row.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 10),
+      row.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20), row.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+      box.topAnchor.constraint(equalTo: row.bottomAnchor, constant: 4), box.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+      box.widthAnchor.constraint(equalToConstant: 2), box.heightAnchor.constraint(equalToConstant: 2)])
+  }
+  override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); box.becomeFirstResponder() }
+  func textViewDidChange(_ t: UITextView) {
+    guard let c = t.text.first(where: { $0.unicodeScalars.contains { $0.properties.isEmoji && $0.value > 0x238C } }) else { t.text = ""; return }
+    chose(String(c))
+  }
+  private func chose(_ e: String) {
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    RecentReactions.used(e)
+    done(e); dismiss(animated: true)
   }
 }
