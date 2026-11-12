@@ -75,6 +75,9 @@ final class SendPreviewVC: UIViewController, UIScrollViewDelegate, UITextFieldDe
     caption.textColor = .white; caption.font = .systemFont(ofSize: 17); caption.delegate = self; caption.returnKeyType = .done
     caption.addAction(UIAction { [weak self] _ in guard let self = self, self.items.indices.contains(self.at) else { return }; self.items[self.at].caption = self.caption.text ?? "" }, for: .editingChanged)
     [more, caption].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; captionBox.addSubview($0) }
+    // (⊕ at its own size on the left, the words from just after it — ⊕ had been stretched to the middle, Haris 2026-11-12)
+    more.setContentHuggingPriority(.required, for: .horizontal); more.setContentCompressionResistancePriority(.required, for: .horizontal)
+    caption.setContentHuggingPriority(.defaultLow, for: .horizontal)
     chip.text = "  " + to + "  "; chip.font = .systemFont(ofSize: 14, weight: .medium); chip.textColor = .white
     chip.backgroundColor = UIColor(white: 0.17, alpha: 1); chip.layer.cornerRadius = 10; chip.layer.masksToBounds = true
     var sc = UIButton.Configuration.filled(); sc.cornerStyle = .capsule; sc.baseBackgroundColor = .white; sc.baseForegroundColor = .black
@@ -99,9 +102,13 @@ final class SendPreviewVC: UIViewController, UIScrollViewDelegate, UITextFieldDe
       strip.leadingAnchor.constraint(equalTo: view.leadingAnchor), strip.trailingAnchor.constraint(equalTo: view.trailingAnchor),
       strip.heightAnchor.constraint(equalToConstant: 50), strip.bottomAnchor.constraint(equalTo: captionBox.topAnchor, constant: -12),
       stripRow.topAnchor.constraint(equalTo: strip.contentLayoutGuide.topAnchor), stripRow.bottomAnchor.constraint(equalTo: strip.contentLayoutGuide.bottomAnchor),
-      stripRow.leadingAnchor.constraint(equalTo: strip.contentLayoutGuide.leadingAnchor, constant: 14), stripRow.trailingAnchor.constraint(equalTo: strip.contentLayoutGuide.trailingAnchor, constant: -14),
+      // (the row at its own width, centred while it fits, scrolling once it's wider — it was stretched to the screen's
+      //  width and its + grew to fill it, Haris 2026-11-12)
+      stripRow.centerXAnchor.constraint(equalTo: strip.contentLayoutGuide.centerXAnchor),
+      stripRow.leadingAnchor.constraint(greaterThanOrEqualTo: strip.contentLayoutGuide.leadingAnchor, constant: 14),
+      strip.contentLayoutGuide.widthAnchor.constraint(greaterThanOrEqualTo: strip.frameLayoutGuide.widthAnchor),
+      { let c = strip.contentLayoutGuide.widthAnchor.constraint(equalTo: stripRow.widthAnchor, constant: 28); c.priority = .defaultHigh; return c }(),
       stripRow.heightAnchor.constraint(equalTo: strip.frameLayoutGuide.heightAnchor),
-      stripRow.widthAnchor.constraint(greaterThanOrEqualTo: strip.frameLayoutGuide.widthAnchor, constant: -28),
     ])
     // (a tap on the picture puts the keyboard away)
     pager.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapPage(_:))))
