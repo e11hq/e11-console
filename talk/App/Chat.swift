@@ -382,7 +382,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     //  chat opened that much short and then jumped when the bar came — Haris 2026-11-12)
     let acc: UIView = finding ? findAcc : bar
     let accH = acc.window != nil ? acc.bounds.height : acc.intrinsicContentSize.height + (view.window?.safeAreaInsets.bottom ?? 0)
-    let cover = max(kbOverlap, accH)
+    // (the @ list comes over the chat, as a menu would — it isn't counted, so the messages don't move for it — Haris 2026-11-12)
+    let cover = max(kbOverlap, accH) - (finding ? 0 : bar.listH)
     guard abs(cover - kb) > 0.5 else { return }
     let wasAtEnd = table.contentOffset.y + table.bounds.height >= table.contentSize.height + table.adjustedContentInset.bottom - 40
     let grew = cover > kb
@@ -1609,6 +1610,7 @@ final class MessageBar: UIView, UITextViewDelegate {
   required init?(coder: NSCoder) { fatalError() }
   // (the bar stays above the home indicator when the keyboard is down)
   private var mentionH: CGFloat { mentionV.isHidden ? 0 : CGFloat(mentionV.arrangedSubviews.count) * 44 }
+  var listH: CGFloat { mentionH }   // (the @ list sits over the chat — the chat makes no room for it)
   override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: (locked ? 83 : boxH + 13) + (replyV.isHidden ? 0 : 52) + mentionH + safeAreaInsets.bottom) }
   override func safeAreaInsetsDidChange() { super.safeAreaInsetsDidChange(); invalidateIntrinsicContentSize() }
   override func layoutSubviews() {
