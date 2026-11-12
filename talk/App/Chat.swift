@@ -1776,6 +1776,11 @@ final class EmojiBox: UITextView {
     // (matched by its language — iPhone hands out a new object for the same keyboard each time, so the one kept was never
     //  found again and iPhone went to the next language)
     if let t = typing?.primaryLanguage, let m = UITextInputMode.activeInputModes.first(where: { $0.primaryLanguage == t }) { return m }
+    // (none kept: back to a letters keyboard all the same — the phone's own language first, else the first that isn't
+    //  emoji; left to iPhone, it stayed on the emojis and the ⌨︎ did nothing, Haris 2026-11-12)
+    let modes = UITextInputMode.activeInputModes.filter { $0.primaryLanguage != "emoji" }
+    let lang = Locale.preferredLanguages.first.map { String($0.prefix(2)) } ?? "en"
+    if super.textInputMode?.primaryLanguage == "emoji", let m = modes.first(where: { $0.primaryLanguage?.hasPrefix(lang) == true }) ?? modes.first { return m }
     return super.textInputMode
   }
 }
