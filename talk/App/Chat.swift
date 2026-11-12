@@ -1225,8 +1225,7 @@ final class BubbleCell: UITableViewCell {
     stack.setCustomSpacing(4, after: fwdL)
     stack.setCustomSpacing(2, after: roleL); stack.setCustomSpacing(6, after: photoWrap); stack.setCustomSpacing(7, after: quoteWrap)
     stack.setCustomSpacing(7, after: cardWrap); stack.setCustomSpacing(7, after: linkWrap); stack.setCustomSpacing(2, after: nameL)
-    stampPill.backgroundColor = Look.theirs; stampPill.layer.cornerRadius = 9; stampPill.layer.cornerCurve = .continuous; stampPill.isHidden = true
-    bubble.addSubview(stack); bubble.addSubview(stampPill); bubble.addSubview(stamp); contentView.addSubview(bubble)
+    bubble.addSubview(stack); bubble.addSubview(stamp); contentView.addSubview(bubble)
     face.isUserInteractionEnabled = false; contentView.addSubview(face)
     reacts.font = .systemFont(ofSize: 14); reacts.backgroundColor = Look.theirs; reacts.layer.cornerRadius = 13; reacts.layer.masksToBounds = true
     reacts.layer.borderWidth = 2; reacts.layer.borderColor = Look.chatBg.resolvedColor(with: traitCollection).cgColor
@@ -1243,7 +1242,7 @@ final class BubbleCell: UITableViewCell {
     fwdB.tintColor = .secondaryLabel; fwdB.accessibilityLabel = "Forward"
     fwdB.addAction(UIAction { [weak self] _ in if let m = self?.msg { UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.onForward?(m) } }, for: .touchUpInside)
     contentView.addSubview(fwdB)
-    for v in [bubble, stack, stamp, stampPill, face, reacts, sysL, retryB, fwdB] as [UIView] { v.translatesAutoresizingMaskIntoConstraints = false }
+    for v in [bubble, stack, stamp, face, reacts, sysL, retryB, fwdB] as [UIView] { v.translatesAutoresizingMaskIntoConstraints = false }
     fwdMine = fwdB.trailingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: -10)
     fwdTheirs = fwdB.leadingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: 18)
     lead = bubble.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 44)
@@ -1269,18 +1268,15 @@ final class BubbleCell: UITableViewCell {
       sysL.centerXAnchor.constraint(equalTo: contentView.centerXAnchor), sysL.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.85),
       retryB.centerYAnchor.constraint(equalTo: bubble.centerYAnchor), retryB.trailingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: -6),
       fwdB.widthAnchor.constraint(equalToConstant: 30), fwdB.heightAnchor.constraint(equalToConstant: 30), fwdB.centerYAnchor.constraint(equalTo: bubble.centerYAnchor),
-      stampPill.leadingAnchor.constraint(equalTo: stamp.leadingAnchor, constant: -7), stampPill.trailingAnchor.constraint(equalTo: stamp.trailingAnchor, constant: 7),
-      stampPill.topAnchor.constraint(equalTo: stamp.topAnchor, constant: -2), stampPill.bottomAnchor.constraint(equalTo: stamp.bottomAnchor, constant: 2),
     ])
   }
   private var quoteThumbW: NSLayoutConstraint!
   // (a short message: the bubble as narrow as its words — a weak pull to nothing that the words hold out against;
   //  the widest stays the design's — Haris 2026-11-12)
   private lazy var tight: NSLayoutConstraint = { let c = bubble.widthAnchor.constraint(equalToConstant: 0); c.priority = .init(999); return c }()
-  // emojis alone (WhatsApp's, measured from Haris's screenshot, 2026-11-12): one — big, no bubble, the time in a small
-  // pill of the bubble's colour under it; two or three — larger in the bubble, the time on its own line; more — as words
-  private var big = false, emojis = 0
-  private let stampPill = UIView()
+  // emojis alone (WhatsApp's sizes, measured from Haris's screenshot, 2026-11-12): larger in the bubble — one at 46, two at
+  // 28, three at 22 — the time on its own line under them; more — as words. (One in a bubble too, Haris 16:27.)
+  private var emojis = 0
   static func emojiCount(_ s: String) -> Int {
     let cs = s.filter { !$0.isWhitespace }
     guard !cs.isEmpty, cs.count <= 3 else { return 0 }
@@ -1369,11 +1365,8 @@ final class BubbleCell: UITableViewCell {
     let isVoice = !m.deleted && m.file != nil && m.kind == "voice"
     let isDoc = !m.deleted && m.file != nil && !isPhoto && !isVoice
     emojis = !m.deleted && m.file == nil && m.reply == nil && m.fwd != true ? BubbleCell.emojiCount(m.text) : 0
-    big = emojis == 1
     // (only a photo has the photo's height — a text bubble on a cell that last showed a photo grew to it, Haris 2026-11-12)
     photoH.isActive = isPhoto
-    stampPill.backgroundColor = mine ? Look.mine : Look.theirs
-    stampPill.isHidden = !big
     textL.preferredMaxLayoutWidth = UIScreen.main.bounds.width * (mine ? 281 : 250) / 393 - 24
     // (a forwarded photo sits inside the bubble under "Forwarded", rounded 14, the bubble's colour round it)
     framed = isPhoto && m.fwd == true
@@ -1392,8 +1385,8 @@ final class BubbleCell: UITableViewCell {
     mediaW.constant = isVoice ? 292 : mine ? 236 : 262; mediaW.isActive = isPhoto || isVoice
     wMine.isActive = mine && !isPhoto && !isVoice; wTheirs.isActive = !mine && !isPhoto && !isVoice
     stackTrail.constant = mine ? -11 : -12
-    bubble.fill = big ? .clear : mine ? Look.mine : Look.theirs
-    tailOn = run.last && (!isPhoto || caption || framed) && !big
+    bubble.fill = mine ? Look.mine : Look.theirs
+    tailOn = run.last && (!isPhoto || caption || framed)
     bubble.tail = (mine, tailOn)
     let ink: UIColor = mine ? .white : .label, dim: UIColor = mine ? Look.mineTime : Look.roleInk
     // the name: over a photo for one, else at the top (others', first of a run)
