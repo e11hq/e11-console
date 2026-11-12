@@ -709,9 +709,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       v.source = { [weak self] x in
         guard let self = self else { return nil }
         // (the bubble showing it — an album's first stands for the album)
-        let id = self.albums.first(where: { $0.value.contains { $0.id == x.id } })?.key ?? x.id
+        let al = self.albums.first(where: { $0.value.contains { $0.id == x.id } })
+        let id = al?.key ?? x.id
         guard let ip = self.data.indexPath(for: .msg(id)), let c = self.table.cellForRow(at: ip) as? BubbleCell, c.window != nil else { return nil }
-        return c.photo
+        // (in an album: its own square of the grid — the ones past four, the fourth's square with "+N")
+        guard let k = al?.value.firstIndex(where: { $0.id == x.id }) else { return (c.photo, c.photo.bounds) }
+        let i = min(k, 3), b = c.photo.bounds, t = (b.width - 2) / 2
+        return (c.photo, CGRect(x: b.minX + CGFloat(i % 2) * (t + 2), y: b.minY + CGFloat(i / 2) * (t + 2), width: t, height: t))
       }
       v.onReply = { [weak self] x in self?.startReply(x) }
       v.onForward = { [weak self] x in self?.forward(x) }

@@ -11,7 +11,9 @@ import ImageIO
 final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureRecognizerDelegate {
   private var items: [Msg]
   private var at: Int
-  var source: ((Msg) -> UIView?)?
+  // where a photo shows in the chat: the view and the part of it that is this photo (the whole bubble picture, or its
+  // square in an album's grid)
+  var source: ((Msg) -> (UIView, CGRect)?)?
   var onReply: ((Msg) -> Void)?, onForward: ((Msg) -> Void)?, onDelete: ((Msg) -> Void)?, onReact: ((Msg) -> Void)?, onShow: ((Msg) -> Void)?
 
   private let back = UIView(), pager = UIScrollView()
@@ -133,9 +135,13 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
   // opening: out of its bubble (the design's "Opening a photo") — the picture flies from the bubble to its place
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
-    guard let m = items[safe: at], let src = source?(m), let w = src.window, let img = (src as? UIImageView)?.image else { return }
-    let from = src.convert(src.bounds, to: w)
-    let fly = UIImageView(image: img); fly.contentMode = .scaleAspectFill; fly.clipsToBounds = true; fly.layer.cornerRadius = 19; fly.frame = from
+    // (the photo's own picture flies — out of an album, its square, not the whole grid: Haris 2026-11-12)
+    guard let m = items[safe: at], let spot = source?(m), let w = spot.0.window else { return }
+    let src = spot.0, r = spot.1
+    let whole = r == src.bounds
+    guard let img = m.file.flatMap({ BubbleCell.cached($0.id) }) ?? (whole ? (src as? UIImageView)?.image : nil) else { return }
+    let from = src.convert(r, to: w)
+    let fly = UIImageView(image: img); fly.contentMode = .scaleAspectFill; fly.clipsToBounds = true; fly.layer.cornerRadius = whole ? 19 : 0; fly.frame = from
     // (under the buttons — it flew over ☺︎ and Reply and cut them, Haris 2026-11-12)
     view.insertSubview(fly, aboveSubview: pager); pager.alpha = 0; back.alpha = 0; top.alpha = 0; foot.alpha = 0
     let to = ZoomPage.fit(img.size, in: view.bounds)
@@ -201,14 +207,16 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
   }
   private func close(from page: ZoomPage? = nil) {
     let page = page ?? pages[safe: at]
-    guard let page = page, let m = items[safe: at], let src = source?(m), let w = src.window else {
+    guard let page = page, let m = items[safe: at], let spot = source?(m), let w = spot.0.window else {
       UIView.animate(withDuration: 0.2, animations: { self.view.alpha = 0 }) { _ in self.dismiss(animated: false) }; return
     }
-    let to = src.convert(src.bounds, to: w), from = page.image.convert(page.image.bounds, to: view)
+    let src = spot.0, r = spot.1, whole = r == src.bounds
+    let to = src.convert(r, to: w), from = page.image.convert(page.image.bounds, to: view)
     let fly = UIImageView(image: page.image.image); fly.contentMode = .scaleAspectFill; fly.clipsToBounds = true; fly.frame = from
-    view.insertSubview(fly, aboveSubview: pager); page.image.isHidden = true; src.alpha = 0
+    // (back into an album: into its own square, the grid left showing — the rest of the grid is still there)
+    view.insertSubview(fly, aboveSubview: pager); page.image.isHidden = true; if whole { src.alpha = 0 }
     UIView.animate(withDuration: 0.32, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0) {
-      fly.frame = to; fly.layer.cornerRadius = 19; self.back.alpha = 0; self.top.alpha = 0; self.foot.alpha = 0
+      fly.frame = to; fly.layer.cornerRadius = whole ? 19 : 0; self.back.alpha = 0; self.top.alpha = 0; self.foot.alpha = 0
     } completion: { _ in self.dismiss(animated: false) }
     // (the bubble itself — its shade and time — fading in as the picture lands, not popping in after it, Haris 2026-11-12)
     UIView.animate(withDuration: 0.14, delay: 0.18, options: [.curveEaseOut]) { src.alpha = 1; fly.alpha = 0 }
@@ -249,7 +257,11 @@ final class ZoomPage: UIScrollView, UIScrollViewDelegate {
     contentInsetAdjustmentBehavior = .never; bouncesZoom = true
     image.contentMode = .scaleAspectFit; addSubview(image)
     doubleTap.numberOfTapsRequired = 2; doubleTap.addTarget(self, action: #selector(zoom(_:))); addGestureRecognizer(doubleTap)
-    if let f = msg.file { ZoomPage.picture(msg, f) { [weak self] img in self?.image.image = img; self?.setNeedsLayout() } }
+    // (the chat's own picture at once, the full one taking its place when it's read — the page was empty a moment)
+    if let f = msg.file {
+      image.image = BubbleCell.cached(f.id)
+      ZoomPage.picture(msg, f) { [weak self] img in if let img = img { self?.image.image = img; self?.setNeedsLayout() } }
+    }
     if msg.kind == "video" {
       let play = UIButton(type: .system)
       var c = UIButton.Configuration.filled(); c.cornerStyle = .capsule; c.baseBackgroundColor = UIColor(white: 0, alpha: 0.45); c.baseForegroundColor = .white
