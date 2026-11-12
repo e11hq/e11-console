@@ -643,7 +643,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     hasOlder = start > 0
     // (an album: four or more photos and videos sent together by one person — shown once, as the first of them)
     var byAlbum: [String: [Msg]] = [:]
-    for m in all where m.album != nil && m.file != nil && !m.deleted { byAlbum[m.album!, default: []].append(m) }
+    // (a photo with its own words stands apart, as its own bubble — WhatsApp's way, Haris 2026-11-12)
+    for m in all where m.album != nil && m.file != nil && !m.deleted && m.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { byAlbum[m.album!, default: []].append(m) }
     var newAlbums: [String: [Msg]] = [:]
     for i in start..<all.count {
       let m = all[i]
@@ -984,9 +985,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     for v in table.visibleCells where v !== c { v.contentView.alpha = 1 - 0.68 * p }
   }
   // Forward (the button beside a photo, video, file or link, or hold › Forward): the sheet of groups to send it to
-  private func forward(_ m: Msg) {
+  private func forward(_ m: Msg) { forward([m]) }
+  private func forward(_ ms: [Msg]) {
     bar.box.resignFirstResponder()
-    let n = UINavigationController(rootViewController: ForwardVC(msg: m, from: group))
+    let n = UINavigationController(rootViewController: ForwardVC(msgs: ms, from: group))
     if let s = n.sheetPresentationController { s.detents = [.large()]; s.prefersGrabberVisible = true }
     present(n, animated: true)
   }
@@ -1036,6 +1038,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   // the design (board 33): the reactions on top, then Reply · Forward · Copy · Star · (line) · Delete — Forward comes with
   // the forward sheet (stage 5); yours also keep Edit (15 minutes) and Info, files Save / Share, as the app has them today
   private func menu(_ m: Msg) -> UIMenu {
+    if let al = albums[m.id], al.count >= 4, !m.deleted, !m.pending { return albumMenu(m, al) }
     let T = Talk.shared, mine = m.by == T.me?.id
     let now = Date().timeIntervalSince1970 * 1000
     var items: [UIMenuElement] = []
@@ -1086,23 +1089,55 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     ]))
     return UIMenu(children: items)
   }
+  // an album held: the whole album — the reactions and Reply on it as one, Forward and Save all its photos, Delete them all
+  // (Haris 2026-11-12: "the whole album")
+  private func albumMenu(_ m: Msg, _ al: [Msg]) -> UIMenu {
+    let acts: [UIMenuElement] = [
+      UIAction(title: "Reply", image: UIImage(systemName: "arrowshape.turn.up.left")) { [weak self] _ in self?.startReply(m) },
+      UIAction(title: "Forward", image: UIImage(systemName: "arrowshape.turn.up.right")) { [weak self] _ in self?.forward(al) },
+      UIAction(title: "Save \(al.count) to Photos", image: UIImage(systemName: "square.and.arrow.down")) { [weak self] _ in self?.saveAll(al) },
+    ]
+    return UIMenu(children: [reactRow(m), UIMenu(options: .displayInline, children: acts), UIMenu(options: .displayInline, children: [
+      UIAction(title: "Delete", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in self?.askDelete(al) }
+    ])])
+  }
+  private func saveAll(_ al: [Msg]) {
+    var left = al.count, saved = 0
+    for m in al {
+      guard let f = m.file else { left -= 1; continue }
+      Net.shared.file(f.id) { url in
+        DispatchQueue.main.async {
+          left -= 1
+          if let url = url {
+            if m.kind == "video" { UISaveVideoAtPathToSavedPhotosAlbum(url.path, nil, nil, nil); saved += 1 }
+            else if let i = UIImage(contentsOfFile: url.path) { UIImageWriteToSavedPhotosAlbum(i, nil, nil, nil); saved += 1 }
+          }
+          if left == 0 { toast(saved == al.count ? "Saved to Photos" : "Saved \(saved) of \(al.count)") }
+        }
+      }
+    }
+  }
   // "More…": Apple's submenu (it slides in with its own back row) — three, then More… again for the rest
   static func morePage(_ xs: [UIMenuElement]) -> UIMenu {
     let kids = xs.count <= 4 ? xs : Array(xs.prefix(3)) + [morePage(Array(xs.dropFirst(3)))]
     return UIMenu(title: "More", image: UIImage(systemName: "ellipsis.circle"), children: kids)
   }
   // Delete: Apple's sheet — for everyone (yours, about 2 days after sending) or for me
-  private func askDelete(_ m: Msg) {
-    let mine = m.by == Talk.shared.me?.id, now = Date().timeIntervalSince1970 * 1000
-    let a = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
-    if mine && !m.deleted && !m.pending && now - m.at < 2 * 86400000 {
+  private func askDelete(_ m: Msg) { askDelete([m]) }
+  // (one message, or an album's photos all together)
+  private func askDelete(_ ms: [Msg]) {
+    let me = Talk.shared.me?.id, now = Date().timeIntervalSince1970 * 1000
+    let a = UIAlertController(title: ms.count > 1 ? "Delete \(ms.count) photos and videos?" : nil, message: nil, preferredStyle: .actionSheet)
+    if ms.allSatisfy({ $0.by == me && !$0.deleted && !$0.pending && now - $0.at < 2 * 86400000 }) {
       a.addAction(UIAlertAction(title: "Delete for Everyone", style: .destructive) { [weak self] _ in
         guard let g = self?.group else { return }
-        let was = Talk.shared.local(g, m.id) { $0.deleted = true; $0.text = ""; $0.reply = nil }   // (shows at once; the file goes with the server's answer)
-        Net.shared.act(["act": "del", "msg": m.id]) { j in if (j?["ok"] as? Bool) == true { Talk.shared.sync() } else { if let w = was { Talk.shared.putBack(g, w) }; toast(j?["error"] as? String ?? "Couldn’t delete it") } }
+        for m in ms {
+          let was = Talk.shared.local(g, m.id) { $0.deleted = true; $0.text = ""; $0.reply = nil }   // (shows at once; the file goes with the server's answer)
+          Net.shared.act(["act": "del", "msg": m.id]) { j in if (j?["ok"] as? Bool) == true { Talk.shared.sync() } else { if let w = was { Talk.shared.putBack(g, w) }; toast(j?["error"] as? String ?? "Couldn’t delete it") } }
+        }
       })
     }
-    a.addAction(UIAlertAction(title: "Delete for Me", style: .destructive) { [weak self] _ in guard let self = self else { return }; Talk.shared.deleteForMe(self.group, m) })
+    a.addAction(UIAlertAction(title: "Delete for Me", style: .destructive) { [weak self] _ in guard let self = self else { return }; ms.forEach { Talk.shared.deleteForMe(self.group, $0) } })
     a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
     present(a, animated: true)
   }

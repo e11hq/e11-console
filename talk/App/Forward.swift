@@ -6,7 +6,8 @@ import UIKit
    see (the Clients tab's) carries the "With Client" chip and a small orange circle with a person on its picture. Pick one
    or more; the bar at the bottom names them, with the blue send. Each gets a copy marked "Forwarded". */
 final class ForwardVC: UIViewController, UICollectionViewDelegate, UISearchResultsUpdating {
-  private let msg: Msg, from: String
+  private let msgs: [Msg], from: String
+  private var msg: Msg { msgs[0] }
   private var cv: UICollectionView!
   private var data: UICollectionViewDiffableDataSource<String, String>!
   private var picked: [String] = []            // group ids, in the order picked
@@ -16,7 +17,9 @@ final class ForwardVC: UIViewController, UICollectionViewDelegate, UISearchResul
   private let names = UILabel(), sendB = UIButton(type: .custom)
   private let titleL = UILabel(), countL = UILabel()
 
-  init(msg: Msg, from: String) { self.msg = msg; self.from = from; super.init(nibName: nil, bundle: nil) }
+  // (one message, or an album's photos together — Haris 2026-11-12: holding an album acts on the whole album)
+  init(msgs: [Msg], from: String) { self.msgs = msgs; self.from = from; super.init(nibName: nil, bundle: nil) }
+  convenience init(msg: Msg, from: String) { self.init(msgs: [msg], from: from) }
   required init?(coder: NSCoder) { fatalError() }
 
   override func viewDidLoad() {
@@ -146,26 +149,34 @@ final class ForwardVC: UIViewController, UICollectionViewDelegate, UISearchResul
   // each picked group gets its own copy, marked Forwarded — a file sent again from this phone's copy
   private func send() {
     guard !picked.isEmpty else { return }
-    let m = msg, targets = picked
+    let all = msgs, targets = picked
     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     let done = { [weak self] in
       toast(targets.count == 1 ? "Forwarded" : "Forwarded to \(targets.count) groups")
       self?.dismiss(animated: true)
     }
-    guard let f = m.file else {
-      for g in targets { Talk.shared.send(g, text: m.text, fwd: true, task: m.task) }
-      done(); return
-    }
+    // (an album goes on as an album — one id per group for its photos, so it arrives as one)
+    let albumIds = Dictionary(uniqueKeysWithValues: targets.map { ($0, all.count >= 4 ? UUID().uuidString : nil) })
     sendB.isEnabled = false
-    Net.shared.file(f.id) { [weak self] url in
-      guard let url = url, let d = try? Data(contentsOf: url) else { self?.sendB.isEnabled = true; toast("That file isn’t on this phone any more"); return }
-      for g in targets {
-        let tmp = "local-" + UUID().uuidString
-        let copy = Msg.FileRef(id: tmp, name: f.name, size: d.count, kind: f.kind, w: f.w, h: f.h, secs: f.secs, wave: f.wave)
-        Talk.shared.send(g, text: m.text, file: copy, localFile: url, upload: d, fwd: true)
+    var left = all.count, failed = false
+    func next(_ i: Int) {
+      guard i < all.count else { if !failed { done() } else { sendB.isEnabled = true }; return }
+      let m = all[i]
+      guard let f = m.file else {
+        for g in targets { Talk.shared.send(g, text: m.text, fwd: true, task: m.task) }
+        left -= 1; next(i + 1); return
       }
-      done()
+      Net.shared.file(f.id) { url in
+        guard let url = url, let d = try? Data(contentsOf: url) else { failed = true; toast("That file isn’t on this phone any more"); next(all.count); return }
+        for g in targets {
+          let tmp = "local-" + UUID().uuidString
+          let copy = Msg.FileRef(id: tmp, name: f.name, size: d.count, kind: f.kind, w: f.w, h: f.h, secs: f.secs, wave: f.wave)
+          Talk.shared.send(g, text: m.text, file: copy, localFile: url, upload: d, fwd: true, album: albumIds[g] ?? nil)
+        }
+        left -= 1; next(i + 1)
+      }
     }
+    next(0)
   }
 
   // the chip beside a group the client can see — the Clients tab's own (orange words on a faint orange)
