@@ -741,7 +741,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
   // (you scrolled up to read: the keyboard or the bar growing doesn't pull you back down)
   private var scrolledAway: Bool { table.contentOffset.y + table.bounds.height < table.contentSize.height - 160 }
-  private func jump(to id: String) {
+  func jump(to id: String) {
     reach(id)
     guard let ip = data.indexPath(for: item(id)) else { toast("That message isn’t on this phone any more"); return }
     table.scrollToRow(at: ip, at: .middle, animated: true)
@@ -1011,7 +1011,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     return UIColor { $0.userInterfaceStyle == .dark ? dark : light }
   }()
   private func openInfo(_ m: Msg) { navigationController?.pushViewController(MessageInfoVC(group: group, id: m.id), animated: true) }
-  private func startReply(_ m: Msg) { editingMsg = nil; bar.setTask(nil); replying = m; UIImpactFeedbackGenerator(style: .light).impactOccurred(); bar.box.becomeFirstResponder() }
+  func startReply(_ m: Msg) { editingMsg = nil; bar.setTask(nil); replying = m; UIImpactFeedbackGenerator(style: .light).impactOccurred(); bar.box.becomeFirstResponder() }
 
   // ---------- hold: reactions and the menu ----------
   func tableView(_ tv: UITableView, contextMenuConfigurationForRowAt ip: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
@@ -1100,13 +1100,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let acts: [UIMenuElement] = [
       UIAction(title: "Reply", image: UIImage(systemName: "arrowshape.turn.up.left")) { [weak self] _ in self?.startReply(m) },
       UIAction(title: "Forward", image: UIImage(systemName: "arrowshape.turn.up.right")) { [weak self] _ in self?.forward(al) },
-      UIAction(title: "Save \(al.count) to Photos", image: UIImage(systemName: "square.and.arrow.down")) { [weak self] _ in self?.saveAll(al) },
+      UIAction(title: "Save \(al.count) to Photos", image: UIImage(systemName: "square.and.arrow.down")) { [weak self] _ in ChatVC.saveAll(al) },
     ]
     return UIMenu(children: [reactRow(m), UIMenu(options: .displayInline, children: acts), UIMenu(options: .displayInline, children: [
       UIAction(title: "Delete", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in self?.askDelete(al) }
     ])])
   }
-  private func saveAll(_ al: [Msg]) {
+  static func saveAll(_ al: [Msg]) {
     var left = al.count, saved = 0
     for m in al {
       guard let f = m.file else { left -= 1; continue }
@@ -1130,7 +1130,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   // Delete: Apple's sheet — for everyone (yours, about 2 days after sending) or for me
   private func askDelete(_ m: Msg) { askDelete([m]) }
   // (one message, or an album's photos all together)
-  private func askDelete(_ ms: [Msg]) {
+  // (from: another page showing it — Photos, Files and Links — the sheet shown there)
+  func askDelete(_ ms: [Msg], from host: UIViewController? = nil) {
     let me = Talk.shared.me?.id, now = Date().timeIntervalSince1970 * 1000
     let a = UIAlertController(title: ms.count > 1 ? "Delete \(ms.count) photos and videos?" : nil, message: nil, preferredStyle: .actionSheet)
     if ms.allSatisfy({ $0.by == me && !$0.deleted && !$0.pending && now - $0.at < 2 * 86400000 }) {
@@ -1144,10 +1145,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     }
     a.addAction(UIAlertAction(title: "Delete for Me", style: .destructive) { [weak self] _ in guard let self = self else { return }; ms.forEach { Talk.shared.deleteForMe(self.group, $0) } })
     a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-    present(a, animated: true)
+    (host ?? self).present(a, animated: true)
   }
 
-  private func react(_ m: Msg, _ e: String?) {
+  func react(_ m: Msg, _ e: String?) {
     // (picked in the hold menu: put on once the menu has gone and the bubble is back in place — drawn while it was still
     //  lifted, the bubble and its photo flashed, Haris 2026-11-12)
     if holding { afterHold = { [weak self] in self?.react(m, e) }; return }

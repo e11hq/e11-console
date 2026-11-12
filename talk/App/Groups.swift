@@ -372,7 +372,7 @@ final class GroupInfoVC: UITableViewController, PHPickerViewControllerDelegate {
     tv.deselectRow(at: ip, animated: true)
     guard let g = g, let row = data.itemIdentifier(for: ip) else { return }
     switch row {
-    case .media: break   // (its own page: the next step, mock-up first)
+    case .media: navigationController?.pushViewController(MediaVC(group: group), animated: true)   // (step 1b — mock-up approved 2026-11-13)
     case .member(let id): personSheet(id, g, at: tv.cellForRow(at: ip))
     case .addMembers: navigationController?.pushViewController(AddPeopleVC(group: group), animated: true)
     case .mute: muteSheet(g)
