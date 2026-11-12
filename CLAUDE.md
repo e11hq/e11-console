@@ -531,6 +531,10 @@ word). Quick build, no simulator self-test. Nothing changes in its look, behavio
 `locked/ios-app-1695` (never moved or deleted; 1694's and earlier stay as history). 1695 = 1694 + a folder link closing the
 Client Assets left open from before (after a folder was closed, the next link did nothing) + a file or folder link that can't
 open saying why on the screen on show. Quick build, no simulator self-test. Nothing changes without telling Haris first and his yes.
+**THE iPHONE APP — LOCKED at build 1696 (Haris, 2026-11-12 23:52: folder links "opening now"):** commit d32e7b6, branches
+`stable/ios-1696` and `locked/ios-app-1696` (never moved or deleted; 1695's and earlier stay as history). 1696 = 1695 + a
+folder link from any tab going to the Clients tab (its key is "projects" — the link looked for "clients", and from Home the
+folder opened out of sight). Quick build. Nothing changes without telling Haris first and his yes.
 **The App Store release waits for E11 Talk (Haris, 2026-11-11 20:16: "3"):** the Talk button (E11 Day, Clients) does nothing
 yet — App Review would reject a button that does nothing (2.1) — so E11 Console and E11 Talk are sent for review together,
 Talk's button opening the real app; it stays as it is until then (not hidden, not changed). The screenshots keep it.
