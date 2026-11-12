@@ -1894,7 +1894,12 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     store.getAllCookies { cookies in WidgetShare.saveSignIn(server: serverURL(), cookies: cookies) }
   }
   // e11console://open?task=<id> | ?plan=<id> | ?view=home|plans|fin-dash — a tap on the widget
-  func openLink(_ u: URL) {
+  func openLink(_ u: URL, tries: Int = 0) {
+    // (a link from another app — E11 Talk — while this app was in the background: handled once it's active and its own
+    //  screens can open the task or file; at once it was dropped and the app stayed on Home — only the first tap worked,
+    //  Haris 2026-11-12)
+    let readyNow = UIApplication.shared.applicationState == .active && AppData.shared.tabsOn && AppData.shared.ready && AppData.shared.isStarted
+    if !readyNow, tries < 24 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in self?.openLink(u, tries: tries + 1) }; return }
     // a task link (files…/t/<id>, Haris 2026-11-04): the task, in the app
     if u.path.range(of: "^/t/[A-Za-z0-9_-]{1,80}/?$", options: .regularExpression) != nil {
       let id = u.path.dropFirst(3).replacingOccurrences(of: "/", with: "")
