@@ -1244,8 +1244,11 @@ extension Main {
         if self.assetsCtl.isOpen { self.assetsCtl.close(animated: false) }
         // (from Home or any tab that doesn't hold Client Assets: to the Clients tab first — opened there unseen, the app
         //  stayed on Home, Haris 2026-11-12, his yes)
-        if let t = AppleTabs.shared, t.ownNav !== t.clientsNav, t.ownNav !== t.assetsNav, t.ownNav !== t.meNav, !(t.ownNav.map { o in t.roleNavs.values.contains { $0 === o } } ?? false), self.tabKeys.contains("clients") {
-          self.selectTab("clients")
+        // (the Clients tab's key is "projects"; "clients" is an Office Admin's Client Assets tab — looking for "clients" never
+        //  switched, and the folder opened on a screen out of sight: Haris 2026-11-12)
+        let tab = self.tabKeys.contains("projects") ? "projects" : self.tabKeys.contains("clients") ? "clients" : nil
+        if let t = AppleTabs.shared, let tab = tab, t.ownNav !== t.clientsNav, t.ownNav !== t.assetsNav, t.ownNav !== t.meNav, !(t.ownNav.map { o in t.roleNavs.values.contains { $0 === o } } ?? false) {
+          self.selectTab(tab)
           DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.assetsCtl.openFromClients(client: c, folder: w["folder"] as? String) }
         } else { self.assetsCtl.openFromClients(client: c, folder: w["folder"] as? String) }
         guard kind == "asset", let fid = file else { return }
