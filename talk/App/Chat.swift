@@ -12,12 +12,15 @@ import ImageIO
    keyboard opens); swipe your own left for Message info; hold it: Apple's lift, the reactions as Apple's palette (seven
    and + for any emoji), then Reply · Copy · Star · (yours: Edit for 15 minutes, Info) · Delete (for everyone about 2 days,
    for me). The message bar: + (Photos, Camera, Files), the box, camera and mic; while typing, the send button. */
-enum ChatItem: Hashable { case day(String), msg(String) }
+enum ChatItem: Hashable { case msg(String) }
 
 final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDataSource, QLPreviewControllerDelegate, UIGestureRecognizerDelegate {
   let group: String
   private let table = UITableView(frame: .zero, style: .plain)
-  private var data: UITableViewDiffableDataSource<Int, ChatItem>!
+  // (one section per day: its chip is the section's header — Apple's own floating header, stuck under the bar until the
+  //  next day's pushes it away, as E11 Console's comments)
+  private var data: UITableViewDiffableDataSource<String, ChatItem>!
+  private var dayOf: [String: String] = [:]   // section → the words on its chip
   private var msgs: [String: Msg] = [:]
   private var sigs: [String: Int] = [:]
   private var runs: [String: Run] = [:]
@@ -46,15 +49,15 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     navigationItem.largeTitleDisplayMode = .never
     table.backgroundColor = .clear; table.separatorStyle = .none; table.keyboardDismissMode = .interactive
     table.delegate = self; table.estimatedRowHeight = 60; table.rowHeight = UITableView.automaticDimension
-    table.register(BubbleCell.self, forCellReuseIdentifier: "b"); table.register(DayCell.self, forCellReuseIdentifier: "d")
+    table.register(BubbleCell.self, forCellReuseIdentifier: "b"); table.register(DayHeader.self, forHeaderFooterViewReuseIdentifier: "d")
+    table.sectionHeaderTopPadding = 0
     table.frame = view.bounds; table.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     // (the room above and below the messages is ours to set: the bar at the top, the message bar at the bottom — fitBottom)
     table.contentInsetAdjustmentBehavior = .never
     view.addSubview(table)
-    data = UITableViewDiffableDataSource<Int, ChatItem>(tableView: table) { [weak self] tv, ip, item in
+    data = UITableViewDiffableDataSource<String, ChatItem>(tableView: table) { [weak self] tv, ip, item in
       guard let self = self else { return UITableViewCell() }
       switch item {
-      case .day(let s): let c = tv.dequeueReusableCell(withIdentifier: "d", for: ip) as! DayCell; c.set(s); return c
       case .msg(let id):
         let c = tv.dequeueReusableCell(withIdentifier: "b", for: ip) as! BubbleCell
         c.contentView.isUserInteractionEnabled = !self.keyUp
@@ -225,8 +228,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   // each message kept by its id; only one that shows something new is drawn again
   private func reload(animated: Bool) {
     let l = Talk.shared.log(group)
-    var snap = NSDiffableDataSourceSnapshot<Int, ChatItem>(); snap.appendSections([0])
-    var lastDay = "", newSigs: [String: Int] = [:], items: [ChatItem] = []
+    var snap = NSDiffableDataSourceSnapshot<String, ChatItem>()
+    var lastDay = "", newSigs: [String: Int] = [:], items: [ChatItem] = [], section = "", newDayOf: [String: String] = [:]
     msgs = [:]
     // (a run: one person's messages one after another on the same day — the name on its first, the tail on its last)
     var newRuns: [String: Run] = [:]
@@ -240,25 +243,28 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       let prev = i > 0 ? all[i - 1] : nil, next = i + 1 < all.count ? all[i + 1] : nil
       let same = { (o: Msg?) -> Bool in guard let o = o else { return false }; return o.by == m.by && o.kind != "sys" && m.kind != "sys" && Look.day(o.at) == d }
       newRuns[m.id] = Run(first: !same(prev), last: !same(next))
-      if d != lastDay { items.append(.day(d)); lastDay = d }
+      if d != lastDay {
+        lastDay = d
+        section = newDayOf[d] == nil ? d : d + "#\(i)"   // (the same words twice — a section each)
+        newDayOf[section] = d; snap.appendSections([section])
+      }
       msgs[m.id] = m
       var h = Hasher(); h.combine(m.text); h.combine(m.edited); h.combine(m.deleted); h.combine(m.pending); h.combine(m.failed); h.combine(m.reactions); h.combine(m.file?.id)
       h.combine(newRuns[m.id]); h.combine(Talk.shared.people[m.by]?.color); h.combine(Talk.shared.people[m.by]?.role)
       if m.by == meId { h.combine(i <= readTo) }
       newSigs[m.id] = h.finalize()
-      items.append(.msg(m.id))
+      items.append(.msg(m.id)); snap.appendItems([.msg(m.id)], toSection: section)
     }
-    runs = newRuns
-    snap.appendItems(items)
+    runs = newRuns; dayOf = newDayOf
     let old = data.snapshot()
     snap.reconfigureItems(items.filter { if case .msg(let id) = $0 { return old.indexOfItem($0) != nil && sigs[id] != newSigs[id] }; return false })
     sigs = newSigs
     data.apply(snap, animatingDifferences: animated && old.numberOfItems > 0)
   }
   private func toBottom(_ animated: Bool) {
-    let n = data.snapshot().numberOfItems
-    guard n > 0 else { return }
-    if !animated { table.scrollToRow(at: IndexPath(row: n - 1, section: 0), at: .bottom, animated: false) }
+    let s = data.snapshot()
+    guard let last = s.sectionIdentifiers.last, s.numberOfItems(inSection: last) > 0 else { return }
+    if !animated { table.scrollToRow(at: IndexPath(row: s.numberOfItems(inSection: last) - 1, section: s.numberOfSections - 1), at: .bottom, animated: false) }
     table.layoutIfNeeded()
     let end = CGPoint(x: 0, y: max(-table.adjustedContentInset.top, table.contentSize.height + table.adjustedContentInset.bottom - table.bounds.height))
     table.setContentOffset(end, animated: animated)
@@ -398,6 +404,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   func previewController(_ c: QLPreviewController, transitionViewFor item: QLPreviewItem) -> UIView? { openFrom }
   func numberOfPreviewItems(in c: QLPreviewController) -> Int { previewURL == nil ? 0 : 1 }
   func previewController(_ c: QLPreviewController, previewItemAt i: Int) -> QLPreviewItem { previewURL! as NSURL }
+
+  // ---------- the day's chip: the section's header ----------
+  func tableView(_ tv: UITableView, viewForHeaderInSection i: Int) -> UIView? {
+    guard let id = data.snapshot().sectionIdentifiers[safe: i], let h = tv.dequeueReusableHeaderFooterView(withIdentifier: "d") as? DayHeader else { return nil }
+    h.set(dayOf[id] ?? id); return h
+  }
+  func tableView(_ tv: UITableView, heightForHeaderInSection i: Int) -> CGFloat { 38 }
 
   // ---------- the swipes: right — reply; your own left — Message info ----------
   // (Apple has no part for a bubble that follows the finger and springs back, so it's a pan of ours; the reply's keyboard
@@ -627,19 +640,20 @@ extension ChatVC: PHPickerViewControllerDelegate, UIImagePickerControllerDelegat
   }
 }
 
-// ---------- the day between messages (the design: a small chip, 20 high, 13 semibold) ----------
-final class DayCell: UITableViewCell {
+// ---------- the day over its messages (the design: a small chip, 20 high, 13 semibold) — the section's header, so it
+// stays under the bar while its day scrolls by (Apple's floating header) ----------
+final class DayHeader: UITableViewHeaderFooterView {
   private let chip = UIView(), l = UILabel()
-  override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
-    super.init(style: style, reuseIdentifier: reuseIdentifier)
-    backgroundColor = .clear; selectionStyle = .none
+  override init(reuseIdentifier: String?) {
+    super.init(reuseIdentifier: reuseIdentifier)
+    backgroundConfiguration = .clear()
     chip.backgroundColor = Look.dayChip; chip.layer.cornerRadius = 8; chip.layer.cornerCurve = .continuous
     l.font = .systemFont(ofSize: 13, weight: .semibold); l.textColor = .label; l.textAlignment = .center
     chip.addSubview(l); contentView.addSubview(chip)
     [chip, l].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
     NSLayoutConstraint.activate([
       chip.centerXAnchor.constraint(equalTo: contentView.centerXAnchor), chip.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 14),
-      chip.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4), chip.heightAnchor.constraint(equalToConstant: 20),
+      chip.heightAnchor.constraint(equalToConstant: 20),
       l.leadingAnchor.constraint(equalTo: chip.leadingAnchor, constant: 10), l.trailingAnchor.constraint(equalTo: chip.trailingAnchor, constant: -10),
       l.centerYAnchor.constraint(equalTo: chip.centerYAnchor)])
   }
