@@ -319,7 +319,8 @@ final class Talk {
   // this phone; one never sent (still on its way, or failed) simply goes
   func deleteForMe(_ g: String, _ m: Msg) {
     var l = log(g)
-    if m.pending { l.msgs.removeAll { $0.id == m.id } }
+    // (a message already deleted — its "deleted" line — goes from my chat altogether, as WhatsApp's)
+    if m.pending || m.deleted { l.msgs.removeAll { $0.id == m.id } }
     else if let i = l.msgs.firstIndex(where: { $0.id == m.id }) {
       l.msgs[i].deleted = true; l.msgs[i].goneForMe = true; l.msgs[i].text = ""; l.msgs[i].file = nil; l.msgs[i].reply = nil; l.msgs[i].reactions = [:]
     }

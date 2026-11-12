@@ -678,6 +678,12 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       if mine { acts.append(UIAction(title: "Info", image: UIImage(systemName: "info.circle")) { [weak self] _ in self?.openInfo(m) }) }
       items.append(UIMenu(options: .displayInline, children: acts))
     }
+    // (a deleted message's line: only Delete for Me — it goes from this phone's chat, Haris 2026-11-12)
+    if m.deleted {
+      return UIMenu(children: [UIAction(title: "Delete for Me", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in
+        guard let self = self else { return }; Talk.shared.deleteForMe(self.group, m)
+      }])
+    }
     items.append(UIMenu(options: .displayInline, children: [
       UIAction(title: "Delete", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in self?.askDelete(m) }
     ]))
