@@ -912,7 +912,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       })
       if mine && m.file == nil && now - m.at < 15 * 60000 {
         acts.append(UIAction(title: "Edit", image: UIImage(systemName: "pencil")) { [weak self] _ in
-          self?.replying = nil; self?.editingMsg = m; self?.bar.setReply(("Editing", m.text), editing: true); self?.bar.box.text = m.text; self?.bar.textChanged(); self?.bar.box.becomeFirstResponder()
+          self?.replying = nil; self?.editingMsg = m; self?.bar.setReply(("Edit message", m.text), editing: true); self?.bar.box.text = m.text; self?.bar.textChanged(); self?.bar.box.becomeFirstResponder()
         })
       }
       if let f = m.file {
@@ -1922,6 +1922,9 @@ final class MessageBar: UIView, UITextViewDelegate {
   private let place = UILabel()
   var placeholder = "Message" { didSet { place.text = placeholder } }
   private let replyV = UIView(), replyName = UILabel(), replyText = UILabel(), replyX = UIButton(type: .system), replyBar = UIView()
+  // (editing: the pencil before "Edit message", and send turns into ✓ — the design's board 34)
+  private let editIcon = UIImageView(image: UIImage(systemName: "pencil", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)))
+  private(set) var editing = false
   private let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
   var onSend: ((String, [String]) -> Void)?
   var onPlus: ((String) -> Void)?
@@ -2043,13 +2046,14 @@ final class MessageBar: UIView, UITextViewDelegate {
     replyX.setImage(UIImage(systemName: "xmark.circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 21, weight: .light)), for: .normal); replyX.tintColor = .label
     replyX.accessibilityLabel = "Cancel the reply"
     replyX.addAction(UIAction { [weak self] _ in self?.onCancelReply?() }, for: .touchUpInside)
-    [replyBar, replyName, replyText, replyX].forEach { replyV.addSubview($0) }
+    editIcon.tintColor = Look.accent; editIcon.contentMode = .center; editIcon.isHidden = true
+    [replyBar, editIcon, replyName, replyText, replyX].forEach { replyV.addSubview($0) }
     replyV.isHidden = true; addSubview(replyV)
     textChanged()
   }
   required init?(coder: NSCoder) { fatalError() }
   // (the bar stays above the home indicator when the keyboard is down)
-  private var mentionH: CGFloat { mentionV.isHidden ? 0 : CGFloat(mentionV.arrangedSubviews.count) * 44 }
+  private var mentionH: CGFloat { mentionV.isHidden ? 0 : CGFloat(mentionV.arrangedSubviews.count) * 52 }
   var listH: CGFloat { mentionH }   // (the @ list sits over the chat — the chat makes no room for it)
   override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: (locked ? 83 : boxH + 13) + (replyV.isHidden ? 0 : 52) + mentionH) }
   override func layoutSubviews() {
@@ -2060,7 +2064,9 @@ final class MessageBar: UIView, UITextViewDelegate {
     mentionV.frame = CGRect(x: 0, y: 0, width: W, height: mh)
     replyV.frame = CGRect(x: 0, y: mh, width: W, height: 52)
     replyBar.frame = CGRect(x: 0, y: 0, width: 4, height: 52)
-    replyName.frame = CGRect(x: 12, y: 7, width: W - 64, height: 19); replyText.frame = CGRect(x: 12, y: 27, width: W - 64, height: 19)
+    let tx: CGFloat = editing ? 40 : 12
+    editIcon.frame = CGRect(x: 10, y: 12, width: 24, height: 28)
+    replyName.frame = CGRect(x: tx, y: 7, width: W - 52 - tx, height: 19); replyText.frame = CGRect(x: tx, y: 27, width: W - 52 - tx, height: 19)
     replyX.frame = CGRect(x: W - 46, y: 6, width: 40, height: 40)
     let typing = !box.text.isEmpty
     // (the design's places: + at 10, the box from 46, camera and mic at the right; the buttons stay level with the box's last line)
@@ -2262,11 +2268,17 @@ final class MessageBar: UIView, UITextViewDelegate {
   private func showMentions(_ list: [(String, String)]) {
     mentionV.arrangedSubviews.forEach { $0.removeFromSuperview() }
     for (id, name) in list {
+      // (each person with their role under the name, as the design's board 37)
       var c = UIButton.Configuration.plain()
-      c.title = name; c.baseForegroundColor = .label; c.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 56, bottom: 0, trailing: 16)
+      c.title = name; c.baseForegroundColor = .label; c.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 60, bottom: 0, trailing: 16)
+      c.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { var a = $0; a.font = .systemFont(ofSize: 17, weight: .medium); return a }
+      if let role = Talk.shared.people[id]?.role, !role.isEmpty {
+        c.subtitle = role; c.titlePadding = 1
+        c.subtitleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { var a = $0; a.font = .systemFont(ofSize: 13); a.foregroundColor = .secondaryLabel; return a }
+      }
       let b = UIButton(configuration: c); b.contentHorizontalAlignment = .leading
-      b.heightAnchor.constraint(equalToConstant: 44).isActive = true
-      let a = Avatar(frame: CGRect(x: 14, y: 6, width: 32, height: 32)); a.set(person: Talk.shared.people[id]); a.isUserInteractionEnabled = false; b.addSubview(a)
+      b.heightAnchor.constraint(equalToConstant: 52).isActive = true
+      let a = Avatar(frame: CGRect(x: 14, y: 8, width: 36, height: 36)); a.set(person: Talk.shared.people[id]); a.isUserInteractionEnabled = false; b.addSubview(a)
       b.addAction(UIAction { [weak self] _ in self?.pick(id, name) }, for: .touchUpInside)
       mentionV.addArrangedSubview(b)
     }
@@ -2301,8 +2313,19 @@ final class MessageBar: UIView, UITextViewDelegate {
   func setReply(_ r: (String, String)?, editing: Bool, ink: UIColor = Look.accent) {
     replyV.isHidden = r == nil
     replyName.text = r?.0; replyText.text = r?.1
-    replyBar.backgroundColor = editing ? .systemOrange : ink; replyName.textColor = editing ? .systemOrange : ink
-    if r == nil && editing == false && box.text.isEmpty == false && replyName.text == "Editing" { box.text = ""; textChanged() }
+    // (editing, as the design: our blue, the pencil, the old words in grey; ✓ in place of send)
+    let wasEditing = self.editing
+    self.editing = editing && r != nil
+    editIcon.isHidden = !self.editing
+    replyBar.backgroundColor = self.editing ? Look.accent : ink; replyName.textColor = self.editing ? Look.accent : ink
+    replyText.textColor = self.editing ? .secondaryLabel : .label
+    replyX.accessibilityLabel = self.editing ? "Stop editing" : "Cancel the reply"
+    if wasEditing != self.editing {
+      var c = sendB.configuration
+      c?.image = UIImage(systemName: self.editing ? "checkmark" : "arrow.up", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .bold))
+      sendB.configuration = c; sendB.accessibilityLabel = self.editing ? "Save" : "Send"
+    }
+    if wasEditing && !self.editing && !box.text.isEmpty { box.text = ""; textChanged() }
     invalidateIntrinsicContentSize(); setNeedsLayout()
   }
 }
