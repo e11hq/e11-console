@@ -179,7 +179,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
      between the messages always stays. (Apple's list keeps the chip stuck; the fade is Apple's view animation.) */
   private var chipNap: DispatchWorkItem?
   private func chipsAwake() {
-    for s in 0..<table.numberOfSections { if let h = table.headerView(forSection: s), h.alpha < 1 { UIView.animate(withDuration: 0.15) { h.alpha = 1 } } }
+    for s in 0..<table.numberOfSections { (table.headerView(forSection: s) as? DayHeader)?.showChip(true) }
     chipNap?.cancel()
     let w = DispatchWorkItem { [weak self] in self?.chipsNap() }
     chipNap = w
@@ -190,8 +190,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let top = table.contentOffset.y + table.adjustedContentInset.top
     for s in 0..<table.numberOfSections {
       // (stuck: the chip's own place has gone above the bar)
-      guard let h = table.headerView(forSection: s), table.rect(forSection: s).minY < top - 1, table.rect(forSection: s).maxY > top + 38 else { continue }
-      UIView.animate(withDuration: 0.25) { h.alpha = 0 }
+      guard let h = table.headerView(forSection: s) as? DayHeader, table.rect(forSection: s).minY < top - 1, table.rect(forSection: s).maxY > top + 38 else { continue }
+      h.showChip(false)
     }
   }
 
@@ -352,9 +352,11 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let s = data.snapshot()
     guard let last = s.sectionIdentifiers.last, s.numberOfItems(inSection: last) > 0 else { return }
     if !animated { table.scrollToRow(at: IndexPath(row: s.numberOfItems(inSection: last) - 1, section: s.numberOfSections - 1), at: .bottom, animated: false) }
-    table.layoutIfNeeded()
-    let end = CGPoint(x: 0, y: max(-table.adjustedContentInset.top, table.contentSize.height + table.adjustedContentInset.bottom - table.bounds.height))
-    table.setContentOffset(end, animated: animated)
+    let end = { () -> CGPoint in self.table.layoutIfNeeded(); return CGPoint(x: 0, y: max(-self.table.adjustedContentInset.top, self.table.contentSize.height + self.table.adjustedContentInset.bottom - self.table.bounds.height)) }
+    guard !animated else { table.setContentOffset(end(), animated: true); return }
+    // (the rows near the end take their real heights once they're in view — placed again until the end stays put, so
+    //  the chat doesn't open a little short and then jump to its end)
+    for _ in 0..<4 { let e = end(); if abs(table.contentOffset.y - e.y) < 0.5 { break }; table.contentOffset = e }
   }
   /* The room under the last message = how much the message bar (with the keyboard under it, or the reply / @ list above
      it) covers, measured from where the bar really is — the keyboard's notice alone missed the bar's first showing (the
@@ -376,7 +378,11 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // the bar's own height counts even before the keyboard says anything (it sits at the very bottom, home line included)
     let top = view.safeAreaInsets.top + (clientLine.isHidden ? 0 : 30)
     if table.contentInset.top != top { table.contentInset.top = top; table.verticalScrollIndicatorInsets.top = top }
-    let cover = max(kbOverlap, (finding ? findAcc : bar).bounds.height)
+    // (the message bar's real height from the start — before it's on the screen it has no home-line room yet, and the
+    //  chat opened that much short and then jumped when the bar came — Haris 2026-11-12)
+    let acc: UIView = finding ? findAcc : bar
+    let accH = acc.window != nil ? acc.bounds.height : acc.intrinsicContentSize.height + (view.window?.safeAreaInsets.bottom ?? 0)
+    let cover = max(kbOverlap, accH)
     guard abs(cover - kb) > 0.5 else { return }
     let wasAtEnd = table.contentOffset.y + table.bounds.height >= table.contentSize.height + table.adjustedContentInset.bottom - 40
     let grew = cover > kb
@@ -495,7 +501,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   // ---------- the day's chip: the section's header ----------
   func tableView(_ tv: UITableView, viewForHeaderInSection i: Int) -> UIView? {
     guard let id = data.snapshot().sectionIdentifiers[safe: i], let h = tv.dequeueReusableHeaderFooterView(withIdentifier: "d") as? DayHeader else { return nil }
-    h.set(dayOf[id] ?? id); h.alpha = 1; return h
+    h.set(dayOf[id] ?? id); h.showChip(true, animated: false); return h
   }
   func tableView(_ tv: UITableView, heightForHeaderInSection i: Int) -> CGFloat { 38 }
 
@@ -815,6 +821,13 @@ final class DayHeader: UITableViewHeaderFooterView {
   }
   required init?(coder: NSCoder) { fatalError() }
   func set(_ s: String) { l.text = s }
+  // (only the chip fades — the header itself stays, so Apple's frost under the bar, which follows the stuck header,
+  //  keeps its place: fading the whole header moved the frost up and down — Haris 2026-11-12)
+  func showChip(_ on: Bool, animated: Bool = true) {
+    let a: CGFloat = on ? 1 : 0
+    guard chip.alpha != a else { return }
+    if animated { UIView.animate(withDuration: on ? 0.15 : 0.25, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { self.chip.alpha = a } } else { chip.alpha = a }
+  }
 }
 
 /* A message sent and one arriving (Haris 2026-11-11): E11 Console's own comment sounds — iPhone's system sound service,
