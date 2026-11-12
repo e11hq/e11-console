@@ -17,6 +17,9 @@ struct Group {
   let id: String, client: String, name: String, creator: String, creatorAdmin: Bool, second: String?, admins: [String], pic: String?
   let createdAt: Double, lastAt: Double, members: [String], pinnedAt: Double?, mutedUntil: Double?
   var withClient: Bool = false   // (a client contact is in it: the Clients tab)
+  // (its pinned message — one, anyone in the group pins it; a line of what it says, from the phone that pinned it)
+  var pin: Pin? = nil
+  struct Pin: Equatable { let id: String; let by: String; let text: String; let kind: String; let pinnedBy: String }
   var muted: Bool { (mutedUntil ?? 0) > Date().timeIntervalSince1970 * 1000 }
 }
 
@@ -181,7 +184,8 @@ final class Talk {
       gs[id] = Group(id: id, client: g["client"] as? String ?? "", name: g["name"] as? String ?? "", creator: g["creator"] as? String ?? "",
                      creatorAdmin: (g["creatorAdmin"] as? Bool) ?? true, second: g["second"] as? String, admins: g["admins"] as? [String] ?? [],
                      pic: g["pic"] as? String, createdAt: (g["createdAt"] as? Double) ?? 0, lastAt: (g["lastAt"] as? Double) ?? 0,
-                     members: g["members"] as? [String] ?? [], pinnedAt: g["pinnedAt"] as? Double, mutedUntil: g["mutedUntil"] as? Double, withClient: (g["withClient"] as? Bool) == true)
+                     members: g["members"] as? [String] ?? [], pinnedAt: g["pinnedAt"] as? Double, mutedUntil: g["mutedUntil"] as? Double, withClient: (g["withClient"] as? Bool) == true,
+                     pin: (g["pin"] as? [String: Any]).flatMap { p in (p["id"] as? String).map { Group.Pin(id: $0, by: p["by"] as? String ?? "", text: p["text"] as? String ?? "", kind: p["kind"] as? String ?? "text", pinnedBy: p["pinnedBy"] as? String ?? "") } })
     }
     groups = gs
     if let p = j["pins"] as? [String: Any] { pinnedGroups = p["groups"] as? [String] ?? []; pinnedClients = p["clients"] as? [String] ?? []; pinnedClientGroups = p["clientGroups"] as? [String] ?? [] }

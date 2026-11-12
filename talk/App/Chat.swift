@@ -34,6 +34,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private var previewURL: URL?
   private let titleV = UIStackView(), titleL = UILabel(), subL = UILabel(), titlePic = Avatar(frame: CGRect(x: 0, y: 0, width: 39, height: 39))
   private let clientLine = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterial))
+  // the pinned message (one per group): under the bar in its frost — a tap goes to it (approved mock-up "Talk pinned message")
+  private let pinBar = ChatVC.frost(), pinIcon = UIImageView(), pinHead = UILabel(), pinText = UILabel()
+  private var pinTop: NSLayoutConstraint!, shownPin: Group.Pin?
   private let downB = UIButton(type: .custom)
   private var downBottom: NSLayoutConstraint!
 
@@ -204,6 +207,27 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       cl.centerXAnchor.constraint(equalTo: clientLine.contentView.centerXAnchor), cl.centerYAnchor.constraint(equalTo: clientLine.contentView.centerYAnchor),
       clientLine.leadingAnchor.constraint(equalTo: view.leadingAnchor), clientLine.trailingAnchor.constraint(equalTo: view.trailingAnchor),
       clientLine.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor), clientLine.heightAnchor.constraint(equalToConstant: 30)])
+    // the pinned bar: 📌 in a soft square, "Pinned" in our blue, a line of the message
+    pinBar.isUserInteractionEnabled = true; pinBar.isHidden = true
+    pinIcon.image = UIImage(systemName: "pin.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold)); pinIcon.tintColor = .secondaryLabel
+    pinIcon.contentMode = .center; pinIcon.backgroundColor = .tertiarySystemFill; pinIcon.layer.cornerRadius = 7; pinIcon.layer.cornerCurve = .continuous
+    pinHead.text = "Pinned"; pinHead.font = .systemFont(ofSize: 13, weight: .semibold); pinHead.textColor = Look.accent
+    pinText.font = .systemFont(ofSize: 15); pinText.textColor = .label; pinText.lineBreakMode = .byTruncatingTail
+    let pinEdge = UIView(); pinEdge.backgroundColor = .separator
+    [pinIcon, pinHead, pinText, pinEdge].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; pinBar.contentView.addSubview($0) }
+    pinBar.translatesAutoresizingMaskIntoConstraints = false; view.insertSubview(pinBar, belowSubview: clientLine)
+    pinTop = pinBar.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor)
+    NSLayoutConstraint.activate([pinTop, pinBar.leadingAnchor.constraint(equalTo: view.leadingAnchor), pinBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+      pinBar.heightAnchor.constraint(equalToConstant: 48),
+      pinIcon.leadingAnchor.constraint(equalTo: pinBar.contentView.leadingAnchor, constant: 14), pinIcon.centerYAnchor.constraint(equalTo: pinBar.contentView.centerYAnchor),
+      pinIcon.widthAnchor.constraint(equalToConstant: 30), pinIcon.heightAnchor.constraint(equalToConstant: 30),
+      pinHead.leadingAnchor.constraint(equalTo: pinIcon.trailingAnchor, constant: 10), pinHead.topAnchor.constraint(equalTo: pinBar.contentView.topAnchor, constant: 6),
+      pinText.leadingAnchor.constraint(equalTo: pinHead.leadingAnchor), pinText.trailingAnchor.constraint(equalTo: pinBar.contentView.trailingAnchor, constant: -14),
+      pinText.topAnchor.constraint(equalTo: pinHead.bottomAnchor, constant: 1),
+      pinEdge.leadingAnchor.constraint(equalTo: pinBar.contentView.leadingAnchor), pinEdge.trailingAnchor.constraint(equalTo: pinBar.contentView.trailingAnchor),
+      pinEdge.bottomAnchor.constraint(equalTo: pinBar.contentView.bottomAnchor), pinEdge.heightAnchor.constraint(equalToConstant: 0.5)])
+    pinBar.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(pinTap)))
+    pinBar.isAccessibilityElement = true; pinBar.accessibilityTraits = .button
     // the scroll-down button (the design: 31 round, at the right above the message bar) — shown once you've scrolled up
     var dc = UIButton.Configuration.plain()
     dc.image = UIImage(systemName: "chevron.down", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)); dc.baseForegroundColor = .label
@@ -406,6 +430,35 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     }
   }
 
+  // the pinned bar shown, changed (crossfading) or gone (fading) — the chat's top room with it
+  private func showPin(_ p: Group.Pin?) {
+    guard p != shownPin else { return }
+    let was = shownPin; shownPin = p
+    if let p = p {
+      let line = p.text.isEmpty ? "Message" : p.text
+      pinBar.accessibilityLabel = "Pinned: " + line
+      if was == nil {
+        pinText.text = line; pinBar.alpha = 0; pinBar.isHidden = false; fitBottom()
+        UIView.animate(withDuration: 0.25) { self.pinBar.alpha = 1 }
+      } else { UIView.transition(with: pinText, duration: 0.2, options: .transitionCrossDissolve) { self.pinText.text = line } }
+    } else if was != nil {
+      UIView.animate(withDuration: 0.2, animations: { self.pinBar.alpha = 0 }) { _ in
+        guard self.shownPin == nil else { return }
+        self.pinBar.isHidden = true; self.pinBar.alpha = 1; self.fitBottom()
+      }
+    }
+  }
+  @objc private func pinTap() { if let id = shownPin?.id { jump(to: id) } }
+  private func setPin(_ m: Msg, on: Bool) {
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    // (shows at once; the server's answer then stands)
+    if on { showPin(Group.Pin(id: m.id, by: m.by, text: Talk.preview(m), kind: m.kind, pinnedBy: Talk.shared.me?.id ?? "")) } else { showPin(nil) }
+    Net.shared.act(["act": "pinMsg", "msg": m.id, "on": on, "text": Talk.preview(m), "kind": m.kind]) { [weak self] j in
+      if (j?["ok"] as? Bool) == true { Talk.shared.sync() }
+      else { DispatchQueue.main.async { if let g = self?.group { self?.showPin(Talk.shared.groups[g]?.pin) }; toast(j?["error"] as? String ?? "Couldn’t pin it") } }
+    }
+  }
+
   @objc private func head() {
     guard let g = Talk.shared.groups[group] else { return }
     let T = Talk.shared
@@ -423,7 +476,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // a client group, to staff: the band under the bar and the box's hint — the client can see what's written here
     let shared = g.withClient && !T.isContact
     bar.placeholder = shared ? "Message — client can see this" : ""
-    if clientLine.isHidden == shared { clientLine.isHidden = !shared; fitBottom() }
+    if clientLine.isHidden == shared { clientLine.isHidden = !shared; pinTop.constant = shared ? 30 : 0; fitBottom() }
+    showPin(g.pin)
     // (@: the group's people)
     bar.people = g.members.filter { $0 != T.me?.id }.compactMap { id in T.people[id].map { (id, $0.name) } }
   }
@@ -640,7 +694,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     guard isViewLoaded else { return }
     // the top: under Apple's bar (and the client band); the bottom: the message bar, or the keyboard with it on top —
     // the bar's own height counts even before the keyboard says anything (it sits at the very bottom, home line included)
-    let top = view.safeAreaInsets.top + (clientLine.isHidden ? 0 : 30)
+    let top = view.safeAreaInsets.top + (clientLine.isHidden ? 0 : 30) + (pinBar.isHidden ? 0 : 48)
     if table.contentInset.top != top { table.contentInset.top = top; table.verticalScrollIndicatorInsets.top = top }
     // (the message bar's real height from the start — before it's on the screen it has no home-line room yet, and the
     //  chat opened that much short and then jumped when the bar came — Haris 2026-11-12)
@@ -955,22 +1009,29 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     var items: [UIMenuElement] = []
     if !m.deleted && !m.pending {
       items.append(reactRow(m))
+      // (three at a time, then More… — Apple's own submenu with its back row, page after page — Haris 2026-11-12;
+      //  Delete stays at the end of the first page, in red)
       var acts: [UIMenuElement] = []
       acts.append(UIAction(title: "Reply", image: UIImage(systemName: "arrowshape.turn.up.left")) { [weak self] _ in self?.startReply(m) })
-      acts.append(UIAction(title: "Forward", image: UIImage(systemName: "arrowshape.turn.up.right")) { [weak self] _ in self?.forward(m) })
+      let fwd = UIAction(title: "Forward", image: UIImage(systemName: "arrowshape.turn.up.right")) { [weak self] _ in self?.forward(m) }
       if !m.text.isEmpty { acts.append(UIAction(title: "Copy", image: UIImage(systemName: "doc.on.doc")) { _ in UIPasteboard.general.string = m.text; toast("Copied") }) }
+      let pinned = T.groups[group]?.pin?.id == m.id || shownPin?.id == m.id
+      acts.append(UIAction(title: pinned ? "Unpin" : "Pin", image: UIImage(systemName: pinned ? "pin.slash" : "pin")) { [weak self] _ in self?.setPin(m, on: !pinned) })
+      if m.text.isEmpty { acts.insert(fwd, at: 1) }
+      var more: [UIMenuElement] = m.text.isEmpty ? [] : [fwd]
       let starred = T.isStarred(group, m.id)
-      acts.append(UIAction(title: starred ? "Unstar" : "Star", image: UIImage(systemName: starred ? "star.slash" : "star")) { [weak self] _ in
+      more.append(UIAction(title: starred ? "Unstar" : "Star", image: UIImage(systemName: starred ? "star.slash" : "star")) { [weak self] _ in
         guard let self = self else { return }
         UIImpactFeedbackGenerator(style: .light).impactOccurred(); Talk.shared.toggleStar(self.group, m)
       })
+      if mine { more.append(UIAction(title: "Info", image: UIImage(systemName: "info.circle")) { [weak self] _ in self?.openInfo(m) }) }
       if mine && m.file == nil && now - m.at < 15 * 60000 {
-        acts.append(UIAction(title: "Edit", image: UIImage(systemName: "pencil")) { [weak self] _ in
+        more.append(UIAction(title: "Edit", image: UIImage(systemName: "pencil")) { [weak self] _ in
           self?.bar.setTask(nil); self?.replying = nil; self?.editingMsg = m; self?.bar.setReply(("Edit message", m.text), editing: true); self?.bar.box.text = m.text; self?.bar.textChanged(); self?.bar.box.becomeFirstResponder()
         })
       }
       if let f = m.file {
-        acts.append(UIAction(title: "Save / Share", image: UIImage(systemName: "square.and.arrow.up")) { [weak self] _ in
+        more.append(UIAction(title: "Save / Share", image: UIImage(systemName: "square.and.arrow.up")) { [weak self] _ in
           Net.shared.file(f.id) { url in
             guard let url = url else { toast("That file isn’t on the server any more"); return }
             let named = FileManager.default.temporaryDirectory.appendingPathComponent(f.name)
@@ -979,7 +1040,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
           }
         })
       }
-      if mine { acts.append(UIAction(title: "Info", image: UIImage(systemName: "info.circle")) { [weak self] _ in self?.openInfo(m) }) }
+      if !more.isEmpty { acts.append(ChatVC.morePage(more)) }
       items.append(UIMenu(options: .displayInline, children: acts))
     }
     // (a deleted message's line: only Delete for Me — it goes from this phone's chat, Haris 2026-11-12)
@@ -992,6 +1053,11 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       UIAction(title: "Delete", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in self?.askDelete(m) }
     ]))
     return UIMenu(children: items)
+  }
+  // "More…": Apple's submenu (it slides in with its own back row) — three, then More… again for the rest
+  static func morePage(_ xs: [UIMenuElement]) -> UIMenu {
+    let kids = xs.count <= 4 ? xs : Array(xs.prefix(3)) + [morePage(Array(xs.dropFirst(3)))]
+    return UIMenu(title: "More", image: UIImage(systemName: "ellipsis.circle"), children: kids)
   }
   // Delete: Apple's sheet — for everyone (yours, about 2 days after sending) or for me
   private func askDelete(_ m: Msg) {
@@ -1036,7 +1102,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (a lighter blur — Apple's own, held a third of the way, Haris 2026-11-12: "reduce the blur")
     let a = UIViewPropertyAnimator(duration: 1, curve: .linear) { veil.effect = UIBlurEffect(style: .systemUltraThinMaterial) }
     a.pausesOnCompletion = true; holdBlur = a
-    veil.alpha = 0; a.fractionComplete = 0.3
+    veil.alpha = 0; a.fractionComplete = 0.18   // (lighter again, Haris 2026-11-12 19:59)
     UIView.animate(withDuration: 0.25) { veil.alpha = 1 }
   }
   private var holdVeil: UIVisualEffectView?, holdBlur: UIViewPropertyAnimator?
