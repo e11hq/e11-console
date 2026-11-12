@@ -1339,11 +1339,13 @@ final class MessageBar: UIView, UITextViewDelegate {
     blur.backgroundColor = Look.barBg
     addSubview(blur)
     // (the design: + · the box with its smiley · camera · the mic in a round button — while typing, send in our blue)
-    let sym = { (n: String, size: CGFloat) in UIImage(systemName: n, withConfiguration: UIImage.SymbolConfiguration(pointSize: size, weight: .regular)) }
-    plus.setImage(sym("plus", 21), for: .normal); cam.setImage(sym("camera", 21), for: .normal)
+    // (WhatsApp's weights and sizes, Haris 2026-11-12: + thin, the camera and smiley lighter and smaller — they looked
+    //  heavy and squeezed)
+    let sym = { (n: String, size: CGFloat, w: UIImage.SymbolWeight) in UIImage(systemName: n, withConfiguration: UIImage.SymbolConfiguration(pointSize: size, weight: w)) }
+    plus.setImage(sym("plus", 20, .light), for: .normal); cam.setImage(sym("camera", 18, .regular), for: .normal)
     [plus, cam].forEach { $0.tintColor = .label; addSubview($0) }
     var mc = UIButton.Configuration.filled()
-    mc.image = UIImage(systemName: "mic.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .semibold))
+    mc.image = UIImage(systemName: "mic", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .medium))
     mc.baseBackgroundColor = .label; mc.baseForegroundColor = .systemBackground; mc.cornerStyle = .capsule; mc.contentInsets = .zero
     mic.configuration = mc
     var sc = UIButton.Configuration.filled()
@@ -1352,7 +1354,7 @@ final class MessageBar: UIView, UITextViewDelegate {
     sendB.configuration = sc
     mic.accessibilityLabel = "Hold to record a voice message"; sendB.accessibilityLabel = "Send"
     [mic, sendB].forEach { addSubview($0) }
-    smiley.setImage(sym("face.smiling", 18), for: .normal); smiley.tintColor = .label; smiley.accessibilityLabel = "Emoji"
+    smiley.setImage(sym("face.smiling", 17, .regular), for: .normal); smiley.tintColor = .label; smiley.accessibilityLabel = "Emoji"
     smiley.addAction(UIAction { [weak self] _ in
       guard let self = self else { return }
       self.box.emoji.toggle()
@@ -1405,7 +1407,7 @@ final class MessageBar: UIView, UITextViewDelegate {
     mentionV.axis = .vertical; mentionV.isHidden = true
     addSubview(mentionV)
     sendB.addAction(UIAction { [weak self] _ in self?.sendNow() }, for: .touchUpInside)
-    box.font = .systemFont(ofSize: 17); box.backgroundColor = Look.field; box.layer.cornerRadius = 15; box.layer.cornerCurve = .continuous
+    box.font = .systemFont(ofSize: 17); box.backgroundColor = Look.field; box.layer.cornerRadius = 15; box.layer.cornerCurve = .continuous; box.layer.borderWidth = 0.5
     box.textContainerInset = UIEdgeInsets(top: 5, left: 8, bottom: 5, right: 34); box.delegate = self; box.isScrollEnabled = false
     addSubview(box); addSubview(smiley)
     place.text = ""; place.font = .systemFont(ofSize: 16); place.textColor = .systemGray; box.addSubview(place)
@@ -1462,6 +1464,7 @@ final class MessageBar: UIView, UITextViewDelegate {
     pauseB.frame = CGRect(x: W / 2 - 17, y: 47, width: 34, height: 34)
     lockedSend.frame = CGRect(x: W - 56, y: 42, width: 44, height: 44)
     pauseB.layer.borderColor = UIColor.systemRed.resolvedColor(with: traitCollection).cgColor
+    box.layer.borderColor = MessageBar.boxEdge.resolvedColor(with: traitCollection).cgColor
   }
   @objc private func micHold(_ g: UILongPressGestureRecognizer) {
     switch g.state {
@@ -1578,6 +1581,8 @@ final class MessageBar: UIView, UITextViewDelegate {
       self.superview?.layoutIfNeeded(); self.layoutIfNeeded()
     }
   }
+  static let boxEdge = Look.dyn(0x3A3A3C, 0xC6C6C8)
+  override func traitCollectionDidChange(_ p: UITraitCollection?) { super.traitCollectionDidChange(p); if traitCollection.hasDifferentColorAppearance(comparedTo: p) { setNeedsLayout() } }
   // the bin as the design draws it — its body, and its lid apart so it can open
   static func bin(lid: Bool) -> UIImage {
     let size = lid ? CGSize(width: 22, height: 8) : CGSize(width: 22, height: 18)
