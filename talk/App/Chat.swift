@@ -241,6 +241,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let meId = Talk.shared.me?.id, others = (Talk.shared.groups[group]?.members ?? []).filter { $0 != meId }
     let pos = Dictionary(all.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { a, _ in a })
     let readTo = others.isEmpty ? -1 : others.map { l.readBy[$0].flatMap { pos[$0] } ?? -1 }.min() ?? -1
+    // (and how far everyone else's phone has them — ✓✓)
+    let gotTo = others.isEmpty ? -1 : others.map { p in max(l.readBy[p].flatMap { pos[$0] } ?? -1, (l.gotAt?[p] ?? []).compactMap { pos[$0.upto] }.max() ?? -1) }.min() ?? -1
     for (i, m) in all.enumerated() {
       let d = Look.day(m.at)
       let prev = i > 0 ? all[i - 1] : nil, next = i + 1 < all.count ? all[i + 1] : nil
@@ -254,7 +256,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       msgs[m.id] = m
       var h = Hasher(); h.combine(m.text); h.combine(m.edited); h.combine(m.deleted); h.combine(m.pending); h.combine(m.failed); h.combine(m.reactions); h.combine(m.file?.id)
       h.combine(newRuns[m.id]); h.combine(Talk.shared.people[m.by]?.color); h.combine(Talk.shared.people[m.by]?.role)
-      if m.by == meId { h.combine(i <= readTo) }
+      if m.by == meId { h.combine(i <= readTo); h.combine(i <= gotTo) }
       newSigs[m.id] = h.finalize()
       items.append(.msg(m.id)); snap.appendItems([.msg(m.id)], toSection: section)
     }
@@ -774,12 +776,14 @@ final class InsetLabel: UILabel {
 }
 
 enum Ticks {
-  // ✓✓ as the design draws it (16 × 10): blue-white once everyone has read it, else the time's colour
-  static func image(_ c: UIColor) -> UIImage {
+  // ✓ sent · ✓✓ delivered to everyone · ✓✓ in aqua read by everyone (16 × 10, as the design draws it)
+  static func image(_ c: UIColor, double: Bool = true) -> UIImage {
     UIGraphicsImageRenderer(size: CGSize(width: 16, height: 10)).image { _ in
       let p = UIBezierPath()
-      p.move(to: CGPoint(x: 1, y: 5)); p.addLine(to: CGPoint(x: 4, y: 8)); p.addLine(to: CGPoint(x: 10, y: 2))
-      p.move(to: CGPoint(x: 6, y: 8)); p.addLine(to: CGPoint(x: 7, y: 9)); p.addLine(to: CGPoint(x: 13, y: 2))
+      if double {
+        p.move(to: CGPoint(x: 1, y: 5)); p.addLine(to: CGPoint(x: 4, y: 8)); p.addLine(to: CGPoint(x: 10, y: 2))
+        p.move(to: CGPoint(x: 6, y: 8)); p.addLine(to: CGPoint(x: 7, y: 9)); p.addLine(to: CGPoint(x: 13, y: 2))
+      } else { p.move(to: CGPoint(x: 4, y: 5)); p.addLine(to: CGPoint(x: 7, y: 8)); p.addLine(to: CGPoint(x: 13, y: 2)) }
       p.lineWidth = 1.6; p.lineCapStyle = .round; p.lineJoinStyle = .round
       c.setStroke(); p.stroke()
     }
@@ -1195,12 +1199,14 @@ final class BubbleCell: UITableViewCell {
       let others = g.members.filter { $0 != m.by }
       let idx = l.msgs.firstIndex { $0.id == m.id } ?? 0
       let allSeen = !T.isContact && !others.isEmpty && others.allSatisfy { p in l.readBy[p].flatMap { r in l.msgs.firstIndex { $0.id == r } }.map { $0 >= idx } ?? false }
+      // (delivered: every other phone has it — read counts as had; a client sees only this, never read)
+      let allGot = !others.isEmpty && others.allSatisfy { p in l.read(p, m.id) || l.time(l.gotAt, p, m.id) != nil }
       f.append(NSAttributedString(string: " "))
       if m.pending {
         f.append(NSAttributedString(attachment: NSTextAttachment(image: UIImage(systemName: m.failed ? "exclamationmark.circle" : "clock", withConfiguration: UIImage.SymbolConfiguration(pointSize: 10, weight: .bold))!.withTintColor(dim.resolvedColor(with: traitCollection)))))
       } else {
-        let c: UIColor = over ? .white : allSeen ? Look.readTick : Look.mineTime
-        let t = NSTextAttachment(image: Ticks.image(c.resolvedColor(with: traitCollection)))
+        let c: UIColor = allSeen ? Look.readTick : over ? .white : Look.mineTime
+        let t = NSTextAttachment(image: Ticks.image(c.resolvedColor(with: traitCollection), double: allSeen || allGot))
         t.bounds = CGRect(x: 0, y: -1, width: 16, height: 10)
         f.append(NSAttributedString(attachment: t))
       }
