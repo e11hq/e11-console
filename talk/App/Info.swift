@@ -17,6 +17,7 @@ final class MessageInfoVC: UIViewController {
   required init?(coder: NSCoder) { fatalError() }
 
   override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); TabBarHide.arrived(self) }
+  override func viewWillDisappear(_ a: Bool) { super.viewWillDisappear(a); TabBarHide.leaving(self) }
   override func viewDidLoad() {
     super.viewDidLoad()
     title = "Message info"

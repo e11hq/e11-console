@@ -148,7 +148,6 @@ final class ForwardVC: UIViewController, UICollectionViewDelegate, UISearchResul
     let m = msg, targets = picked
     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     let done = { [weak self] in
-      ChatSound.send()
       toast(targets.count == 1 ? "Forwarded" : "Forwarded to \(targets.count) groups")
       self?.dismiss(animated: true)
     }

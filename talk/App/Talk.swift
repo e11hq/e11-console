@@ -286,7 +286,8 @@ final class Talk {
       if let f = file, let fid = fileId { var fd: [String: Any] = ["id": fid, "kind": f.kind]; fd["w"] = f.w; fd["h"] = f.h; fd["secs"] = f.secs; fd["wave"] = f.wave; b["file"] = fd }
       Net.shared.act(b) { [weak self] j in
         guard let self = self else { return }
-        if (j?["ok"] as? Bool) == true { self.sync() } else { self.mark(g, cid, failed: true) }
+        // (the send sound once the server has it — not while the clock shows it on its way; every kind, Haris 2026-11-12)
+        if (j?["ok"] as? Bool) == true { DispatchQueue.main.async { ChatSound.send() }; self.sync() } else { self.mark(g, cid, failed: true) }
       }
     }
     if let data = upload, let f = file {

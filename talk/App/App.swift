@@ -304,7 +304,10 @@ enum TabBarHide {
   }
   static func leaving(_ vc: UIViewController) {
     guard #available(iOS 18, *), !Talk.shared.isContact, let t = vc.tabBarController ?? SceneDelegate.current?.tabs, let n = vc.navigationController,
-          vc.isMovingFromParent, n.viewControllers.count == 1 else { return }
+          vc.isMovingFromParent else { return }
+    // (back to any page that isn't a chat or Message info — the tab's first page or a list pushed on it — the bar comes
+    //  back; it stayed hidden for good on a list pushed under the chat, Haris 2026-11-12)
+    if let top = n.viewControllers.last, top is ChatVC || top is MessageInfoVC { return }
     if t.tabBar.isHidden {
       t.tabBar.alpha = 0; t.tabBar.isHidden = false
       if let tc = vc.transitionCoordinator { tc.animate(alongsideTransition: { _ in t.tabBar.alpha = 1 }, completion: { _ in t.tabBar.alpha = 1 }) } else { t.tabBar.alpha = 1 }

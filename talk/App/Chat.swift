@@ -411,7 +411,6 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     Talk.shared.send(group, text: text, reply: replying, mentions: mentions)
     replying = nil
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-    ChatSound.send()
     toBottom(true)
   }
   private func attach(_ kind: String) {
@@ -849,7 +848,9 @@ enum ChatSound {
     }
     if let id = ids[name], id != 0 { AudioServicesPlaySystemSound(id) }
   }
-  static func send() { play("chat-send") }
+  // (several sent together — a forward to many groups, a few photos — one sound)
+  private static var lastSend = Date.distantPast
+  static func send() { guard Date().timeIntervalSince(lastSend) > 0.4 else { return }; lastSend = Date(); play("chat-send") }
   // the voice note's own (Haris 2026-11-11): recording starts, a recording dropped into the bin
   static func voiceStart() { play("voice-start") }
   static func voiceCancel() { play("voice-cancel") }
@@ -1751,7 +1752,7 @@ final class MessageBar: UIView, UITextViewDelegate {
     let r = rec.isRecording || rec.isPaused ? rec.stop(keep: send) : nil
     UIView.animate(withDuration: 0.2) { self.recV.alpha = 0; self.recMic.alpha = 0; self.pill.alpha = 0; self.lockedV.alpha = 0; self.mic.transform = .identity }
     backToBox()
-    if let r = r { UIImpactFeedbackGenerator(style: .light).impactOccurred(); ChatSound.send(); onVoice?(r.0, r.1, r.2) }
+    if let r = r { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onVoice?(r.0, r.1, r.2) }
     else if send { toast("Hold longer to record") }
   }
   // the box, + and camera slide back
