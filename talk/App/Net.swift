@@ -150,6 +150,15 @@ final class Net {
     if let i = pics.object(forKey: p as NSString) { done(i); return }
     let disk = Net.filesDir.appendingPathComponent("pic-" + Net.stableKey(p))   // (a name that stays the same from one launch to the next)
     if let d = try? Data(contentsOf: disk), let i = UIImage(data: d) { pics.setObject(i, forKey: p as NSString); done(i); return }
+    // (an SVG logo: drawn once into a picture and kept as one — iPhone's own pictures can't read SVG)
+    let svg = { (d: Data) in
+      DispatchQueue.main.async {
+        SVGRaster.shared.image(d, max: 160) { [weak self] i in
+          if let i = i { if let png = i.pngData() { try? png.write(to: disk) }; self?.pics.setObject(i, forKey: p as NSString) }
+          done(i)
+        }
+      }
+    }
     let path = p.hasPrefix("http") || p.hasPrefix("data:") ? p : "/__file/" + p.split(separator: "/").map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }.joined(separator: "/")
     if path.hasPrefix("data:"), let comma = path.firstIndex(of: ","), let d = Data(base64Encoded: String(path[path.index(after: comma)...])), let i = UIImage(data: d) {
       pics.setObject(i, forKey: p as NSString); done(i); return
@@ -157,6 +166,7 @@ final class Net {
     var r = path.hasPrefix("http") ? URLRequest(url: URL(string: path)!) : request(path)
     if path.hasPrefix("http"), let c = cookie { r.setValue(c, forHTTPHeaderField: "Cookie") }
     session.dataTask(with: r) { [weak self] d, resp, _ in
+      if (resp as? HTTPURLResponse)?.statusCode == 200, let d = d, UIImage(data: d) == nil, SVGRaster.looksLikeSVG(d, path: p) { svg(d); return }
       let img = ((resp as? HTTPURLResponse)?.statusCode == 200 ? d : nil).flatMap { UIImage(data: $0) }
       if let img = img, let d = d { try? d.write(to: disk); self?.pics.setObject(img, forKey: p as NSString) }
       DispatchQueue.main.async { done(img) }
