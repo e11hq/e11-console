@@ -1807,7 +1807,9 @@ final class BubbleCell: UITableViewCell {
   }
   // an album's square: the first four drawn into one picture once each is here (kept, so it's drawn once)
   var album: [Msg] = []
-  private func drawAlbum(_ m: Msg, _ w: CGFloat) {
+  // (a square left without its picture — not on the phone yet, or taken by a drawing of the album's earlier members that
+  //  finished after the latest one — is drawn again shortly, Haris 2026-11-12: the fourth stayed dark)
+  private func drawAlbum(_ m: Msg, _ w: CGFloat, tries: Int = 0) {
     let four = Array(album.prefix(4)), key = "album:" + four.compactMap { $0.file?.id }.joined(separator: ",") + "+\(album.count)"
     if let k = BubbleCell.pictures.object(forKey: key as NSString) { photo.image = k; shownFile = key; return }
     if shownFile != key { photo.image = nil; shownFile = key }
@@ -1819,7 +1821,7 @@ final class BubbleCell: UITableViewCell {
       Net.shared.file(f.id) { url in DispatchQueue.main.async {
         guard let url = url else { g.leave(); return }
         if a.kind == "video" { BubbleCell.frame(url, f.id) { img in DispatchQueue.main.async { pics[i] = img; g.leave() } } }
-        else { pics[i] = BubbleCell.picture(url, f.id); g.leave() }
+        else { pics[i] = BubbleCell.picture(url, f.id) ?? UIImage(contentsOfFile: url.path); g.leave() }
       } }
     }
     let more = album.count - 4
@@ -1843,8 +1845,15 @@ final class BubbleCell: UITableViewCell {
         }
       }
       if pics.allSatisfy({ $0 != nil }) { BubbleCell.pictures.setObject(img, forKey: key as NSString) }
-      guard let self = self, self.msg?.id == m.id else { return }
+      // (only the latest drawing for this bubble lands — an older one finishing late must not cover it)
+      guard let self = self, self.msg?.id == m.id, self.shownFile == key else { return }
       self.photo.image = img
+      if pics.contains(where: { $0 == nil }), tries < 3 {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+          guard let self = self, self.msg?.id == m.id, self.shownFile == key else { return }
+          self.drawAlbum(m, w, tries: tries + 1)
+        }
+      }
     }
   }
   @objc private func linkTap() { if let u = link { UIApplication.shared.open(u) } }
