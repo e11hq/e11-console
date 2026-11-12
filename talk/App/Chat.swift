@@ -63,7 +63,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     navigationItem.standardAppearance = barLook; navigationItem.scrollEdgeAppearance = barLook; navigationItem.compactScrollEdgeAppearance = barLook
     // the chat's background (approved mock-up "E11 Talk — chat background", Haris 2026-11-12): our own soft line drawings
     // with the E11. wordmark in outline, faint, standing still behind the messages — the list's own background view
-    table.backgroundView = PatternView()
+    let pattern = UIView(); pattern.backgroundColor = ChatVC.pattern; table.backgroundView = pattern
     view.addSubview(table)
     data = UITableViewDiffableDataSource<String, ChatItem>(tableView: table) { [weak self] tv, ip, item in
       guard let self = self else { return UITableViewCell() }
@@ -606,6 +606,19 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     if let s = n.sheetPresentationController { s.detents = [.large()]; s.prefersGrabberVisible = true }
     present(n, animated: true)
   }
+  // the pattern's tile in the chat's colours: dark lines at a tenth in light, white at a fifteenth in dark
+  static let pattern: UIColor = {
+    // (drawn once per look at the phone's own scale, its line colour solid and the strength given as the drawing's
+    //  opacity — the tint's own alpha didn't come through, the pattern far stronger than the mock-up)
+    func tile(_ ink: UIColor, _ alpha: CGFloat) -> UIColor {
+      guard let t = UIImage(named: "TalkPattern")?.withTintColor(ink, renderingMode: .alwaysOriginal) else { return .clear }
+      let f = UIGraphicsImageRendererFormat(); f.scale = UIScreen.main.scale; f.opaque = false
+      let img = UIGraphicsImageRenderer(size: CGSize(width: 288, height: 288), format: f).image { _ in t.draw(in: CGRect(x: 0, y: 0, width: 288, height: 288), blendMode: .normal, alpha: alpha) }
+      return UIColor(patternImage: img)
+    }
+    let light = tile(UIColor(red: 60 / 255, green: 60 / 255, blue: 67 / 255, alpha: 1), 0.07), dark = tile(.white, 0.045)
+    return UIColor { $0.userInterfaceStyle == .dark ? dark : light }
+  }()
   private func openInfo(_ m: Msg) { navigationController?.pushViewController(MessageInfoVC(group: group, id: m.id), animated: true) }
   private func startReply(_ m: Msg) { editingMsg = nil; replying = m; UIImpactFeedbackGenerator(style: .light).impactOccurred(); bar.box.becomeFirstResponder() }
 
@@ -1921,33 +1934,3 @@ final class FindBar: UIView {
   }
 }
 
-// ---------- the chat's background (approved mock-up "E11 Talk — chat background", Haris 2026-11-12): our soft line
-// drawings with the E11. wordmark in outline, standing still behind the messages. The tile is used only for its shape
-// (a mask); the ink is one solid colour and the strength is the view's own opacity — 7% in light, 4.5% in dark, as the
-// mock-up. (A tinted, faded picture came out black and strong on the phone.) ----------
-final class PatternView: UIView {
-  private static let tile: UIColor? = {
-    guard let t = UIImage(named: "TalkPattern") else { return nil }
-    let f = UIGraphicsImageRendererFormat(); f.scale = UIScreen.main.scale; f.opaque = false
-    return UIColor(patternImage: UIGraphicsImageRenderer(size: CGSize(width: 288, height: 288), format: f).image { _ in t.draw(in: CGRect(x: 0, y: 0, width: 288, height: 288)) })
-  }()
-  private let shape = CALayer()
-  override init(frame: CGRect) {
-    super.init(frame: frame)
-    isUserInteractionEnabled = false
-    backgroundColor = Look.dyn(0xFFFFFF, 0x3C3C43)
-    shape.backgroundColor = PatternView.tile?.cgColor
-    layer.mask = shape
-    look()
-  }
-  required init?(coder: NSCoder) { fatalError() }
-  private func look() { alpha = traitCollection.userInterfaceStyle == .dark ? 0.045 : 0.07 }
-  override func traitCollectionDidChange(_ p: UITraitCollection?) {
-    super.traitCollectionDidChange(p)
-    if traitCollection.hasDifferentColorAppearance(comparedTo: p) { look() }
-  }
-  override func layoutSubviews() {
-    super.layoutSubviews()
-    CATransaction.begin(); CATransaction.setDisableActions(true); shape.frame = bounds; CATransaction.commit()
-  }
-}
