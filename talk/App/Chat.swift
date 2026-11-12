@@ -309,6 +309,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private var rowH: [String: CGFloat] = [:]
   func tableView(_ tv: UITableView, willDisplay cell: UITableViewCell, forRowAt ip: IndexPath) {
     if case .msg(let id)? = data.itemIdentifier(for: ip) { rowH[id] = cell.bounds.height }
+    // (taps as the keyboard is now — a row made while it was up, out of sight then, kept them off: the first of two photos
+    //  sent together wouldn't open, Haris 2026-11-12)
+    cell.contentView.isUserInteractionEnabled = !keyUp
   }
   func tableView(_ tv: UITableView, estimatedHeightForRowAt ip: IndexPath) -> CGFloat {
     if case .msg(let id)? = data.itemIdentifier(for: ip), let h = rowH[id] { return h }
@@ -817,7 +820,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   @objc private func keyDown() { if findBar.searchTextField.isFirstResponder { endFind() } else { bar.box.resignFirstResponder() } }
   // (while the keyboard is up, what's in the messages doesn't take touches — the tap above has them; scrolling and the
   // swipes are the list's own and go on)
-  private var keyUp = false { didSet { if keyUp != oldValue { table.visibleCells.forEach { $0.contentView.isUserInteractionEnabled = !keyUp } } } }
+  private var keyUp = false { didSet { if keyUp != oldValue { table.subviews.compactMap { $0 as? UITableViewCell }.forEach { $0.contentView.isUserInteractionEnabled = !keyUp } } } }
   private var swipeWaits = false
   func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
     if g === keyTap { return bar.box.isFirstResponder || findBar.searchTextField.isFirstResponder }
