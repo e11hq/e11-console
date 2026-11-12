@@ -190,6 +190,11 @@ test('client contacts: added by Super / Office Admins only; E11 Talk only; their
   const kev = await (await fetch(base + '/api/talk/sync?after=0', { headers: KH })).json();
   assert.ok(!kev.events.some((e) => e.type === 'read'), 'no read receipts for clients');
   assert.ok((await sync('des')).events.some((e) => e.type === 'read' && e.by === k.id), 'staff see the client has seen it');
+  // forwarded: marked as such for everyone
+  const fw = await act('des', { act: 'send', group: g.id, text: 'Looks great, go ahead with v3', fwd: true });
+  assert.ok((await sync('adm')).events.some((e) => e.type === 'msg' && e.id === fw.id && e.fwd === true), 'forwarded, marked');
+  const plain = await act('des', { act: 'send', group: g.id, text: 'not forwarded' });
+  assert.ok((await sync('adm')).events.some((e) => e.type === 'msg' && e.id === plain.id && !('fwd' in e)), 'an ordinary one, not marked');
   // Delivered to (Message info): a phone that has a message tells the group's others — the client sees it too; never about your own
   const ds = await sync('des'); await ack('des', ds.last);
   const kg = await (await fetch(base + '/api/talk/sync?after=0', { headers: KH })).json();
