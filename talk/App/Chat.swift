@@ -1942,13 +1942,19 @@ final class EmojiBox: UITextView {
   // the keyboard really up now (ours below answers what we ask for, not what iPhone shows)
   var shown: UITextInputMode? { super.textInputMode }
   // (iPhone reads the keyboard asked for only as the box becomes the one typed in — reloadInputViews never asked it again,
-  //  so the ⌨︎ changed but the emojis stayed, Haris 2026-11-12. Let go and taken back at once: iPhone swaps the keyboard
-  //  in place, the box keeps its words and caret.)
+  //  so the ⌨︎ changed but the emojis stayed, Haris 2026-11-12. The typing handed for a moment to an unseen field beside
+  //  it and straight back — the keyboard never goes down (let go outright, it dropped and came back: "jumping"), iPhone
+  //  just swaps it; the box keeps its words and caret.)
   private(set) var swapping = false
+  private lazy var relay: UITextField = {
+    let f = UITextField(frame: CGRect(x: 0, y: 0, width: 1, height: 1)); f.alpha = 0.011; f.isAccessibilityElement = false
+    f.autocorrectionType = .no; f.keyboardAppearance = keyboardAppearance; return f
+  }()
   func swapKeyboard() {
-    guard isFirstResponder else { becomeFirstResponder(); return }
+    guard isFirstResponder, let host = superview else { becomeFirstResponder(); return }
+    if relay.superview == nil { host.insertSubview(relay, at: 0) }
     let sel = selectedRange
-    swapping = true; resignFirstResponder(); becomeFirstResponder(); swapping = false
+    swapping = true; relay.becomeFirstResponder(); becomeFirstResponder(); swapping = false
     selectedRange = sel
   }
   override var textInputMode: UITextInputMode? {
