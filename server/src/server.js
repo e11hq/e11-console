@@ -424,6 +424,8 @@ export function createServer(cfg) {
   function broadcast(rev, results, fromClient, byUser) {
     const changed = results.filter((r) => !r.refused && !r.unchanged);
     if (!changed.length) return;
+    // (E11 Talk's open chats hear which tasks changed, so their task cards keep up — Haris 2026-11-12; only if Talk has started)
+    if (talk) { const ids = changed.filter((r) => r.kind === 'tasks').map((r) => String(r.id)); if (ids.length) talk.tasksChanged(ids); }
     if (cfg.warmReviews !== false) warmReviews(changed.filter((r) => r.kind === 'tasks' && !r.del).map((r) => store.get('tasks', String(r.id))));
     for (const s of streams) {
       const u = streamUser(s);

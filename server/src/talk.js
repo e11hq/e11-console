@@ -717,6 +717,11 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   }
   const filePath = (f) => path.join(relay, f.id);
 
+  // tasks changed in E11 Console: every phone listening hears their ids (nothing kept — the phone asks for the cards it shows)
+  function tasksChanged(ids) {
+    const line = `event: tasks\ndata: ${JSON.stringify({ ids: ids.slice(0, 100) })}\n\n`;
+    for (const set of listeners.values()) for (const s of set) { try { s.write(line); } catch { /* closed */ } }
+  }
   function listen(uid, res) {
     if (!listeners.has(uid)) listeners.set(uid, new Set());
     listeners.get(uid).add(res);
@@ -785,6 +790,6 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     return { ok: true, made };
   }
   const isAdminOf = (u, gid) => { const g = Q.group.get(gid); return !!g && isAdmin(u, g); };
-  return { state, act, sync, ack, sample, upload, contactByEmail, fileFor, filePath, listen, sweep, isAdminOf,
+  return { state, act, sync, ack, sample, upload, tasksChanged, contactByEmail, fileFor, filePath, listen, sweep, isAdminOf,
     linkCode, linkStatus, macFor, unlinkMac, history, hasFiles, resend, close: () => { clearInterval(sweepTimer); for (const set of listeners.values()) for (const r of set) try { r.end(); } catch { /* fine */ } db.close(); } };
 }
