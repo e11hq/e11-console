@@ -1009,6 +1009,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   // ---------- hold: reactions and the menu ----------
   func tableView(_ tv: UITableView, contextMenuConfigurationForRowAt ip: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
     guard case .msg(let key)? = data.itemIdentifier(for: ip), let m = msgs[mid(key)], m.kind != "sys" else { return nil }
+    // (only a hold on the bubble itself — not on the empty space beside it in its row, Haris 2026-11-12)
+    if let c = tv.cellForRow(at: ip) as? BubbleCell, !c.heldPath(origin: .zero).contains(c.contentView.convert(point, from: tv)) { return nil }
     // (the trial of Haris 2026-11-12: a preview of the bubble — iPhone places it where it fits with the menu, shrinking a
     //  tall one — iMessage's way; build 39 kept the bubble itself, slid up WhatsApp's way)
     // (the bubble with its tail — the picture taken a little wider on the tail's side; the tail was cut off as it lifted and
