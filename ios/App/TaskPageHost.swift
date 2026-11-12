@@ -1238,7 +1238,8 @@ extension Main {
         // (the folder's client — its Client Assets asked for as it opens, not required to be worked out already: from Home it
         //  wasn't yet, and the link was dropped without a word, Haris 2026-11-12)
         guard let c = w["client"] as? String else { say("File not shared with you"); return }
-        if kind == "asset", AppData.shared.meModel("assets", "assets", [c]) == nil { say("File not shared with you"); return }
+        // (a file in Client Assets: its folder opened first, the file once that client's Client Assets is in — from Home it
+        //  wasn't yet, and the photo was dropped: Haris 2026-11-13)
         // (Client Assets already open from an earlier link — still in the Clients tab, its navigation kept from then: closed
         //  first, so this one opens afresh in the tab it's on now; the second link opened nothing, Haris 2026-11-12)
         if self.assetsCtl.isOpen { self.assetsCtl.close(animated: false) }
@@ -1246,17 +1247,26 @@ extension Main {
         //  stayed on Home, Haris 2026-11-12, his yes)
         // (the Clients tab's key is "projects"; "clients" is an Office Admin's Client Assets tab — looking for "clients" never
         //  switched, and the folder opened on a screen out of sight: Haris 2026-11-12)
+        var switched = false
         let tab = self.tabKeys.contains("projects") ? "projects" : self.tabKeys.contains("clients") ? "clients" : nil
         if let t = AppleTabs.shared, let tab = tab, t.ownNav !== t.clientsNav, t.ownNav !== t.assetsNav, t.ownNav !== t.meNav, !(t.ownNav.map { o in t.roleNavs.values.contains { $0 === o } } ?? false) {
-          self.selectTab(tab)
+          self.selectTab(tab); switched = true
           DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.assetsCtl.openFromClients(client: c, folder: w["folder"] as? String) }
         } else { self.assetsCtl.openFromClients(client: c, folder: w["folder"] as? String) }
         guard kind == "asset", let fid = file else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-          guard let m = AppData.shared.meModel("assets", "assets", [c]), let all = m["files"] as? [[String: Any]] else { return }
-          let list = all.filter { ($0["folder"] as? String) == (w["folder"] as? String) }
-          if let i = list.firstIndex(where: { ($0["id"] as? String) == fid }) { self?.openFiles(list, at: i) }
+        // (after the folder has slid in — with the tab switched first it was still sliding at 0.5 s, and the photo didn't
+        //  open: Haris 2026-11-13)
+        func openFile(_ tries: Int) {
+          DispatchQueue.main.asyncAfter(deadline: .now() + (tries == 0 ? (switched ? 1.1 : 0.5) : 0.5)) { [weak self] in
+            guard let m = AppData.shared.meModel("assets", "assets", [c]), let all = m["files"] as? [[String: Any]] else {
+              if tries < 8 { openFile(tries + 1) } else { say("That file isn’t available") }; return
+            }
+            let list = all.filter { ($0["folder"] as? String) == (w["folder"] as? String) }
+            if let i = list.firstIndex(where: { ($0["id"] as? String) == fid }) { self?.openFiles(list, at: i) }
+            else if tries < 8 { openFile(tries + 1) } else { say("That file isn’t available") }
+          }
         }
+        openFile(0)
       case "task", "comment":
         guard let t = w["task"] as? String, AppData.shared.screen("task", t).model != nil else { say("File not shared with you"); return }
         self.openTaskPage(t, tab: kind == "comment" ? "comments" : "details", focus: "")
