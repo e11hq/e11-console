@@ -288,7 +288,43 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private var scrolledOnce = false
   private var lastSeenId: String?
   // the scroll-down button: shown once the end of the chat is out of view
+  // ---------- sections of a long chat ----------
+  // (each row's height kept once it's been seen, so lining up and scrolling back over it never guesses again — no jumps)
+  private var rowH: [String: CGFloat] = [:]
+  func tableView(_ tv: UITableView, willDisplay cell: UITableViewCell, forRowAt ip: IndexPath) {
+    if case .msg(let id)? = data.itemIdentifier(for: ip) { rowH[id] = cell.bounds.height }
+  }
+  func tableView(_ tv: UITableView, estimatedHeightForRowAt ip: IndexPath) -> CGFloat {
+    if case .msg(let id)? = data.itemIdentifier(for: ip), let h = rowH[id] { return h }
+    return 60
+  }
+  static let page = 100
+  private var shownFrom: String?, hasOlder = false, addingOlder = false
+  // the next 100 older ones above — the place on screen kept where it is
+  private func older() {
+    guard hasOlder, !addingOlder else { return }
+    let all = Talk.shared.log(group).msgs
+    guard let from = shownFrom, let i = all.firstIndex(where: { $0.id == from }), i > 0 else { return }
+    addingOlder = true
+    let h = table.contentSize.height, y = table.contentOffset.y
+    shownFrom = all[max(0, i - ChatVC.page)].id
+    UIView.performWithoutAnimation {
+      reload(animated: false)
+      table.layoutIfNeeded()
+      table.contentOffset.y = y + (table.contentSize.height - h)
+    }
+    addingOlder = false
+  }
+  // an older message asked for (a quote, a search): lined up down from a little above it first
+  private func reach(_ id: String) {
+    guard data.indexPath(for: .msg(id)) == nil else { return }
+    let all = Talk.shared.log(group).msgs
+    guard let i = all.firstIndex(where: { $0.id == id }) else { return }
+    shownFrom = all[max(0, i - 20)].id
+    reload(animated: false); table.layoutIfNeeded()
+  }
   func scrollViewDidScroll(_ s: UIScrollView) {
+    if hasOlder && s.contentOffset.y < -s.adjustedContentInset.top + 700 && (s.isDragging || s.isDecelerating) { older() }
     let away = s.contentOffset.y + s.bounds.height < s.contentSize.height - 160
     if (downB.alpha > 0) != away { UIView.animate(withDuration: 0.2) { self.downB.alpha = away ? 1 : 0 } }
     chipsAwake()
@@ -422,6 +458,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     data.apply(snap, animatingDifferences: false)
   }
   private func bring(_ id: String) {
+    reach(id)
     guard let ip = data.indexPath(for: .msg(id)) else { return }
     table.scrollToRow(at: ip, at: .middle, animated: true)
     // (the match found: its bubble pulses once it's in view — Haris 2026-11-12)
@@ -471,7 +508,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let readTo = others.isEmpty ? -1 : others.map { l.readBy[$0].flatMap { pos[$0] } ?? -1 }.min() ?? -1
     // (and how far everyone else's phone has them — ✓✓)
     let gotTo = others.isEmpty ? -1 : others.map { p in max(l.readBy[p].flatMap { pos[$0] } ?? -1, (l.gotAt?[p] ?? []).compactMap { pos[$0.upto] }.max() ?? -1) }.min() ?? -1
-    for (i, m) in all.enumerated() {
+    // (a long chat in sections, WhatsApp's way — Haris 2026-11-12: the newest 100 lined up at first, 100 more above as
+    //  you near the top; from the first one lined up, everything newer)
+    let start = shownFrom.flatMap { pos[$0] } ?? max(0, all.count - ChatVC.page)
+    shownFrom = all.indices.contains(start) ? all[start].id : nil
+    hasOlder = start > 0
+    for i in start..<all.count {
+      let m = all[i]
       let d = Look.day(m.at)
       let prev = i > 0 ? all[i - 1] : nil, next = i + 1 < all.count ? all[i + 1] : nil
       let same = { (o: Msg?) -> Bool in guard let o = o else { return false }; return o.by == m.by && o.kind != "sys" && m.kind != "sys" && Look.day(o.at) == d }
@@ -550,6 +593,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   // (you scrolled up to read: the keyboard or the bar growing doesn't pull you back down)
   private var scrolledAway: Bool { table.contentOffset.y + table.bounds.height < table.contentSize.height - 160 }
   private func jump(to id: String) {
+    reach(id)
     guard let ip = data.indexPath(for: .msg(id)) else { toast("That message isn’t on this phone any more"); return }
     table.scrollToRow(at: ip, at: .middle, animated: true)
     // (a quote tapped, or opened from a search: the message pulses once in view, as the chat's search does — Haris 2026-11-12)
