@@ -41,7 +41,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   init(group: String, focus: String? = nil) { self.group = group; self.focus = focus; super.init(nibName: nil, bundle: nil); if #unavailable(iOS 18) { hidesBottomBarWhenPushed = true } }
   required init?(coder: NSCoder) { fatalError() }
   override var canBecomeFirstResponder: Bool { true }
-  override var inputAccessoryView: UIView? { bar }
+  // (while searching, the bar of matches sits where the message bar was — the design's board "Search in a chat")
+  override var inputAccessoryView: UIView? { finding ? findAcc : bar }
 
   override func viewDidLoad() {
     super.viewDidLoad()
@@ -62,7 +63,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     navigationItem.standardAppearance = barLook; navigationItem.scrollEdgeAppearance = barLook; navigationItem.compactScrollEdgeAppearance = barLook
     // the chat's background (approved mock-up "E11 Talk — chat background", Haris 2026-11-12): our own soft line drawings
     // with the E11. wordmark in outline, faint, standing still behind the messages — the list's own background view
-    let pattern = UIView(); pattern.backgroundColor = ChatVC.pattern; table.backgroundView = pattern
+    table.backgroundView = PatternView()
     view.addSubview(table)
     data = UITableViewDiffableDataSource<String, ChatItem>(tableView: table) { [weak self] tv, ip, item in
       guard let self = self else { return UITableViewCell() }
@@ -70,6 +71,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       case .msg(let id):
         let c = tv.dequeueReusableCell(withIdentifier: "b", for: ip) as! BubbleCell
         c.contentView.isUserInteractionEnabled = !self.keyUp
+        c.find = self.findSet.contains(id) ? (self.findQ, id == self.findCur) : nil
         if let m = self.msgs[id], let g = Talk.shared.groups[self.group] { c.set(m, group: g, log: Talk.shared.log(self.group), run: self.runs[id] ?? Run()) }
         c.onReplyTap = { [weak self] rid in self?.jump(to: rid) }
         c.onFileTap = { [weak self, weak c] m in self?.openFrom = (m.kind == "photo" || m.kind == "video") ? c?.photo : nil; self?.open(m) }
@@ -154,7 +156,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     Talk.shared.markRead(group)
     ChatVC.open = group
   }
-  override func viewWillDisappear(_ a: Bool) { super.viewWillDisappear(a); if ChatVC.open == group { ChatVC.open = nil }; TabBarHide.leaving(self) }
+  override func viewWillDisappear(_ a: Bool) { super.viewWillDisappear(a); endFind(leaving: true); if ChatVC.open == group { ChatVC.open = nil }; TabBarHide.leaving(self) }
   static var open: String?
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
@@ -210,9 +212,19 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (@: the group's people)
     bar.people = g.members.filter { $0 != T.me?.id }.compactMap { id in T.people[id].map { (id, $0.name) } }
   }
-  // ---------- search inside the chat: 🔍 — the words, ⌃ ⌄ through the matches (newest first), each brought into view ----------
+  // ---------- search inside the chat (the design's board "Search in a chat"): the field and its own ✕ in Apple's bar;
+  // above the keyboard ˄ ˅ in a glass capsule and "2 of 3 matches"; every match marked in the messages, the one shown
+  // brighter. Earlier = up, later = down; it starts on the newest. ----------
   private let findBar = UISearchBar()
-  private var finds: [String] = [], findAt = 0
+  private lazy var findAcc: FindBar = {
+    let f = FindBar()
+    f.up.addAction(UIAction { [weak self] _ in self?.step(-1) }, for: .touchUpInside)
+    f.down.addAction(UIAction { [weak self] _ in self?.step(1) }, for: .touchUpInside)
+    return f
+  }()
+  private var finding = false
+  private var finds: [String] = [], findAt = 0, findQ = "", findCur: String?
+  private var findSet = Set<String>()
   private func setBarButtons() {
     let find = UIBarButtonItem(title: nil, image: UIImage(systemName: "magnifyingglass"), primaryAction: UIAction { [weak self] _ in self?.startFind() }, menu: nil)
     navigationItem.rightBarButtonItems = [find]
@@ -224,27 +236,63 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     navigationItem.hidesBackButton = false
   }
   private func startFind() {
-    findBar.placeholder = "Search this chat"; findBar.delegate = self; findBar.searchBarStyle = .minimal; findBar.text = ""
+    guard !finding else { return }
+    findBar.placeholder = "Search in this chat"; findBar.delegate = self; findBar.text = ""
+    findBar.searchTextField.inputAccessoryView = findAcc
+    finding = true; finds = []; findQ = ""; findCur = nil; findSet = []
+    findAcc.show(0, 0, typed: false)
     navigationItem.leftBarButtonItems = nil
-    navigationItem.titleView = findBar
     navigationItem.hidesBackButton = true
-    let up = UIBarButtonItem(title: nil, image: UIImage(systemName: "chevron.up"), primaryAction: UIAction { [weak self] _ in self?.step(1) }, menu: nil)
-    let down = UIBarButtonItem(title: nil, image: UIImage(systemName: "chevron.down"), primaryAction: UIAction { [weak self] _ in self?.step(-1) }, menu: nil)
-    let done = UIBarButtonItem(systemItem: .done, primaryAction: UIAction { [weak self] _ in self?.endFind() })
-    navigationItem.rightBarButtonItems = [done, down, up]
-    findBar.becomeFirstResponder()
+    navigationItem.titleView = findBar
+    let close = UIBarButtonItem(title: nil, image: UIImage(systemName: "xmark"), primaryAction: UIAction { [weak self] _ in self?.endFind() }, menu: nil)
+    close.accessibilityLabel = "Close the search"
+    navigationItem.rightBarButtonItems = [close]
+    findBar.searchTextField.becomeFirstResponder()
   }
-  private func endFind() { finds = []; findBar.resignFirstResponder(); setBarButtons(); becomeFirstResponder() }
+  private func endFind(leaving: Bool = false) {
+    guard finding else { return }
+    finding = false
+    findBar.searchTextField.inputAccessoryView = nil
+    findBar.searchTextField.resignFirstResponder()
+    let was = findSet
+    finds = []; findSet = []; findQ = ""; findCur = nil
+    remark(was)
+    setBarButtons()
+    if !leaving { reloadInputViews(); becomeFirstResponder(); fitBottom() }
+  }
   private func runFind() {
-    finds = Talk.shared.search(findBar.text ?? "", in: group).map { $0.1.id }
-    findAt = 0
-    if let f = finds.first { jump(to: f) }
+    let q = (findBar.text ?? "").trimmingCharacters(in: .whitespaces)
+    let was = findSet
+    // (oldest first, as they stand in the chat — starting on the newest)
+    finds = Talk.shared.search(q, in: group).map { $0.1.id }.reversed()
+    findQ = q; findSet = Set(finds)
+    findAt = max(0, finds.count - 1); findCur = finds.last
+    remark(was.union(findSet))
+    findAcc.show(finds.isEmpty ? 0 : findAt + 1, finds.count, typed: q.count >= 2)
+    if let f = findCur { bring(f) }
   }
   private func step(_ d: Int) {
-    guard !finds.isEmpty else { toast(findBar.text?.isEmpty == false ? "Not found in this chat" : "Type something to find"); return }
-    findAt = (findAt + d + finds.count) % finds.count
-    jump(to: finds[findAt])
-    toast("\(findAt + 1) of \(finds.count)")
+    guard !finds.isEmpty else { return }
+    let to = min(max(findAt + d, 0), finds.count - 1)
+    guard to != findAt else { return }
+    let was = findCur
+    findAt = to; findCur = finds[to]
+    remark(Set([was, findCur].compactMap { $0 }))
+    findAcc.show(findAt + 1, finds.count, typed: true)
+    UISelectionFeedbackGenerator().selectionChanged()
+    bring(finds[to])
+  }
+  // (only the messages whose marks changed are set again — the same rows, the same heights)
+  private func remark(_ ids: Set<String>) {
+    var snap = data.snapshot()
+    let items = ids.map { ChatItem.msg($0) }.filter { snap.indexOfItem($0) != nil }
+    guard !items.isEmpty else { return }
+    snap.reconfigureItems(items)
+    data.apply(snap, animatingDifferences: false)
+  }
+  private func bring(_ id: String) {
+    guard let ip = data.indexPath(for: .msg(id)) else { return }
+    table.scrollToRow(at: ip, at: .middle, animated: true)
   }
   @objc private func info() { navigationController?.pushViewController(GroupInfoVC(group: group), animated: true) }
   @objc private func gone(_ n: Notification) {
@@ -317,7 +365,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   @objc private func kbMoved(_ n: Notification) {
     if let f = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue {
       kbOverlap = max(0, view.bounds.maxY - view.convert(f, from: nil).minY)
-      keyUp = kbOverlap > bar.bounds.height + 20
+      keyUp = kbOverlap > (finding ? findAcc : bar).bounds.height + 20
     }
     view.layoutIfNeeded(); fitBottom()
   }
@@ -328,7 +376,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // the bar's own height counts even before the keyboard says anything (it sits at the very bottom, home line included)
     let top = view.safeAreaInsets.top + (clientLine.isHidden ? 0 : 30)
     if table.contentInset.top != top { table.contentInset.top = top; table.verticalScrollIndicatorInsets.top = top }
-    let cover = max(kbOverlap, bar.bounds.height)
+    let cover = max(kbOverlap, (finding ? findAcc : bar).bounds.height)
     guard abs(cover - kb) > 0.5 else { return }
     let wasAtEnd = table.contentOffset.y + table.bounds.height >= table.contentSize.height + table.adjustedContentInset.bottom - 40
     let grew = cover > kb
@@ -460,13 +508,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private func canReply(_ m: Msg) -> Bool { m.kind != "sys" && !m.deleted && !m.pending }
   private func canInfo(_ m: Msg) -> Bool { m.kind != "sys" && !m.deleted && !m.pending && m.by == Talk.shared.me?.id }
   private lazy var keyTap = UITapGestureRecognizer(target: self, action: #selector(keyDown))
-  @objc private func keyDown() { bar.box.resignFirstResponder() }
+  @objc private func keyDown() { bar.box.resignFirstResponder(); findBar.searchTextField.resignFirstResponder() }
   // (while the keyboard is up, what's in the messages doesn't take touches — the tap above has them; scrolling and the
   // swipes are the list's own and go on)
   private var keyUp = false { didSet { if keyUp != oldValue { table.visibleCells.forEach { $0.contentView.isUserInteractionEnabled = !keyUp } } } }
   private var swipeWaits = false
   func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
-    if g === keyTap { return bar.box.isFirstResponder }
+    if g === keyTap { return bar.box.isFirstResponder || findBar.searchTextField.isFirstResponder }
     guard g === swipe else { return true }
     guard swipe.location(in: view).x > 28 else { return false }   // (the screen's edge: going back)
     let v = swipe.velocity(in: table)
@@ -558,19 +606,6 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     if let s = n.sheetPresentationController { s.detents = [.large()]; s.prefersGrabberVisible = true }
     present(n, animated: true)
   }
-  // the pattern's tile in the chat's colours: dark lines at a tenth in light, white at a fifteenth in dark
-  static let pattern: UIColor = {
-    // (drawn once per look at the phone's own scale, its line colour solid and the strength given as the drawing's
-    //  opacity — the tint's own alpha didn't come through, the pattern far stronger than the mock-up)
-    func tile(_ ink: UIColor, _ alpha: CGFloat) -> UIColor {
-      guard let t = UIImage(named: "TalkPattern")?.withTintColor(ink, renderingMode: .alwaysOriginal) else { return .clear }
-      let f = UIGraphicsImageRendererFormat(); f.scale = UIScreen.main.scale; f.opaque = false
-      let img = UIGraphicsImageRenderer(size: CGSize(width: 288, height: 288), format: f).image { _ in t.draw(in: CGRect(x: 0, y: 0, width: 288, height: 288), blendMode: .normal, alpha: alpha) }
-      return UIColor(patternImage: img)
-    }
-    let light = tile(UIColor(red: 60 / 255, green: 60 / 255, blue: 67 / 255, alpha: 1), 0.07), dark = tile(.white, 0.045)
-    return UIColor { $0.userInterfaceStyle == .dark ? dark : light }
-  }()
   private func openInfo(_ m: Msg) { navigationController?.pushViewController(MessageInfoVC(group: group, id: m.id), animated: true) }
   private func startReply(_ m: Msg) { editingMsg = nil; replying = m; UIImpactFeedbackGenerator(style: .light).impactOccurred(); bar.box.becomeFirstResponder() }
 
@@ -708,7 +743,15 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
 
 extension ChatVC: UISearchBarDelegate {
   func searchBar(_ b: UISearchBar, textDidChange t: String) { runFind() }
-  func searchBarSearchButtonClicked(_ b: UISearchBar) { b.resignFirstResponder(); runFind(); if finds.isEmpty { toast("Not found in this chat") } }
+  func searchBarSearchButtonClicked(_ b: UISearchBar) { b.searchTextField.resignFirstResponder() }
+  // (the keyboard put down — Search, a tap on the chat or dragged away: the matches' bar stays at the bottom)
+  func searchBarTextDidEndEditing(_ b: UISearchBar) {
+    guard finding else { return }
+    DispatchQueue.main.async { [weak self] in
+      guard let self = self, self.finding, !self.findBar.searchTextField.isFirstResponder else { return }
+      self.reloadInputViews(); self.becomeFirstResponder(); self.fitBottom()
+    }
+  }
 }
 
 extension ChatVC: PHPickerViewControllerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate, UIDocumentPickerDelegate {
@@ -897,6 +940,8 @@ final class Bleed: UIView {
 }
 
 final class BubbleCell: UITableViewCell {
+  var find: (String, Bool)?   // (searching: the words, and whether this is the match shown)
+  static let findAll = Look.rgb(0x7A5626), findNow = Look.rgb(0xD9952F)
   let bubble = BubbleShape()
   private let stack = UIStackView()
   private let nameL = UILabel(), roleL = UILabel(), textL = UILabel(), footL = UILabel(), stamp = UILabel()
@@ -1243,6 +1288,15 @@ final class BubbleCell: UITableViewCell {
           guard let u = hit.url, u.scheme?.hasPrefix("http") == true else { continue }
           if link == nil { link = u }
           a.addAttributes([.foregroundColor: mine ? UIColor.white : Look.linkInk, .underlineStyle: NSUnderlineStyle.single.rawValue], range: hit.range)
+        }
+      }
+      // (searching: every match marked in amber, the one shown brighter — the design's board "Search in a chat")
+      if let f = find, !f.0.isEmpty {
+        let q = f.0, cur = f.1
+        var from = m.text.startIndex
+        while let r = m.text.range(of: q, options: [.caseInsensitive, .diacriticInsensitive], range: from..<m.text.endIndex) {
+          a.addAttributes([.backgroundColor: cur ? BubbleCell.findNow : BubbleCell.findAll, .foregroundColor: UIColor.white], range: NSRange(r, in: m.text))
+          from = r.upperBound
         }
       }
     }
@@ -1819,5 +1873,81 @@ final class EmojiSheet: UIViewController, UITextViewDelegate {
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     RecentReactions.used(e)
     done(e); dismiss(animated: true)
+  }
+}
+
+// ---------- searching: the bar above the keyboard (the design's board "Search in a chat") — ˄ ˅ in a glass capsule
+// and how many matches; it stays at the bottom when the keyboard goes down ----------
+final class FindBar: UIView {
+  let up = UIButton(type: .system), down = UIButton(type: .system)
+  private let countL = UILabel(), line = UIView()
+  private let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
+  private let capsule: UIVisualEffectView = {
+    if #available(iOS 26.0, *) { return UIVisualEffectView(effect: UIGlassEffect()) }
+    return UIVisualEffectView(effect: UIBlurEffect(style: .systemThickMaterial))
+  }()
+  override init(frame: CGRect) {
+    super.init(frame: CGRect(x: 0, y: 0, width: 390, height: 56))
+    autoresizingMask = .flexibleHeight
+    blur.contentView.backgroundColor = UIColor { Look.chatBg.resolvedColor(with: $0).withAlphaComponent(0.62) }
+    addSubview(blur)
+    line.backgroundColor = .separator; addSubview(line)
+    capsule.layer.cornerRadius = 20; capsule.layer.cornerCurve = .continuous; capsule.clipsToBounds = true
+    addSubview(capsule)
+    let cfg = UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)
+    up.setImage(UIImage(systemName: "chevron.up", withConfiguration: cfg), for: .normal); up.accessibilityLabel = "Earlier match"
+    down.setImage(UIImage(systemName: "chevron.down", withConfiguration: cfg), for: .normal); down.accessibilityLabel = "Later match"
+    [up, down].forEach { $0.tintColor = .label; capsule.contentView.addSubview($0) }
+    countL.font = .systemFont(ofSize: 16); countL.textColor = .secondaryLabel
+    addSubview(countL)
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: 56 + safeAreaInsets.bottom) }
+  override func safeAreaInsetsDidChange() { super.safeAreaInsetsDidChange(); invalidateIntrinsicContentSize() }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    blur.frame = bounds
+    line.frame = CGRect(x: 0, y: 0, width: bounds.width, height: 1 / max(1, traitCollection.displayScale))
+    capsule.frame = CGRect(x: 16, y: 8, width: 100, height: 40)
+    up.frame = CGRect(x: 0, y: 0, width: 50, height: 40); down.frame = CGRect(x: 50, y: 0, width: 50, height: 40)
+    countL.frame = CGRect(x: 132, y: 8, width: bounds.width - 148, height: 40)
+  }
+  // (n of total; nothing typed yet: no words; typed and none: "No matches")
+  func show(_ n: Int, _ total: Int, typed: Bool) {
+    let t = !typed ? "" : total == 0 ? "No matches" : "\(n) of \(total) \(total == 1 ? "match" : "matches")"
+    if countL.text != t { UIView.transition(with: countL, duration: 0.15, options: .transitionCrossDissolve) { self.countL.text = t } }
+    up.isEnabled = total > 0 && n > 1
+    down.isEnabled = total > 0 && n < total
+  }
+}
+
+// ---------- the chat's background (approved mock-up "E11 Talk — chat background", Haris 2026-11-12): our soft line
+// drawings with the E11. wordmark in outline, standing still behind the messages. The tile is used only for its shape
+// (a mask); the ink is one solid colour and the strength is the view's own opacity — 7% in light, 4.5% in dark, as the
+// mock-up. (A tinted, faded picture came out black and strong on the phone.) ----------
+final class PatternView: UIView {
+  private static let tile: UIColor? = {
+    guard let t = UIImage(named: "TalkPattern") else { return nil }
+    let f = UIGraphicsImageRendererFormat(); f.scale = UIScreen.main.scale; f.opaque = false
+    return UIColor(patternImage: UIGraphicsImageRenderer(size: CGSize(width: 288, height: 288), format: f).image { _ in t.draw(in: CGRect(x: 0, y: 0, width: 288, height: 288)) })
+  }()
+  private let shape = CALayer()
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    isUserInteractionEnabled = false
+    backgroundColor = Look.dyn(0xFFFFFF, 0x3C3C43)
+    shape.backgroundColor = PatternView.tile?.cgColor
+    layer.mask = shape
+    look()
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  private func look() { alpha = traitCollection.userInterfaceStyle == .dark ? 0.045 : 0.07 }
+  override func traitCollectionDidChange(_ p: UITraitCollection?) {
+    super.traitCollectionDidChange(p)
+    if traitCollection.hasDifferentColorAppearance(comparedTo: p) { look() }
+  }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    CATransaction.begin(); CATransaction.setDisableActions(true); shape.frame = bounds; CATransaction.commit()
   }
 }
