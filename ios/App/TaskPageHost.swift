@@ -1228,7 +1228,9 @@ extension Main {
     guard AppData.shared.tabsOn, AppData.shared.ready, AppData.shared.isStarted else { return false }
     serverTask.request("/api/flink?token=" + (tok.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? tok), body: nil) { [weak self] j in
       guard let self = self else { return }
-      let say = { (t: String) in self.shownScreen?.toast(["t": t]) }
+      // (said on the screen on show — the tab's own Apple screen; the app's old shared screen is out of sight, and a link
+      //  that couldn't open said nothing, Haris 2026-11-12)
+      let say = { (t: String) in (AppleTabs.cornerScreen(AppleTabs.shared?.selectedViewController) ?? self.shownScreen)?.toast(["t": t]) }
       guard let j = j, (j["ok"] as? Bool) == true, let w = j["where"] as? [String: Any] else { say(j?["error"] as? String ?? "That file isn’t available"); return }
       let kind = w["kind"] as? String ?? "", file = w["file"] as? String
       switch kind {
