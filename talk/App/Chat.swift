@@ -252,6 +252,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     homeLimits.forEach { $0.constant = -home }
     bar.onLayout = { [weak self] in self?.fitBottom() }
     fitBottom()
+    // (arrived: the chat's end where it really is — a last message whose height settled during the slide (a task card)
+    //  was left half under the message bar, Haris 2026-11-12)
+    if !scrolledAway, focus == nil, !table.isDragging, !table.isDecelerating { toBottom(false) }
     Talk.shared.markRead(group)
     ChatVC.open = group
   }
