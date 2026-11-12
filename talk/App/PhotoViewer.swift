@@ -175,8 +175,16 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
       b.layer.borderWidth = on ? 1.5 : 0; b.layer.borderColor = UIColor.white.cgColor
       (b.constraints.first { $0.firstAttribute == .width })?.constant = on ? 40 : 26
     }
-    if let b = stripRow.arrangedSubviews[safe: at] { strip.layoutIfNeeded(); strip.scrollRectToVisible(b.frame.insetBy(dx: -60, dy: 0), animated: true) }
+    // (the strip centred on the one shown — already in place as the viewer opens, sliding only when you move between
+    //  photos; it opened at its start and then slid across, Haris 2026-11-12)
+    guard let b = stripRow.arrangedSubviews[safe: at] else { return }
+    if !stripPlaced { view.layoutIfNeeded() } else { strip.layoutIfNeeded() }
+    let maxX = max(0, strip.contentSize.width - strip.bounds.width)
+    let x = min(maxX, max(0, b.frame.midX - strip.bounds.width / 2))
+    strip.setContentOffset(CGPoint(x: x, y: 0), animated: stripPlaced)
+    stripPlaced = true
   }
+  private var stripPlaced = false
   @objc private func toggleChrome() {
     chrome.toggle()
     UIView.animate(withDuration: 0.2) { self.top.alpha = self.chrome ? 1 : 0; self.foot.alpha = self.chrome ? 1 : 0; self.setNeedsStatusBarAppearanceUpdate() }
