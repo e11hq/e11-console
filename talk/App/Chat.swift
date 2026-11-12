@@ -116,6 +116,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   override func viewDidAppear(_ a: Bool) {
     super.viewDidAppear(a)
     becomeFirstResponder()
+    bar.onLayout = { [weak self] in self?.fitBottom() }
+    fitBottom()
     Talk.shared.markRead(group)
     ChatVC.open = group
   }
@@ -123,6 +125,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   static var open: String?
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
+    fitBottom()
     if !scrolledOnce, data.snapshot().numberOfItems > 0 {
       scrolledOnce = true; toBottom(false)
       if let f = focus { focus = nil; DispatchQueue.main.async { self.jump(to: f) } }
@@ -238,19 +241,31 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private func toBottom(_ animated: Bool) {
     let n = data.snapshot().numberOfItems
     guard n > 0 else { return }
-    table.scrollToRow(at: IndexPath(row: n - 1, section: 0), at: .bottom, animated: animated)
+    if !animated { table.scrollToRow(at: IndexPath(row: n - 1, section: 0), at: .bottom, animated: false) }
+    table.layoutIfNeeded()
+    let end = CGPoint(x: 0, y: max(-table.adjustedContentInset.top, table.contentSize.height + table.adjustedContentInset.bottom - table.bounds.height))
+    table.setContentOffset(end, animated: animated)
   }
-  @objc private func kbMoved(_ n: Notification) {
-    guard let f = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue else { return }
-    let cover = max(0, view.bounds.maxY - view.convert(f, from: nil).minY)
+  /* The room under the last message = how much the message bar (with the keyboard under it, or the reply / @ list above
+     it) covers, measured from where the bar really is — the keyboard's notice alone missed the bar's first showing (the
+     chat scrolled to its end before the bar came) and its height changes, so the latest messages sat behind it and
+     couldn't be scrolled out. Called on every keyboard move and whenever the bar is laid out. */
+  @objc private func kbMoved(_ n: Notification) { view.layoutIfNeeded(); fitBottom() }
+  private func fitBottom() {
+    guard isViewLoaded, bar.window != nil, let screen = view.window?.screen else { return }
+    let r = view.convert(bar.convert(bar.bounds, to: screen.coordinateSpace), from: screen.coordinateSpace)
+    let cover = max(0, view.bounds.maxY - r.minY)
+    guard abs(cover - kb) > 0.5 else { return }
+    let wasAtEnd = table.contentOffset.y + table.bounds.height >= table.contentSize.height + table.adjustedContentInset.bottom - 40
     let grew = cover > kb
     kb = cover
-    let atEnd = table.contentOffset.y + table.bounds.height >= table.contentSize.height - 40
     table.contentInset.bottom = max(0, cover - view.safeAreaInsets.bottom) + 8
     table.verticalScrollIndicatorInsets.bottom = table.contentInset.bottom
-    downBottom.constant = -(max(cover, bar.bounds.height) + 25)
-    if grew && (atEnd || table.isTracking == false) && bar.box.isFirstResponder { toBottom(false) }
+    downBottom.constant = -(cover + 25)
+    if grew && (wasAtEnd || !scrolledAway) { toBottom(false) }
   }
+  // (you scrolled up to read: the keyboard or the bar growing doesn't pull you back down)
+  private var scrolledAway: Bool { table.contentOffset.y + table.bounds.height < table.contentSize.height - 160 }
   private func jump(to id: String) {
     guard let ip = data.indexPath(for: .msg(id)) else { toast("That message isn’t on this phone any more"); return }
     table.scrollToRow(at: ip, at: .middle, animated: true)
@@ -1014,6 +1029,7 @@ final class MessageBar: UIView, UITextViewDelegate {
   var onPlus: ((String) -> Void)?
   var onCancelReply: (() -> Void)?
   var onVoice: ((URL, Double, String) -> Void)?
+  var onLayout: (() -> Void)?
   // @: the group's people (id, name); the ones picked while typing
   var people: [(String, String)] = []
   private var picked: [String: String] = [:]   // id → name
@@ -1123,6 +1139,7 @@ final class MessageBar: UIView, UITextViewDelegate {
   override func safeAreaInsetsDidChange() { super.safeAreaInsetsDidChange(); invalidateIntrinsicContentSize() }
   override func layoutSubviews() {
     super.layoutSubviews()
+    defer { onLayout?() }
     let W = bounds.width, mh = mentionH, top: CGFloat = mh + (replyV.isHidden ? 0 : 46)
     blur.frame = CGRect(x: 0, y: 0, width: W, height: bounds.height + 200)
     mentionV.frame = CGRect(x: 0, y: 0, width: W, height: mh)
