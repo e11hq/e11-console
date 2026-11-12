@@ -523,6 +523,10 @@ branches `stable/ios-1693` and `locked/ios-app-1693` (never moved or deleted; 16
 from another app (E11 Talk) opening their task / file / folder every time (waits until the app is active), and a Client
 Assets folder link going to the Clients tab to open there. Quick build, no simulator self-test (Haris: "No not full test").
 Nothing changes in its look, behaviour or code without telling Haris first and his yes.
+**THE iPHONE APP — LOCKED at build 1694 (Haris, 2026-11-12 23:06: "Yes"):** commit f2aea47, branches `stable/ios-1694` and
+`locked/ios-app-1694` (never moved or deleted; 1693's and 1690's stay as history). 1694 = 1693 + a Client Assets folder link
+opening even when that client's Client Assets hadn't been worked out on the phone yet (from Home it was dropped without a
+word). Quick build, no simulator self-test. Nothing changes in its look, behaviour or code without telling Haris first and his yes.
 **The App Store release waits for E11 Talk (Haris, 2026-11-11 20:16: "3"):** the Talk button (E11 Day, Clients) does nothing
 yet — App Review would reject a button that does nothing (2.1) — so E11 Console and E11 Talk are sent for review together,
 Talk's button opening the real app; it stays as it is until then (not hidden, not changed). The screenshots keep it.
