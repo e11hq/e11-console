@@ -57,7 +57,7 @@ struct Msg: Codable, Equatable {
       return URL(string: "https://\(files)/t/" + (id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id))
     }
   }
-  struct LinkPrev: Codable, Equatable, Hashable { var url: String; var title: String?; var site: String?; var video: Bool; var img: String?; var icon: String?; var e11: String? = nil }   // (e11: one of our own links — "file" / "folder", its card from the server)
+  struct LinkPrev: Codable, Equatable, Hashable { var url: String; var title: String?; var site: String?; var video: Bool; var img: String?; var icon: String?; var e11: String? = nil; var pic: String? = nil }   // (pic: an E11 link's picture, its page's own — a web address)   // (e11: one of our own links — "file" / "folder", its card from the server)
   struct FileRef: Codable, Equatable { var id: String; var name: String; var size: Int; var kind: String; var w: Double?; var h: Double?; var secs: Double?; var wave: String? = nil }
   struct Reply: Codable, Equatable { var id: String; var by: String; var text: String; var kind: String }
 }
@@ -271,7 +271,8 @@ final class Talk {
       DispatchQueue.main.async { Talk.shared.stoppedTyping(g, by) }
       if let k = e["link"] as? [String: Any], let u = k["url"] as? String {
         m.link = Msg.LinkPrev(url: u, title: k["title"] as? String, site: k["site"] as? String, video: (k["video"] as? Bool) == true,
-                              img: (k["img"] as? [String: Any])?["id"] as? String, icon: (k["icon"] as? [String: Any])?["id"] as? String, e11: k["e11"] as? String)
+                              img: (k["img"] as? [String: Any])?["id"] as? String, icon: (k["icon"] as? [String: Any])?["id"] as? String, e11: k["e11"] as? String,
+                              pic: (k["pic"] as? String).flatMap { $0.hasPrefix("https://") ? $0 : nil })
       }
       if let i = l.msgs.firstIndex(where: { $0.id == id || ($0.pending && m.cid != nil && $0.cid == m.cid) }) {
         // (one of mine sent from here: it keeps its place, with the server's id; a photo keeps the copy it was sent from)

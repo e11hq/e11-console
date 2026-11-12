@@ -1882,7 +1882,7 @@ final class BubbleCell: UITableViewCell {
       }
     }
     linkWrap.isHidden = link == nil || isPhoto || isDoc
-    tight.isActive = !isPhoto && !isVoice && !isDoc && (link == nil || m.link?.img != nil)
+    tight.isActive = !isPhoto && !isVoice && !isDoc && (link == nil || m.link?.img != nil || m.link?.pic != nil)
     if link != nil && !m.deleted && !m.pending { fwdB.isHidden = false }
     linkWrap.reach(nameL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
     wideCard = false
@@ -1899,12 +1899,16 @@ final class BubbleCell: UITableViewCell {
       if let ic = pv?.icon, let i = UIImage(contentsOfFile: Net.local(ic).path) { mark.image = i; mark.bounds = CGRect(x: 0, y: -2, width: 14, height: 14) }
       let lf = NSMutableAttributedString(attachment: mark)
       lf.append(NSAttributedString(string: "  " + site, attributes: [.foregroundColor: sub])); linkFoot.attributedText = lf
-      let hasImg = pv?.img != nil
+      let hasImg = pv?.img != nil || pv?.pic != nil
       linkImgOff.isActive = !hasImg; linkImgH.isActive = hasImg; linkPlay.isHidden = !(hasImg && pv?.video == true)
       wideCard = hasImg
       if let id = pv?.img {
         if let i = UIImage(contentsOfFile: Net.local(id).path) { linkImg.image = i }
         else { linkImg.image = nil; Net.shared.file(id) { [weak self] url in guard let self = self, self.msg?.id == m.id, let url = url else { return }; self.linkImg.image = UIImage(contentsOfFile: url.path) } }
+      } else if let p = pv?.pic {
+        // (an E11 link: its page's own picture, kept once fetched)
+        linkImg.image = nil
+        Net.shared.picture(p) { [weak self] i in guard let self = self, self.msg?.id == m.id else { return }; self.linkImg.image = i }
       } else { linkImg.image = nil }
     } else { linkImgOff.isActive = true; linkImgH.isActive = false }
     taskWrap.isHidden = m.task == nil || m.deleted
