@@ -836,7 +836,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (the trial of Haris 2026-11-12: a preview of the bubble — iPhone places it where it fits with the menu, shrinking a
     //  tall one — iMessage's way; build 39 kept the bubble itself, slid up WhatsApp's way)
     let shot = (tv.cellForRow(at: ip) as? BubbleCell)?.bubble.snapshotView(afterScreenUpdates: false)
-    return UIContextMenuConfiguration(identifier: id as NSString, previewProvider: shot.map { v in { [weak self] in let p = BubblePreview(v); self?.heldPreview = p; return p } }) { [weak self] _ in self?.menu(m) }
+    return UIContextMenuConfiguration(identifier: id as NSString, previewProvider: shot.map { v in { BubblePreview(v) } }) { [weak self] _ in self?.menu(m) }
   }
   // opening and closing: from and back to the message's own place in the chat
   func tableView(_ tv: UITableView, previewForDismissingContextMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? { holdPreview(tv, c) }
@@ -854,6 +854,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let now = Date().timeIntervalSince1970 * 1000
     var items: [UIMenuElement] = []
     if !m.deleted && !m.pending {
+      items.append(reactRow(m))
       var acts: [UIMenuElement] = []
       acts.append(UIAction(title: "Reply", image: UIImage(systemName: "arrowshape.turn.up.left")) { [weak self] _ in self?.startReply(m) })
       acts.append(UIAction(title: "Forward", image: UIImage(systemName: "arrowshape.turn.up.right")) { [weak self] _ in self?.forward(m) })
@@ -926,74 +927,32 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     present(n, animated: true)
   }
 
-  // ---------- the reactions bar beside Apple's hold menu (approved mock-up "E11 Talk — hold a message", Haris
-  // 2026-11-12): ours — a glass capsule above the held message: the seven quick ones, then the ones you used lately (no
-  // twice), scrolling sideways; + pinned at its end opens the emoji sheet. Apple's lift and menu below it. ----------
-  private var reactBar: ReactBar?
+  // ---------- holding a message: the chat behind a little blurred (Haris 2026-11-12); the reactions are the menu's own
+  // top row — Apple's palette (mock-up "Talk reactions palette", Haris 2026-11-12: "This palette is much better") ----------
   func tableView(_ tv: UITableView, willDisplayContextMenu c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
-    guard let id = c.identifier as? String, let m = msgs[id], !m.deleted, !m.pending, m.kind != "sys",
-          let ip = data.indexPath(for: .msg(id)), let cell = tv.cellForRow(at: ip) as? BubbleCell, let w = view.window else { return }
-    let me = Talk.shared.me?.id ?? ""
-    let bar = ReactBar(mine: m.reactions[me]) { [weak self, weak tv] e in
-      guard let self = self else { return }
-      if let e = e { self.react(m, m.reactions[me] == e ? nil : e) } else { self.pendingMore = m }
-      tv?.contextMenuInteraction?.dismissMenu()
-    }
-    reactBar = bar
-    let mine = m.by == Talk.shared.me?.id
-    // (the strip just above where iPhone put the preview — known once its lift has finished; grows out of its top corner,
-    //  the emojis popping in one after another)
-    let show = { (b: CGRect) in
-      guard self.reactBar === bar else { return }
-      bar.frame = CGRect(x: 14, y: max(w.safeAreaInsets.top + 8, b.minY - 62), width: w.bounds.width - 28, height: 54)
-      let from = CGPoint(x: mine ? b.maxX - 34 : b.minX + 34, y: b.minY), k: CGFloat = 0.2
-      bar.alpha = 0
-      bar.transform = CGAffineTransform(translationX: (from.x - bar.center.x) * (1 - k), y: (from.y - bar.center.y) * (1 - k)).scaledBy(x: k, y: k)
-      bar.prepareToPop(); w.addSubview(bar)
-      UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 0.74, initialSpringVelocity: 0) { bar.alpha = 1; bar.transform = .identity }
-      bar.pop()
-    }
-    // (where iPhone puts the preview is known as its lift begins — its view is given its final place then — so the strip
-    //  comes with the lift, not after it; checked again as the lift ends, and moved there if iPhone placed it otherwise.
-    //  The place read with the preview's own size and scale, as iPhone may shrink it — Haris 2026-11-12)
-    // (the preview's place read inside iPhone's own lift — where its final place is already set — and the strip shown
-    //  there; read again as the lift ends and moved if iPhone placed it otherwise. Before, it was read a moment too early,
-    //  from where the message started, and could land under the preview or over the menu — Haris 2026-11-12)
-    // (the chat behind a little blurred while the message is held — Haris 2026-11-12)
-    if let host = navigationController?.view {
-      let veil = UIVisualEffectView(effect: nil); veil.frame = host.bounds; veil.isUserInteractionEnabled = false
-      veil.autoresizingMask = [.flexibleWidth, .flexibleHeight]; host.addSubview(veil); holdVeil = veil
-      UIView.animate(withDuration: 0.3) { veil.effect = UIBlurEffect(style: .systemUltraThinMaterial) }
-    }
-    // (the preview we made, kept when iPhone asked for it — iPhone's own handle on it wasn't ours to read, and the strip
-    //  and the blur were skipped)
-    guard let a = animator, let pv = heldPreview?.shot else { show(cell.bubble.convert(cell.bubble.bounds, to: w)); return }
-    var shown = false
-    a.addAnimations { let b = pv.convert(pv.bounds, to: w); DispatchQueue.main.async { if !shown { shown = true; show(b) } } }
-    a.addCompletion {
-      guard self.reactBar === bar, pv.window != nil else { return }
-      let b = pv.convert(pv.bounds, to: w)
-      if !shown { shown = true; show(b); return }
-      let y = max(w.safeAreaInsets.top + 8, b.minY - 62)
-      if abs(bar.frame.minY - y) > 1 { UIView.animate(withDuration: 0.2) { bar.frame.origin.y = y } }
-    }
+    guard let host = navigationController?.view else { return }
+    let veil = UIVisualEffectView(effect: nil); veil.frame = host.bounds; veil.isUserInteractionEnabled = false
+    veil.autoresizingMask = [.flexibleWidth, .flexibleHeight]; host.addSubview(veil); holdVeil = veil
+    UIView.animate(withDuration: 0.3) { veil.effect = UIBlurEffect(style: .systemUltraThinMaterial) }
   }
   private var holdVeil: UIVisualEffectView?
-  private var heldPreview: BubblePreview?
   func tableView(_ tv: UITableView, willEndContextMenuInteraction c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
-    heldPreview = nil
     if let veil = holdVeil { holdVeil = nil; UIView.animate(withDuration: 0.25, animations: { veil.effect = nil }) { _ in veil.removeFromSuperview() } }
-    if let bar = reactBar {
-      reactBar = nil
-      UIView.animate(withDuration: 0.2, animations: { bar.alpha = 0; bar.transform = CGAffineTransform(scaleX: 0.92, y: 0.92) }) { _ in bar.removeFromSuperview() }
-    }
-    if let m = pendingMore {
-      pendingMore = nil
-      animator?.addCompletion { [weak self] in self?.anyEmoji(m) }
-      if animator == nil { anyEmoji(m) }
-    }
   }
-  private var pendingMore: Msg?
+  // the reactions row: six quick ones (the one you gave marked) and + for any emoji
+  private func reactRow(_ m: Msg) -> UIMenuElement {
+    let me = Talk.shared.me?.id ?? "", mine = m.reactions[me]
+    var acts: [UIMenuElement] = RecentReactions.quick.prefix(6).map { e in
+      let a = UIAction(title: e, image: RecentReactions.picture(e)) { [weak self] _ in RecentReactions.used(e); self?.react(m, mine == e ? nil : e) }
+      a.state = mine == e ? .on : .off
+      return a
+    }
+    acts.append(UIAction(title: "More Reactions", image: UIImage(systemName: "plus")) { [weak self] _ in
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { self?.anyEmoji(m) }
+    })
+    if #available(iOS 17.0, *) { return UIMenu(options: .displayAsPalette, children: acts) }
+    return UIMenu(title: "React", image: UIImage(systemName: "face.smiling"), children: acts)
+  }
 
 }
 
@@ -2200,61 +2159,16 @@ enum RecentReactions {
     var l = list.filter { $0 != e }; l.insert(e, at: 0)
     UserDefaults.standard.set(Array(l.prefix(24)), forKey: key)
   }
-  // the bar's emojis: the seven, then the lately used that aren't among them — never one twice
-  static var bar: [String] { quick + list.filter { !quick.contains($0) } }
+  // an emoji as a picture, for Apple's palette
+  static func picture(_ e: String) -> UIImage {
+    let f = UIGraphicsImageRendererFormat(); f.scale = UIScreen.main.scale
+    return UIGraphicsImageRenderer(size: CGSize(width: 30, height: 30), format: f).image { _ in
+      let a = NSAttributedString(string: e, attributes: [.font: UIFont.systemFont(ofSize: 24)]), sz = a.size()
+      a.draw(at: CGPoint(x: (30 - sz.width) / 2, y: (30 - sz.height) / 2))
+    }.withRenderingMode(.alwaysOriginal)
+  }
 }
 
-// the glass capsule: Apple's glass (iOS 26; a thick material before), the emojis scrolling sideways, + at its end
-final class ReactBar: UIView {
-  private let glass: UIVisualEffectView
-  private let scroll = UIScrollView(), row = UIStackView(), plus = UIButton(type: .system)
-  private let pick: (String?) -> Void
-  init(mine: String?, pick: @escaping (String?) -> Void) {
-    self.pick = pick
-    if #available(iOS 26.0, *) { glass = UIVisualEffectView(effect: UIGlassEffect()) } else { glass = UIVisualEffectView(effect: UIBlurEffect(style: .systemThickMaterial)) }
-    super.init(frame: .zero)
-    glass.layer.cornerRadius = 27; glass.layer.cornerCurve = .continuous; glass.clipsToBounds = true
-    layer.shadowColor = UIColor.black.cgColor; layer.shadowOpacity = 0.14; layer.shadowRadius = 14; layer.shadowOffset = CGSize(width: 0, height: 6)
-    addSubview(glass)
-    scroll.showsHorizontalScrollIndicator = false; scroll.alwaysBounceHorizontal = true
-    row.axis = .horizontal; row.spacing = 2; row.alignment = .center
-    for e in RecentReactions.bar {
-      let b = UIButton(type: .custom)
-      b.setTitle(e, for: .normal); b.titleLabel?.font = .systemFont(ofSize: 27)
-      b.widthAnchor.constraint(equalToConstant: 42).isActive = true; b.heightAnchor.constraint(equalToConstant: 42).isActive = true
-      b.layer.cornerRadius = 21
-      if e == mine { b.backgroundColor = UIColor.label.withAlphaComponent(0.1) }
-      b.accessibilityLabel = "React " + e
-      b.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); RecentReactions.used(e); self?.pick(e) }, for: .touchUpInside)
-      row.addArrangedSubview(b)
-    }
-    scroll.addSubview(row); glass.contentView.addSubview(scroll)
-    var pc = UIButton.Configuration.gray()
-    pc.image = UIImage(systemName: "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .medium)); pc.cornerStyle = .capsule; pc.contentInsets = .zero
-    pc.baseForegroundColor = .label
-    plus.configuration = pc; plus.accessibilityLabel = "More reactions"
-    plus.addAction(UIAction { [weak self] _ in self?.pick(nil) }, for: .touchUpInside)
-    glass.contentView.addSubview(plus)
-  }
-  required init?(coder: NSCoder) { fatalError() }
-  // the emojis (and +) pop in one after another as the strip grows
-  private var pops: [UIView] { row.arrangedSubviews + [plus] }
-  func prepareToPop() { for v in pops { v.alpha = 0; v.transform = CGAffineTransform(scaleX: 0.3, y: 0.3) } }
-  func pop() {
-    for (i, v) in pops.enumerated() {
-      UIView.animate(withDuration: 0.38, delay: 0.06 + 0.025 * Double(min(i, 10)), usingSpringWithDamping: 0.6, initialSpringVelocity: 0, options: [.allowUserInteraction]) { v.alpha = 1; v.transform = .identity }
-    }
-  }
-  override func layoutSubviews() {
-    super.layoutSubviews()
-    glass.frame = bounds
-    layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: 27).cgPath
-    plus.frame = CGRect(x: bounds.width - 48, y: 7, width: 40, height: 40)
-    scroll.frame = CGRect(x: 6, y: 0, width: bounds.width - 58, height: bounds.height)
-    let w = row.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).width
-    row.frame = CGRect(x: 0, y: 6, width: w, height: 42); scroll.contentSize = CGSize(width: w, height: bounds.height)
-  }
-}
 
 // + : Apple's sheet — the seven quick reactions on top, iPhone's own emoji keyboard under them (search, Frequently Used,
 // every category); any emoji: it reacts and the sheet goes
