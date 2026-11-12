@@ -62,7 +62,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     }
     data.defaultRowAnimation = .fade
     // the swipes on a message (WhatsApp's, the design's boards 26 / 27): right — reply; your own left — Message info
-    swipe.delegate = self; swipe.maxNumberOfTouches = 1
+    swipe.delegate = self; swipe.maximumNumberOfTouches = 1
     table.addGestureRecognizer(swipe)
     table.panGestureRecognizer.require(toFail: swipe)
     // the title (the design): the group's picture, its name, its people — at the left after ‹; a tap: group info
