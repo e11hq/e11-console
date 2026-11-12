@@ -295,12 +295,22 @@ enum TabBarHide {
   static func arrived(_ vc: UIViewController) {
     guard #available(iOS 18, *), !Talk.shared.isContact, let t = vc.tabBarController ?? SceneDelegate.current?.tabs else { return }
     t.setTabBarHidden(true, animated: true)
+    // (found by the build's simulator check, 2026-11-12: on iOS 26 Apple's call sets isTabBarHidden but the bar stays where
+    //  it is, drawn behind the chat — then the bar itself is hidden once Apple's hide would have finished)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+      guard t.isTabBarHidden, !t.tabBar.isHidden, t.tabBar.frame.minY < t.view.bounds.maxY - 1 else { return }
+      UIView.animate(withDuration: 0.2) { t.tabBar.alpha = 0 } completion: { _ in if t.isTabBarHidden { t.tabBar.isHidden = true; t.tabBar.alpha = 1 } }
+    }
   }
   static func leaving(_ vc: UIViewController) {
     guard #available(iOS 18, *), !Talk.shared.isContact, let t = vc.tabBarController ?? SceneDelegate.current?.tabs, let n = vc.navigationController,
           vc.isMovingFromParent, n.viewControllers.count == 1 else { return }
+    if t.tabBar.isHidden {
+      t.tabBar.alpha = 0; t.tabBar.isHidden = false
+      if let tc = vc.transitionCoordinator { tc.animate(alongsideTransition: { _ in t.tabBar.alpha = 1 }, completion: { _ in t.tabBar.alpha = 1 }) } else { t.tabBar.alpha = 1 }
+    }
     t.setTabBarHidden(false, animated: true)
-    vc.transitionCoordinator?.notifyWhenInteractionChanges { c in if c.isCancelled { t.setTabBarHidden(true, animated: true) } }
+    vc.transitionCoordinator?.notifyWhenInteractionChanges { c in if c.isCancelled { t.setTabBarHidden(true, animated: true); t.tabBar.isHidden = true } }
   }
 }
 // the navigation's delegate for one slide only: Message info hooked by the finger (SlideIn, driven by it)
