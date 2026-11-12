@@ -294,23 +294,21 @@ final class HookSlide: NSObject, UINavigationControllerDelegate {
   }
 }
 
-// the push a finger drives (Message info hooked from a chat): the new page in from the right edge, the chat going a third
-// of the way left under a light shade — as Apple's own push
+// the push a finger drives (Message info hooked from a chat — WhatsApp's way, the design's board 27): Message info lies
+// under the chat, and the chat itself is slid away to the left with the finger, its shadow on the page it uncovers
 final class SlideIn: NSObject, UIViewControllerAnimatedTransitioning {
   func transitionDuration(using c: UIViewControllerContextTransitioning?) -> TimeInterval { 0.4 }
   func animateTransition(using c: UIViewControllerContextTransitioning) {
     guard let from = c.view(forKey: .from), let to = c.view(forKey: .to), let toVC = c.viewController(forKey: .to) else { c.completeTransition(false); return }
     let box = c.containerView, W = box.bounds.width
     to.frame = c.finalFrame(for: toVC)
-    let shade = UIView(frame: from.bounds); shade.backgroundColor = UIColor.black.withAlphaComponent(0.12); shade.alpha = 0
-    from.addSubview(shade)
-    box.addSubview(to)
-    to.transform = CGAffineTransform(translationX: W, y: 0)
-    to.layer.shadowColor = UIColor.black.cgColor; to.layer.shadowOpacity = 0.12; to.layer.shadowRadius = 8; to.layer.shadowOffset = .zero
+    box.insertSubview(to, belowSubview: from)
+    to.transform = CGAffineTransform(translationX: W * 0.3, y: 0)
+    from.layer.shadowColor = UIColor.black.cgColor; from.layer.shadowOpacity = 0.18; from.layer.shadowRadius = 10; from.layer.shadowOffset = .zero
     UIView.animate(withDuration: transitionDuration(using: c), delay: 0, options: [.curveLinear]) {
-      to.transform = .identity; from.transform = CGAffineTransform(translationX: -W * 0.3, y: 0); shade.alpha = 1
+      from.transform = CGAffineTransform(translationX: -W, y: 0); to.transform = .identity
     } completion: { _ in
-      from.transform = .identity; shade.removeFromSuperview(); to.layer.shadowOpacity = 0
+      from.transform = .identity; to.transform = .identity; from.layer.shadowOpacity = 0
       if c.transitionWasCancelled { to.removeFromSuperview() }
       c.completeTransition(!c.transitionWasCancelled)
     }
