@@ -909,14 +909,31 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 0.74, initialSpringVelocity: 0) { bar.alpha = 1; bar.transform = .identity }
       bar.pop()
     }
+    // (where iPhone puts the preview is known as its lift begins — its view is given its final place then — so the strip
+    //  comes with the lift, not after it; checked again as the lift ends, and moved there if iPhone placed it otherwise.
+    //  The place read with the preview's own size and scale, as iPhone may shrink it — Haris 2026-11-12)
+    let placed = { (a: UIContextMenuInteractionAnimating?) -> CGRect? in
+      guard let pv = a?.previewViewController?.view, pv.window != nil else { return nil }
+      return pv.convert(pv.bounds, to: w)
+    }
     if let a = animator {
+      DispatchQueue.main.async { [weak a] in show(placed(a) ?? cell.bubble.convert(cell.bubble.bounds, to: w)) }
       a.addCompletion { [weak a] in
-        if let pv = a?.previewViewController?.view, let sv = pv.superview { show(sv.convert(pv.frame, to: w)) }
-        else { show(cell.bubble.convert(cell.bubble.bounds, to: w)) }
+        guard self.reactBar === bar, let b = placed(a) else { return }
+        let y = max(w.safeAreaInsets.top + 8, b.minY - 62)
+        if abs(bar.frame.minY - y) > 1 { UIView.animate(withDuration: 0.2) { bar.frame.origin.y = y } }
       }
     } else { show(cell.bubble.convert(cell.bubble.bounds, to: w)) }
+    // (the chat behind a little blurred while the message is held — Haris 2026-11-12)
+    if let host = navigationController?.view {
+      let veil = UIVisualEffectView(effect: nil); veil.frame = host.bounds; veil.isUserInteractionEnabled = false
+      veil.autoresizingMask = [.flexibleWidth, .flexibleHeight]; host.addSubview(veil); holdVeil = veil
+      UIView.animate(withDuration: 0.3) { veil.effect = UIBlurEffect(style: .systemUltraThinMaterial) }
+    }
   }
+  private var holdVeil: UIVisualEffectView?
   func tableView(_ tv: UITableView, willEndContextMenuInteraction c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
+    if let veil = holdVeil { holdVeil = nil; UIView.animate(withDuration: 0.25, animations: { veil.effect = nil }) { _ in veil.removeFromSuperview() } }
     if let bar = reactBar {
       reactBar = nil
       UIView.animate(withDuration: 0.2, animations: { bar.alpha = 0; bar.transform = CGAffineTransform(scaleX: 0.92, y: 0.92) }) { _ in bar.removeFromSuperview() }
