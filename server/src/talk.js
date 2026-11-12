@@ -397,22 +397,40 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       return seeTask(u, tk) ? { task: taskCard(tk) } : null;
     }
     const L = links(); if (!L) return null;
-    // (its picture, from the link's own page — the file's, or the folder's first one with a picture, as its page shows —
-    //  Talk had none: Haris 2026-11-12)
-    const ext = (x) => String((x && (x.name || x.path)) || '').split('.').pop().toLowerCase();
-    // (an SVG logo too — its own file, which Talk draws itself; the link pages make no picture of one)
-    const pictured = (x) => !!x && (!!x.thumb || ext(x) === 'svg' || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'heic', 'pdf', 'mp4', 'mov', 'm4v', 'webm', 'avi', 'mkv', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(ext(x)));
+    const card = linkCard(L, kind, tok, url);
+    return card ? { link: card } : null;
+  }
+  // an E11 file or folder link as a live card — the task card's way (mock-up "Talk — E11 link cards", Haris 2026-11-13:
+  // the picture across the top, only the client): its picture, the client, its name, what it is; turned off or deleted:
+  // the card says so (state), never a dead link
+  const ext = (x) => String((x && (x.name || x.path)) || '').split('.').pop().toLowerCase();
+  const PICTURED = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'heic', 'pdf', 'mp4', 'mov', 'm4v', 'webm', 'avi', 'mkv', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'];
+  // (an SVG logo too — its own file, which Talk draws itself; the link pages make no picture of one)
+  const pictured = (x) => !!x && (!!x.thumb || ext(x) === 'svg' || PICTURED.includes(ext(x)));
+  const mb = (n) => (n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n >= 1e6 ? (n / 1e6).toFixed(1) + ' MB' : n >= 1e3 ? Math.round(n / 1e3) + ' KB' : (n || 0) + ' B');
+  const kindOf = (x) => { const e = ext(x); return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'heic', 'svg'].includes(e) ? (e === 'svg' ? 'Logo' : 'Photo') : ['mp4', 'mov', 'm4v', 'webm', 'avi', 'mkv'].includes(e) ? 'Video' : e ? e.toUpperCase() : 'File'; };
+  function linkCard(L, kind, tok, url) {
     const base = url.replace(/\/+$/, '');
     if (kind === 'd') {
-      const r = L.resolveFolder(tok); if (!r || !r.live) return null;
-      const { c, f } = r.hit, all = [], walk = (x, d) => { all.push(...(x.files || [])); if (d < 8) for (const k of (c.folders || []).filter((y) => y.parentId === x.id)) walk(k, d + 1); };
+      const r = L.resolveFolder(tok); if (!r) return null;
+      if (!r.hit) return { url, title: 'Folder', site: 'E11 Console · Folder', video: false, img: null, icon: null, e11: 'folder', state: 'gone' };
+      const { c, f } = r.hit, all = [], subs = [], walk = (x, d) => { all.push(...(x.files || [])); if (d < 8) for (const k of (c.folders || []).filter((y) => y.parentId === x.id)) { subs.push(k); walk(k, d + 1); } };
       walk(f, 0);
       const cover = all.find((x) => pictured(x) && ext(x) !== 'svg') || all.find(pictured);
-      return { link: { url, title: f.name, site: 'E11 Console · Folder', video: false, img: null, icon: null, e11: 'folder', ...(cover ? { pic: `${base}/f/${cover.id}/${ext(cover) === 'svg' ? 'view' : 'thumb'}` } : {}) } };
+      const sub = [subs.length ? `${subs.length} folder${subs.length === 1 ? '' : 's'}` : '', `${all.length} file${all.length === 1 ? '' : 's'}`, mb(all.reduce((n, a) => n + (a.size || 0), 0))].filter(Boolean);
+      // (files first, as the mock-up: "12 files · 3 folders · 84 MB")
+      const line = [sub[subs.length ? 1 : 0], subs.length ? sub[0] : '', sub[sub.length - 1]].filter(Boolean).join(' · ');
+      return { url, title: f.name, site: 'E11 Console · Folder', video: false, img: null, icon: null, e11: 'folder', client: c.name || '', sub: line,
+        state: r.off ? 'off' : r.live ? 'ok' : 'gone', ...(cover && r.live ? { pic: `${base}/f/${cover.id}/${ext(cover) === 'svg' ? 'view' : 'thumb'}` } : {}) };
     }
-    const r = L.resolveToken(tok); if (!r || !r.live) return null;
-    const a = r.hit.att || {};
-    return { link: { url, title: a.name || 'File', site: 'E11 Console · File', video: false, img: null, icon: null, e11: 'file', ...(pictured(a) ? { pic: `${base}/${ext(a) === 'svg' ? 'view' : 'thumb'}` } : {}) } };
+    const r = L.resolveToken(tok); if (!r) return null;
+    const a = (r.hit && r.hit.att) || {};
+    if (!r.hit) return { url, title: 'File', site: 'E11 Console · File', video: false, img: null, icon: null, e11: 'file', state: 'gone' };
+    const w = r.hit.where || {};
+    const cl = w.client ? clientById(w.client) : w.task ? (() => { const t = store.get('tasks', w.task); return t ? clientById(t.projectId) : null; })() : null;
+    return { url, title: a.name || 'File', site: 'E11 Console · File', video: false, img: null, icon: null, e11: 'file', client: cl ? cl.name : '',
+      sub: `${kindOf(a)} · ${mb(a.size || 0)}`, state: r.off ? 'off' : r.live ? 'ok' : 'gone',
+      ...(pictured(a) && r.live ? { pic: `${base}/${ext(a) === 'svg' ? 'view' : 'thumb'}` } : {}) };
   }
 
   function act(u, b) {
@@ -671,6 +689,13 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         return { ok: true };
       }
       // the task cards in a chat as they are now (a card keeps up with its task — Haris 2026-11-12)
+      // (E11 link cards as they are now — renamed, turned off, deleted: Haris 2026-11-13)
+      case 'linkCards': {
+        const [, e] = needGroup(u, b.group); if (e) return e;
+        const L = links(); if (!L) return { ok: true, cards: [] };
+        const urls = (Array.isArray(b.urls) ? b.urls : []).slice(0, 200).map(String);
+        return { ok: true, cards: urls.map((x) => { const m = E11_LINK.exec(x); if (!m || m[1].toLowerCase() === 't') return null; return linkCard(L, m[1].toLowerCase(), decodeURIComponent(m[2]), m[0]); }).filter(Boolean) };
+      }
       case 'taskCards': {
         const [g, e] = needGroup(u, b.group); if (e) return e;
         if (isContact(u) || withClient(g)) return { ok: true, cards: [] };
