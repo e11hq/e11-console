@@ -1237,6 +1237,9 @@ extension Main {
         //  wasn't yet, and the link was dropped without a word, Haris 2026-11-12)
         guard let c = w["client"] as? String else { say("File not shared with you"); return }
         if kind == "asset", AppData.shared.meModel("assets", "assets", [c]) == nil { say("File not shared with you"); return }
+        // (Client Assets already open from an earlier link — still in the Clients tab, its navigation kept from then: closed
+        //  first, so this one opens afresh in the tab it's on now; the second link opened nothing, Haris 2026-11-12)
+        if self.assetsCtl.isOpen { self.assetsCtl.close(animated: false) }
         // (from Home or any tab that doesn't hold Client Assets: to the Clients tab first — opened there unseen, the app
         //  stayed on Home, Haris 2026-11-12, his yes)
         if let t = AppleTabs.shared, t.ownNav !== t.clientsNav, t.ownNav !== t.assetsNav, t.ownNav !== t.meNav, !(t.ownNav.map { o in t.roleNavs.values.contains { $0 === o } } ?? false), self.tabKeys.contains("clients") {
