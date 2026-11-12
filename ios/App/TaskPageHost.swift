@@ -1234,7 +1234,12 @@ extension Main {
       switch kind {
       case "folder", "asset":
         guard let c = w["client"] as? String, AppData.shared.meModel("assets", "assets", [c]) != nil else { say("File not shared with you"); return }
-        self.assetsCtl.openFromClients(client: c, folder: w["folder"] as? String)
+        // (from Home or any tab that doesn't hold Client Assets: to the Clients tab first — opened there unseen, the app
+        //  stayed on Home, Haris 2026-11-12, his yes)
+        if let t = AppleTabs.shared, t.ownNav !== t.clientsNav, t.ownNav !== t.assetsNav, t.ownNav !== t.meNav, !(t.ownNav.map { o in t.roleNavs.values.contains { $0 === o } } ?? false), self.tabKeys.contains("clients") {
+          self.selectTab("clients")
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.assetsCtl.openFromClients(client: c, folder: w["folder"] as? String) }
+        } else { self.assetsCtl.openFromClients(client: c, folder: w["folder"] as? String) }
         guard kind == "asset", let fid = file else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
           guard let m = AppData.shared.meModel("assets", "assets", [c]), let all = m["files"] as? [[String: Any]] else { return }
