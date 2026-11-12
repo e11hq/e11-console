@@ -234,11 +234,18 @@ final class GroupsVC: ListVC {
     table.tableHeaderView?.isHidden = T.isContact
     if T.isContact, table.tableHeaderView?.frame.height != 0 { table.tableHeaderView?.frame.size.height = 0; table.tableHeaderView = table.tableHeaderView }
     navigationItem.rightBarButtonItem?.isHidden = !T.canMake || (clientsTab && !T.boss)
-    let a = Avatar(frame: CGRect(x: 0, y: 0, width: 32, height: 32)); a.set(person: T.me)
-    a.widthAnchor.constraint(equalToConstant: 32).isActive = true; a.heightAnchor.constraint(equalToConstant: 32).isActive = true
-    a.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(toSettings)))
-    navigationItem.leftBarButtonItem = UIBarButtonItem(customView: a)
+    // (your picture made once and only set again when it changes — made anew on every change, it popped in as a chat
+    //  slid back instead of coming in with Apple's bar, Haris 2026-11-12)
+    if navigationItem.leftBarButtonItem == nil {
+      meFace.widthAnchor.constraint(equalToConstant: 32).isActive = true; meFace.heightAnchor.constraint(equalToConstant: 32).isActive = true
+      meFace.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(toSettings)))
+      navigationItem.leftBarButtonItem = UIBarButtonItem(customView: meFace)
+    }
+    let key = [T.me?.id, T.me?.name, T.me?.color, T.me?.picture].map { $0 ?? "" }.joined(separator: "|")
+    if key != meKey { meKey = key; meFace.set(person: T.me) }
   }
+  private let meFace = Avatar(frame: CGRect(x: 0, y: 0, width: 32, height: 32))
+  private var meKey = ""
   @objc private func toSettings() {
     if Talk.shared.isContact { navigationController?.pushViewController(SettingsVC(), animated: true); return }
     tabBarController?.selectedIndex = (tabBarController?.viewControllers?.count ?? 2) - 1

@@ -189,28 +189,25 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
   override func viewWillDisappear(_ a: Bool) {
     super.viewWillDisappear(a); endFind(leaving: true); if ChatVC.open == group { ChatVC.open = nil }
-    if isMovingFromParent { coverTitle(opening: false) }
   }
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
-    if isMovingToParent { coverTitle(opening: true) }
+    if isMovingToParent { coverTitle() }
   }
   /* The list's big title folding into its bar as the chat comes in (Apple's, with the tab bar hidden as it's pushed —
      kept, Haris 2026-11-12): WhatsApp's way of not seeing it — for the slide, the chat's frost reaches down over the big
-     title's room, under the chat's own bar row, and shrinks to the chat's bar as the slide goes (and grows back on the
-     way out, with the finger on a back swipe). Only for the slide, then gone. */
-  private var listBarBottom: CGFloat = 0
-  private func coverTitle(opening: Bool) {
+     title's room, under the chat's own bar row, and shrinks to the chat's bar as the slide goes (and grows back 
+     way out nothing: the title doesn't move then). Only for the slide, then gone. */
+  private func coverTitle() {
     guard let n = navigationController, let tc = transitionCoordinator else { return }
     let rowBottom = (n.view.window?.safeAreaInsets.top ?? n.view.safeAreaInsets.top) + { if #available(iOS 26.0, *) { return 54 } else { return 44 } }()
-    if opening { listBarBottom = n.navigationBar.frame.maxY }
-    let deep = max(0, listBarBottom - rowBottom)
+    let deep = max(0, n.navigationBar.frame.maxY - rowBottom)
     guard deep > 1 else { return }
     let cover = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
     cover.isUserInteractionEnabled = false
-    cover.frame = CGRect(x: 0, y: rowBottom, width: n.view.bounds.width, height: opening ? deep : 0)
+    cover.frame = CGRect(x: 0, y: rowBottom, width: n.view.bounds.width, height: deep)
     n.view.insertSubview(cover, aboveSubview: n.navigationBar)
-    tc.animate(alongsideTransition: { _ in cover.frame.size.height = opening ? 0 : deep }, completion: { _ in cover.removeFromSuperview() })
+    tc.animate(alongsideTransition: { _ in cover.frame.size.height = 0 }, completion: { _ in cover.removeFromSuperview() })
   }
   static var open: String?
   override func viewDidLayoutSubviews() {
