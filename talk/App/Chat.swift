@@ -1134,7 +1134,7 @@ final class BubbleCell: UITableViewCell {
   private lazy var linkWrap = Bleed(linkBox)
   private var link: URL?
   private let voice = VoiceView()
-  private let reacts = InsetLabel(dx: 8, dy: 0), sysL = InsetLabel(dx: 14, dy: 6), retryB = UIButton(type: .system)
+  private let reacts = InsetLabel(dx: 8, dy: 0), sysL = InsetLabel(dx: 12, dy: 3), retryB = UIButton(type: .system)
   private let face = Avatar(frame: CGRect(x: 0, y: 0, width: 27, height: 27))
   private var lead: NSLayoutConstraint!, trail: NSLayoutConstraint!, photoH: NSLayoutConstraint!, mediaW: NSLayoutConstraint!
   private var wMine: NSLayoutConstraint!, wTheirs: NSLayoutConstraint!, top: NSLayoutConstraint!, stackTrail: NSLayoutConstraint!
@@ -1231,8 +1231,8 @@ final class BubbleCell: UITableViewCell {
     reacts.font = .systemFont(ofSize: 14); reacts.backgroundColor = Look.theirs; reacts.layer.cornerRadius = 13; reacts.layer.masksToBounds = true
     reacts.layer.borderWidth = 2; reacts.layer.borderColor = Look.chatBg.resolvedColor(with: traitCollection).cgColor
     contentView.addSubview(reacts)
-    sysL.font = .systemFont(ofSize: 15); sysL.textColor = Look.dyn(0xE5E5EA, 0x000000); sysL.backgroundColor = Look.dyn(0x181818, 0xFFFFFF); sysL.numberOfLines = 0; sysL.textAlignment = .center
-    sysL.layer.cornerRadius = 10; sysL.layer.masksToBounds = true
+    sysL.font = .systemFont(ofSize: 12); sysL.textColor = Look.dyn(0xE5E5EA, 0x000000); sysL.backgroundColor = Look.dyn(0x181818, 0xFFFFFF); sysL.numberOfLines = 0; sysL.textAlignment = .center
+    sysL.layer.cornerRadius = 8; sysL.layer.cornerCurve = .continuous; sysL.layer.masksToBounds = true
     contentView.addSubview(sysL)
     retryB.setImage(UIImage(systemName: "exclamationmark.circle.fill"), for: .normal); retryB.tintColor = .systemRed
     retryB.addAction(UIAction { [weak self] _ in if let m = self?.msg { self?.onRetry?(m) } }, for: .touchUpInside)
@@ -1276,7 +1276,7 @@ final class BubbleCell: UITableViewCell {
   private var quoteThumbW: NSLayoutConstraint!
   // (a short message: the bubble as narrow as its words — a weak pull to nothing that the words hold out against;
   //  the widest stays the design's — Haris 2026-11-12)
-  private lazy var tight: NSLayoutConstraint = { let c = bubble.widthAnchor.constraint(equalToConstant: 0); c.priority = .init(200); return c }()
+  private lazy var tight: NSLayoutConstraint = { let c = bubble.widthAnchor.constraint(equalToConstant: 0); c.priority = .init(999); return c }()
   // emojis alone (WhatsApp's, measured from Haris's screenshot, 2026-11-12): one — big, no bubble, the time in a small
   // pill of the bubble's colour under it; two or three — larger in the bubble, the time on its own line; more — as words
   private var big = false, emojis = 0
@@ -1357,7 +1357,12 @@ final class BubbleCell: UITableViewCell {
     let sys = m.kind == "sys"
     sysL.isHidden = !sys; bubble.isHidden = sys; reacts.isHidden = true; retryB.isHidden = !(mine && m.failed); face.isHidden = true; fwdB.isHidden = true
     bubbleBottom.isActive = false; reactsBottom.isActive = false
-    if sys { sysL.text = m.text; media = false; return }
+    if sys {
+      // (the group's notes as WhatsApp's, measured from Haris's screenshot: 12 on an 18 line, a small white pill — 2026-11-12)
+      let ps = NSMutableParagraphStyle(); ps.minimumLineHeight = 18; ps.maximumLineHeight = 18; ps.alignment = .center
+      sysL.attributedText = NSAttributedString(string: m.text, attributes: [.font: UIFont.systemFont(ofSize: 12), .paragraphStyle: ps, .baselineOffset: (18 - UIFont.systemFont(ofSize: 12).lineHeight) / 4])
+      media = false; return
+    }
     top.constant = run.first ? 10 : 2
     let isVideo = !m.deleted && m.file != nil && m.kind == "video"
     let isPhoto = !m.deleted && m.file != nil && (m.kind == "photo" || isVideo)
@@ -1538,6 +1543,19 @@ final class BubbleCell: UITableViewCell {
     reacts.isHidden = counts.isEmpty || m.deleted
     reacts.text = counts.map { $0.0 }.joined() + (m.reactions.count > 1 ? " \(m.reactions.count)" : "")
     reactsLead.isActive = !mine; reactsTrail.isActive = mine
+    // (a message of words: the bubble as wide as what's in it, worked out here — the words' own widest line with the time's
+    //  room, the name, "Forwarded", a quote — never wider than the design's widest; the label's own size grew to that widest)
+    if tight.isActive {
+      let widest = UIScreen.main.bounds.width * (mine ? 281 : 250) / 393, inner = widest - 24
+      var w: CGFloat = 0
+      if !textL.isHidden, let t = textL.attributedText {
+        w = ceil(t.boundingRect(with: CGSize(width: inner, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil).width) + 1
+      }
+      for l in [nameL, roleL, fwdL] where !l.isHidden { w = max(w, ceil(l.intrinsicContentSize.width)) }
+      if !quoteWrap.isHidden { w = max(w, max(quoteName.intrinsicContentSize.width, quoteText.intrinsicContentSize.width) + 26 + quoteThumbW.constant) }
+      if !footL.isHidden { w = max(w, ceil(footL.intrinsicContentSize.width)) }
+      tight.constant = min(widest, w + 24)
+    }
     if reacts.isHidden { bubbleBottom.isActive = true } else { reactsBottom.isActive = true }
     setNeedsLayout()
   }
