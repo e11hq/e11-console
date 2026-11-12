@@ -912,18 +912,19 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (where iPhone puts the preview is known as its lift begins — its view is given its final place then — so the strip
     //  comes with the lift, not after it; checked again as the lift ends, and moved there if iPhone placed it otherwise.
     //  The place read with the preview's own size and scale, as iPhone may shrink it — Haris 2026-11-12)
-    let placed = { (a: UIContextMenuInteractionAnimating?) -> CGRect? in
-      guard let pv = a?.previewViewController?.view, pv.window != nil else { return nil }
-      return pv.convert(pv.bounds, to: w)
+    // (the preview's place read inside iPhone's own lift — where its final place is already set — and the strip shown
+    //  there; read again as the lift ends and moved if iPhone placed it otherwise. Before, it was read a moment too early,
+    //  from where the message started, and could land under the preview or over the menu — Haris 2026-11-12)
+    guard let a = animator, let pv = a.previewViewController?.view else { show(cell.bubble.convert(cell.bubble.bounds, to: w)); return }
+    var shown = false
+    a.addAnimations { let b = pv.convert(pv.bounds, to: w); DispatchQueue.main.async { if !shown { shown = true; show(b) } } }
+    a.addCompletion {
+      guard self.reactBar === bar, pv.window != nil else { return }
+      let b = pv.convert(pv.bounds, to: w)
+      if !shown { shown = true; show(b); return }
+      let y = max(w.safeAreaInsets.top + 8, b.minY - 62)
+      if abs(bar.frame.minY - y) > 1 { UIView.animate(withDuration: 0.2) { bar.frame.origin.y = y } }
     }
-    if let a = animator {
-      DispatchQueue.main.async { [weak a] in show(placed(a) ?? cell.bubble.convert(cell.bubble.bounds, to: w)) }
-      a.addCompletion { [weak a] in
-        guard self.reactBar === bar, let b = placed(a) else { return }
-        let y = max(w.safeAreaInsets.top + 8, b.minY - 62)
-        if abs(bar.frame.minY - y) > 1 { UIView.animate(withDuration: 0.2) { bar.frame.origin.y = y } }
-      }
-    } else { show(cell.bubble.convert(cell.bubble.bounds, to: w)) }
     // (the chat behind a little blurred while the message is held — Haris 2026-11-12)
     if let host = navigationController?.view {
       let veil = UIVisualEffectView(effect: nil); veil.frame = host.bounds; veil.isUserInteractionEnabled = false
