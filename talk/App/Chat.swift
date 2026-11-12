@@ -117,6 +117,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         let c = tv.dequeueReusableCell(withIdentifier: "b", for: ip) as! BubbleCell
         c.contentView.isUserInteractionEnabled = !self.keyUp
         c.find = self.findSet.contains(id) ? (self.findQ, id == self.findCur) : nil
+        c.album = self.albums[id] ?? []
         if let m = self.msgs[id], let g = Talk.shared.groups[self.group] { c.set(m, group: g, log: Talk.shared.log(self.group), run: self.runs[id] ?? Run()) }
         c.onReplyTap = { [weak self] rid in self?.jump(to: rid) }
         c.onFileTap = { [weak self, weak c] m in self?.openFrom = (m.kind == "photo" || m.kind == "video") ? c?.photo : nil; self?.open(m) }
@@ -300,6 +301,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
   static let page = 100
   private var shownFrom: String?, hasOlder = false, addingOlder = false
+  private var albums: [String: [Msg]] = [:]
   // the next 100 older ones above — the place on screen kept where it is
   private func older() {
     guard hasOlder, !addingOlder else { return }
@@ -513,8 +515,16 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let start = shownFrom.flatMap { pos[$0] } ?? max(0, all.count - ChatVC.page)
     shownFrom = all.indices.contains(start) ? all[start].id : nil
     hasOlder = start > 0
+    // (an album: four or more photos and videos sent together by one person — shown once, as the first of them)
+    var byAlbum: [String: [Msg]] = [:]
+    for m in all where m.album != nil && m.file != nil && !m.deleted { byAlbum[m.album!, default: []].append(m) }
+    var newAlbums: [String: [Msg]] = [:]
     for i in start..<all.count {
       let m = all[i]
+      if let a = m.album, let members = byAlbum[a], members.count >= 4 {
+        if members.first?.id != m.id { continue }
+        newAlbums[m.id] = members
+      }
       let d = Look.day(m.at)
       let prev = i > 0 ? all[i - 1] : nil, next = i + 1 < all.count ? all[i + 1] : nil
       let same = { (o: Msg?) -> Bool in guard let o = o else { return false }; return o.by == m.by && o.kind != "sys" && m.kind != "sys" && Look.day(o.at) == d }
@@ -525,13 +535,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         newDayOf[section] = d; snap.appendSections([section])
       }
       msgs[m.id] = m
-      var h = Hasher(); h.combine(m.text); h.combine(m.edited); h.combine(m.deleted); h.combine(m.pending); h.combine(m.failed); h.combine(m.reactions); h.combine(m.file?.id); h.combine(m.link)
+      var h = Hasher(); h.combine(m.text); h.combine(m.edited); h.combine(m.deleted); h.combine(m.pending); h.combine(m.failed); h.combine(m.reactions); h.combine(m.file?.id); h.combine(m.link); h.combine(newAlbums[m.id]?.map { $0.id + ($0.file?.id ?? "") })
       h.combine(newRuns[m.id]); h.combine(Talk.shared.people[m.by]?.color); h.combine(Talk.shared.people[m.by]?.role)
       if m.by == meId { h.combine(i <= readTo); h.combine(i <= gotTo) }
       newSigs[m.id] = h.finalize()
       items.append(.msg(m.id)); snap.appendItems([.msg(m.id)], toSection: section)
     }
-    runs = newRuns; dayOf = newDayOf
+    runs = newRuns; dayOf = newDayOf; albums = newAlbums
     let old = data.snapshot()
     snap.reconfigureItems(items.filter { if case .msg(let id) = $0 { return old.indexOfItem($0) != nil && sigs[id] != newSigs[id] }; return false })
     sigs = newSigs
@@ -637,7 +647,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     toBottom(true)
   }
   // a video from the camera or Photos: shrunk to 720p first (Haris 2026-11-05); one from Files goes as it is
-  fileprivate func sendVideo(_ url: URL, name: String, caption: String = "", hd: Bool = false) {
+  fileprivate func sendVideo(_ url: URL, name: String, caption: String = "", hd: Bool = false, album: String? = nil) {
     let asset = AVURLAsset(url: url)
     // (HD: 1080p; otherwise 720p)
     guard let ex = AVAssetExportSession(asset: asset, presetName: hd ? AVAssetExportPreset1920x1080 : AVAssetExportPreset1280x720) else { sendFile(url, kind: "file", name: name, caption: caption); return }
@@ -656,14 +666,14 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         guard let d = try? Data(contentsOf: src) else { toast("Couldn’t read that video"); return }
         let tmpId = "local-" + UUID().uuidString
         let fname = (name as NSString).deletingPathExtension + ".mp4"
-        Talk.shared.send(self.group, text: caption, reply: self.replying, file: Msg.FileRef(id: tmpId, name: fname, size: d.count, kind: "video", w: w, h: h, secs: secs.isFinite ? secs : nil), localFile: src, upload: d)
+        Talk.shared.send(self.group, text: caption, reply: self.replying, file: Msg.FileRef(id: tmpId, name: fname, size: d.count, kind: "video", w: w, h: h, secs: secs.isFinite ? secs : nil), localFile: src, upload: d, album: album)
         self.replying = nil
         self.toBottom(true)
       }
     }
   }
-  fileprivate func sendFile(_ url: URL, kind: String, name: String, caption: String = "", hd: Bool = false) {
-    if kind == "video" { sendVideo(url, name: name, caption: caption, hd: hd); return }
+  fileprivate func sendFile(_ url: URL, kind: String, name: String, caption: String = "", hd: Bool = false, album: String? = nil) {
+    if kind == "video" { sendVideo(url, name: name, caption: caption, hd: hd, album: album); return }
     guard let d = try? Data(contentsOf: url) else { toast("Couldn’t read that file"); return }
     var w: Double? = nil, h: Double? = nil, data = d
     var kind = kind
@@ -679,7 +689,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let local = FileManager.default.temporaryDirectory.appendingPathComponent(tmpId)
     try? data.write(to: local)
     let fname = kind == "photo" ? (name as NSString).deletingPathExtension + ".jpg" : name
-    Talk.shared.send(group, text: caption, reply: replying, file: Msg.FileRef(id: tmpId, name: fname, size: data.count, kind: kind, w: w, h: h, secs: nil), localFile: local, upload: data)
+    Talk.shared.send(group, text: caption, reply: replying, file: Msg.FileRef(id: tmpId, name: fname, size: data.count, kind: kind, w: w, h: h, secs: nil), localFile: local, upload: data, album: kind == "photo" ? album : nil)
     replying = nil
     toBottom(true)
   }
@@ -1009,7 +1019,9 @@ extension ChatVC: PHPickerViewControllerDelegate, UIImagePickerControllerDelegat
     let v = SendPreviewVC(items: items, to: Talk.shared.groups[group]?.name ?? "")
     v.onSend = { [weak self] all in
       guard let self = self else { return }
-      for it in all { self.sendFile(it.url, kind: it.kind, name: it.name, caption: it.caption.trimmingCharacters(in: .whitespacesAndNewlines), hd: it.hd) }
+      // (four or more photos and videos sent together: one album, WhatsApp's)
+      let album = all.filter { $0.kind != "file" }.count >= 4 ? UUID().uuidString : nil
+      for it in all { self.sendFile(it.url, kind: it.kind, name: it.name, caption: it.caption.trimmingCharacters(in: .whitespacesAndNewlines), hd: it.hd, album: it.kind == "file" ? nil : album) }
     }
     v.onAddMore = { [weak self, weak v] in
       guard let v = v else { return }
@@ -1256,7 +1268,7 @@ final class BubbleCell: UITableViewCell {
     quote.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(quoteTap)))
     // the photo
     photo.contentMode = .scaleAspectFill; photo.clipsToBounds = true; photo.backgroundColor = .tertiarySystemFill; photo.isUserInteractionEnabled = true
-    photo.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(fileTap)))
+    photo.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(fileTap(_:))))
     diag.colors = [UIColor.black.withAlphaComponent(0.62).cgColor, UIColor.black.withAlphaComponent(0.28).cgColor, UIColor.clear.cgColor]
     diag.locations = [0, 0.26, 0.46]; diag.startPoint = CGPoint(x: 0, y: 0); diag.endPoint = CGPoint(x: 0.75, y: 1)
     foot.colors = [UIColor.clear.cgColor, UIColor.black.withAlphaComponent(0.45).cgColor]
@@ -1290,7 +1302,7 @@ final class BubbleCell: UITableViewCell {
                                  cs.leadingAnchor.constraint(equalTo: cardIcon.trailingAnchor, constant: 10), cs.centerYAnchor.constraint(equalTo: card.centerYAnchor),
                                  cs.trailingAnchor.constraint(lessThanOrEqualTo: cardDown.leadingAnchor, constant: -10),
                                  cardDown.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12), cardDown.centerYAnchor.constraint(equalTo: card.centerYAnchor)])
-    card.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(fileTap)))
+    card.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(fileTap(_:))))
     // the link's box
     linkBox.backgroundColor = UIColor.black.withAlphaComponent(0.22); linkBox.layer.cornerRadius = 15; linkBox.layer.cornerCurve = .continuous
     linkSite.font = .systemFont(ofSize: 15, weight: .semibold); linkURL.font = .systemFont(ofSize: 14); linkURL.numberOfLines = 2; linkURL.lineBreakMode = .byCharWrapping
@@ -1548,8 +1560,12 @@ final class BubbleCell: UITableViewCell {
       if let s = f.secs { vlen.text = String(format: "%d:%02d", Int(s) / 60, Int(s) % 60) }
       // (the same photo drawn again keeps its picture — it blanked for a moment on every redraw, all photos flashing)
       let known = isVideo ? BubbleCell.frames.object(forKey: f.id as NSString) : BubbleCell.pictures.object(forKey: f.id as NSString)
-      if shownFile == f.id && photo.image != nil { } else if let k = known { photo.image = k; shownFile = f.id } else { photo.image = nil; shownFile = f.id }
-      if photo.image == nil, !isVideo || f.size <= 60 * 1024 * 1024 || FileManager.default.fileExists(atPath: Net.local(f.id).path) {
+      if album.count >= 4 {
+        // (an album: a square of its first four, "+N" on the fourth for the rest)
+        photoH.constant = w; playDisc.isHidden = true; vlen.isHidden = true
+        drawAlbum(m, w)
+      } else if shownFile == f.id && photo.image != nil { } else if let k = known { photo.image = k; shownFile = f.id } else { photo.image = nil; shownFile = f.id }
+      if album.count < 4, photo.image == nil, !isVideo || f.size <= 60 * 1024 * 1024 || FileManager.default.fileExists(atPath: Net.local(f.id).path) {
         Net.shared.file(f.id) { [weak self] url in
           guard let self = self, self.msg?.id == m.id, let url = url else { return }
           if isVideo { BubbleCell.frame(url, f.id) { [weak self] img in if self?.msg?.id == m.id { self?.photo.image = img } } }
@@ -1742,7 +1758,57 @@ final class BubbleCell: UITableViewCell {
     }
   }
   @objc private func quoteTap() { if let r = msg?.reply { onReplyTap?(r.id) } }
-  @objc private func fileTap() { if let m = msg { onFileTap?(m) } }
+  @objc private func fileTap(_ g: UITapGestureRecognizer) {
+    guard let m = msg else { return }
+    // (in an album: the one under the finger — the fourth for the rest)
+    if album.count >= 4, g.view === photo {
+      let p = g.location(in: photo), col = p.x < photo.bounds.midX ? 0 : 1, row = p.y < photo.bounds.midY ? 0 : 1
+      onFileTap?(album[row * 2 + col]); return
+    }
+    onFileTap?(m)
+  }
+  // an album's square: the first four drawn into one picture once each is here (kept, so it's drawn once)
+  var album: [Msg] = []
+  private func drawAlbum(_ m: Msg, _ w: CGFloat) {
+    let four = Array(album.prefix(4)), key = "album:" + four.compactMap { $0.file?.id }.joined(separator: ",") + "+\(album.count)"
+    if let k = BubbleCell.pictures.object(forKey: key as NSString) { photo.image = k; shownFile = key; return }
+    if shownFile != key { photo.image = nil; shownFile = key }
+    var pics = [UIImage?](repeating: nil, count: four.count)
+    let g = DispatchGroup()
+    for (i, a) in four.enumerated() {
+      guard let f = a.file else { continue }
+      g.enter()
+      Net.shared.file(f.id) { url in DispatchQueue.main.async {
+        guard let url = url else { g.leave(); return }
+        if a.kind == "video" { BubbleCell.frame(url, f.id) { img in DispatchQueue.main.async { pics[i] = img; g.leave() } } }
+        else { pics[i] = BubbleCell.picture(url, f.id); g.leave() }
+      } }
+    }
+    let more = album.count - 4
+    g.notify(queue: .main) { [weak self] in
+      let gap: CGFloat = 2, t = (w - gap) / 2
+      let img = UIGraphicsImageRenderer(size: CGSize(width: w, height: w)).image { ctx in
+        for (i, p) in pics.enumerated() {
+          let r = CGRect(x: CGFloat(i % 2) * (t + gap), y: CGFloat(i / 2) * (t + gap), width: t, height: t)
+          UIColor.tertiarySystemFill.setFill(); ctx.fill(r)
+          if let p = p {
+            let k = max(t / p.size.width, t / p.size.height), sz = CGSize(width: p.size.width * k, height: p.size.height * k)
+            ctx.cgContext.saveGState(); ctx.cgContext.clip(to: r)
+            p.draw(in: CGRect(x: r.midX - sz.width / 2, y: r.midY - sz.height / 2, width: sz.width, height: sz.height))
+            ctx.cgContext.restoreGState()
+          }
+          if i == 3 && more > 0 {
+            UIColor(white: 0, alpha: 0.45).setFill(); ctx.fill(r)
+            let s = NSAttributedString(string: "+\(more)", attributes: [.font: UIFont.systemFont(ofSize: 28, weight: .semibold), .foregroundColor: UIColor.white])
+            let z = s.size(); s.draw(at: CGPoint(x: r.midX - z.width / 2, y: r.midY - z.height / 2))
+          }
+        }
+      }
+      if pics.allSatisfy({ $0 != nil }) { BubbleCell.pictures.setObject(img, forKey: key as NSString) }
+      guard let self = self, self.msg?.id == m.id else { return }
+      self.photo.image = img
+    }
+  }
   @objc private func linkTap() { if let u = link { UIApplication.shared.open(u) } }
   // a found message: the bubble swells a little and settles (on its layer, so a swipe's own move is never disturbed)
   func pulse() {
