@@ -23,7 +23,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private var runs: [String: Run] = [:]
   private let bar = MessageBar()
   private var kb: CGFloat = 0
-  private var replying: Msg? { didSet { bar.setReply(replying.map { (Talk.shared.name($0.by), Talk.preview($0)) }, editing: false) } }
+  private var replying: Msg? { didSet {
+    let mine = replying?.by == Talk.shared.me?.id
+    bar.setReply(replying.map { (mine ? "You" : Talk.shared.name($0.by), Talk.preview($0)) }, editing: false, ink: replying.map { mine ? Look.accent : Look.person($0.by) } ?? Look.accent)
+  } }
   private var editingMsg: Msg?
   private var previewURL: URL?
   private let titleV = UIStackView(), titleL = UILabel(), subL = UILabel(), titlePic = Avatar(frame: CGRect(x: 0, y: 0, width: 39, height: 39))
@@ -1307,10 +1310,13 @@ final class MessageBar: UIView, UITextViewDelegate {
     box.textContainerInset = UIEdgeInsets(top: 6, left: 8, bottom: 6, right: 34); box.delegate = self; box.isScrollEnabled = false
     addSubview(box); addSubview(smiley)
     place.text = ""; place.font = .systemFont(ofSize: 16); place.textColor = .systemGray; box.addSubview(place)
-    replyV.backgroundColor = .clear
-    replyBar.backgroundColor = Look.accent; replyName.font = .systemFont(ofSize: 13, weight: .semibold); replyName.textColor = Look.accent
-    replyText.font = .systemFont(ofSize: 13); replyText.textColor = .secondaryLabel
-    replyX.setImage(UIImage(systemName: "xmark.circle.fill"), for: .normal); replyX.tintColor = .tertiaryLabel
+    // the message being answered (WhatsApp's): edge to edge over the box, its person's colour as the bar on the very
+    // left and their name, the words under it, ⓧ drawn thin at the right
+    replyV.backgroundColor = .tertiarySystemFill
+    replyBar.backgroundColor = Look.accent; replyName.font = .systemFont(ofSize: 15, weight: .semibold); replyName.textColor = Look.accent
+    replyText.font = .systemFont(ofSize: 15); replyText.textColor = .label
+    replyX.setImage(UIImage(systemName: "xmark.circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 21, weight: .light)), for: .normal); replyX.tintColor = .label
+    replyX.accessibilityLabel = "Cancel the reply"
     replyX.addAction(UIAction { [weak self] _ in self?.onCancelReply?() }, for: .touchUpInside)
     [replyBar, replyName, replyText, replyX].forEach { replyV.addSubview($0) }
     replyV.isHidden = true; addSubview(replyV)
@@ -1319,18 +1325,18 @@ final class MessageBar: UIView, UITextViewDelegate {
   required init?(coder: NSCoder) { fatalError() }
   // (the bar stays above the home indicator when the keyboard is down)
   private var mentionH: CGFloat { mentionV.isHidden ? 0 : CGFloat(mentionV.arrangedSubviews.count) * 44 }
-  override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: (locked ? 83 : boxH + 14) + (replyV.isHidden ? 0 : 46) + mentionH + safeAreaInsets.bottom) }
+  override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: (locked ? 83 : boxH + 14) + (replyV.isHidden ? 0 : 52) + mentionH + safeAreaInsets.bottom) }
   override func safeAreaInsetsDidChange() { super.safeAreaInsetsDidChange(); invalidateIntrinsicContentSize() }
   override func layoutSubviews() {
     super.layoutSubviews()
     defer { onLayout?() }
-    let W = bounds.width, mh = mentionH, top: CGFloat = mh + (replyV.isHidden ? 0 : 46)
+    let W = bounds.width, mh = mentionH, top: CGFloat = mh + (replyV.isHidden ? 0 : 52)
     blur.frame = CGRect(x: 0, y: 0, width: W, height: bounds.height + 200)
     mentionV.frame = CGRect(x: 0, y: 0, width: W, height: mh)
-    replyV.frame = CGRect(x: 0, y: mh, width: W, height: 46)
-    replyBar.frame = CGRect(x: 14, y: 8, width: 3, height: 32)
-    replyName.frame = CGRect(x: 24, y: 7, width: W - 70, height: 17); replyText.frame = CGRect(x: 24, y: 24, width: W - 70, height: 17)
-    replyX.frame = CGRect(x: W - 44, y: 6, width: 36, height: 36)
+    replyV.frame = CGRect(x: 0, y: mh, width: W, height: 52)
+    replyBar.frame = CGRect(x: 0, y: 0, width: 4, height: 52)
+    replyName.frame = CGRect(x: 12, y: 7, width: W - 64, height: 19); replyText.frame = CGRect(x: 12, y: 27, width: W - 64, height: 19)
+    replyX.frame = CGRect(x: W - 46, y: 6, width: 40, height: 40)
     let typing = !box.text.isEmpty
     // (the design's places: + at 10, the box from 46, camera and mic at the right; the buttons stay level with the box's last line)
     let y = top + 8, by = y + boxH - 32
@@ -1538,10 +1544,10 @@ final class MessageBar: UIView, UITextViewDelegate {
     box.text = ""; picked = [:]; showMentions([]); textChanged()
     onSend?(t, ms)
   }
-  func setReply(_ r: (String, String)?, editing: Bool) {
+  func setReply(_ r: (String, String)?, editing: Bool, ink: UIColor = Look.accent) {
     replyV.isHidden = r == nil
     replyName.text = r?.0; replyText.text = r?.1
-    replyBar.backgroundColor = editing ? .systemOrange : Look.accent; replyName.textColor = editing ? .systemOrange : Look.accent
+    replyBar.backgroundColor = editing ? .systemOrange : ink; replyName.textColor = editing ? .systemOrange : ink
     if r == nil && editing == false && box.text.isEmpty == false && replyName.text == "Editing" { box.text = ""; textChanged() }
     invalidateIntrinsicContentSize(); setNeedsLayout()
   }
