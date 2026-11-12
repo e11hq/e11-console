@@ -835,8 +835,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     guard case .msg(let id)? = data.itemIdentifier(for: ip), let m = msgs[id], m.kind != "sys" else { return nil }
     // (the trial of Haris 2026-11-12: a preview of the bubble — iPhone places it where it fits with the menu, shrinking a
     //  tall one — iMessage's way; build 39 kept the bubble itself, slid up WhatsApp's way)
-    let shot = (tv.cellForRow(at: ip) as? BubbleCell)?.bubbleShot()
-    return UIContextMenuConfiguration(identifier: id as NSString, previewProvider: shot.map { img in { BubblePreview(img) } }) { [weak self] _ in self?.menu(m) }
+    let shot = (tv.cellForRow(at: ip) as? BubbleCell)?.bubble.snapshotView(afterScreenUpdates: false)
+    return UIContextMenuConfiguration(identifier: id as NSString, previewProvider: shot.map { v in { BubblePreview(v) } }) { [weak self] _ in self?.menu(m) }
   }
   // opening and closing: from and back to the message's own place in the chat
   func tableView(_ tv: UITableView, previewForDismissingContextMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? { holdPreview(tv, c) }
@@ -945,7 +945,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     //  the emojis popping in one after another)
     let show = { (b: CGRect) in
       guard self.reactBar === bar else { return }
-      bar.frame = CGRect(x: 14, y: max(w.safeAreaInsets.top + 8, b.minY + BubblePreview.pad - 62), width: w.bounds.width - 28, height: 54)
+      bar.frame = CGRect(x: 14, y: max(w.safeAreaInsets.top + 8, b.minY - 62), width: w.bounds.width - 28, height: 54)
       let from = CGPoint(x: mine ? b.maxX - 34 : b.minX + 34, y: b.minY), k: CGFloat = 0.2
       bar.alpha = 0
       bar.transform = CGAffineTransform(translationX: (from.x - bar.center.x) * (1 - k), y: (from.y - bar.center.y) * (1 - k)).scaledBy(x: k, y: k)
@@ -959,14 +959,14 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (the preview's place read inside iPhone's own lift — where its final place is already set — and the strip shown
     //  there; read again as the lift ends and moved if iPhone placed it otherwise. Before, it was read a moment too early,
     //  from where the message started, and could land under the preview or over the menu — Haris 2026-11-12)
-    guard let a = animator, let pv = a.previewViewController?.view else { show(cell.bubble.convert(cell.bubble.bounds, to: w)); return }
+    guard let a = animator, let pv = (a.previewViewController as? BubblePreview)?.shot else { show(cell.bubble.convert(cell.bubble.bounds, to: w)); return }
     var shown = false
     a.addAnimations { let b = pv.convert(pv.bounds, to: w); DispatchQueue.main.async { if !shown { shown = true; show(b) } } }
     a.addCompletion {
       guard self.reactBar === bar, pv.window != nil else { return }
       let b = pv.convert(pv.bounds, to: w)
       if !shown { shown = true; show(b); return }
-      let y = max(w.safeAreaInsets.top + 8, b.minY + BubblePreview.pad - 62)
+      let y = max(w.safeAreaInsets.top + 8, b.minY - 62)
       if abs(bar.frame.minY - y) > 1 { UIView.animate(withDuration: 0.2) { bar.frame.origin.y = y } }
     }
     // (the chat behind a little blurred while the message is held — Haris 2026-11-12)
@@ -1753,10 +1753,6 @@ final class BubbleCell: UITableViewCell {
   @objc private func quoteTap() { if let r = msg?.reply { onReplyTap?(r.id) } }
   @objc private func fileTap() { if let m = msg { onFileTap?(m) } }
   @objc private func linkTap() { if let u = link { UIApplication.shared.open(u) } }
-  // the bubble as a picture, for the hold's preview
-  func bubbleShot() -> UIImage {
-    UIGraphicsImageRenderer(bounds: bubble.bounds).image { _ in bubble.drawHierarchy(in: bubble.bounds, afterScreenUpdates: false) }
-  }
   // a found message: the bubble swells a little and settles (on its layer, so a swipe's own move is never disturbed)
   func pulse() {
     let a = CAKeyframeAnimation(keyPath: "transform.scale")
@@ -2289,17 +2285,16 @@ final class FindBar: UIView {
 
 
 // the hold's preview (trial, Haris 2026-11-12): the bubble's picture at its own size — iPhone shrinks it if it won't fit
-// (a clear margin round it — iPhone rounds the preview's corners more on a big one and cut into a long message's bubble;
-//  the rounding now falls on the margin, Haris 2026-11-12)
+// (the bubble itself as it looks — iPhone's own snapshot of it, at its own size, in the middle of a clear margin: a
+//  picture of it was shown enlarged and cut on a reply, Haris 2026-11-12; iPhone's rounding falls on the margin)
 final class BubblePreview: UIViewController {
   static let pad: CGFloat = 12
-  private let img: UIImage
-  init(_ img: UIImage) { self.img = img; super.init(nibName: nil, bundle: nil); preferredContentSize = CGSize(width: img.size.width + 2 * BubblePreview.pad, height: img.size.height + 2 * BubblePreview.pad) }
-  required init?(coder: NSCoder) { fatalError() }
-  override func loadView() {
-    let v = UIView(); v.backgroundColor = .clear
-    let iv = UIImageView(image: img); iv.contentMode = .scaleAspectFit; iv.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-    iv.frame = CGRect(origin: .zero, size: preferredContentSize).insetBy(dx: BubblePreview.pad, dy: BubblePreview.pad)
-    v.addSubview(iv); view = v
+  let shot: UIView
+  init(_ shot: UIView) {
+    self.shot = shot; super.init(nibName: nil, bundle: nil)
+    preferredContentSize = CGSize(width: shot.bounds.width + 2 * BubblePreview.pad, height: shot.bounds.height + 2 * BubblePreview.pad)
   }
+  required init?(coder: NSCoder) { fatalError() }
+  override func loadView() { let v = UIView(); v.backgroundColor = .clear; v.addSubview(shot); view = v }
+  override func viewDidLayoutSubviews() { super.viewDidLayoutSubviews(); shot.center = CGPoint(x: view.bounds.midX, y: view.bounds.midY) }
 }
