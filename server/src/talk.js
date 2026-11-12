@@ -279,7 +279,10 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     sweep();
     return { ok: true };
   }
-  function filesIn(data) { const f = data && data.file; return [...(f && f.id ? [f.id] : []), ...(Array.isArray(data && data.files) ? data.files : [])]; }
+  function filesIn(data) {
+    const f = data && data.file, k = data && data.link;   // (a link preview's picture and icon go with it too)
+    return [...(f && f.id ? [f.id] : []), ...(k && k.img && k.img.id ? [k.img.id] : []), ...(k && k.icon && k.icon.id ? [k.icon.id] : []), ...(Array.isArray(data && data.files) ? data.files : [])];
+  }
   function dropFiles(ids) {
     for (const id of ids) {
       if (Q.fileInUse.get(`%"id":"${id}"%`)) continue;   // (still in an event someone hasn't picked up)
@@ -521,8 +524,16 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         if (!text.trim() && !file) return bad('Nothing to send');
         const id = rid('m'), mentions = cleanIds(b.mentions).filter((m) => member(g, m));
         const reply = b.reply && typeof b.reply === 'object' ? { id: clip(b.reply.id, 40), by: clip(b.reply.by, 40), text: clip(b.reply.text, 200), kind: clip(b.reply.kind, 10) } : null;
-        Q.putSent.run(id, g.id, u.id, t, JSON.stringify(file ? [file.id] : []));
-        const seq = emit(g, 'msg', { id, cid: clip(b.cid, 60), kind: file ? file.kind : 'text', text, file, reply, mentions, ...(b.fwd === true ? { fwd: true } : {}) }, u.id);   // (fwd: forwarded from another chat — "Forwarded" over it)
+        // a link's preview, made on the sender's phone (Apple's link reader there): the address, title, site, whether it's a
+        // video, and its picture and site icon as files that phone uploaded (Haris 2026-11-12, option B)
+        let link = null;
+        if (!file && b.link && typeof b.link === 'object' && /^https?:\/\//i.test(String(b.link.url || ''))) {
+          const own = (x) => { const f = x && typeof x === 'object' ? Q.getFile.get(String(x.id || '')) : null; return f && f.by === u.id && f.done ? { id: f.id } : null; };
+          link = { url: clip(b.link.url, 2000), title: clip(b.link.title || '', 300) || null, site: clip(b.link.site || '', 120) || null,
+            video: b.link.video === true, img: own(b.link.img), icon: own(b.link.icon) };
+        }
+        Q.putSent.run(id, g.id, u.id, t, JSON.stringify([file && file.id, link && link.img && link.img.id, link && link.icon && link.icon.id].filter(Boolean)));
+        const seq = emit(g, 'msg', { id, cid: clip(b.cid, 60), kind: file ? file.kind : 'text', text, file, reply, mentions, ...(b.fwd === true ? { fwd: true } : {}), ...(link ? { link } : {}) }, u.id);   // (fwd: forwarded from another chat — "Forwarded" over it)
         Q.touch.run(t, g.id);
         notify(g, u, file && !text.trim() ? ({ photo: '📷 Photo', video: '🎥 Video', voice: '🎤 Voice message' }[file.kind] || `📄 ${file.name}`) : text, id, mentions);
         return { ok: true, id, seq, at: t };

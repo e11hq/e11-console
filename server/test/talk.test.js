@@ -203,6 +203,12 @@ test('client contacts: added by Super / Office Admins only; E11 Talk only; their
   assert.ok((await sync('adm')).events.some((e) => e.type === 'msg' && e.id === fw.id && e.fwd === true), 'forwarded, marked');
   const plain = await act('des', { act: 'send', group: g.id, text: 'not forwarded' });
   assert.ok((await sync('adm')).events.some((e) => e.type === 'msg' && e.id === plain.id && !('fwd' in e)), 'an ordinary one, not marked');
+  // a link's preview from the sender's phone: kept with the message; a picture it doesn't own is dropped
+  const lk = await act('des', { act: 'send', group: g.id, text: 'see https://news.example.com/a', link: { url: 'https://news.example.com/a', title: 'Ten ideas', site: 'news.example.com', video: true, img: { id: 'nope' } } });
+  const le = (await sync('adm')).events.find((e) => e.type === 'msg' && e.id === lk.id);
+  assert.ok(le && le.link && le.link.title === 'Ten ideas' && le.link.video === true && le.link.img === null, 'the preview kept, a picture not theirs dropped');
+  const bad = await act('des', { act: 'send', group: g.id, text: 'x', link: { url: 'javascript:alert(1)' } });
+  assert.ok(!(await sync('adm')).events.find((e) => e.id === bad.id).link, 'only http(s) links');
   // Delivered to (Message info): a phone that has a message tells the group's others — the client sees it too; never about your own
   const ds = await sync('des'); await ack('des', ds.last);
   const kg = await (await fetch(base + '/api/talk/sync?after=0', { headers: KH })).json();
