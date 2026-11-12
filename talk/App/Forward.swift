@@ -160,7 +160,7 @@ final class ForwardVC: UIViewController, UICollectionViewDelegate, UISearchResul
     Net.shared.file(f.id) { [weak self] url in
       guard let url = url, let d = try? Data(contentsOf: url) else { self?.sendB.isEnabled = true; toast("That file isn’t on this phone any more"); return }
       for g in targets {
-        let tmp = "tmp-" + UUID().uuidString
+        let tmp = "local-" + UUID().uuidString
         let copy = Msg.FileRef(id: tmp, name: f.name, size: d.count, kind: f.kind, w: f.w, h: f.h, secs: f.secs, wave: f.wave)
         Talk.shared.send(g, text: m.text, file: copy, localFile: url, upload: d, fwd: true)
       }
