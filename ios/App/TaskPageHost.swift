@@ -1233,7 +1233,10 @@ extension Main {
       let kind = w["kind"] as? String ?? "", file = w["file"] as? String
       switch kind {
       case "folder", "asset":
-        guard let c = w["client"] as? String, AppData.shared.meModel("assets", "assets", [c]) != nil else { say("File not shared with you"); return }
+        // (the folder's client — its Client Assets asked for as it opens, not required to be worked out already: from Home it
+        //  wasn't yet, and the link was dropped without a word, Haris 2026-11-12)
+        guard let c = w["client"] as? String else { say("File not shared with you"); return }
+        if kind == "asset", AppData.shared.meModel("assets", "assets", [c]) == nil { say("File not shared with you"); return }
         // (from Home or any tab that doesn't hold Client Assets: to the Clients tab first — opened there unseen, the app
         //  stayed on Home, Haris 2026-11-12, his yes)
         if let t = AppleTabs.shared, t.ownNav !== t.clientsNav, t.ownNav !== t.assetsNav, t.ownNav !== t.meNav, !(t.ownNav.map { o in t.roleNavs.values.contains { $0 === o } } ?? false), self.tabKeys.contains("clients") {
