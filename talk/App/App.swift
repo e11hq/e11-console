@@ -72,6 +72,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     w.rootViewController = UIViewController()
     w.makeKeyAndVisible()
     Net.shared.onSignedOut = { [weak self] in self?.signedOut() }
+    NotificationCenter.default.addObserver(self, selector: #selector(refused), name: .talkRefused, object: nil)
     Net.shared.onNews = { Talk.shared.sync() }
     if let r = options.notificationResponse, let g = (r.notification.request.content.userInfo["e11"] as? [String: Any])?["groupId"] as? String { wantGroup = g }
     start()
@@ -164,6 +165,16 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     let a = UIAlertController(title: "Please sign in again", message: "Your E11 Talk sign-in has run out (about once a month). Your chats stay on this phone.", preferredStyle: .alert)
     a.addAction(UIAlertAction(title: "Sign in", style: .default) { [weak self] _ in self?.signingOut = false; self?.showSignIn() })
     window?.rootViewController?.present(a, animated: true)
+  }
+  // the email signed in isn't on the Team or in Client Contacts: Apple's alert says so, once while the app is open
+  private var toldRefused = false
+  @objc private func refused() {
+    guard !toldRefused, let top = window?.rootViewController else { return }
+    toldRefused = true
+    let a = UIAlertController(title: "This email isn’t set up for E11 Talk", message: "Ask E11 to add you, or sign out and sign in with the email they added for you.", preferredStyle: .alert)
+    a.addAction(UIAlertAction(title: "Sign Out", style: .destructive) { [weak self] _ in self?.toldRefused = false; self?.signOutNow() })
+    a.addAction(UIAlertAction(title: "OK", style: .cancel))
+    (top.presentedViewController ?? top).present(a, animated: true)
   }
   func signOutNow() {
     if let t = UserDefaults.standard.string(forKey: "talk_push_token") { Net.shared.post("/api/talk/push", ["token": t, "off": true]) }

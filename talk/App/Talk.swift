@@ -61,6 +61,7 @@ extension Notification.Name {
   static let talkChanged = Notification.Name("talk.changed")        // the lists
   static let talkGroup = Notification.Name("talk.group")            // object: group id — its messages
   static let talkGone = Notification.Name("talk.gone")              // object: group id
+  static let talkRefused = Notification.Name("talk.refused")        // object: the server's words
 }
 
 final class Talk {
@@ -124,6 +125,8 @@ final class Talk {
   func refresh(_ done: (() -> Void)? = nil) {
     Net.shared.get("/api/talk/state") { [weak self] j in
       if let j = j, (j["ok"] as? Bool) == true { self?.take(j, save: true) }
+      // (signed in, but the email isn't anyone's in E11 Talk — said plainly, never an empty list)
+      else if let e = j?["error"] as? String, e.hasPrefix("No E11 Talk account") { NotificationCenter.default.post(name: .talkRefused, object: e) }
       done?()
     }
   }
