@@ -86,6 +86,7 @@ struct GroupLog: Codable {
 extension Notification.Name {
   static let talkChanged = Notification.Name("talk.changed")        // the lists
   static let talkGroup = Notification.Name("talk.group")            // object: group id — its messages
+  static let talkTasks = Notification.Name("talk.tasks")            // tasks changed in E11 Console
   static let talkTyping = Notification.Name("talk.typing")          // object: group id — who is typing there changed
   static let talkGone = Notification.Name("talk.gone")              // object: group id
   static let talkRefused = Notification.Name("talk.refused")        // object: the server's words

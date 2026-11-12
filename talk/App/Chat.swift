@@ -178,6 +178,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     }
     bar.onPickTask = { [weak self] _ in self?.editingMsg = nil; self?.replying = nil }
     NotificationCenter.default.addObserver(self, selector: #selector(typingChanged(_:)), name: .talkTyping, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(tasksChanged), name: .talkTasks, object: nil)
     bar.onPlus = { [weak self] k in self?.attach(k) }
     bar.onCancelReply = { [weak self] in self?.editingMsg = nil; self?.replying = nil; self?.bar.setTask(nil); self?.bar.setReply(nil, editing: false) }
     bar.onVoice = { [weak self] url, secs, wave in self?.sendVoice(url, secs: secs, wave: wave) }
@@ -407,6 +408,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   // ---------- typing (step 5, the design's board 32): "Omar is typing…" in our blue under the group's name, in place of
   // the people, crossfading; the dots bubble at the end of the chat ----------
   private var membersLine = ""
+  // (a task changed in E11 Console: this chat's task cards asked for again, if it's on screen)
+  @objc private func tasksChanged() { if view.window != nil { Talk.shared.refreshTasks(group) } }
   @objc private func typingChanged(_ n: Notification) { if (n.object as? String) == group { showTyping(animated: true) } }
   private func showTyping(animated: Bool) {
     let line = Talk.shared.typingLine(group)
