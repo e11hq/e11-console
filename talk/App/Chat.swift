@@ -108,6 +108,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     eye.addAttribute(.foregroundColor, value: Look.clientInk, range: NSRange(location: 0, length: eye.length)); cl.attributedText = eye
     let tint = UIView(); tint.backgroundColor = Look.clientInk.withAlphaComponent(0.14); tint.isUserInteractionEnabled = false
     clientLine.isHidden = true
+    let edge = UIView(); edge.backgroundColor = Look.clientInk.withAlphaComponent(0.22); edge.isUserInteractionEnabled = false
+    edge.translatesAutoresizingMaskIntoConstraints = false; clientLine.contentView.addSubview(edge)
+    NSLayoutConstraint.activate([edge.leadingAnchor.constraint(equalTo: clientLine.contentView.leadingAnchor), edge.trailingAnchor.constraint(equalTo: clientLine.contentView.trailingAnchor),
+                                 edge.bottomAnchor.constraint(equalTo: clientLine.contentView.bottomAnchor), edge.heightAnchor.constraint(equalToConstant: 0.5)])
     [tint, cl].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; clientLine.contentView.addSubview($0) }
     clientLine.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(clientLine)
     NSLayoutConstraint.activate([
@@ -941,7 +945,7 @@ final class BubbleCell: UITableViewCell {
     reacts.font = .systemFont(ofSize: 14); reacts.backgroundColor = Look.theirs; reacts.layer.cornerRadius = 13; reacts.layer.masksToBounds = true
     reacts.layer.borderWidth = 2; reacts.layer.borderColor = Look.chatBg.resolvedColor(with: traitCollection).cgColor
     contentView.addSubview(reacts)
-    sysL.font = .systemFont(ofSize: 15); sysL.textColor = .label; sysL.backgroundColor = Look.dayChip; sysL.numberOfLines = 0; sysL.textAlignment = .center
+    sysL.font = .systemFont(ofSize: 15); sysL.textColor = Look.dyn(0xE5E5EA, 0x000000); sysL.backgroundColor = Look.dyn(0x181818, 0xFFFFFF); sysL.numberOfLines = 0; sysL.textAlignment = .center
     sysL.layer.cornerRadius = 10; sysL.layer.masksToBounds = true
     contentView.addSubview(sysL)
     retryB.setImage(UIImage(systemName: "exclamationmark.circle.fill"), for: .normal); retryB.tintColor = .systemRed
@@ -1195,6 +1199,9 @@ final class BubbleCell: UITableViewCell {
     if words {
       let room = NSTextAttachment(image: BubbleCell.clear); room.bounds = CGRect(x: 0, y: 0, width: ceil(stamp.intrinsicContentSize.width) + 10, height: 1)
       a.append(NSAttributedString(attachment: room))
+      // (the design: 17 on a 22 line)
+      let ps = NSMutableParagraphStyle(); ps.minimumLineHeight = 22; ps.maximumLineHeight = 22
+      a.addAttributes([.paragraphStyle: ps, .baselineOffset: (22 - UIFont.systemFont(ofSize: 17).lineHeight) / 4], range: NSRange(location: 0, length: a.length))
       textL.attributedText = a
     } else if !isPhoto && !isVoice {
       // (a card with no words: the time on its own line under it; a voice message keeps it at its bottom right)
@@ -1321,7 +1328,7 @@ final class MessageBar: UIView, UITextViewDelegate {
   private let binBody = UIImageView(), binLid = UIImageView()
   private let lockedV = UIView(), lockedTime = UILabel(), live = LiveWave(), trashB = UIButton(type: .system), pauseB = UIButton(type: .system), lockedSend = UIButton(type: .system)
   private var recCancelled = false, recStart: CGPoint = .zero, locked = false, holding = false
-  private var boxH: CGFloat = 32
+  private var boxH: CGFloat = 30
 
   override init(frame: CGRect) {
     super.init(frame: CGRect(x: 0, y: 0, width: 390, height: 52))
@@ -1395,8 +1402,8 @@ final class MessageBar: UIView, UITextViewDelegate {
     mentionV.axis = .vertical; mentionV.isHidden = true
     addSubview(mentionV)
     sendB.addAction(UIAction { [weak self] _ in self?.sendNow() }, for: .touchUpInside)
-    box.font = .systemFont(ofSize: 17); box.backgroundColor = Look.field; box.layer.cornerRadius = 16; box.layer.cornerCurve = .continuous
-    box.textContainerInset = UIEdgeInsets(top: 6, left: 8, bottom: 6, right: 34); box.delegate = self; box.isScrollEnabled = false
+    box.font = .systemFont(ofSize: 17); box.backgroundColor = Look.field; box.layer.cornerRadius = 15; box.layer.cornerCurve = .continuous
+    box.textContainerInset = UIEdgeInsets(top: 5, left: 8, bottom: 5, right: 34); box.delegate = self; box.isScrollEnabled = false
     addSubview(box); addSubview(smiley)
     place.text = ""; place.font = .systemFont(ofSize: 16); place.textColor = .systemGray; box.addSubview(place)
     // the message being answered (WhatsApp's): edge to edge over the box, its person's colour as the bar on the very
@@ -1414,7 +1421,7 @@ final class MessageBar: UIView, UITextViewDelegate {
   required init?(coder: NSCoder) { fatalError() }
   // (the bar stays above the home indicator when the keyboard is down)
   private var mentionH: CGFloat { mentionV.isHidden ? 0 : CGFloat(mentionV.arrangedSubviews.count) * 44 }
-  override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: (locked ? 83 : boxH + 14) + (replyV.isHidden ? 0 : 52) + mentionH + safeAreaInsets.bottom) }
+  override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: (locked ? 83 : boxH + 13) + (replyV.isHidden ? 0 : 52) + mentionH + safeAreaInsets.bottom) }
   override func safeAreaInsetsDidChange() { super.safeAreaInsetsDidChange(); invalidateIntrinsicContentSize() }
   override func layoutSubviews() {
     super.layoutSubviews()
@@ -1428,12 +1435,12 @@ final class MessageBar: UIView, UITextViewDelegate {
     replyX.frame = CGRect(x: W - 46, y: 6, width: 40, height: 40)
     let typing = !box.text.isEmpty
     // (the design's places: + at 10, the box from 46, camera and mic at the right; the buttons stay level with the box's last line)
-    let y = top + 8, by = y + boxH - 32
+    let y = top + 9, by = y + boxH - 31   // (the design: the box 9 from the bar's top, the buttons 1 above it)
     plus.frame = CGRect(x: 10, y: by, width: 32, height: 32)
-    let right: CGFloat = typing ? 49 : 87
+    let right: CGFloat = typing ? 49 : 93
     box.frame = CGRect(x: 46, y: y, width: W - 46 - right, height: boxH)
-    smiley.frame = CGRect(x: box.frame.maxX - 34, y: y + boxH - 32, width: 32, height: 32)
-    place.frame = CGRect(x: 13, y: 6, width: box.bounds.width - 46, height: 20)
+    smiley.frame = CGRect(x: box.frame.maxX - 34, y: y + boxH - 31, width: 32, height: 32)
+    place.frame = CGRect(x: 13, y: 5, width: box.bounds.width - 46, height: 20)
     sendB.frame = CGRect(x: W - 41, y: by, width: 32, height: 32)
     cam.frame = CGRect(x: W - 79, y: by, width: 32, height: 32); mic.frame = CGRect(x: W - 41, y: by, width: 32, height: 32)
     sendB.isHidden = !typing; cam.isHidden = typing; mic.isHidden = typing
@@ -1620,7 +1627,7 @@ final class MessageBar: UIView, UITextViewDelegate {
   }
   func textChanged() {
     place.isHidden = !box.text.isEmpty
-    let h = min(130, max(32, ceil(box.sizeThatFits(CGSize(width: max(100, box.bounds.width), height: 400)).height)))
+    let h = min(130, max(30, ceil(box.sizeThatFits(CGSize(width: max(100, box.bounds.width), height: 400)).height)))
     box.isScrollEnabled = h >= 130
     if h != boxH { boxH = h; invalidateIntrinsicContentSize() }
     UIView.animate(withDuration: 0.15) { self.setNeedsLayout(); self.layoutIfNeeded() }
