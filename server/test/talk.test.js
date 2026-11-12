@@ -203,6 +203,9 @@ test('client contacts: added by Super / Office Admins only; E11 Talk only; their
   assert.ok((await sync('adm')).events.some((e) => e.type === 'msg' && e.id === fw.id && e.fwd === true), 'forwarded, marked');
   const plain = await act('des', { act: 'send', group: g.id, text: 'not forwarded' });
   assert.ok((await sync('adm')).events.some((e) => e.type === 'msg' && e.id === plain.id && !('fwd' in e)), 'an ordinary one, not marked');
+  // photos sent together carry their album; only on files, only a plain id
+  const al = await act('des', { act: 'send', group: g.id, text: 'no file', album: 'abc123-album' });
+  assert.ok(!('album' in (await sync('adm')).events.find((e) => e.id === al.id)), 'no album without a file');
   // a link's preview from the sender's phone: kept with the message; a picture it doesn't own is dropped
   const lk = await act('des', { act: 'send', group: g.id, text: 'see https://news.example.com/a', link: { url: 'https://news.example.com/a', title: 'Ten ideas', site: 'news.example.com', video: true, img: { id: 'nope' } } });
   const le = (await sync('adm')).events.find((e) => e.type === 'msg' && e.id === lk.id);
