@@ -53,6 +53,15 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private let topFrost = ChatVC.frost()
   private let titleSpot = UIView()
   private var spotW: NSLayoutConstraint!
+  private static let titleLead: CGFloat = { if #available(iOS 26.0, *) { return 68 } else { return 44 } }()
+  private static let rowMid: CGFloat = { if #available(iOS 26.0, *) { return 27 } else { return 22 } }()
+  // the picture and the name in the page, on its frost (they slide with it)
+  private func pinTitle() {
+    titleV.removeFromSuperview(); titleV.translatesAutoresizingMaskIntoConstraints = false
+    view.insertSubview(titleV, aboveSubview: topFrost)
+    NSLayoutConstraint.activate([titleV.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: ChatVC.titleLead),
+                                 titleV.centerYAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: -ChatVC.rowMid)])
+  }
   // the chat's top frost (Haris 2026-11-12, b): Apple's blur, tinted thick with the chat's colour — nothing shows through
   static func frost() -> UIVisualEffectView {
     let v = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial)); v.isUserInteractionEnabled = false
@@ -135,10 +144,6 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (the picture and the name are the page's own, on its top frost where the bar had them — so they slide with the chat
     //  and follow the finger on a back swipe, WhatsApp's way, instead of Apple's fade of a bar item; Haris 2026-11-12. An
     //  empty spot of the same size stays in Apple's bar for the tap, as the bar takes the touches there.)
-    titleV.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(titleV)
-    let lead: CGFloat = { if #available(iOS 26.0, *) { return 68 } else { return 44 } }()
-    NSLayoutConstraint.activate([titleV.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: lead),
-                                 titleV.centerYAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: { if #available(iOS 26.0, *) { return -27 } else { return -22 } }())])
     titleSpot.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(info)))
     titleSpot.translatesAutoresizingMaskIntoConstraints = false
     spotW = titleSpot.widthAnchor.constraint(equalToConstant: 200)
@@ -172,7 +177,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     topFrost.isUserInteractionEnabled = false; topFrost.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(topFrost)
     NSLayoutConstraint.activate([topFrost.topAnchor.constraint(equalTo: view.topAnchor), topFrost.leadingAnchor.constraint(equalTo: view.leadingAnchor),
                                  topFrost.trailingAnchor.constraint(equalTo: view.trailingAnchor), topFrost.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor)])
-    view.bringSubviewToFront(titleV)   // (the name on the frost)
+    pinTitle()   // (the name on the frost)
     clientLine.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(clientLine)
     NSLayoutConstraint.activate([
       tint.leadingAnchor.constraint(equalTo: clientLine.contentView.leadingAnchor), tint.trailingAnchor.constraint(equalTo: clientLine.contentView.trailingAnchor),
@@ -226,9 +231,15 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
      way out nothing: the title doesn't move then). Only for the slide, then gone. */
   private func coverTitle() {
     guard let n = navigationController, let tc = transitionCoordinator else { return }
-    let rowBottom = (n.view.window?.safeAreaInsets.top ?? n.view.safeAreaInsets.top) + { if #available(iOS 26.0, *) { return 54 } else { return 44 } }()
+    let rowBottom = (n.view.window?.safeAreaInsets.top ?? n.view.safeAreaInsets.top) + ChatVC.rowMid * 2
     let full = n.navigationBar.frame.maxY, W = n.view.bounds.width
-    guard full - rowBottom > 1 else { return }
+    // (WhatsApp's: the chat's picture and name are there at once, in their place, as the chat opens — held still above the
+    //  slide and given back to the page as it arrives, in the same spot; going back they slide away with the page)
+    titleV.removeFromSuperview(); titleV.translatesAutoresizingMaskIntoConstraints = false
+    n.view.insertSubview(titleV, belowSubview: n.navigationBar)
+    NSLayoutConstraint.activate([titleV.leadingAnchor.constraint(equalTo: n.view.leadingAnchor, constant: ChatVC.titleLead),
+                                 titleV.centerYAnchor.constraint(equalTo: n.view.topAnchor, constant: rowBottom - ChatVC.rowMid)])
+    guard full - rowBottom > 1 else { tc.animate(alongsideTransition: nil) { [weak self] _ in self?.pinTitle() }; return }
     // (WhatsApp's, frame by frame: at the first moment one frost from the very top down past the list's search bar, thick
     //  enough that the big title and the search don't show through; then it settles to the chat's bar. Two pieces of the
     //  one frost: the top behind Apple's bar (the chat's name and buttons on it), the rest over the folding title.)
@@ -241,9 +252,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let searchBar = (tc.viewController(forKey: .from)?.navigationItem.searchController?.searchBar)
     searchBar?.alpha = 0
     let upper = piece(0, rowBottom), lower = piece(rowBottom, full - rowBottom)
-    n.view.insertSubview(upper, belowSubview: n.navigationBar); n.view.insertSubview(lower, aboveSubview: n.navigationBar)
+    n.view.insertSubview(upper, belowSubview: titleV); n.view.insertSubview(lower, aboveSubview: n.navigationBar)
     tc.animate(alongsideTransition: { _ in lower.frame.size.height = 0 },
-               completion: { _ in upper.removeFromSuperview(); lower.removeFromSuperview(); searchBar?.alpha = 1 })
+               completion: { [weak self] _ in upper.removeFromSuperview(); lower.removeFromSuperview(); searchBar?.alpha = 1; self?.pinTitle() })
   }
   static var open: String?
   override func viewDidLayoutSubviews() {
