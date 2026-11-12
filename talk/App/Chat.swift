@@ -1543,7 +1543,7 @@ final class MessageBar: UIView, UITextViewDelegate {
     pauseB.setImage(UIImage(systemName: "pause.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .bold)), for: .normal); pauseB.tintColor = .systemRed
     pauseB.layer.borderWidth = 2; pauseB.layer.cornerRadius = 17; pauseB.accessibilityLabel = "Pause the recording"
     var ls = UIButton.Configuration.filled()
-    ls.image = UIImage(systemName: "paperplane.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold))
+    ls.image = UIImage(systemName: "paperplane.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold))
     ls.baseBackgroundColor = Look.rgb(0x2F7BFF); ls.baseForegroundColor = .white; ls.cornerStyle = .capsule; ls.contentInsets = .zero
     lockedSend.configuration = ls; lockedSend.accessibilityLabel = "Send"
     [lockedTime, live, trashB, pauseB, lockedSend].forEach { lockedV.addSubview($0) }
@@ -1615,7 +1615,7 @@ final class MessageBar: UIView, UITextViewDelegate {
     live.frame = CGRect(x: 80, y: 11, width: W - 96, height: 22)
     trashB.frame = CGRect(x: 10, y: 44, width: 40, height: 40)
     pauseB.frame = CGRect(x: W / 2 - 17, y: 47, width: 34, height: 34)
-    lockedSend.frame = CGRect(x: W - 56, y: 42, width: 44, height: 44)
+    lockedSend.frame = CGRect(x: W - 41, y: 48.5, width: 31, height: 31)   // (the send's own size, 10 from the edge — Haris 2026-11-12)
     pauseB.layer.borderColor = UIColor.systemRed.resolvedColor(with: traitCollection).cgColor
     box.layer.borderColor = MessageBar.boxEdge.resolvedColor(with: traitCollection).cgColor
   }
