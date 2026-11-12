@@ -217,6 +217,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (a run: one person's messages one after another on the same day — the name on its first, the tail on its last)
     var newRuns: [String: Run] = [:]
     let all = l.msgs
+    // (how far everyone else has read: your message is read once it's at or before that — only its ✓✓ hangs on it)
+    let meId = Talk.shared.me?.id, others = (Talk.shared.groups[group]?.members ?? []).filter { $0 != meId }
+    let pos = Dictionary(all.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { a, _ in a })
+    let readTo = others.isEmpty ? -1 : others.map { l.readBy[$0].flatMap { pos[$0] } ?? -1 }.min() ?? -1
     for (i, m) in all.enumerated() {
       let d = Look.day(m.at)
       let prev = i > 0 ? all[i - 1] : nil, next = i + 1 < all.count ? all[i + 1] : nil
@@ -226,8 +230,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       msgs[m.id] = m
       var h = Hasher(); h.combine(m.text); h.combine(m.edited); h.combine(m.deleted); h.combine(m.pending); h.combine(m.failed); h.combine(m.reactions); h.combine(m.file?.id)
       h.combine(newRuns[m.id]); h.combine(Talk.shared.people[m.by]?.color); h.combine(Talk.shared.people[m.by]?.role)
-      h.combine(l.readBy.count); h.combine(Talk.shared.groups[group]?.members.count ?? 0)
-      for (k, v) in l.readBy.sorted(by: { $0.key < $1.key }) { h.combine(k); h.combine(v) }
+      if m.by == meId { h.combine(i <= readTo) }
       newSigs[m.id] = h.finalize()
       items.append(.msg(m.id))
     }
@@ -619,6 +622,7 @@ final class Bleed: UIView {
     addSubview(v); v.translatesAutoresizingMaskIntoConstraints = false
     l = v.leadingAnchor.constraint(equalTo: leadingAnchor); r = v.trailingAnchor.constraint(equalTo: trailingAnchor)
     t = v.topAnchor.constraint(equalTo: topAnchor); b = v.bottomAnchor.constraint(equalTo: bottomAnchor)
+    b.priority = .init(999)   // (hidden in the bubble's stack it folds to 0 — its inside's own height gives way, no clash)
     NSLayoutConstraint.activate([l, r, t, b])
   }
   required init?(coder: NSCoder) { fatalError() }
@@ -1044,7 +1048,7 @@ final class MessageBar: UIView, UITextViewDelegate {
   private let pill = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterial)), pillLock = UIImageView(), pillUp = UIImageView()
   private let binBody = UIImageView(), binLid = UIImageView()
   private let lockedV = UIView(), lockedTime = UILabel(), live = LiveWave(), trashB = UIButton(type: .system), pauseB = UIButton(type: .system), lockedSend = UIButton(type: .system)
-  private var recCancelled = false, recStart: CGPoint = .zero, locked = false
+  private var recCancelled = false, recStart: CGPoint = .zero, locked = false, holding = false
   private var boxH: CGFloat = 32
 
   override init(frame: CGRect) {
@@ -1100,7 +1104,7 @@ final class MessageBar: UIView, UITextViewDelegate {
     trashB.setImage(UIImage(systemName: "trash", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .regular)), for: .normal); trashB.tintColor = .label
     trashB.accessibilityLabel = "Delete the recording"
     pauseB.setImage(UIImage(systemName: "pause.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .bold)), for: .normal); pauseB.tintColor = .systemRed
-    pauseB.layer.borderWidth = 2; pauseB.layer.borderColor = UIColor.systemRed.cgColor; pauseB.layer.cornerRadius = 17; pauseB.accessibilityLabel = "Pause the recording"
+    pauseB.layer.borderWidth = 2; pauseB.layer.cornerRadius = 17; pauseB.accessibilityLabel = "Pause the recording"
     var ls = UIButton.Configuration.filled()
     ls.image = UIImage(systemName: "paperplane.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold))
     ls.baseBackgroundColor = Look.rgb(0x2F7BFF); ls.baseForegroundColor = .white; ls.cornerStyle = .capsule; ls.contentInsets = .zero
@@ -1172,15 +1176,17 @@ final class MessageBar: UIView, UITextViewDelegate {
     trashB.frame = CGRect(x: 10, y: 44, width: 40, height: 40)
     pauseB.frame = CGRect(x: W / 2 - 17, y: 47, width: 34, height: 34)
     lockedSend.frame = CGRect(x: W - 56, y: 42, width: 44, height: 44)
+    pauseB.layer.borderColor = UIColor.systemRed.resolvedColor(with: traitCollection).cgColor
   }
   @objc private func micHold(_ g: UILongPressGestureRecognizer) {
     switch g.state {
     case .began:
-      recCancelled = false; locked = false; recStart = g.location(in: self)
+      recCancelled = false; locked = false; holding = true; recStart = g.location(in: self)
       UIImpactFeedbackGenerator(style: .medium).impactOccurred()
       rec.start { [weak self] ok in
         guard let self = self else { return }
         guard ok else { toast("Allow the microphone for E11 Talk in Settings to record"); return }
+        guard self.holding else { _ = self.rec.stop(keep: false); return }
         ChatSound.voiceStart()
         self.recTime.text = "0:00"; self.lockedTime.text = "0:00"
         self.recV.isHidden = false; self.recV.alpha = 0; self.recMic.alpha = 0
@@ -1208,8 +1214,8 @@ final class MessageBar: UIView, UITextViewDelegate {
         recHint.transform = CGAffineTransform(translationX: min(0, dx), y: 0); recHint.alpha = max(0, 1 + dx / 140)
         if dx < -120 { cancelRecording() }
       }
-    case .ended: if !recCancelled && !locked { endRecording(send: true) }
-    case .cancelled, .failed: if !recCancelled && !locked { endRecording(send: false) }
+    case .ended: holding = false; if !recCancelled && !locked { endRecording(send: true) }
+    case .cancelled, .failed: holding = false; if !recCancelled && !locked { endRecording(send: false) }
     default: break
     }
   }

@@ -364,6 +364,7 @@ final class Talk {
     try? FileManager.default.removeItem(at: dir); try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     try? FileManager.default.removeItem(at: Net.filesDir)
     UserDefaults.standard.removeObject(forKey: "talk_seq_" + Server.host)
+    VoiceHeard.clear()
   }
 }
 

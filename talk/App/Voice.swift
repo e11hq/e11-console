@@ -78,12 +78,12 @@ final class VoicePlayer: NSObject, AVAudioPlayerDelegate {
   static let changed = Notification.Name("talk.voice")
   private(set) var playing: String?
   private var player: AVAudioPlayer?
-  private var timer: Timer?
+  private var link: CADisplayLink?
   var progress: Double { guard let p = player, p.duration > 0 else { return 0 }; return p.currentTime / p.duration }
 
   func toggle(_ id: String, url: URL) {
     if playing == id, let p = player {
-      if p.isPlaying { p.pause(); timer?.invalidate() } else { p.play(); tick() }
+      if p.isPlaying { p.pause(); link?.invalidate(); link = nil } else { p.play(); tick() }
       NotificationCenter.default.post(name: VoicePlayer.changed, object: nil); return
     }
     stop()
@@ -97,11 +97,12 @@ final class VoicePlayer: NSObject, AVAudioPlayerDelegate {
   }
   var isPlaying: Bool { player?.isPlaying == true }
   private func tick() {
-    timer?.invalidate()
-    timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in NotificationCenter.default.post(name: VoicePlayer.changed, object: nil) }
+    link?.invalidate()
+    link = CADisplayLink(target: self, selector: #selector(frame)); link?.add(to: .main, forMode: .common)
   }
+  @objc private func frame() { NotificationCenter.default.post(name: VoicePlayer.changed, object: nil) }
   func stop() {
-    timer?.invalidate(); timer = nil
+    link?.invalidate(); link = nil
     player?.stop(); player = nil; playing = nil
     NotificationCenter.default.post(name: VoicePlayer.changed, object: nil)
   }
@@ -130,6 +131,7 @@ enum VoiceHeard {
   private static let key = "talk.voiceHeard"
   private static var set = Set(UserDefaults.standard.stringArray(forKey: key) ?? [])
   static func has(_ id: String) -> Bool { set.contains(id) }
+  static func clear() { set = []; UserDefaults.standard.removeObject(forKey: key) }
   static func add(_ id: String) {
     guard !set.contains(id) else { return }
     set.insert(id); UserDefaults.standard.set(Array(set.suffix(2000)), forKey: key)
@@ -144,7 +146,7 @@ final class VoiceView: UIView {
   private var bars: [CGFloat] = []
   private var id = "", fileId = "", secs: Double = 0, mine = false
   private var played: UIColor = .label, rest: UIColor = .secondaryLabel
-  private var loading = false
+  private var loading = false, shownOn = false
   override init(frame: CGRect) {
     super.init(frame: frame)
     backgroundColor = .clear; isOpaque = false; contentMode = .redraw
@@ -169,7 +171,7 @@ final class VoiceView: UIView {
     btn.tintColor = mine ? .white : .label
     len.textColor = mine ? Look.mineTime : Look.roleInk
     dot.backgroundColor = played
-    update()
+    shownOn = true; update()
   }
   private func tap() {
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -186,6 +188,8 @@ final class VoiceView: UIView {
   private var progress: CGFloat { VoicePlayer.shared.playing == id ? CGFloat(VoicePlayer.shared.progress) : 0 }
   @objc private func update() {
     let on = VoicePlayer.shared.playing == id
+    guard on || shownOn || loading else { return }   // (another bubble's playing: nothing here changes)
+    shownOn = on
     let sym = loading ? "arrow.down.circle" : (on && VoicePlayer.shared.isPlaying ? "pause.fill" : "play.fill")
     btn.setImage(UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 24, weight: .regular)), for: .normal)
     let shown = on ? secs * Double(progress) : secs
