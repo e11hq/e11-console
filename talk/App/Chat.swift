@@ -46,6 +46,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
      page shows at the keyboard's rounded corners. (It was the keyboard's own accessory before.) While searching, the
      bar of matches takes its place (the design's board "Search in a chat"). */
   private var homeLimits: [NSLayoutConstraint] = []
+  private let topFrost = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
   private var home: CGFloat { UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first?.safeAreaInsets.bottom ?? 0 }
   private func placeBars() {
     if #available(iOS 17.0, *) { view.keyboardLayoutGuide.usesBottomSafeArea = false }   // (iOS 16: the guide stops at the home line itself)
@@ -76,8 +77,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (WhatsApp's, Haris 2026-11-12: one steady frost the bar's own height, always there — no edge effect growing down
     //  past the day chips; the stuck chip sits just under it)
     if #available(iOS 26.0, *) { table.topEdgeEffect.isHidden = true }
-    let barLook = UINavigationBarAppearance(); barLook.configureWithDefaultBackground()
-    barLook.backgroundEffect = UIBlurEffect(style: .systemChromeMaterial); barLook.shadowColor = .clear
+    // (the frost is the page's own, under Apple's bar, which is clear here — so it slides with the page on the back swipe;
+    //  as the bar's own background it went the moment the swipe began, the bar taking the list's look — Haris 2026-11-12)
+    let barLook = UINavigationBarAppearance(); barLook.configureWithTransparentBackground()
     navigationItem.standardAppearance = barLook; navigationItem.scrollEdgeAppearance = barLook; navigationItem.compactScrollEdgeAppearance = barLook
     // the chat's background (approved mock-up "E11 Talk — chat background", Haris 2026-11-12): our own soft line drawings
     // with the E11. wordmark in outline, faint, standing still behind the messages — the list's own background view
@@ -144,6 +146,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     NSLayoutConstraint.activate([edge.leadingAnchor.constraint(equalTo: clientLine.contentView.leadingAnchor), edge.trailingAnchor.constraint(equalTo: clientLine.contentView.trailingAnchor),
                                  edge.bottomAnchor.constraint(equalTo: clientLine.contentView.bottomAnchor), edge.heightAnchor.constraint(equalToConstant: 0.5)])
     [tint, cl].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; clientLine.contentView.addSubview($0) }
+    topFrost.isUserInteractionEnabled = false; topFrost.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(topFrost)
+    NSLayoutConstraint.activate([topFrost.topAnchor.constraint(equalTo: view.topAnchor), topFrost.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                                 topFrost.trailingAnchor.constraint(equalTo: view.trailingAnchor), topFrost.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor)])
     clientLine.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(clientLine)
     NSLayoutConstraint.activate([
       tint.leadingAnchor.constraint(equalTo: clientLine.contentView.leadingAnchor), tint.trailingAnchor.constraint(equalTo: clientLine.contentView.trailingAnchor),
