@@ -1,4 +1,5 @@
 import UIKit
+import LinkPresentation
 
 /* What the app knows: the groups (from the server — who's in which, admins, pins, mutes) and the messages (on this
    phone only — WhatsApp's way: the server passes each one on and lets it go once every member's phone has it).
@@ -37,6 +38,8 @@ struct Msg: Codable, Equatable {
   var failed: Bool = false
   var goneForMe: Bool? = nil             // (deleted for me: "You deleted this message" stays in its place)
   var fwd: Bool? = nil                    // (forwarded from another chat: "Forwarded" over it)
+  var link: LinkPrev? = nil               // (a link's preview, made on the sender's phone — option B, Haris 2026-11-12)
+  struct LinkPrev: Codable, Equatable, Hashable { var url: String; var title: String?; var site: String?; var video: Bool; var img: String?; var icon: String? }
   struct FileRef: Codable, Equatable { var id: String; var name: String; var size: Int; var kind: String; var w: Double?; var h: Double?; var secs: Double?; var wave: String? = nil }
   struct Reply: Codable, Equatable { var id: String; var by: String; var text: String; var kind: String }
 }
@@ -206,10 +209,12 @@ final class Talk {
          message's file go as soon as every phone has said so — said before the file was fetched, it was gone ("That file
          isn't on the server any more", Haris 2026-11-12). A file that can't be fetched now: nothing said, so the same
          messages come again on the next sync and it's tried again. */
-      let files = evs.compactMap { e -> String? in
-        guard (e["type"] as? String) == "msg", let f = e["file"] as? [String: Any], let id = f["id"] as? String, !id.hasPrefix("local-"),
-              !FileManager.default.fileExists(atPath: Net.local(id).path) else { return nil }
-        return id
+      let files = evs.flatMap { e -> [String] in
+        guard (e["type"] as? String) == "msg" else { return [] }
+        let k = e["link"] as? [String: Any]
+        // (a link's preview picture and site icon too)
+        return [(e["file"] as? [String: Any])?["id"] as? String, (k?["img"] as? [String: Any])?["id"] as? String, (k?["icon"] as? [String: Any])?["id"] as? String]
+          .compactMap { $0 }.filter { !$0.hasPrefix("local-") && !FileManager.default.fileExists(atPath: Net.local($0).path) }
       }
       self.syncing = true
       self.fetch(files) { [weak self] ok in
@@ -237,8 +242,12 @@ final class Talk {
         guard let rid = r["id"] as? String, !rid.isEmpty else { return nil }
         return Msg.Reply(id: rid, by: r["by"] as? String ?? "", text: r["text"] as? String ?? "", kind: r["kind"] as? String ?? "text")
       }
-      let m = Msg(id: id, cid: e["cid"] as? String, seq: seq, by: by, at: at, kind: e["kind"] as? String ?? "text", text: e["text"] as? String ?? "",
+      var m = Msg(id: id, cid: e["cid"] as? String, seq: seq, by: by, at: at, kind: e["kind"] as? String ?? "text", text: e["text"] as? String ?? "",
                   file: f, reply: r, mentions: e["mentions"] as? [String] ?? [], fwd: (e["fwd"] as? Bool) == true ? true : nil)
+      if let k = e["link"] as? [String: Any], let u = k["url"] as? String {
+        m.link = Msg.LinkPrev(url: u, title: k["title"] as? String, site: k["site"] as? String, video: (k["video"] as? Bool) == true,
+                              img: (k["img"] as? [String: Any])?["id"] as? String, icon: (k["icon"] as? [String: Any])?["id"] as? String)
+      }
       if let i = l.msgs.firstIndex(where: { $0.id == id || ($0.pending && m.cid != nil && $0.cid == m.cid) }) {
         // (one of mine sent from here: it keeps its place, with the server's id; a photo keeps the copy it was sent from)
         var keep = m; keep.reactions = l.msgs[i].reactions
@@ -279,8 +288,10 @@ final class Talk {
     if let lf = localFile, let f = file { try? FileManager.default.copyItem(at: lf, to: Net.local(f.id)) }
     l.msgs.append(m); logs[g] = l; saveSoon(g)
     NotificationCenter.default.post(name: .talkGroup, object: g); NotificationCenter.default.post(name: .talkChanged, object: nil)
+    var linkBody: [String: Any]? = nil
     let go = { (fileId: String?) in
       var b: [String: Any] = ["act": "send", "group": g, "text": text, "cid": cid, "mentions": mentions]
+      if let lb = linkBody { b["link"] = lb }
       if fwd { b["fwd"] = true }
       if let r = m.reply { b["reply"] = ["id": r.id, "by": r.by, "text": r.text, "kind": r.kind] }
       if let f = file, let fid = fileId { var fd: [String: Any] = ["id": fid, "kind": f.kind]; fd["w"] = f.w; fd["h"] = f.h; fd["secs"] = f.secs; fd["wave"] = f.wave; b["file"] = fd }
@@ -296,6 +307,27 @@ final class Talk {
         try? FileManager.default.copyItem(at: Net.local(f.id), to: Net.local(fid))
         m.file?.id = fid
         go(fid)
+      }
+    } else if file == nil, !fwd, let u = LinkPrevMaker.firstLink(text) {
+      // (words with a link: its preview made here first — the picture and the site's icon sent up as files — then the
+      //  message with it; the clock shows meanwhile, and the message goes without a preview if none comes)
+      LinkPrevMaker.make(u) { [weak self] prev, img, icon in
+        guard let self = self, var prev = prev else { go(nil); return }
+        let up = { (d: Data?, name: String, done: @escaping (String?) -> Void) in
+          guard let d = d else { done(nil); return }
+          Net.shared.upload(d, name: name, progress: { _ in }) { fid in if let fid = fid { try? d.write(to: Net.local(fid)) }; done(fid) }
+        }
+        up(img, "preview.jpg") { imgId in
+          up(icon, "icon.png") { iconId in
+            prev.img = imgId; prev.icon = iconId
+            var lb: [String: Any] = ["url": prev.url, "video": prev.video]
+            lb["title"] = prev.title; lb["site"] = prev.site
+            if let i = imgId { lb["img"] = ["id": i] }; if let i = iconId { lb["icon"] = ["id": i] }
+            linkBody = lb
+            self.local(g, m.id) { $0.link = prev }
+            go(nil)
+          }
+        }
       }
     } else { go(nil) }
   }
@@ -571,4 +603,35 @@ func toast(_ text: String, in v: UIView? = nil) {
 final class PaddedLabel: UILabel {
   override func drawText(in rect: CGRect) { super.drawText(in: rect.insetBy(dx: 16, dy: 10)) }
   override func sizeThatFits(_ size: CGSize) -> CGSize { let s = super.sizeThatFits(CGSize(width: size.width - 32, height: size.height)); return CGSize(width: s.width + 32, height: s.height) }
+}
+
+// a link's preview, read by Apple's own link reader (LinkPresentation) on the sender's phone — the picture, the title,
+// the site, its icon, whether it's a video (Apple gives no length, nor a description)
+enum LinkPrevMaker {
+  static func firstLink(_ text: String) -> URL? {
+    guard let d = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return nil }
+    return d.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { $0.url }.first { $0.scheme?.hasPrefix("http") == true }
+  }
+  static func make(_ url: URL, done: @escaping (Msg.LinkPrev?, Data?, Data?) -> Void) {
+    let p = LPMetadataProvider(); p.timeout = 6
+    p.startFetchingMetadata(for: url) { md, _ in
+      guard let md = md else { DispatchQueue.main.async { done(nil, nil, nil) }; return }
+      let site = (md.url ?? url).host?.replacingOccurrences(of: "www.", with: "")
+      let prev = Msg.LinkPrev(url: url.absoluteString, title: md.title, site: site, video: md.videoProvider != nil || md.remoteVideoURL != nil, img: nil, icon: nil)
+      let group = DispatchGroup()
+      var img: Data?, icon: Data?
+      if let ip = md.imageProvider, ip.canLoadObject(ofClass: UIImage.self) {
+        group.enter(); ip.loadObject(ofClass: UIImage.self) { o, _ in img = (o as? UIImage).flatMap { shrink($0, 800)?.jpegData(compressionQuality: 0.75) }; group.leave() }
+      }
+      if let ip = md.iconProvider, ip.canLoadObject(ofClass: UIImage.self) {
+        group.enter(); ip.loadObject(ofClass: UIImage.self) { o, _ in icon = (o as? UIImage).flatMap { shrink($0, 64)?.pngData() }; group.leave() }
+      }
+      group.notify(queue: .main) { done(prev, img, icon) }
+    }
+  }
+  private static func shrink(_ i: UIImage, _ w: CGFloat) -> UIImage? {
+    let k = min(1, w / max(1, i.size.width)), size = CGSize(width: i.size.width * k, height: i.size.height * k)
+    let f = UIGraphicsImageRendererFormat(); f.scale = 1
+    return UIGraphicsImageRenderer(size: size, format: f).image { _ in i.draw(in: CGRect(origin: .zero, size: size)) }
+  }
 }

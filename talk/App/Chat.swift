@@ -482,7 +482,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         newDayOf[section] = d; snap.appendSections([section])
       }
       msgs[m.id] = m
-      var h = Hasher(); h.combine(m.text); h.combine(m.edited); h.combine(m.deleted); h.combine(m.pending); h.combine(m.failed); h.combine(m.reactions); h.combine(m.file?.id)
+      var h = Hasher(); h.combine(m.text); h.combine(m.edited); h.combine(m.deleted); h.combine(m.pending); h.combine(m.failed); h.combine(m.reactions); h.combine(m.file?.id); h.combine(m.link)
       h.combine(newRuns[m.id]); h.combine(Talk.shared.people[m.by]?.color); h.combine(Talk.shared.people[m.by]?.role)
       if m.by == meId { h.combine(i <= readTo); h.combine(i <= gotTo) }
       newSigs[m.id] = h.finalize()
@@ -1170,6 +1170,9 @@ final class BubbleCell: UITableViewCell {
   private lazy var cardWrap = Bleed(card)
   // a link: its preview box — the site, the address, a line, 🔗 the site
   private let linkBox = UIView(), linkSite = UILabel(), linkURL = UILabel(), linkLine = UIView(), linkFoot = UILabel()
+  // a link's preview (option B, Haris 2026-11-12): its picture on top of the card, ▶ on it for a video
+  private let linkImg = UIImageView(), linkPlay = UIView()
+  private var linkImgH: NSLayoutConstraint!, linkImgOff: NSLayoutConstraint!, wideCard = false
   private lazy var linkWrap = Bleed(linkBox)
   private var link: URL?
   private let voice = VoiceView()
@@ -1256,8 +1259,21 @@ final class BubbleCell: UITableViewCell {
     linkBox.backgroundColor = UIColor.black.withAlphaComponent(0.22); linkBox.layer.cornerRadius = 15; linkBox.layer.cornerCurve = .continuous
     linkSite.font = .systemFont(ofSize: 15, weight: .semibold); linkURL.font = .systemFont(ofSize: 14); linkURL.numberOfLines = 2; linkURL.lineBreakMode = .byCharWrapping
     linkFoot.font = .systemFont(ofSize: 14)
-    [linkSite, linkURL, linkLine, linkFoot].forEach { linkBox.addSubview($0); $0.translatesAutoresizingMaskIntoConstraints = false }
-    NSLayoutConstraint.activate([linkSite.topAnchor.constraint(equalTo: linkBox.topAnchor, constant: 9), linkSite.leadingAnchor.constraint(equalTo: linkBox.leadingAnchor, constant: 12), linkSite.trailingAnchor.constraint(equalTo: linkBox.trailingAnchor, constant: -12),
+    linkBox.clipsToBounds = true
+    linkImg.contentMode = .scaleAspectFill; linkImg.clipsToBounds = true; linkImg.backgroundColor = UIColor.black.withAlphaComponent(0.12)
+    linkImg.setContentCompressionResistancePriority(.init(1), for: .vertical); linkImg.setContentCompressionResistancePriority(.init(1), for: .horizontal)
+    linkPlay.backgroundColor = UIColor.black.withAlphaComponent(0.45); linkPlay.layer.cornerRadius = 23; linkPlay.isUserInteractionEnabled = false
+    let tri = UIImageView(image: UIImage(systemName: "play.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 19, weight: .semibold))); tri.tintColor = .white
+    tri.translatesAutoresizingMaskIntoConstraints = false; linkPlay.addSubview(tri)
+    [linkImg, linkSite, linkURL, linkLine, linkFoot].forEach { linkBox.addSubview($0); $0.translatesAutoresizingMaskIntoConstraints = false }
+    linkPlay.translatesAutoresizingMaskIntoConstraints = false; linkImg.addSubview(linkPlay)
+    linkImgH = linkImg.heightAnchor.constraint(equalTo: linkImg.widthAnchor, multiplier: 1 / 1.91); linkImgH.priority = .init(999)
+    linkImgOff = linkImg.heightAnchor.constraint(equalToConstant: 0)
+    NSLayoutConstraint.activate([linkImg.topAnchor.constraint(equalTo: linkBox.topAnchor), linkImg.leadingAnchor.constraint(equalTo: linkBox.leadingAnchor), linkImg.trailingAnchor.constraint(equalTo: linkBox.trailingAnchor), linkImgOff,
+                                 linkPlay.widthAnchor.constraint(equalToConstant: 46), linkPlay.heightAnchor.constraint(equalToConstant: 46),
+                                 linkPlay.centerXAnchor.constraint(equalTo: linkImg.centerXAnchor), linkPlay.centerYAnchor.constraint(equalTo: linkImg.centerYAnchor),
+                                 tri.centerXAnchor.constraint(equalTo: linkPlay.centerXAnchor, constant: 2), tri.centerYAnchor.constraint(equalTo: linkPlay.centerYAnchor)])
+    NSLayoutConstraint.activate([linkSite.topAnchor.constraint(equalTo: linkImg.bottomAnchor, constant: 9), linkSite.leadingAnchor.constraint(equalTo: linkBox.leadingAnchor, constant: 12), linkSite.trailingAnchor.constraint(equalTo: linkBox.trailingAnchor, constant: -12),
                                  linkURL.topAnchor.constraint(equalTo: linkSite.bottomAnchor), linkURL.leadingAnchor.constraint(equalTo: linkSite.leadingAnchor), linkURL.trailingAnchor.constraint(equalTo: linkSite.trailingAnchor),
                                  linkLine.topAnchor.constraint(equalTo: linkURL.bottomAnchor, constant: 9), linkLine.leadingAnchor.constraint(equalTo: linkSite.leadingAnchor), linkLine.trailingAnchor.constraint(equalTo: linkSite.trailingAnchor), linkLine.heightAnchor.constraint(equalToConstant: 0.5),
                                  linkFoot.topAnchor.constraint(equalTo: linkLine.bottomAnchor, constant: 8), linkFoot.leadingAnchor.constraint(equalTo: linkSite.leadingAnchor), linkFoot.trailingAnchor.constraint(equalTo: linkSite.trailingAnchor),
@@ -1554,18 +1570,31 @@ final class BubbleCell: UITableViewCell {
       }
     }
     linkWrap.isHidden = link == nil || isPhoto || isDoc
-    tight.isActive = !isPhoto && !isVoice && !isDoc && link == nil
+    tight.isActive = !isPhoto && !isVoice && !isDoc && (link == nil || m.link?.img != nil)
     if link != nil && !m.deleted && !m.pending { fwdB.isHidden = false }
     linkWrap.reach(nameL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
+    wideCard = false
     if let u = link {
-      let site = (u.host ?? "").replacingOccurrences(of: "www.", with: "")
+      let pv = m.link
+      let site = pv?.site ?? (u.host ?? "").replacingOccurrences(of: "www.", with: "")
       let sub: UIColor = mine ? UIColor.white.withAlphaComponent(0.8) : .secondaryLabel
-      linkSite.text = site; linkSite.textColor = ink
-      linkURL.text = u.absoluteString; linkURL.textColor = sub
+      // (with a preview: its picture, its title over two lines, the site with its icon; without: as before)
+      let title = pv?.title.flatMap { $0.isEmpty ? nil : $0 }
+      linkSite.text = title ?? site; linkSite.textColor = ink; linkSite.numberOfLines = title == nil ? 1 : 2
+      linkURL.text = title == nil ? u.absoluteString : nil; linkURL.textColor = sub
       linkLine.backgroundColor = sub.withAlphaComponent(0.3)
-      let lf = NSMutableAttributedString(attachment: NSTextAttachment(image: UIImage(systemName: "link", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold))!.withTintColor(sub)))
+      let mark = NSTextAttachment(image: UIImage(systemName: "link", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold))!.withTintColor(sub))
+      if let ic = pv?.icon, let i = UIImage(contentsOfFile: Net.local(ic).path) { mark.image = i; mark.bounds = CGRect(x: 0, y: -2, width: 14, height: 14) }
+      let lf = NSMutableAttributedString(attachment: mark)
       lf.append(NSAttributedString(string: "  " + site, attributes: [.foregroundColor: sub])); linkFoot.attributedText = lf
-    }
+      let hasImg = pv?.img != nil
+      linkImgOff.isActive = !hasImg; linkImgH.isActive = hasImg; linkPlay.isHidden = !(hasImg && pv?.video == true)
+      wideCard = hasImg
+      if let id = pv?.img {
+        if let i = UIImage(contentsOfFile: Net.local(id).path) { linkImg.image = i }
+        else { linkImg.image = nil; Net.shared.file(id) { [weak self] url in guard let self = self, self.msg?.id == m.id, let url = url else { return }; self.linkImg.image = UIImage(contentsOfFile: url.path) } }
+      } else { linkImg.image = nil }
+    } else { linkImgOff.isActive = true; linkImgH.isActive = false }
     let words = a.length > 0
     textL.isHidden = !words
     footL.isHidden = true
@@ -1596,7 +1625,8 @@ final class BubbleCell: UITableViewCell {
     reactsLead.isActive = !mine; reactsTrail.isActive = mine
     // (a message of words: the bubble as wide as what's in it, worked out here — the words' own widest line with the time's
     //  room, the name, "Forwarded", a quote — never wider than the design's widest; the label's own size grew to that widest)
-    if tight.isActive {
+    if tight.isActive && wideCard { tight.constant = UIScreen.main.bounds.width * (mine ? 281 : 250) / 393 }   // (a preview's picture: the widest)
+    else if tight.isActive {
       let widest = UIScreen.main.bounds.width * (mine ? 281 : 250) / 393, inner = widest - 24
       var w: CGFloat = 0
       if !textL.isHidden, let t = textL.attributedText {
