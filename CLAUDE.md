@@ -577,6 +577,11 @@ moved or deleted; 1696's and earlier stay as history). 1699 = 1696 + a Client As
 again until its folder's files are in — de000ad) + the phone's notification address only on the server the app is on now (moved
 live ↔ test, the server before is told to forget it — live's morning summary reached a phone on test). Quick build. Nothing
 changes without telling Haris first and his yes.
+**THE iPHONE APP — LOCKED at build 1700 (Haris, 2026-11-13 19:06: "Lock 1700"):** commit 3ba6903, branches `stable/ios-1700`
+and `locked/ios-app-1700` (never moved or deleted; 1699's and earlier stay as history). 1700 = 1699 + the Sign-in Code sheet's
+four boxes each its own view with its own colour (dark grey / white digit in dark, light grey / black digit in light — on the
+glass sheet the label's own background came out reversed and the code couldn't be read). Quick build. Nothing changes without
+telling Haris first and his yes.
 **Compile checks: `-f checks=compile -f walk=no`** — without `walk=no` the walk-through for every role runs too (~20 min),
 holding the Mac (2026-11-13).
 **The App Store release waits for E11 Talk (Haris, 2026-11-11 20:16: "3"):** the Talk button (E11 Day, Clients) does nothing
