@@ -4347,11 +4347,16 @@ final class SigninCodeVC: UIViewController {
     let sub = UILabel(); sub.text = "\(email) · \(newUser ? "New user" : "Forgot password")"; sub.font = .preferredFont(forTextStyle: .subheadline); sub.textColor = .secondaryLabel
     let names = UIStackView(arrangedSubviews: [who, sub]); names.axis = .vertical; names.spacing = 2
     let person = UIStackView(arrangedSubviews: [circle, names]); person.spacing = 12; person.alignment = .center
+    // (each box its own view with its own colour and the digit on it — on iPhone's glass sheet a label's own background was
+    //  turned round, white boxes in dark and black in light, the digits lost in them: Haris 2026-11-13)
     let digits = UIStackView(arrangedSubviews: code.map { ch -> UIView in
-      let l = UILabel(); l.text = String(ch); l.textAlignment = .center; l.font = .monospacedDigitSystemFont(ofSize: 34, weight: .semibold)
-      l.backgroundColor = .secondarySystemGroupedBackground; l.layer.cornerRadius = 14; l.clipsToBounds = true
-      l.widthAnchor.constraint(equalToConstant: 60).isActive = true; l.heightAnchor.constraint(equalToConstant: 68).isActive = true
-      return l
+      let box = UIView(); box.backgroundColor = Look.c(UIColor(red: 0.17, green: 0.17, blue: 0.18, alpha: 1), UIColor(red: 0.95, green: 0.95, blue: 0.97, alpha: 1))
+      box.layer.cornerRadius = 14; box.layer.cornerCurve = .continuous
+      let l = UILabel(); l.text = String(ch); l.textAlignment = .center; l.font = .monospacedDigitSystemFont(ofSize: 34, weight: .semibold); l.textColor = .label
+      l.translatesAutoresizingMaskIntoConstraints = false; box.addSubview(l)
+      NSLayoutConstraint.activate([l.centerXAnchor.constraint(equalTo: box.centerXAnchor), l.centerYAnchor.constraint(equalTo: box.centerYAnchor),
+                                   box.widthAnchor.constraint(equalToConstant: 60), box.heightAnchor.constraint(equalToConstant: 68)])
+      return box
     })
     digits.spacing = 12; digits.isAccessibilityElement = true; digits.accessibilityLabel = "Code " + code.map(String.init).joined(separator: " ")
     let note = UILabel(); note.numberOfLines = 0; note.textAlignment = .center; note.font = .preferredFont(forTextStyle: .footnote); note.textColor = .secondaryLabel
