@@ -439,8 +439,33 @@ final class GroupsVC: ListVC {
   init(clientsTab: Bool = false) { super.init(nibName: nil, bundle: nil); self.clientsTab = clientsTab }
   required init?(coder: NSCoder) { fatalError() }
   static let pageBg = Look.dyn(0x0C0D0F, 0xFFFFFF)
+  // ---------- a TEMPORARY check (Haris 2026-11-13: "1") — what makes the big title small while the list is at its top.
+  // Nothing on the page changes: each moment it goes small at the top is noted with what was happening, and Settings
+  // shows the notes under the version. Taken out once the cause is found. ----------
+  private var bigBarH: CGFloat = 0, smallAtTop = false, lastEvent = "—"
+  private func note(_ e: String) { lastEvent = e + " " + DiagTitle.clock() }
+  override func viewDidLayoutSubviews() {
+    super.viewDidLayoutSubviews()
+    guard let bar = navigationController?.navigationBar, !Talk.shared.isContact else { return }
+    if bigBarH == 0, view.window != nil, bar.frame.height > 80 { bigBarH = bar.frame.height }
+    guard bigBarH > 0 else { return }
+    let small = bar.frame.height < bigBarH - 20 && table.contentOffset.y <= -table.adjustedContentInset.top + 1 && !search.isActive
+    if small && !smallAtTop {
+      let app = UIApplication.shared.applicationState == .background ? "in the background" : UIApplication.shared.applicationState == .inactive ? "leaving or coming back" : "open"
+      DiagTitle.add("\(clientsTab ? "Clients" : "E11 Agency") went small at the top — app \(app), page \(view.window == nil ? "off screen" : "on screen"), last: \(lastEvent)")
+    }
+    smallAtTop = small
+  }
+  override func traitCollectionDidChange(_ p: UITraitCollection?) {
+    super.traitCollectionDidChange(p)
+    if UIApplication.shared.applicationState == .background { note("look redrawn in the background (app switcher picture)") }
+  }
+  override func viewDidDisappear(_ a: Bool) { if search.isActive { note("search closed while away") } else { note("page left") }; super.viewDidDisappear(a) }
+  override func viewWillAppear(_ a: Bool) { note("page coming back"); super.viewWillAppear(a) }
   override func viewDidLoad() {
     super.viewDidLoad()
+    NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in self?.note("app to the background") }
+    NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in self?.note("app coming back") }
     view.backgroundColor = GroupsVC.pageBg; table.backgroundColor = GroupsVC.pageBg
     table.separatorInset = UIEdgeInsets(top: 0, left: 80, bottom: 0, right: 0)
     table.separatorColor = Look.dyn(0x2A2B2E, 0xDCDCE0)
@@ -914,4 +939,11 @@ enum GroupActions {
     a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
     vc?.present(a, animated: true)
   }
+}
+
+// the TEMPORARY check's notes (the big title going small at the top) — the newest 12, kept on the phone, shown in Settings
+enum DiagTitle {
+  static func clock() -> String { let f = DateFormatter(); f.dateFormat = "HH:mm:ss"; return f.string(from: Date()) }
+  static var notes: [String] { UserDefaults.standard.stringArray(forKey: "diag-title") ?? [] }
+  static func add(_ s: String) { UserDefaults.standard.set(Array(([clock() + " " + s] + notes).prefix(12)), forKey: "diag-title") }
 }

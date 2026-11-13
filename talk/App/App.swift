@@ -240,7 +240,7 @@ final class SettingsVC: UITableViewController {
   override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { [1, rows1.count, 1][s] }
   override func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat { ip.section == 0 ? 76 : 48 }
   override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
-    s == 1 ? "Chats live on this phone. The server only passes each message on and lets it go once everyone has it." : s == 2 ? "E11 Talk \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "")) · \(Server.host)" : nil
+    s == 1 ? "Chats live on this phone. The server only passes each message on and lets it go once everyone has it." : s == 2 ? "E11 Talk \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "")) · \(Server.host)" + (DiagTitle.notes.isEmpty ? "" : "\n\nCheck (temporary) — the title going small:\n" + DiagTitle.notes.joined(separator: "\n")) : nil
   }
   override func tableView(_ tv: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
     let c = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
