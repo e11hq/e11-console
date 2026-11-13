@@ -1232,14 +1232,33 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   func tableView(_ tv: UITableView, previewForHighlightingContextMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? { holdPreview(tv, c) }
   private func holdPreview(_ tv: UITableView, _ c: UIContextMenuConfiguration) -> UITargetedPreview? {
     guard let id = c.identifier as? String, let ip = data.indexPath(for: item(id)), let cell = tv.cellForRow(at: ip) as? BubbleCell else { return nil }
-    // (Messages' way, Haris 2026-11-14: the bubble itself lifts — its view holds the tail, so nothing of it is cut — inside
-    //  its own shape only, with the shadow in that shape; iPhone takes it from its place and puts it back after. The
-    //  reaction pill and the forward button are beside it, not in it: they fade as it lifts and back after.)
-    let v = cell.held
-    let shape = cell.heldPath(origin: v.frame.origin)
+    // (what lifts is a picture of the bubble — tail, and its reaction pill, all inside its own shape — and the bubble itself
+    //  steps out of its place while it's up, Messages' way (Haris 2026-11-14). The bubble's own view lifted as it is let
+    //  iPhone lift its whole square, with the rows next to it showing in the corners — Haris's screenshots of build 110, as
+    //  with the folder tiles of E11 Console and the bubbles of 2026-11-13: iPhone doesn't cut a live view to the shape it's
+    //  given; a picture it does.)
+    // (the picture's box on the screen's own pixels — at a part-pixel place it drew a pixel off: Haris 2026-11-13)
+    // (letting go: the same picture back — the bubble is out of its place by then, there's nothing to draw)
+    if let s = heldShot, s.id == id, cell.held.alpha == 0 { return preview(s.img, s.r, s.shape, in: cell) }
+    let k = cell.traitCollection.displayScale > 0 ? cell.traitCollection.displayScale : UIScreen.main.scale
+    let h = cell.heldPath(origin: .zero).bounds
+    let x0 = floor(h.minX * k) / k, y0 = floor(h.minY * k) / k, x1 = ceil(h.maxX * k) / k, y1 = ceil(h.maxY * k) / k
+    let r = CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0)
+    let shape = cell.heldPath(origin: r.origin)
+    let img = UIGraphicsImageRenderer(bounds: CGRect(origin: .zero, size: r.size)).image { ctx in
+      shape.addClip()
+      ctx.cgContext.translateBy(x: -r.minX, y: -r.minY)
+      cell.contentView.drawHierarchy(in: cell.contentView.bounds, afterScreenUpdates: false)
+    }
+    heldShot = (id, img, r, shape)
+    return preview(img, r, shape, in: cell)
+  }
+  private var heldShot: (id: String, img: UIImage, r: CGRect, shape: UIBezierPath)?
+  private func preview(_ img: UIImage, _ r: CGRect, _ shape: UIBezierPath, in cell: BubbleCell) -> UITargetedPreview {
+    let iv = UIImageView(image: img); iv.frame = CGRect(origin: .zero, size: r.size); iv.backgroundColor = .clear
     let p = UIPreviewParameters(); p.backgroundColor = .clear
     p.visiblePath = shape; p.shadowPath = shape
-    return UITargetedPreview(view: v, parameters: p)
+    return UITargetedPreview(view: iv, parameters: p, target: UIPreviewTarget(container: cell.contentView, center: CGPoint(x: r.midX, y: r.midY)))
   }
   // the design (board 33): the reactions on top, then Reply · Forward · Copy · Star · (line) · Delete — Forward comes with
   // the forward sheet (stage 5); yours also keep Edit (15 minutes) and Info, files Save / Share, as the app has them today
@@ -1390,7 +1409,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     return table.cellForRow(at: ip) as? BubbleCell
   }
   func tableView(_ tv: UITableView, willDisplayContextMenu c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
-    if let cell = heldCell(c) { animator?.addAnimations { cell.besides(0) } ?? cell.besides(0) }
+    if let cell = heldCell(c) { cell.held.alpha = 0; animator?.addAnimations { cell.besides(0) } ?? cell.besides(0) }
     holding = true
     guard let host = navigationController?.view else { return }
     let veil = UIVisualEffectView(effect: nil); veil.frame = host.bounds; veil.isUserInteractionEnabled = false
@@ -1408,6 +1427,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let cell = heldCell(c)
     let finish = { [weak self] in
       guard let self = self else { return }; self.holding = false; let f = self.afterHold; self.afterHold = nil; f?(); self.fitBottom()
+      cell?.held.alpha = 1; self.heldShot = nil   // (back in its place the moment the picture has landed on it)
       if let cell = cell { UIView.animate(withDuration: Crossfade.time, delay: 0, options: [.allowUserInteraction]) { cell.besides(1) } }
     }
     if let a = animator { a.addCompletion(finish) } else { DispatchQueue.main.async(execute: finish) }
