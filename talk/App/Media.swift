@@ -33,8 +33,13 @@ final class MediaVC: UIViewController, UICollectionViewDelegate, QLPreviewContro
     // (Media · Files · Links in Apple's bar, where the title was — B, Haris 2026-11-13: under the bar, the frost behind them
     //  went each time they were pressed; in the bar, Apple's bar, its frost and the press are all one. The title stays the
     //  page's name for ‹ and VoiceOver.)
+    // (its width and height given, and its frame from the start — E11 Console's task page lesson (Haris 2026-11-09): with
+    //  only a width, Apple's bar sized it from the room it had while the page slid in, its top cut until the page landed,
+    //  and it sat off to one side; 44 high, as ‹ beside it)
     seg.translatesAutoresizingMaskIntoConstraints = false
-    let w = seg.widthAnchor.constraint(equalToConstant: 240); w.priority = .defaultHigh; w.isActive = true
+    seg.widthAnchor.constraint(equalToConstant: 236).isActive = true
+    seg.heightAnchor.constraint(equalToConstant: 44).isActive = true
+    seg.frame = CGRect(x: 0, y: 0, width: 236, height: 44)
     seg.apportionsSegmentWidthsByContent = false
     navigationItem.titleView = seg
 
