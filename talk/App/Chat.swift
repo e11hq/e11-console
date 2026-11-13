@@ -308,24 +308,16 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     guard let n = navigationController, let tc = transitionCoordinator else { return }
     let rowBottom = (n.view.window?.safeAreaInsets.top ?? n.view.safeAreaInsets.top) + ChatVC.rowMid * 2
     let full = n.navigationBar.frame.maxY, W = n.view.bounds.width
+    // (a page with its name in the middle of its bar — a client's page since 2b: no big title to fold, so no cover and
+    //  nothing held still — the chat's picture and name come in with the chat, Apple's own push, Haris 2026-11-13: "we can
+    //  have normal behaviour")
+    guard full - rowBottom > 1 else { pinTitle(); return }
     // (WhatsApp's: the chat's picture and name are there at once, in their place, as the chat opens — held still above the
     //  slide and given back to the page as it arrives, in the same spot; going back they slide away with the page)
     titleV.removeFromSuperview(); titleV.translatesAutoresizingMaskIntoConstraints = false
     n.view.insertSubview(titleV, belowSubview: n.navigationBar)
     NSLayoutConstraint.activate([titleV.leadingAnchor.constraint(equalTo: n.view.leadingAnchor, constant: ChatVC.titleLead),
                                  titleV.centerYAnchor.constraint(equalTo: n.view.topAnchor, constant: rowBottom - ChatVC.titleMid)])
-    guard full - rowBottom > 1 else {
-      // (a page with its name in the middle of its bar — a client's page since 2b: no big title to fold, but the same cover
-      //  over the bar's row for the slide, and the page's centred name and line kept out of it — they showed under the
-      //  chat's name, Haris 2026-11-13: "Where did the cover go?")
-      let fromItem = tc.viewController(forKey: .from)?.navigationItem
-      let hadTitleView = fromItem?.titleView
-      if hadTitleView == nil { fromItem?.titleView = UIView() }
-      let upper = ChatVC.frost(); upper.frame = CGRect(x: 0, y: 0, width: W, height: rowBottom)
-      n.view.insertSubview(upper, belowSubview: titleV)
-      tc.animate(alongsideTransition: nil) { [weak self] _ in upper.removeFromSuperview(); if hadTitleView == nil { fromItem?.titleView = nil }; self?.pinTitle() }
-      return
-    }
     // (WhatsApp's, frame by frame: at the first moment one frost from the very top down past the list's search bar, thick
     //  enough that the big title and the search don't show through; then it settles to the chat's bar. Two pieces of the
     //  one frost: the top behind Apple's bar (the chat's name and buttons on it), the rest over the folding title.)
