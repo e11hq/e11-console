@@ -263,7 +263,11 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
     guard !rows.isEmpty else { return }
     snap.reconfigureItems(rows); data.applySteady(snap, in: table, animated: view.window != nil)
   }
-  override func viewWillAppear(_ a: Bool) { super.viewWillAppear(a); reload(animated: false) }
+  // (coming back to the page: what changed while away set, but the list not laid out here — laid out before Apple's bar
+  //  had put its big title back, it kept the small bar's room and the title stayed small: the check's note, Clients,
+  //  "page coming back", room 116 of 189 — Haris 2026-11-13. Apple lays it out with its bar, as the page shows.)
+  override func viewWillAppear(_ a: Bool) { super.viewWillAppear(a); appearing = true; reload(animated: false); appearing = false }
+  private var appearing = false
   @objc func changed() { reload(animated: view.window != nil) }
   func updateSearchResults(for s: UISearchController) { reload(animated: false) }
   func build() -> [(String, String, [Row])] { [] }
@@ -294,7 +298,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
     for r in snap.itemIdentifiers { newSigs[r] = sig(r) }
     snap.reconfigureItems(snap.itemIdentifiers.filter { old.indexOfItem($0) != nil && sigs[$0] != newSigs[$0] })
     sigs = newSigs
-    data.applySteady(snap, in: table, animated: animated)
+    data.applySteady(snap, in: table, animated: animated, layout: !appearing)
     emptyNote()
   }
   func emptyNote() {}
