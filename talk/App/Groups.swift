@@ -246,7 +246,7 @@ final class GroupInfoVC: UITableViewController {
   required init?(coder: NSCoder) { fatalError() }
   private var g: Group? { Talk.shared.groups[group] }
   enum Row: Hashable { case media, member(String), addMembers, mute, makeMeAdmin, second, leave, delete }
-  private var data: UITableViewDiffableDataSource<Int, Row>!
+  private var data: TitledSource<Int, Row>!
   private var sigs: [Row: Int] = [:]
   private let head = UIView(), pic = Avatar(frame: CGRect(x: 0, y: 0, width: 116, height: 116)), nameL = UILabel(), subL = UILabel()
   private let acts = UIStackView()
@@ -265,9 +265,13 @@ final class GroupInfoVC: UITableViewController {
     navigationItem.title = "Group Info"; navigationItem.largeTitleDisplayMode = .never
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "c")
     tableView.sectionHeaderTopPadding = 0
-    data = UITableViewDiffableDataSource(tableView: tableView) { [weak self] tv, ip, row in
+    data = TitledSource(tableView: tableView) { [weak self] tv, ip, row in
       let c = tv.dequeueReusableCell(withIdentifier: "c", for: ip); self?.fill(c, row); return c
     }
+    // (the list's own titles — "18 MEMBERS" over the people, as board 23, and the notes under the last boxes: a diffable
+    //  list asks its data source for them, never the page, so they never showed and left an empty gap — Haris 2026-11-13)
+    data.head = { [weak self] s in self?.headTitle(s) }
+    data.foot = { [weak self] s in self?.footTitle(s) }
     data.defaultRowAnimation = .fade
     buildHead()
     NotificationCenter.default.addObserver(self, selector: #selector(changed), name: .talkChanged, object: nil)
@@ -349,6 +353,10 @@ final class GroupInfoVC: UITableViewController {
     snap.reconfigureItems(snap.itemIdentifiers.filter { old.indexOfItem($0) != nil && sigs[$0] != newSigs[$0] })
     sigs = newSigs
     data.apply(snap, animatingDifferences: animated)
+    // (someone added or gone: the title over the people says the new count, in place — the rest left as it is)
+    if let i = snap.indexOfSection(1), let h = tableView.headerView(forSection: i), let t = headTitle(i), h.textLabel?.text != t {
+      UIView.transition(with: h, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction]) { h.textLabel?.text = t }
+    }
   }
 
   // what the chat holds: photos and videos, files, and messages with links — from this phone's own copy
@@ -436,13 +444,13 @@ final class GroupInfoVC: UITableViewController {
     c.contentConfiguration = cfg
   }
   // (the gap between boxes 24, as under the three cards — Apple's were wider: Haris 2026-11-13)
-  override func tableView(_ tv: UITableView, heightForHeaderInSection s: Int) -> CGFloat { 0.01 }
-  override func tableView(_ tv: UITableView, heightForFooterInSection s: Int) -> CGFloat { 24 }
-  override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? {
+  override func tableView(_ tv: UITableView, heightForHeaderInSection s: Int) -> CGFloat { headTitle(s) == nil ? 0.01 : UITableView.automaticDimension }
+  override func tableView(_ tv: UITableView, heightForFooterInSection s: Int) -> CGFloat { footTitle(s) == nil ? 24 : UITableView.automaticDimension }
+  private func headTitle(_ s: Int) -> String? {
     guard data.snapshot().sectionIdentifiers.indices.contains(s) else { return nil }
-    return data.snapshot().sectionIdentifiers[s] == 1 ? "\(g?.members.count ?? 0) Members" : nil
+    return data.snapshot().sectionIdentifiers[s] == 1 ? "\(g?.members.count ?? 0) MEMBERS" : nil
   }
-  override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
+  private func footTitle(_ s: Int) -> String? {
     guard let g = g, data.snapshot().sectionIdentifiers.indices.contains(s) else { return nil }
     switch data.snapshot().sectionIdentifiers[s] {
     case 3: return "The creator picks one second admin. Admins change the picture and name, add and remove people, and can delete the group."
@@ -919,4 +927,13 @@ final class EditGroupVC: UITableViewController, PHPickerViewControllerDelegate, 
       if let self = self { (self.tableView.tableHeaderView?.subviews.compactMap { $0 as? UIButton }.first)?.menu = UIMenu(children: self.picMenu()) }
     }
   }
+}
+
+
+// A diffable list with section titles: Apple asks the data source for them (the page's own title methods are never asked
+// once a diffable data source is set)
+final class TitledSource<S: Hashable, I: Hashable>: UITableViewDiffableDataSource<S, I> {
+  var head: ((Int) -> String?)?, foot: ((Int) -> String?)?
+  override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? { head?(s) }
+  override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? { foot?(s) }
 }
