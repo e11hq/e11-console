@@ -89,7 +89,9 @@ export function createServer(cfg) {
   // E11 Talk (talk.js): its own database, its own phones for notifications (the same Apple key, its own app)
   const talkApns = createApns({ store, keyFile: cfg.apnsKeyFile, keyId: cfg.apnsKeyId, teamId: cfg.apnsTeamId, topic: cfg.talkTopic || 'ae.e11.talk.ios', kvPrefix: 'talk-apns', hosts: cfg.apnsHosts, connectOpts: cfg.apnsConnectOpts });
   let talk = null;
-  const talkNow = () => talk || (talk = createTalk({ dataDir, store, access, apns: talkApns, dbFile: cfg.talkDbFile, now: cfg.now || (() => Date.now()), links: () => fileLinks, signinCode: talkSigninCode }));
+  const talkNow = () => talk || (talk = createTalk({ dataDir, store, access, apns: talkApns, dbFile: cfg.talkDbFile, now: cfg.now || (() => Date.now()), links: () => fileLinks, signinCode: talkSigninCode, onUnread: talkUnreadTell }));
+  // (E11 Talk's unread count on E11 Console's Talk button: to that person's open apps, as it changes)
+  function talkUnreadTell(uids) { if (!talk) return; const set = new Set(uids.map(String)); for (const s of streams) if (set.has(s.userId)) { try { send(s, 'talkUnread', { n: talk.unreadFor(s.userId) }); } catch { /* fine */ } } }
   function talkContact(e) { try { return talkNow().contactByEmail(e); } catch { return null; } }
   // a client contact's sign-in code (board 51): made by a Super / Office Admin, shown with the message to pass on
   function talkSigninCode(email, by, { name = '', client = '' } = {}) {
@@ -1372,7 +1374,7 @@ export function createServer(cfg) {
       // (access: a short mark of what this person may see — an app that keeps its copy between launches sends the one it
       //  had, and gets a fresh download if it changed while it was away)
       const accessMark = crypto.createHash('sha1').update(s.lastAccess).digest('hex').slice(0, 12);
-      send(s, 'hello', { version, rev: store.rev(), appIcon: appIcon.info(), access: accessMark });
+      send(s, 'hello', { version, rev: store.rev(), appIcon: appIcon.info(), access: accessMark, talkUnread: (() => { try { return talkNow().unreadFor(u.id); } catch { return 0; } })() });
       const since = Number(url.searchParams.get('since'));
       const hadMark = url.searchParams.get('access');
       if (hadMark && hadMark !== accessMark && Number.isFinite(since) && since > 0) send(s, 'resync', { rev: store.rev() });

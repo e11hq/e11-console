@@ -369,3 +369,24 @@ test('Settings › Notifications: an @mention in a muted group — on until turn
   await act('des', { act: 'setOpt', key: 'mutedMentions', on: true });
   assert.equal((await state('des')).me.opts.mutedMentions, true);
 });
+test('your unread count for E11 Console\'s Talk button: what Talk said, plus what is still waiting for your phone; live on E11 Console\'s stream (Haris 2026-11-13)', async () => {
+  const g = (await act('am', { act: 'newGroup', client: 'p1', name: 'Count check', members: ['u-sm'] })).group.id;
+  // (Sara's phone up to date and nothing unread)
+  const s0 = await sync('sm'); await ack('sm', s0.last);
+  assert.ok((await act('sm', { act: 'unread', n: 0, seq: s0.last })).ok);
+  // E11 Console's stream for Sara
+  const ctl = new AbortController();
+  const res = await fetch(base + '/api/events', { headers: H('sm'), signal: ctl.signal });
+  const rd = res.body.getReader(); let got = '';
+  const until = async (re) => { for (let i = 0; i < 40 && !re.test(got); i++) { const { value } = await Promise.race([rd.read(), new Promise((r) => setTimeout(() => r({ value: null }), 100))]); if (value) got += Buffer.from(value).toString(); } return re.test(got); };
+  assert.ok(await until(/"talkUnread":0/), 'the count comes with hello');
+  await act('am', { act: 'send', group: g, text: 'one', cid: 'k1' });
+  await act('am', { act: 'send', group: g, text: 'two', cid: 'k2' });
+  assert.ok(await until(/event: talkUnread\ndata: \{"n":2\}/), 'two new while Talk is closed');
+  // Talk opens, picks them up and says 2 unread; then reads them
+  const s1 = await sync('sm', s0.last); await ack('sm', s1.last);
+  await act('sm', { act: 'unread', n: 2, seq: s1.last });
+  await act('sm', { act: 'unread', n: 0, seq: s1.last });
+  assert.ok(await until(/data: \{"n":0\}/), 'read in Talk: back to 0');
+  ctl.abort();
+});

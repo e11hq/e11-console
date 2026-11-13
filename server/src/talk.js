@@ -25,7 +25,7 @@ const PHONE_MS = 30 * 86400000;         // a linked Mac goes when its phone hasn
 const rid = (p) => p + '-' + crypto.randomBytes(8).toString('hex');
 const clip = (s, n) => String(s == null ? '' : s).slice(0, n);
 
-export function createTalk({ dataDir, store, access, apns = null, now = () => Date.now(), dbFile, links = () => null, signinCode = null }) {
+export function createTalk({ dataDir, store, access, apns = null, now = () => Date.now(), dbFile, links = () => null, signinCode = null, onUnread = null }) {
   const file = dbFile || path.join(dataDir, 'db', 'talk.sqlite');
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
   const relay = path.join(dataDir, 'talk-relay');
@@ -48,6 +48,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     CREATE TABLE IF NOT EXISTS phone_seen (uid TEXT PRIMARY KEY, at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS needs (file TEXT NOT NULL, uid TEXT NOT NULL, grp TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (file, uid));
     CREATE TABLE IF NOT EXISTS opts (uid TEXT NOT NULL, key TEXT NOT NULL, val INTEGER NOT NULL, PRIMARY KEY (uid, key));
+    CREATE TABLE IF NOT EXISTS unread (uid TEXT PRIMARY KEY, n INTEGER NOT NULL, seq INTEGER NOT NULL, at INTEGER NOT NULL);
   `);
   // (a group's pinned message — one, kept until unpinned or replaced; anyone in the group pins, Haris 2026-11-12)
   try { db.exec('ALTER TABLE groups ADD COLUMN pin TEXT'); } catch { /* already there */ }
@@ -203,7 +204,20 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     const r = Q.addEvent.run(g.id, type, JSON.stringify(data), at, by || null);
     const seq = Number(r.lastInsertRowid);
     for (const uid of devicesFor(to, by)) waitFor(seq, uid);
+    if (type === 'msg' && data && data.kind !== 'sys' && onUnread) { try { onUnread(to.filter((x) => x !== by && !isMacId(x))); } catch { /* fine */ } }
     return seq;
+  }
+  // ---------- your unread count, for E11 Console's Talk button (Haris 2026-11-08 plan; 2026-11-13 "go ahead") ----------
+  // E11 Talk tells the server its own count (and how far it had come); the messages still waiting for your phone since
+  // are added — so it grows while Talk is closed, and drops as you read in Talk
+  const unreadQ = {
+    get: q('SELECT n, seq FROM unread WHERE uid = ?'),
+    put: q('INSERT OR REPLACE INTO unread (uid, n, seq, at) VALUES (?, ?, ?, ?)'),
+    since: q("SELECT COUNT(*) AS c FROM waiting w JOIN events e ON e.seq = w.seq WHERE w.uid = ? AND w.seq > ? AND e.type = 'msg' AND (e.by IS NULL OR e.by <> w.uid) AND COALESCE(json_extract(e.data, '$.kind'), '') <> 'sys'"),
+  };
+  function unreadFor(uid) {
+    const r = unreadQ.get.get(String(uid));
+    return (r ? r.n : 0) + (unreadQ.since.get(String(uid), r ? r.seq : 0).c || 0);
   }
   // ---------- linked Macs (Haris 2026-11-05: "as WhatsApp links a computer") ----------
   // A linked Mac is a device of its person: it gets everything its person gets — and what its person does elsewhere —
@@ -381,7 +395,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     if (ks.some((k) => (contactRow(k) || {}).client !== g.client)) return bad('A client contact can only join their own client’s groups');
     return null;
   }
-  const CONTACT_ACTS = new Set(['send', 'edit', 'del', 'react', 'read', 'leave', 'pin', 'mute', 'typing', 'setOpt']);   // (setOpt: their own notification choices)
+  const CONTACT_ACTS = new Set(['send', 'edit', 'del', 'react', 'read', 'leave', 'pin', 'mute', 'typing', 'setOpt', 'unread']);   // (setOpt: their own notification choices)
 
   // ---------- typing (step 5, Haris 2026-11-12): passed straight to the group's other phones and Macs that are listening —
   // nothing kept; a phone shows it for a few seconds unless told again ----------
@@ -627,6 +641,12 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
           Q.setPin.run(u.id, kind, id, t);
         } else Q.setPin.run(u.id, kind, id, null);
         return { ok: true, pins: Q.pinsOf.all(u.id, kind).map((r) => r.id) };
+      }
+      case 'unread': {
+        const n = Math.max(0, Math.min(100000, Math.floor(Number(b.n) || 0))), sq = Math.max(0, Math.floor(Number(b.seq) || 0));
+        unreadQ.put.run(u.id, n, sq, now());
+        if (onUnread) { try { onUnread([u.id]); } catch { /* fine */ } }
+        return { ok: true };
       }
       case 'setOpt': {
         if (b.key !== 'mutedMentions') return bad('Not a setting');
@@ -894,6 +914,6 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   const isAdminOf = (u, gid) => { const g = Q.group.get(gid); return !!g && isAdmin(u, g); };
   // (whose E11 Console key — board 53's card: name, role, colour)
   function personByEmail(e) { const u = access.userByEmail(e); if (u) return personOf(u); const k = contactByEmail(e); return k ? { id: k.id, name: k.name, role: 'Client', photo: null, color: null } : null; }
-  return { state, act, sync, ack, sample, upload, tasksChanged, contactByEmail, personByEmail, fileFor, filePath, fetched, listen, sweep, isAdminOf,
+  return { state, act, sync, ack, unreadFor, sample, upload, tasksChanged, contactByEmail, personByEmail, fileFor, filePath, fetched, listen, sweep, isAdminOf,
     linkCode, linkStatus, macFor, unlinkMac, history, hasFiles, resend, close: () => { clearInterval(sweepTimer); for (const set of listeners.values()) for (const r of set) try { r.end(); } catch { /* fine */ } db.close(); } };
 }
