@@ -781,20 +781,25 @@ final class GroupCell: UITableViewCell {
     return a
   }
   // "With Client" (board 20): orange words on a faint orange, a picture for each look so iPhone switches it itself
+  private static let chipFont = UIFont.systemFont(ofSize: 12, weight: .semibold)
+  // (its size in points, known here — the picture from the look's set came back in pixels and was stretched, Haris 2026-11-13)
+  private static let chipW: CGFloat = ceil(("With Client" as NSString).size(withAttributes: [.font: chipFont]).width) + 16
   private static let chip: UIImage = {
     func draw(_ dark: Bool) -> UIImage {
-      let f = UIFont.systemFont(ofSize: 12, weight: .semibold), t = "With Client" as NSString
+      let f = chipFont, t = "With Client" as NSString
       let ink = dark ? Look.rgb(0xFFB340) : Look.rgb(0xC26A00), fill = dark ? Look.rgb(0xFF9F0A, 0.16) : Look.rgb(0xFF9F0A, 0.16)
-      let w = ceil(t.size(withAttributes: [.font: f]).width) + 16
-      return UIGraphicsImageRenderer(size: CGSize(width: w, height: 18)).image { _ in
+      let w = chipW
+      let fmt = UIGraphicsImageRendererFormat.preferred(); fmt.scale = UIScreen.main.scale
+      return UIGraphicsImageRenderer(size: CGSize(width: w, height: 18), format: fmt).image { _ in
         fill.setFill(); UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: w, height: 18), cornerRadius: 8).fill()
         t.draw(at: CGPoint(x: 8, y: 1.5), withAttributes: [.font: f, .foregroundColor: ink])
       }
     }
     let asset = UIImageAsset()
-    asset.register(draw(false), with: UITraitCollection(userInterfaceStyle: .light))
-    asset.register(draw(true), with: UITraitCollection(userInterfaceStyle: .dark))
-    return asset.image(with: UITraitCollection.current)
+    let scale = UITraitCollection(displayScale: UIScreen.main.scale)
+    asset.register(draw(false), with: UITraitCollection(traitsFrom: [scale, UITraitCollection(userInterfaceStyle: .light)]))
+    asset.register(draw(true), with: UITraitCollection(traitsFrom: [scale, UITraitCollection(userInterfaceStyle: .dark)]))
+    return asset.image(with: UITraitCollection(traitsFrom: [scale, UITraitCollection.current]))
   }()
   private var rightW: CGFloat = 0
   private var badgeW: NSLayoutConstraint!
@@ -815,7 +820,7 @@ final class GroupCell: UITableViewCell {
     var cfg = UIListContentConfiguration.subtitleCell()
     let title = GroupCell.marked(m.name, m.find, font: .systemFont(ofSize: 17, weight: .semibold), ink: .label)
     if m.chip {
-      let a = NSTextAttachment(image: GroupCell.chip); a.bounds = CGRect(x: 0, y: -2, width: GroupCell.chip.size.width, height: 18)
+      let a = NSTextAttachment(image: GroupCell.chip); a.bounds = CGRect(x: 0, y: -3, width: GroupCell.chipW, height: 18)
       title.append(NSAttributedString(string: "\n")); title.append(NSAttributedString(attachment: a))
     }
     cfg.attributedText = title
