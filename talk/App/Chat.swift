@@ -706,8 +706,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     if let last = Talk.shared.log(group).msgs.last, last.id != lastSeenId, last.by != Talk.shared.me?.id, last.kind != "sys", lastSeenId != nil, view.window != nil { ChatSound.arrive() }
     // (one of yours just sent: always to the end — Haris 2026-11-12: it stopped short, the new row measured only after)
     let mineNew = Talk.shared.log(group).msgs.last.map { $0.id != lastSeenId && $0.by == Talk.shared.me?.id && $0.kind != "sys" } ?? false   // (not a note of yours — "You pinned a message" took the chat to its end, Haris 2026-11-12)
+    // (a note of yours just made — a description, a picture, a pin: the chat stays where you are, Haris 2026-11-13)
+    let myNote = Talk.shared.log(group).msgs.last.map { $0.id != lastSeenId && $0.by == Talk.shared.me?.id && $0.kind == "sys" } ?? false
     lastSeenId = Talk.shared.log(group).msgs.last?.id
-    if near || mineNew {
+    if (near && !myNote) || mineNew {
       toBottom(true)
       // (once the new row has its real height, the rest of the way if it fell short)
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
