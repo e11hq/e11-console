@@ -439,11 +439,12 @@ final class GroupInfoVC: UITableViewController, PHPickerViewControllerDelegate {
     present(a, animated: true)
   }
   private func muteSheet(_ g: Group) {
-    let a = UIAlertController(title: g.muted ? "Muted" : "Mute “\(g.name)”", message: "An @mention still notifies you.", preferredStyle: .actionSheet)
+    // (the design's board 39, word for word — Haris 2026-11-13)
+    let a = UIAlertController(title: g.muted ? "Muted" : "Mute \(g.name)", message: "You still get a notification when someone @mentions you.", preferredStyle: .actionSheet)
     if g.muted { a.addAction(UIAlertAction(title: "Unmute", style: .default) { _ in GroupActions.mute(g.id, nil) }) }
     else {
-      a.addAction(UIAlertAction(title: "8 hours", style: .default) { _ in GroupActions.mute(g.id, 8 * 3600) })
-      a.addAction(UIAlertAction(title: "1 week", style: .default) { _ in GroupActions.mute(g.id, 7 * 86400) })
+      a.addAction(UIAlertAction(title: "8 Hours", style: .default) { _ in GroupActions.mute(g.id, 8 * 3600) })
+      a.addAction(UIAlertAction(title: "1 Week", style: .default) { _ in GroupActions.mute(g.id, 7 * 86400) })
       a.addAction(UIAlertAction(title: "Always", style: .default) { _ in GroupActions.mute(g.id, -1) })
     }
     a.addAction(UIAlertAction(title: "Cancel", style: .cancel)); present(a, animated: true)

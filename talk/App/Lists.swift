@@ -192,8 +192,8 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
     let mute: UIMenuElement = g.muted
       ? UIAction(title: "Unmute", image: UIImage(systemName: "bell")) { _ in GroupActions.mute(id, nil) }
       : UIMenu(title: "Mute", image: UIImage(systemName: "bell.slash"), children: [
-          UIAction(title: "8 hours") { _ in GroupActions.mute(id, 8 * 3600) },
-          UIAction(title: "1 week") { _ in GroupActions.mute(id, 7 * 86400) },
+          UIAction(title: "8 Hours") { _ in GroupActions.mute(id, 8 * 3600) },
+          UIAction(title: "1 Week") { _ in GroupActions.mute(id, 7 * 86400) },
           UIAction(title: "Always") { _ in GroupActions.mute(id, -1) }])
     return UIMenu(title: g.name, children: [
       UIAction(title: pinned ? "Unpin" : "Pin", image: UIImage(systemName: pinned ? "pin.slash" : "pin")) { [weak self] _ in self?.pin(group: id, !pinned) },
