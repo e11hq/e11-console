@@ -373,7 +373,11 @@ final class GroupInfoVC: UITableViewController {
     switch row {
     case .media: navigationController?.pushViewController(MediaVC(group: group), animated: true)   // (step 1b — mock-up approved 2026-11-13)
     case .member(let id): personSheet(id, g, at: tv.cellForRow(at: ip))
-    case .addMembers: navigationController?.pushViewController(AddPeopleVC(group: group), animated: true)
+    case .addMembers:
+      // (step 1f: its own sheet — the design's board 41)
+      let n = UINavigationController(rootViewController: AddPeopleVC(group: group))
+      if let sh = n.sheetPresentationController { sh.detents = [.large()]; sh.prefersGrabberVisible = true }
+      present(n, animated: true)
     case .mute: muteSheet(g)
     case .makeMeAdmin: simple(["act": "makeMeAdmin", "group": group], done: "You’re an admin of this group")
     case .second: secondSheet(g, at: tv.cellForRow(at: ip))
@@ -449,49 +453,90 @@ final class GroupInfoVC: UITableViewController {
   }
 }
 
-final class AddPeopleVC: UITableViewController {
+// ---------- Add Members (step 1f — the design's board 41): Apple's sheet; ✕ · Add Members · Add in Apple's bar, "N selected"
+// under the title; Apple's search; the team, then the client's contacts (Super / Office Admins); Apple's own round
+// selection marks (the list's multiple selection); the footer as drawn ----------
+final class AddPeopleVC: UITableViewController, UISearchResultsUpdating {
   let group: String
   private var picked = Set<String>()
+  private var q = ""
   init(group: String) { self.group = group; super.init(style: .insetGrouped) }
   required init?(coder: NSCoder) { fatalError() }
-  private var list: [Person] {
+  private var cname: String { Talk.shared.clients[Talk.shared.groups[group]?.client ?? ""]?.name ?? "Client" }
+  private var sections: [(String, [Person])] {
     let T = Talk.shared, inIt = Set(T.groups[group]?.members ?? [])
-    let team = T.people.values.filter { !inIt.contains($0.id) && !$0.gone && !$0.contact }.sorted { $0.name < $1.name }
-    guard T.boss, let g = T.groups[group] else { return team }
-    let cname = T.clients[g.client]?.name ?? "Client"
-    return T.contacts.filter { $0.client == g.client && !inIt.contains($0.id) }.map { Person(id: $0.id, name: $0.name, role: "\(cname) · client", photo: nil, color: nil, gone: false, contact: true, client: g.client) } + team
+    let hit = { (p: Person) in self.q.isEmpty || p.name.localizedCaseInsensitiveContains(self.q) }
+    let team = T.people.values.filter { !inIt.contains($0.id) && !$0.gone && !$0.contact && hit($0) }.sorted { $0.name < $1.name }
+    var out: [(String, [Person])] = team.isEmpty ? [] : [("Team", team)]
+    if T.boss, let g = T.groups[group] {
+      let cs = T.contacts.filter { $0.client == g.client && !inIt.contains($0.id) }
+        .map { Person(id: $0.id, name: $0.name, role: "Client", photo: nil, color: nil, gone: false, contact: true, client: g.client) }.filter(hit)
+      if !cs.isEmpty { out.append(("\(cname) Contacts", cs)) }
+    }
+    return out
   }
   override func viewDidLoad() {
-    super.viewDidLoad(); title = "Add people"
-    navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Add", primaryAction: UIAction { [weak self] _ in self?.add() })
-    navigationItem.rightBarButtonItem?.style = .done; navigationItem.rightBarButtonItem?.isEnabled = false
+    super.viewDidLoad()
+    navigationItem.title = "Add Members"
+    navigationItem.leftBarButtonItem = UIBarButtonItem(systemItem: .close, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
+    let add = UIBarButtonItem(title: "Add", primaryAction: UIAction { [weak self] _ in self?.add() })
+    if #available(iOS 26.0, *) { add.style = .prominent } else { add.style = .done }
+    add.isEnabled = false; navigationItem.rightBarButtonItem = add
+    let sc = UISearchController(searchResultsController: nil); sc.searchResultsUpdater = self; sc.obscuresBackgroundDuringPresentation = false
+    sc.searchBar.placeholder = "Search people"
+    navigationItem.searchController = sc; navigationItem.hidesSearchBarWhenScrolling = false
+    tableView.register(UITableViewCell.self, forCellReuseIdentifier: "c")
+    // (Apple's round selection marks on the left — the list's own multiple selection)
+    tableView.allowsMultipleSelectionDuringEditing = true; tableView.isEditing = true
+    counted()
   }
-  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { list.count }
-  override func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat { 58 }
-  override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? { "They’ll see the messages from now on — not what was said before." }
+  private func counted() {
+    navigationItem.rightBarButtonItem?.isEnabled = !picked.isEmpty
+    if #available(iOS 26.0, *) { navigationItem.subtitle = picked.isEmpty ? nil : "\(picked.count) selected" }
+  }
+  func updateSearchResults(for sc: UISearchController) {
+    let n = (sc.searchBar.text ?? "").trimmingCharacters(in: .whitespaces); guard n != q else { return }
+    q = n; tableView.reloadData(); reselect()
+  }
+  private func reselect() {
+    for (s, sec) in sections.enumerated() { for (r, p) in sec.1.enumerated() where picked.contains(p.id) { tableView.selectRow(at: IndexPath(row: r, section: s), animated: false, scrollPosition: .none) } }
+  }
+  override func numberOfSections(in tv: UITableView) -> Int { sections.count }
+  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { sections[s].1.count }
+  override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? { sections[s].0 }
+  override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
+    guard s == sections.count - 1 else { return nil }
+    return Talk.shared.boss ? "Adding a client contact moves the group to the Clients tab and marks it “Client can see this group”. People already in the group aren’t listed." : "People already in the group aren’t listed."
+  }
   override func tableView(_ tv: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
-    let c = UITableViewCell(style: .subtitle, reuseIdentifier: nil), p = list[ip.row]
-    var cfg = c.defaultContentConfiguration(); cfg.text = p.name; cfg.secondaryText = p.role; cfg.secondaryTextProperties.color = .secondaryLabel
-    cfg.image = UIImage(systemName: "circle.fill"); cfg.imageProperties.tintColor = .clear; cfg.imageProperties.reservedLayoutSize = CGSize(width: 40, height: 40)
+    let c = tv.dequeueReusableCell(withIdentifier: "c", for: ip), p = sections[ip.section].1[ip.row]
+    // (Apple's content view first, ours into it — Group Info's lesson)
+    if c.contentConfiguration == nil { c.contentConfiguration = UIListContentConfiguration.subtitleCell() }
+    c.contentView.subviews.filter { $0.tag == 77 }.forEach { $0.removeFromSuperview() }
+    var cfg = UIListContentConfiguration.subtitleCell()
+    cfg.text = p.name; cfg.secondaryText = p.role
+    cfg.secondaryTextProperties.color = p.contact ? .systemOrange : .secondaryLabel
+    cfg.secondaryTextProperties.font = p.contact ? .systemFont(ofSize: 13, weight: .semibold) : .systemFont(ofSize: 13)
+    cfg.image = UIImage(systemName: "circle.fill"); cfg.imageProperties.tintColor = .clear
+    cfg.imageProperties.reservedLayoutSize = CGSize(width: 40, height: 40); cfg.imageProperties.maximumSize = CGSize(width: 40, height: 40)
+    // (room above and below — the grey line under the name was cut off at the old fixed height)
+    cfg.directionalLayoutMargins.top = 10; cfg.directionalLayoutMargins.bottom = 10
     c.contentConfiguration = cfg
-    let a = Avatar(frame: CGRect(x: 16, y: 9, width: 40, height: 40)); a.set(person: p); c.contentView.addSubview(a)
-    let on = picked.contains(p.id)
-    let tick = UIImageView(image: UIImage(systemName: on ? "checkmark.circle.fill" : "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22)))
-    tick.tintColor = on ? Look.accent : .tertiaryLabel; c.accessoryView = tick
+    let a = Avatar(frame: CGRect(x: 16, y: 10, width: 40, height: 40)); a.tag = 77; a.isUserInteractionEnabled = false; a.set(person: p)
+    c.contentView.addSubview(a)
     return c
   }
   override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) {
-    tv.deselectRow(at: ip, animated: true)
-    let id = list[ip.row].id
-    if picked.contains(id) { picked.remove(id) } else { picked.insert(id) }
-    UISelectionFeedbackGenerator().selectionChanged()
-    tv.reloadRows(at: [ip], with: .none)
-    navigationItem.rightBarButtonItem?.isEnabled = !picked.isEmpty
+    picked.insert(sections[ip.section].1[ip.row].id); UISelectionFeedbackGenerator().selectionChanged(); counted()
+  }
+  override func tableView(_ tv: UITableView, didDeselectRowAt ip: IndexPath) {
+    picked.remove(sections[ip.section].1[ip.row].id); UISelectionFeedbackGenerator().selectionChanged(); counted()
   }
   private func add() {
+    navigationItem.rightBarButtonItem?.isEnabled = false
     Net.shared.act(["act": "addPeople", "group": group, "ids": Array(picked)]) { [weak self] j in
-      if (j?["ok"] as? Bool) == true { Talk.shared.refresh(); Talk.shared.sync(); self?.navigationController?.popViewController(animated: true) }
-      else { toast(j?["error"] as? String ?? "Couldn’t add them — try again") }
+      if (j?["ok"] as? Bool) == true { Talk.shared.refresh(); Talk.shared.sync(); self?.dismiss(animated: true) }
+      else { toast(j?["error"] as? String ?? "Couldn’t add them — try again"); self?.counted() }
     }
   }
 }
