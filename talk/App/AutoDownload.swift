@@ -170,6 +170,8 @@ final class DownloadBadge: UIView {
   }
   required init?(coder: NSCoder) { fatalError() }
   private(set) var state: Auto.State = .here
+  // (why it's gone: past 30 days, or the server let it go sooner — an older app's way)
+  var why = "It wasn’t downloaded within 30 days" { didSet { goneLine.text = why; setNeedsLayout() } }
   func set(_ s: Auto.State, size: Int) {
     state = s
     pill.isHidden = s != .wait; goneBox.isHidden = s != .gone

@@ -2158,7 +2158,9 @@ final class BubbleCell: UITableViewCell {
     // (someone else's photo, first of their run: their name and role on the bubble above it, WhatsApp's way — not over
     //  the photo — Haris 2026-11-13)
     headed = isPhoto && !mine && run.first && !framed
-    tailOn = run.last && (!isPhoto || caption || framed || headed)
+    // (an attachment last in its run — a photo, video, album or file — has no tail; words under it keep the tail,
+    //  Haris 2026-11-13)
+    tailOn = run.last && (!(isPhoto || isDoc) || caption)
     bubble.tail = (mine, tailOn)
     let ink: UIColor = mine ? .white : .label, dim: UIColor = mine ? Look.mineTime : Look.roleInk
     // the name: over a photo for one, else at the top (others', first of a run)
@@ -2521,6 +2523,7 @@ final class BubbleCell: UITableViewCell {
     if (m.kind == "photo" || m.kind == "video") && album.count < 4 {
       let was = dlBadge.state
       let put = {
+        self.dlBadge.why = Date().timeIntervalSince1970 * 1000 - m.at > Auto.keep ? "It wasn’t downloaded within 30 days" : "It’s no longer on the server"
         self.dlBadge.set(st, size: f.size)
         self.playDisc.isHidden = m.kind != "video" || !(st == .here || st == .auto)
       }
