@@ -2138,7 +2138,7 @@ final class BubbleCell: UITableViewCell {
     if let l = m.link.map({ Talk.shared.liveLink($0) }), l.e11 != nil, !m.deleted, !Talk.shared.isContact {
       linkWrap.isHidden = true; e11Wrap.isHidden = false; if !m.pending { fwdB.isHidden = false }
       e11Wrap.reach(nameL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
-      e11Card.set(l, mine: mine, ink: ink, msg: m.id) { [weak self] in self?.msg?.id }; wideCard = true
+      e11Card.set(l, mine: mine, ink: ink, msg: m.id, find: find) { [weak self] in self?.msg?.id }; wideCard = true
     } else { e11Wrap.isHidden = true }
     taskWrap.isHidden = m.task == nil || m.deleted
     if let t = m.task, !m.deleted {
@@ -3115,7 +3115,7 @@ final class E11CardView: UIView {
   }
   required init?(coder: NSCoder) { fatalError() }
   private var quietBottom: NSLayoutConstraint?
-  func set(_ l: Msg.LinkPrev, mine: Bool, ink: UIColor, msg: String, still: @escaping () -> String?) {
+  func set(_ l: Msg.LinkPrev, mine: Bool, ink: UIColor, msg: String, find: (String, Bool)? = nil, still: @escaping () -> String?) {
     let subInk: UIColor = mine ? UIColor.white.withAlphaComponent(0.8) : .secondaryLabel
     let folder = l.e11 == "folder", state = l.state ?? "ok"
     live = state == "ok"; url = URL(string: l.url)
@@ -3149,6 +3149,16 @@ final class E11CardView: UIView {
     h.append(NSAttributedString(string: "  " + (folder ? "FOLDER" : "FILE") + (c.isEmpty ? "" : " · " + c), attributes: [.foregroundColor: subInk, .kern: 0.4]))
     head.attributedText = h
     title.text = l.title; title.textColor = ink
+    // (searching the chat: the name marked in amber where it matches, as in a message's words)
+    if let f = find, !f.0.isEmpty, let t = l.title {
+      let a = NSMutableAttributedString(string: t, attributes: [.font: title.font!, .foregroundColor: ink])
+      var from = t.startIndex
+      while let r = t.range(of: f.0, options: [.caseInsensitive, .diacriticInsensitive], range: from..<t.endIndex) {
+        a.addAttributes([.backgroundColor: f.1 ? BubbleCell.findNow : BubbleCell.findAll, .foregroundColor: UIColor.white], range: NSRange(r, in: t))
+        from = r.upperBound
+      }
+      title.attributedText = a
+    }
     sub.text = l.sub; sub.textColor = subInk; sub.isHidden = (l.sub ?? "").isEmpty
     line.backgroundColor = subInk.withAlphaComponent(0.3)
     open.text = "Open in E11 Console ›"; open.textColor = ink
