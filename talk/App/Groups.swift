@@ -1115,12 +1115,12 @@ enum Crossfade {
   }
 }
 extension UITableViewDiffableDataSource {
-  func applySteady(_ snap: NSDiffableDataSourceSnapshot<SectionIdentifierType, ItemIdentifierType>, in tv: UITableView, animated: Bool, layout: Bool = true, done: (() -> Void)? = nil) {
+  func applySteady(_ snap: NSDiffableDataSourceSnapshot<SectionIdentifierType, ItemIdentifierType>, in tv: UITableView, animated: Bool, done: (() -> Void)? = nil) {
     let old = snapshot()
     if !animated || (old.sectionIdentifiers == snap.sectionIdentifiers && old.itemIdentifiers == snap.itemIdentifiers) {
       let ids = animated ? snap.reconfiguredItemIdentifiers : []
       let shots = Crossfade.cover(ids.compactMap { indexPath(for: $0).flatMap { tv.cellForRow(at: $0) } }, in: tv)
-      UIView.performWithoutAnimation { apply(snap, animatingDifferences: false); if layout { tv.layoutIfNeeded() } }
+      UIView.performWithoutAnimation { apply(snap, animatingDifferences: false); tv.layoutIfNeeded() }
       Crossfade.run(shots, new: ids.compactMap { indexPath(for: $0).flatMap { tv.cellForRow(at: $0)?.contentView } })
       done?()
     } else {
