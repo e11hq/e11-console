@@ -128,6 +128,17 @@ screens dark, the main five light); the startup logo animation stays as Talk has
 **E11 Talk is built exactly as its mock-ups (Haris 2026-11-11 23:41):** the canvas "E11 Talk — design" is followed strictly —
 every gap, size, colour, placement and every animation, done the Apple way (Apple's parts and Apple's animations set to
 match, never our own drawing). Light and dark follow the iPhone. Decisions: project doc `claude/talk-design-reference.md`.
+**E11 Talk — every new page carries what the done pages have, from now on (Haris 2026-11-13: "All new pages will have the
+same changes onwards"):** each page after 2a–2d is built with every change made on the done ones, without being asked again —
+rows as Apple's own cells set to the board (AgencyCell / GroupCell), set again only when what they show changed (a fingerprint),
+crossfading in place (`Crossfade` — a still picture inside the row, the old look fading over the new, never both fading);
+rows coming, going or moving glide first, the changed ones crossfading after (`applySteady`); search hidden until pulled
+down where the board hides it, the head (filters, logo) going with its room while searching, found rows their own identity
+(never the list's rows), the words found marked (dark: the board's brown; light: a soft yellow); a search left open closes when
+the page leaves; Apple's empty views, their words kept while they fade away and crossfading from one to another; a line under
+the title as Apple's subtitle, crossfading; your photo top left, + top right; typing shown in blue on the row; heights from the
+content, nothing jumping (no keyboard or note of yours moving a chat); light and dark the phone's, pictures that follow the look.
+Before a page is called done, check it against this list and the rules above.
 **E11 Talk's messages — one steady behaviour for every bubble (Haris 2026-11-13: "nothing slides while anything changes"):**
 a message that changes in place — a reaction, a tick, an edit, a card or link brought up to date, a picture arriving — is set at
 in place, crossfading to its new look, no words or pictures inside the bubble moving (set and laid out without animation —
