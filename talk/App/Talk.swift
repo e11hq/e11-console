@@ -592,12 +592,14 @@ final class Avatar: UIView {
   required init?(coder: NSCoder) { fatalError() }
   override func layoutSubviews() {
     super.layoutSubviews()
-    layer.cornerRadius = bounds.width / 2
+    // (a client's logo on E11 Agency: a rounded square, the design's board 1 — 14 on 52; everywhere else a circle)
+    layer.cornerRadius = square ? bounds.width * 14 / 52 : bounds.width / 2; layer.cornerCurve = square ? .continuous : .circular
     img.frame = bounds; lbl.frame = bounds.insetBy(dx: 3, dy: 0)
     lbl.font = .systemFont(ofSize: bounds.width * 0.36, weight: .semibold)
   }
   // (a logo — a client's — is shown whole inside the circle on the client's colour, never cut: Haris 2026-11-13)
   private var isLogo = false
+  var square = false { didSet { setNeedsLayout() } }
   func set(name: String, color: UIColor, picture: String?, talkFile: String? = nil, logo: Bool = false) {
     lbl.text = Look.initials(name); backgroundColor = color; isLogo = logo
     img.image = nil; img.isHidden = true; lbl.isHidden = false

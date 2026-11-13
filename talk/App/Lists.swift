@@ -85,16 +85,44 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
     table.register(ChatRowCell.self, forCellReuseIdentifier: ChatRowCell.id)
     table.sectionHeaderTopPadding = 6
     view.addSubview(table)
+    table.register(AgencyCell.self, forCellReuseIdentifier: AgencyCell.id)
     data = UITableViewDiffableDataSource<String, Row>(tableView: table) { [weak self] tv, ip, row in
-      let c = tv.dequeueReusableCell(withIdentifier: ChatRowCell.id, for: ip) as! ChatRowCell
-      self?.fill(c, row)
-      return c
+      guard let self = self else { return UITableViewCell() }
+      return self.cell(tv, ip, row)
     }
     data.defaultRowAnimation = .fade
     search.searchResultsUpdater = self; search.obscuresBackgroundDuringPresentation = false
     navigationItem.searchController = search; navigationItem.hidesSearchBarWhenScrolling = false
     NotificationCenter.default.addObserver(self, selector: #selector(changed), name: .talkChanged, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(typingChanged(_:)), name: .talkTyping, object: nil)
+  }
+  // a row's cell: the group rows as before (a client's groups — step 2b); a client's row Apple's own cell (2a)
+  func cell(_ tv: UITableView, _ ip: IndexPath, _ row: Row) -> UITableViewCell {
+    if case .client(let id) = row {
+      let c = tv.dequeueReusableCell(withIdentifier: AgencyCell.id, for: ip) as! AgencyCell
+      c.show(clientRow(id)); return c
+    }
+    let c = tv.dequeueReusableCell(withIdentifier: ChatRowCell.id, for: ip) as! ChatRowCell
+    fill(c, row); return c
+  }
+  // what a client's row shows (board 1): its logo, name, the newest "Group · Name: message", the time, unread, pinned
+  var hits: [String: (String, Msg)] = [:]   // (searching: a client's message found, by client)
+  func clientRow(_ id: String) -> AgencyCell.Model {
+    let T = Talk.shared
+    let gs = T.groups(of: id, withClient: clientsTab)
+    var line = "\(gs.count) group\(gs.count == 1 ? "" : "s")"
+    var blue = false
+    func said(_ g: Group, _ m: Msg) -> String {
+      let who = m.kind == "sys" ? "" : (m.by == T.me?.id ? "You" : String(T.name(m.by).split(separator: " ").first ?? "")) + ": "
+      return "\(g.name) · \(who)\(Talk.preview(m))"
+    }
+    if let (gid, m) = hits[id], let g = T.groups[gid] { line = said(g, m) }
+    else if let g = gs.first(where: { T.typingLine($0.id) != nil }), let t = T.typingLine(g.id) { line = "\(g.name) · \(t)"; blue = true }
+    else if let g = gs.first, let m = T.last(g.id) { line = said(g, m) }
+    let un = T.clientUnread(id, withClient: clientsTab)
+    return AgencyCell.Model(id: id, client: T.clients[id], name: T.clients[id]?.name ?? "", line: line, typing: blue,
+                            time: Look.time(T.clientActivity(id, withClient: clientsTab)), unread: un,
+                            pinned: !clientsTab && T.pinnedClients.contains(id), find: query, twoLines: hits[id] != nil)
   }
   // (typing: only that group's row and its client's row drawn again)
   @objc func typingChanged(_ n: Notification) {
@@ -105,19 +133,38 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
       switch r { case .group(let id): return id == gid; case .client(let id): return id == cid; default: return false }
     }
     guard !rows.isEmpty else { return }
-    snap.reconfigureItems(rows); data.apply(snap, animatingDifferences: false)
+    snap.reconfigureItems(rows); data.applySteady(snap, in: table, animated: view.window != nil)
   }
   override func viewWillAppear(_ a: Bool) { super.viewWillAppear(a); reload(animated: false) }
   @objc func changed() { reload(animated: view.window != nil) }
   func updateSearchResults(for s: UISearchController) { reload(animated: false) }
   func build() -> [(String, String, [Row])] { [] }
+  // (the redraw rule: a row is set again only when what it shows changed, crossfading in place; rows coming, going or
+  //  moving to the top glide — Haris 2026-11-13)
+  var sigs: [Row: Int] = [:]
+  func sig(_ r: Row) -> Int {
+    let T = Talk.shared; var h = Hasher()
+    switch r {
+    case .client(let id): h.combine(clientRow(id).sig)
+    case .group(let id):
+      guard let g = T.groups[id] else { return 0 }
+      h.combine(g.name); h.combine(g.pic); h.combine(g.muted); h.combine(g.withClient); h.combine(T.unread(id)); h.combine(T.activity(g))
+      h.combine(T.last(id)?.id); h.combine(T.last(id)?.text); h.combine(T.typingLine(id)); h.combine(T.pinnedGroups.contains(id)); h.combine(T.pinnedClientGroups.contains(id))
+      h.combine(T.clients[g.client]?.logo)
+    case .found(let g, let m): h.combine(g); h.combine(m); h.combine(query)
+    }
+    return h.finalize()
+  }
   func reload(animated: Bool) {
     var snap = NSDiffableDataSourceSnapshot<String, Row>()
     sections = [:]
     for (key, head, rows) in build() where !rows.isEmpty { snap.appendSections([key]); snap.appendItems(rows, toSection: key); sections[key] = head }
-    // (rows that stay: drawn again in place — only what they show changes)
-    snap.reconfigureItems(snap.itemIdentifiers.filter { data.snapshot().indexOfItem($0) != nil })
-    data.apply(snap, animatingDifferences: animated)
+    let old = data.snapshot()
+    var newSigs: [Row: Int] = [:]
+    for r in snap.itemIdentifiers { newSigs[r] = sig(r) }
+    snap.reconfigureItems(snap.itemIdentifiers.filter { old.indexOfItem($0) != nil && sigs[$0] != newSigs[$0] })
+    sigs = newSigs
+    data.applySteady(snap, in: table, animated: animated)
     emptyNote()
   }
   func emptyNote() {}
@@ -149,16 +196,18 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
     }
   }
   func tableView(_ tv: UITableView, heightForHeaderInSection s: Int) -> CGFloat {
-    let key = data.snapshot().sectionIdentifiers[s]; return (sections[key] ?? "").isEmpty ? 0 : 32
+    let key = data.snapshot().sectionIdentifiers[s]; return (sections[key] ?? "").isEmpty ? 0 : 30
   }
+  // (Apple's own plain header — PINNED, CLIENTS, as board 1: 13 semibold, spaced, grey)
   func tableView(_ tv: UITableView, viewForHeaderInSection s: Int) -> UIView? {
     let key = data.snapshot().sectionIdentifiers[s], head = sections[key] ?? ""
     guard !head.isEmpty else { return nil }
-    let v = UIView(), l = UILabel()
-    let a = NSMutableAttributedString()
-    if key == "pins" { a.append(NSAttributedString(attachment: NSTextAttachment(image: UIImage(systemName: "pin.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11))!.withTintColor(.secondaryLabel)))); a.append(NSAttributedString(string: " ")) }
-    a.append(NSAttributedString(string: head, attributes: [.font: UIFont.systemFont(ofSize: 14, weight: .semibold), .foregroundColor: UIColor.secondaryLabel]))
-    l.attributedText = a; l.frame = CGRect(x: 18, y: 8, width: 300, height: 22); v.addSubview(l)
+    let v = tv.dequeueReusableHeaderFooterView(withIdentifier: "head") ?? UITableViewHeaderFooterView(reuseIdentifier: "head")
+    var c = UIListContentConfiguration.plainHeader()
+    c.attributedText = NSAttributedString(string: head, attributes: [.font: UIFont.systemFont(ofSize: 13, weight: .semibold), .kern: 0.4, .foregroundColor: UIColor.secondaryLabel])
+    c.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 6, leading: 20, bottom: 4, trailing: 20)
+    v.contentConfiguration = c
+    var bg = UIBackgroundConfiguration.clear(); bg.backgroundColor = view.backgroundColor; v.backgroundConfiguration = bg
     return v
   }
   func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) {
@@ -243,48 +292,94 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
   }
 }
 
-// ---------- Groups: pins, then clients ----------
+// ---------- E11 Agency (the first tab) and the Clients tab: pinned clients, then clients — the design's boards 1, 19, 56,
+// L1 (step 2a, Haris 2026-11-13). A client contact: their groups straight away (board 14 — step 2d). ----------
 final class GroupsVC: ListVC {
-  private var filter = 0   // All · Unread · @ Mentions
-  private let pills = UISegmentedControl(items: ["All", "Unread", "@ Mentions"])
-  private let empty = UILabel()
+  private var filter = 0   // All · Unread · Mentions — clients with unread / with a mention (Haris 2026-11-13: A, clients)
+  private let pillsRow = UIStackView()
+  private var pills: [UIButton] = []
   // (the Clients tab: the same screen with the groups that have a client contact in them — Haris 2026-11-05)
   init(clientsTab: Bool = false) { super.init(nibName: nil, bundle: nil); self.clientsTab = clientsTab }
   required init?(coder: NSCoder) { fatalError() }
+  static let pageBg = Look.dyn(0x0C0D0F, 0xFFFFFF)
   override func viewDidLoad() {
     super.viewDidLoad()
-    title = clientsTab ? "Clients" : "Groups"
+    view.backgroundColor = GroupsVC.pageBg; table.backgroundColor = GroupsVC.pageBg
+    table.separatorInset = UIEdgeInsets(top: 0, left: 80, bottom: 0, right: 0)
+    table.separatorColor = Look.dyn(0x2A2B2E, 0xDCDCE0)
+    table.keyboardDismissMode = .interactive   // (the keyboard rule: the list scrolls while searching, a drag takes it down)
+    title = clientsTab ? "Clients" : "E11 Agency"
     navigationItem.largeTitleDisplayMode = .always
-    search.searchBar.placeholder = clientsTab ? "Search client groups" : "Search"
-    pills.selectedSegmentIndex = 0
-    pills.addAction(UIAction { [weak self] _ in guard let self = self else { return }; self.filter = self.pills.selectedSegmentIndex; UISelectionFeedbackGenerator().selectionChanged(); self.reload(animated: true) }, for: .valueChanged)
+    search.searchBar.placeholder = clientsTab ? "Search clients" : "Search clients"
+    // (search hidden until the list is pulled down — board 1; Apple's own)
+    navigationItem.hidesSearchBarWhenScrolling = true
+    search.delegate = self
+    // All · Unread · Mentions — Apple's own buttons set to the board's look (ours, said plainly: there's no Apple part for
+    // this row; Haris 2026-11-13: B, as Console's Inbox)
+    for (i, t) in ["All", "Unread", "Mentions"].enumerated() {
+      let b = UIButton(type: .system); b.tag = i
+      b.addAction(UIAction { [weak self] _ in self?.pick(i) }, for: .touchUpInside)
+      b.heightAnchor.constraint(equalToConstant: 32).isActive = true
+      pills.append(b); pillsRow.addArrangedSubview(b)
+      b.accessibilityLabel = t
+    }
+    pillsRow.axis = .horizontal; pillsRow.spacing = 8; pillsRow.alignment = .center
     let head = UIView(frame: CGRect(x: 0, y: 0, width: view.bounds.width, height: 46))
-    pills.frame = CGRect(x: 16, y: 6, width: min(300, view.bounds.width - 32), height: 32)
-    head.addSubview(pills); table.tableHeaderView = head
-    empty.numberOfLines = 0; empty.textAlignment = .center; empty.textColor = .secondaryLabel; empty.font = .systemFont(ofSize: 15)
-    table.backgroundView = empty
-    navigationItem.rightBarButtonItem = UIBarButtonItem(title: nil, image: UIImage(systemName: "plus"), primaryAction: UIAction { [weak self] _ in self?.newGroup() }, menu: nil)
+    pillsRow.frame = CGRect(x: 16, y: 4, width: view.bounds.width - 32, height: 32); pillsRow.distribution = .fill
+    let spacer = UIView(); spacer.setContentHuggingPriority(.init(1), for: .horizontal); pillsRow.addArrangedSubview(spacer)
+    head.addSubview(pillsRow); table.tableHeaderView = head
+    paintPills(animated: false)
     setMe()
     NotificationCenter.default.addObserver(self, selector: #selector(setMe), name: .talkChanged, object: nil)
   }
+  // a pill: Apple's filled capsule button — the chosen one in the page's ink, the others on a faint fill (board 1, L1)
+  private func paintPills(animated: Bool) {
+    let T = Talk.shared
+    let un = T.myClients(withClient: clientsTab).reduce(0) { $0 + T.clientUnread($1, withClient: clientsTab) }
+    let titles = ["All", un > 0 ? "Unread \(un)" : "Unread", "Mentions"]
+    let change = {
+      for (i, b) in self.pills.enumerated() {
+        var c = UIButton.Configuration.filled(); c.cornerStyle = .capsule
+        c.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 14, bottom: 0, trailing: 14)
+        let on = i == self.filter
+        c.baseBackgroundColor = on ? Look.dyn(0xF5F5F7, 0x000000) : Look.dyn(0x262628, 0xE3E3E8)
+        c.baseForegroundColor = on ? Look.dyn(0x000000, 0xFFFFFF) : .label
+        c.attributedTitle = AttributedString(titles[i], attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 15, weight: on ? .semibold : .regular)]))
+        b.configuration = c
+      }
+    }
+    if animated, view.window != nil { UIView.transition(with: pillsRow, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction], animations: change) } else { change() }
+  }
+  private var pillsSig = ""
+  private func pick(_ i: Int) {
+    guard i != filter else { return }
+    filter = i; UISelectionFeedbackGenerator().selectionChanged()
+    paintPills(animated: true); reload(animated: true)
+  }
   @objc private func setMe() {
     let T = Talk.shared
-    // (a client contact: a plain list of their groups — no filters, no +; Haris 2026-11-05)
-    title = T.isContact ? "Chats" : clientsTab ? "Clients" : "Groups"
+    // (a client contact: a plain list of their groups — no filters; their page is step 2d)
+    title = T.isContact ? "Chats" : clientsTab ? "Clients" : "E11 Agency"
     table.tableHeaderView?.isHidden = T.isContact
     if T.isContact, table.tableHeaderView?.frame.height != 0 { table.tableHeaderView?.frame.size.height = 0; table.tableHeaderView = table.tableHeaderView }
-    navigationItem.rightBarButtonItem?.isHidden = !T.canMake || (clientsTab && !T.boss)
-    // (your picture made once and only set again when it changes — made anew on every change, it popped in as a chat
-    //  slid back instead of coming in with Apple's bar, Haris 2026-11-12)
-    if navigationItem.leftBarButtonItem == nil {
-      meFace.widthAnchor.constraint(equalToConstant: 32).isActive = true; meFace.heightAnchor.constraint(equalToConstant: 32).isActive = true
+    // + only on the Clients tab (E11 Agency's groups are made from a client's page — board 25)
+    if clientsTab, T.canMake, T.boss, !T.isContact {
+      if navigationItem.leftBarButtonItem == nil { navigationItem.leftBarButtonItem = UIBarButtonItem(title: nil, image: UIImage(systemName: "plus"), primaryAction: UIAction { [weak self] _ in self?.newGroup() }, menu: nil) }
+    } else { navigationItem.leftBarButtonItem = nil }
+    // your E11 Console photo, top right in Apple's glass button (board 1) — made once, set again only when it changes
+    if navigationItem.rightBarButtonItem == nil {
+      meFace.translatesAutoresizingMaskIntoConstraints = false
+      meFace.widthAnchor.constraint(equalToConstant: 38).isActive = true; meFace.heightAnchor.constraint(equalToConstant: 38).isActive = true
       meFace.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(toSettings)))
-      navigationItem.leftBarButtonItem = UIBarButtonItem(customView: meFace)
+      meFace.accessibilityLabel = "You — Settings"; meFace.isAccessibilityElement = true
+      navigationItem.rightBarButtonItem = UIBarButtonItem(customView: meFace)
     }
     let key = [T.me?.id, T.me?.name, T.me?.color, T.me?.picture].map { $0 ?? "" }.joined(separator: "|")
     if key != meKey { meKey = key; meFace.set(person: T.me) }
+    let ps = [T.myClients(withClient: clientsTab).reduce(0) { $0 + T.clientUnread($1, withClient: clientsTab) }].map(String.init).joined()
+    if ps != pillsSig { pillsSig = ps; paintPills(animated: true) }
   }
-  private let meFace = Avatar(frame: CGRect(x: 0, y: 0, width: 32, height: 32))
+  private let meFace = Avatar(frame: CGRect(x: 0, y: 0, width: 38, height: 38))
   private var meKey = ""
   @objc private func toSettings() {
     if Talk.shared.isContact { navigationController?.pushViewController(SettingsVC(), animated: true); return }
@@ -294,42 +389,153 @@ final class GroupsVC: ListVC {
     let nav = UINavigationController(rootViewController: NewGroupVC(client: nil, forClient: clientsTab))
     present(nav, animated: true)
   }
+  // the line under the title: "8 clients · 5 unread" (board 1), crossfading when it changes
+  private func setLine() {
+    let T = Talk.shared
+    guard !T.isContact else { return }
+    let cs = T.myClients(withClient: clientsTab), un = cs.reduce(0) { $0 + T.clientUnread($1, withClient: clientsTab) }
+    let line = "\(cs.count) client\(cs.count == 1 ? "" : "s")" + (un > 0 ? " · \(un) unread" : "")
+    if #available(iOS 26.0, *), navigationItem.subtitle != line {
+      if view.window != nil, let bar = navigationController?.navigationBar { UIView.transition(with: bar, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction], animations: nil) }
+      navigationItem.subtitle = line
+    }
+  }
+  override func reload(animated: Bool) {
+    super.reload(animated: animated)
+    setLine()
+  }
+  // searching: the filters fade away (board 19), back when it closes
+  private func pillsShown(_ on: Bool) {
+    guard let h = table.tableHeaderView, !Talk.shared.isContact else { return }
+    UIView.animate(withDuration: Crossfade.time, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState]) { h.alpha = on ? 1 : 0 }
+    h.isUserInteractionEnabled = on
+  }
   override func build() -> [(String, String, [Row])] {
     let T = Talk.shared
-    // a client contact: their groups, newest first
+    hits = [:]
+    // a client contact: their groups, newest first (step 2d)
     if T.isContact {
       let gs = T.groups.values.filter { query.isEmpty || $0.name.lowercased().contains(query) }.sorted { T.activity($0) > T.activity($1) }
       return [("found", "", gs.map { .group($0.id) })]
     }
-    let tabGroups = T.groups.values.filter { $0.withClient == clientsTab }
-    let keep: (String) -> Bool = { [filter] id in filter == 0 || (filter == 1 && T.unread(id) > 0) || (filter == 2 && T.mentionsMe(id)) }
-    if !query.isEmpty {
-      // searching: the groups themselves (and clients by name)
-      let gs = tabGroups.filter { $0.name.lowercased().contains(query) || (T.clients[$0.client]?.name.lowercased().contains(query) ?? false) }.filter { keep($0.id) }
-        .sorted { T.activity($0) > T.activity($1) }
-      // (and the messages on this phone with those words — Haris 2026-11-06, stage 2)
-      let ms = T.search(query).filter { T.groups[$0.0]?.withClient == clientsTab }.prefix(50).map { Row.found($0.0, $0.1.id) }
-      return [("found", gs.isEmpty ? "" : "Groups", gs.map { .group($0.id) }), ("msgs", "Messages", Array(ms))]
-    }
-    let pinList = clientsTab ? T.pinnedClientGroups : T.pinnedGroups
-    let pins = pinList.filter { T.groups[$0]?.withClient == clientsTab && keep($0) }
-    if filter != 0 {
-      let gs = tabGroups.filter { keep($0.id) }.sorted { T.activity($0) > T.activity($1) }
-      return [("found", "", gs.map { .group($0.id) })]
-    }
     let mine = T.myClients(withClient: clientsTab)
-    let pinnedC = clientsTab ? [] : T.pinnedClients.filter { mine.contains($0) }
-    let cs = pinnedC + mine.filter { !pinnedC.contains($0) }
-    return [("pins", "Pinned", pins.map { .group($0) }), ("clients", "Clients", cs.map { .client($0) })]
+    if !query.isEmpty {
+      // searching (board 19): the clients, by name or by a message in their groups — the words found marked
+      for (gid, m) in T.search(query) {
+        guard let g = T.groups[gid], g.withClient == clientsTab, hits[g.client] == nil else { continue }
+        hits[g.client] = (gid, m)
+      }
+      let found = mine.filter { (T.clients[$0]?.name.lowercased().contains(query) ?? false) || hits[$0] != nil }
+      return [("found", "", found.map { .client($0) })]
+    }
+    // (A: the filters keep this tab a list of clients — the ones with unread, or with a mention of you)
+    let keep: (String) -> Bool = { [filter, clientsTab] c in
+      filter == 0 || (filter == 1 && T.clientUnread(c, withClient: clientsTab) > 0) || (filter == 2 && T.groups(of: c, withClient: clientsTab).contains { T.mentionsMe($0.id) })
+    }
+    let pinnedC = clientsTab ? [] : T.pinnedClients.filter { mine.contains($0) && keep($0) }
+    let rest = mine.filter { !pinnedC.contains($0) && keep($0) }
+    return [("pins", "PINNED", pinnedC.map { .client($0) }), ("clients", pinnedC.isEmpty ? "" : "CLIENTS", rest.map { .client($0) })]
   }
+  // nothing to show: Apple's own empty view (board 56) — and Apple's "No Results" for a search; faded in and out
   override func emptyNote() {
     let none = data.snapshot().numberOfItems == 0
-    empty.isHidden = !none
     let T = Talk.shared
-    empty.text = !query.isEmpty ? "Nothing found" : filter == 1 ? "No unread messages" : filter == 2 ? "No mentions"
-      : T.isContact ? "No chats yet.\nYou’ll see one here when E11 adds you to it."
-      : clientsTab ? (T.boss ? "No client groups yet.\nTap + to make a group with a client contact in it." : "Groups with a client contact in them show here.\nOnly Super Admins and Office Admins make them.")
-      : T.canMake ? "No groups yet.\nTap + to make one under a client." : "No groups yet.\nYou’ll see a group here when you’re added to one."
+    if #available(iOS 17.0, *) {
+      var e: UIContentUnavailableConfiguration
+      if !query.isEmpty { e = .search() }
+      else {
+        e = .empty()
+        e.image = UIImage(systemName: filter == 2 ? "at" : "bubble.left.and.bubble.right")
+        (e.text, e.secondaryText) = filter == 1 ? ("No Unread Messages", "Clients with something new show here.")
+          : filter == 2 ? ("No Mentions", "Clients where someone @mentions you show here.")
+          : T.isContact ? ("No Chats Yet", "You’ll see one here when E11 adds you to it.")
+          : clientsTab ? ("No Client Groups Yet", "Groups with a client contact in them show here.")
+          : ("No Groups Yet", "When someone adds you to a group, its client shows here.")
+      }
+      let v = (table.backgroundView as? UIContentUnavailableView) ?? { let v = UIContentUnavailableView(configuration: e); v.alpha = 0; table.backgroundView = v; return v }()
+      v.configuration = e
+      let a: CGFloat = none ? 1 : 0
+      if v.alpha != a { UIView.animate(withDuration: Crossfade.time) { v.alpha = a } }
+    } else {
+      let l = (table.backgroundView as? UILabel) ?? { let l = UILabel(); l.textAlignment = .center; l.textColor = .secondaryLabel; l.numberOfLines = 0; l.alpha = 0; table.backgroundView = l; return l }()
+      l.text = !query.isEmpty ? "No Results" : filter == 1 ? "No Unread Messages" : filter == 2 ? "No Mentions" : "No Groups Yet"
+      let a: CGFloat = none ? 1 : 0
+      if l.alpha != a { UIView.animate(withDuration: Crossfade.time) { l.alpha = a } }
+    }
+  }
+}
+extension GroupsVC: UISearchControllerDelegate {
+  func willPresentSearchController(_ s: UISearchController) { pillsShown(false) }
+  func willDismissSearchController(_ s: UISearchController) { pillsShown(true) }
+}
+
+// A client's row on E11 Agency (board 1): Apple's own list cell — the logo (a rounded square), the name, the newest
+// "Group · Name: message" — with ours inside it, said plainly: the time on the first line, the unread count and the pin or ›
+final class AgencyCell: UITableViewCell {
+  static let id = "agency"
+  struct Model {
+    let id: String, client: Client?, name: String, line: String, typing: Bool, time: String, unread: Int, pinned: Bool, find: String, twoLines: Bool
+    var sig: Int { var h = Hasher(); [id, name, line, time, find, client?.logo ?? "", client?.color ?? ""].forEach { h.combine($0) }; h.combine(typing); h.combine(unread); h.combine(pinned); h.combine(twoLines); return h.finalize() }
+  }
+  private let logo = Avatar(frame: CGRect(x: 0, y: 0, width: 52, height: 52)), time = UILabel(), badge = PaddedBadge(), mark = UIImageView()
+  override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+    super.init(style: style, reuseIdentifier: reuseIdentifier)
+    logo.square = true; logo.isUserInteractionEnabled = false
+    time.font = .systemFont(ofSize: 14); time.textAlignment = .right
+    badge.font = .systemFont(ofSize: 13, weight: .bold); badge.layer.cornerRadius = 11
+    mark.contentMode = .center
+    insetsLayoutMarginsFromSafeArea = false; contentView.insetsLayoutMarginsFromSafeArea = false   // (steady heights — the rule)
+    contentConfiguration = UIListContentConfiguration.subtitleCell()   // (Apple's content view first, ours into it)
+    [logo, time, badge, mark].forEach { contentView.addSubview($0) }
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  override func updateConfiguration(using state: UICellConfigurationState) {
+    var bg = UIBackgroundConfiguration.listPlainCell().updated(for: state)
+    if !state.isHighlighted && !state.isSelected { bg.backgroundColor = .clear }
+    backgroundConfiguration = bg
+  }
+  private static func marked(_ t: String, _ q: String, font: UIFont, ink: UIColor) -> NSAttributedString {
+    let a = NSMutableAttributedString(string: t, attributes: [.font: font, .foregroundColor: ink])
+    guard !q.isEmpty else { return a }
+    var from = t.startIndex
+    while let r = t.range(of: q, options: [.caseInsensitive, .diacriticInsensitive], range: from..<t.endIndex) {
+      a.addAttributes([.backgroundColor: BubbleCell.findAll, .foregroundColor: UIColor.white], range: NSRange(r, in: t)); from = r.upperBound
+    }
+    return a
+  }
+  private var rightW: CGFloat = 0
+  func show(_ m: Model) {
+    time.text = m.time; time.textColor = m.unread > 0 ? Look.dyn(0x5AA9FF, 0x2F7BFF) : .secondaryLabel
+    badge.isHidden = m.unread == 0; badge.text = m.unread > 99 ? "99+" : "\(m.unread)"; badge.backgroundColor = Look.dyn(0x2F7BFF, 0x2F7BFF)
+    mark.image = UIImage(systemName: m.pinned ? "pin.fill" : "chevron.right", withConfiguration: UIImage.SymbolConfiguration(pointSize: m.pinned ? 12 : 13, weight: .semibold))
+    mark.tintColor = m.pinned ? .secondaryLabel : .tertiaryLabel
+    let tw = ceil(time.sizeThatFits(CGSize(width: 140, height: 20)).width)
+    let bw = badge.isHidden ? 0 : max(22, ceil(badge.sizeThatFits(.zero).width) + 2)
+    rightW = max(tw, bw + (bw > 0 ? 8 : 0) + 14)
+    var cfg = UIListContentConfiguration.subtitleCell()
+    cfg.attributedText = AgencyCell.marked(m.name, m.find, font: .systemFont(ofSize: 17, weight: .semibold), ink: .label)
+    cfg.secondaryAttributedText = AgencyCell.marked(m.line, m.find, font: .systemFont(ofSize: 15), ink: m.typing ? Look.accent : .secondaryLabel)
+    cfg.textProperties.numberOfLines = 1; cfg.secondaryTextProperties.numberOfLines = m.twoLines ? 2 : 1
+    cfg.textToSecondaryTextVerticalPadding = 3
+    cfg.image = UIImage(systemName: "square.fill"); cfg.imageProperties.tintColor = .clear
+    cfg.imageProperties.reservedLayoutSize = CGSize(width: 52, height: 52); cfg.imageProperties.maximumSize = CGSize(width: 52, height: 52)
+    cfg.imageToTextPadding = 12
+    cfg.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 11, leading: 16, bottom: 11, trailing: 16 + rightW + 8)
+    contentConfiguration = cfg
+    [logo, time, badge, mark].forEach { contentView.bringSubviewToFront($0) }
+    if let c = m.client { logo.set(client: c) } else { logo.set(name: m.name, color: Look.color(for: m.id), picture: nil) }
+    accessibilityLabel = [m.name, m.line, m.time, m.unread > 0 ? "\(m.unread) unread" : nil, m.pinned ? "Pinned" : nil].compactMap { $0 }.joined(separator: ", ")
+    setNeedsLayout()
+  }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    let W = contentView.bounds.width, H = contentView.bounds.height
+    logo.frame = CGRect(x: 16, y: (H - 52) / 2, width: 52, height: 52)
+    let tw = ceil(time.sizeThatFits(CGSize(width: 140, height: 20)).width)
+    time.frame = CGRect(x: W - 16 - tw, y: H / 2 - 22, width: tw, height: 18)
+    var x = W - 16
+    mark.frame = CGRect(x: x - 14, y: H / 2 + 2, width: 14, height: 20); x -= 14 + 8
+    if !badge.isHidden { let bw = max(22, ceil(badge.sizeThatFits(.zero).width) + 2); badge.frame = CGRect(x: x - bw, y: H / 2 + 1, width: bw, height: 22) }
   }
 }
 
