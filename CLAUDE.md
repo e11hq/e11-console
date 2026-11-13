@@ -130,8 +130,9 @@ every gap, size, colour, placement and every animation, done the Apple way (Appl
 match, never our own drawing). Light and dark follow the iPhone. Decisions: project doc `claude/talk-design-reference.md`.
 **E11 Talk's messages — one steady behaviour for every bubble (Haris 2026-11-13: "nothing slides while anything changes"):**
 a message that changes in place — a reaction, a tick, an edit, a card or link brought up to date, a picture arriving — is set at
-once, with nothing in the chat sliding: no row moving, no words or pictures inside the bubble moving (set and laid out without
-animation — `ChatVC.reload` applies a change with the same rows unanimated; the cell is set inside `performWithoutAnimation`).
+in place, crossfading to its new look, no words or pictures inside the bubble moving (set and laid out without animation —
+the cell is set inside `performWithoutAnimation`); when it grows or shrinks (a reaction's pill under it) the messages below
+slide smoothly to make room, never jumping (Haris 2026-11-13: the pill stays under the bubble).
 Only a message coming or going fades in or out. A chat opens where it should without moving (cards kept on the phone). Held:
 the bubble lifts in its own shape, tail and all, with nothing round it and no shadow. Every bubble kind, now and later.
 **E11 Talk is always the account E11 Console is signed in as (Haris 2026-11-11 23:55):** never a different account on the
