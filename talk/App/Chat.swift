@@ -861,7 +861,11 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let accTop = acc.frame.height > 0 ? acc.frame.minY : view.bounds.maxY - home - acc.intrinsicContentSize.height
     // (the @ list comes over the chat, as a menu would — it floats above the bar, outside its height, so the messages don't
     //  move for it — Haris 2026-11-12)
-    let cover = view.bounds.maxY - accTop
+    // (while a message is held — Apple's menu over the chat — the bar's room isn't read: the menu moves the message bar a
+    //  little, and the chat followed by a point, the bubble seen shifting as it lifted and again as it settled — Haris
+    //  2026-11-13, his recording measured frame by frame: the chat 3 pixels lower after the hold)
+    guard !holding else { return }
+    let cover = (view.bounds.maxY - accTop).rounded()
     guard abs(cover - kb) > 0.5 else { return }
     let wasAtEnd = table.contentOffset.y + table.bounds.height >= table.contentSize.height + table.adjustedContentInset.bottom - 40
     let grew = cover > kb
@@ -1374,7 +1378,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   func tableView(_ tv: UITableView, willEndContextMenuInteraction c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
     let cell = heldCell(c)
     let finish = { [weak self] in
-      guard let self = self else { return }; self.holding = false; let f = self.afterHold; self.afterHold = nil; f?()
+      guard let self = self else { return }; self.holding = false; let f = self.afterHold; self.afterHold = nil; f?(); self.fitBottom()
       if let cell = cell { UIView.animate(withDuration: Crossfade.time, delay: 0, options: [.allowUserInteraction]) { cell.besides(1) } }
     }
     if let a = animator { a.addCompletion(finish) } else { DispatchQueue.main.async(execute: finish) }
