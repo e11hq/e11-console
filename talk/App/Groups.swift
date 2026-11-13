@@ -151,7 +151,7 @@ final class ClientPickVC: UITableViewController, UISearchResultsUpdating {
 }
 
 // ---------- group info ----------
-final class GroupInfoVC: UITableViewController, PHPickerViewControllerDelegate {
+final class GroupInfoVC: UITableViewController {
   /* Group Info — the approved design's boards 23 and 24 (Haris 2026-11-12: "Start Group Info"). Apple's inset list:
      the picture, name and "client · N members" with Search · Mute · Edit; Photos, Files and Links with the latest four;
      the members (Admin chip, a client in orange, You), + Add Members; Mute and Make Me Admin; Second Admin with what it
@@ -212,24 +212,11 @@ final class GroupInfoVC: UITableViewController, PHPickerViewControllerDelegate {
     tableView.tableHeaderView = head
   }
   private var headSig = 0
-  // (a new picture: on show at once, dimmed with Apple's spinner until it's in — Haris 2026-11-13)
-  private var picBusy = false
-  private lazy var picSpin: UIActivityIndicatorView = {
-    let s = UIActivityIndicatorView(style: .medium); s.color = .white; s.hidesWhenStopped = true
-    s.backgroundColor = UIColor.black.withAlphaComponent(0.35); s.layer.cornerRadius = 58; s.clipsToBounds = true
-    s.translatesAutoresizingMaskIntoConstraints = false; pic.addSubview(s)
-    NSLayoutConstraint.activate([s.leadingAnchor.constraint(equalTo: pic.leadingAnchor), s.trailingAnchor.constraint(equalTo: pic.trailingAnchor), s.topAnchor.constraint(equalTo: pic.topAnchor), s.bottomAnchor.constraint(equalTo: pic.bottomAnchor)])
-    return s
-  }()
-  private func picUploading(_ on: Bool, _ img: UIImage? = nil) {
-    picBusy = on
-    if on { if let i = img { pic.show(i) }; picSpin.startAnimating() } else { picSpin.stopAnimating(); headSig = 0; if let g = g { fillHead(g) } }
-  }
   private func fillHead(_ g: Group) {
     let T = Talk.shared, can = T.canManage(g)
     var h = Hasher(); h.combine(g.name); h.combine(g.pic); h.combine(g.members.count); h.combine(can); h.combine(g.muted); h.combine(T.clients[g.client]?.name); h.combine(T.clients[g.client]?.logo)
     let sig = h.finalize(); guard sig != headSig else { return }; headSig = sig
-    if !picBusy { pic.set(group: g) }; nameL.text = g.name
+    pic.set(group: g); nameL.text = g.name
     subL.text = [T.clients[g.client]?.name, "\(g.members.count) member\(g.members.count == 1 ? "" : "s")"].compactMap { $0 }.joined(separator: " · ")
     acts.arrangedSubviews.forEach { $0.removeFromSuperview() }
     acts.addArrangedSubview(card("magnifyingglass", "Search") { [weak self] in self?.search() })
@@ -405,11 +392,11 @@ final class GroupInfoVC: UITableViewController, PHPickerViewControllerDelegate {
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { chat.startFind() }
   }
   // Edit (for now the picture and the name — its own sheet is step 1e)
+  // (step 1e: Edit Group as its own sheet — the design's board 40)
   private func edit(_ g: Group) {
-    let a = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
-    a.addAction(UIAlertAction(title: "Change Picture", style: .default) { [weak self] _ in self?.changePicture() })
-    a.addAction(UIAlertAction(title: "Rename Group", style: .default) { [weak self] _ in self?.rename(g) })
-    a.addAction(UIAlertAction(title: "Cancel", style: .cancel)); present(a, animated: true)
+    let n = UINavigationController(rootViewController: EditGroupVC(group: g.id))
+    if let s = n.sheetPresentationController { s.detents = [.large()]; s.prefersGrabberVisible = true }
+    present(n, animated: true)
   }
   // the second admin: any of the team in the group (not a client), or none
   private func secondSheet(_ g: Group, at cell: UITableViewCell?) {
@@ -427,16 +414,6 @@ final class GroupInfoVC: UITableViewController, PHPickerViewControllerDelegate {
     Net.shared.act(b) { j in
       if (j?["ok"] as? Bool) == true { if let d = done { toast(d) }; Talk.shared.refresh(); Talk.shared.sync() } else { toast(j?["error"] as? String ?? "Couldn’t do that — try again") }
     }
-  }
-  private func rename(_ g: Group) {
-    let a = UIAlertController(title: "Rename group", message: nil, preferredStyle: .alert)
-    a.addTextField { t in t.text = g.name; t.clearButtonMode = .whileEditing; t.autocapitalizationType = .sentences }
-    a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-    a.addAction(UIAlertAction(title: "Save", style: .default) { [weak self] _ in
-      let n = (a.textFields?.first?.text ?? "").trimmingCharacters(in: .whitespaces)
-      if !n.isEmpty, n != g.name { self?.simple(["act": "rename", "group": g.id, "name": n]) }
-    })
-    present(a, animated: true)
   }
   private func muteSheet(_ g: Group) {
     // (the design's board 39, word for word — Haris 2026-11-13)
@@ -469,31 +446,6 @@ final class GroupInfoVC: UITableViewController, PHPickerViewControllerDelegate {
     a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
     a.popoverPresentationController?.sourceView = cell
     present(a, animated: true)
-  }
-  private func changePicture() {
-    var c = PHPickerConfiguration(); c.filter = .images; c.selectionLimit = 1
-    let p = PHPickerViewController(configuration: c); p.delegate = self; present(p, animated: true)
-  }
-  func picker(_ p: PHPickerViewController, didFinishPicking r: [PHPickerResult]) {
-    p.dismiss(animated: true)
-    guard let ip = r.first?.itemProvider, ip.canLoadObject(ofClass: UIImage.self) else { return }
-    ip.loadObject(ofClass: UIImage.self) { [weak self] obj, _ in
-      guard let img = obj as? UIImage, let self = self else { return }
-      let side: CGFloat = 640, s = side / min(img.size.width, img.size.height)
-      let sq = UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in img.draw(in: CGRect(x: (side - img.size.width * s) / 2, y: (side - img.size.height * s) / 2, width: img.size.width * s, height: img.size.height * s)) }
-      guard let d = sq.jpegData(compressionQuality: 0.85) else { return }
-      DispatchQueue.main.async {
-        self.picUploading(true, sq)
-        Net.shared.upload(d, name: "group.jpg", progress: { _ in }) { fid in
-          guard let fid = fid else { self.picUploading(false); toast("The picture didn’t upload — try again"); return }
-          try? d.write(to: Net.local(fid))
-          Net.shared.act(["act": "setPic", "group": self.group, "file": fid]) { j in
-            if (j?["ok"] as? Bool) == true { Talk.shared.refresh(); Talk.shared.sync() } else { toast(j?["error"] as? String ?? "Couldn’t do that — try again") }
-            self.picUploading(false)
-          }
-        }
-      }
-    }
   }
 }
 
@@ -661,6 +613,184 @@ final class NewContactVC: UITableViewController, UITextFieldDelegate {
         Talk.shared.refresh()
         self?.dismiss(animated: true) { toast("\(n) added — put them in a group to start") }
       } else { toast(j?["error"] as? String ?? "Couldn’t add them — try again"); self?.check() }
+    }
+  }
+}
+
+// ---------- Edit Group (step 1e — the design's board 40): Apple's sheet; ✕ · Edit Group · Done in Apple's bar; the picture
+// with Edit (Take Photo · Choose Photo · Use Client Logo, Apple's menu); the name; the members with Apple's red remove;
+// who may do what as the footer. A picture or a removal goes at once (as everywhere); the name on Done. ----------
+final class EditGroupVC: UITableViewController, PHPickerViewControllerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate, UITextFieldDelegate {
+  let group: String
+  init(group: String) { self.group = group; super.init(style: .insetGrouped) }
+  required init?(coder: NSCoder) { fatalError() }
+  private var g: Group? { Talk.shared.groups[group] }
+  private let pic = Avatar(frame: CGRect(x: 0, y: 0, width: 88, height: 88))
+  private let field = UITextField()
+  private var gone = Set<String>()   // (removed here: off the list at once)
+  private lazy var spin: UIActivityIndicatorView = {
+    let s = UIActivityIndicatorView(style: .medium); s.color = .white; s.hidesWhenStopped = true
+    s.backgroundColor = UIColor.black.withAlphaComponent(0.35); s.layer.cornerRadius = 44; s.clipsToBounds = true
+    s.frame = pic.bounds; pic.addSubview(s); return s
+  }()
+  private var people: [String] {
+    guard let g = g else { return [] }
+    let me = Talk.shared.me?.id
+    return g.members.filter { !gone.contains($0) }.sorted { a, b in
+      let aa = g.admins.contains(a), ba = g.admins.contains(b)
+      if aa != ba { return aa }
+      if (a == me) != (b == me) { return b == me }
+      return Talk.shared.name(a) < Talk.shared.name(b)
+    }
+  }
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    navigationItem.title = "Edit Group"
+    navigationItem.leftBarButtonItem = UIBarButtonItem(systemItem: .close, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
+    let done = UIBarButtonItem(title: "Done", primaryAction: UIAction { [weak self] _ in self?.save() })
+    if #available(iOS 26.0, *) { done.style = .prominent } else { done.style = .done }
+    navigationItem.rightBarButtonItem = done
+    tableView.register(UITableViewCell.self, forCellReuseIdentifier: "c")
+    tableView.isEditing = true; tableView.allowsSelectionDuringEditing = true
+    tableView.keyboardDismissMode = .interactive
+    field.text = g?.name; field.font = .systemFont(ofSize: 17); field.clearButtonMode = .whileEditing
+    field.autocapitalizationType = .sentences; field.returnKeyType = .done; field.delegate = self
+    field.placeholder = "Group name"
+    // the top: the picture and Edit under it, Apple's menu
+    let head = UIView(frame: CGRect(x: 0, y: 0, width: view.bounds.width, height: 136))
+    pic.translatesAutoresizingMaskIntoConstraints = false; head.addSubview(pic)
+    if let g = g { pic.set(group: g) }
+    let edit = UIButton(type: .system); edit.setTitle("Edit", for: .normal); edit.titleLabel?.font = .systemFont(ofSize: 17)
+    edit.menu = UIMenu(children: picMenu()); edit.showsMenuAsPrimaryAction = true
+    edit.translatesAutoresizingMaskIntoConstraints = false; head.addSubview(edit)
+    NSLayoutConstraint.activate([pic.topAnchor.constraint(equalTo: head.topAnchor, constant: 4), pic.centerXAnchor.constraint(equalTo: head.centerXAnchor),
+                                 pic.widthAnchor.constraint(equalToConstant: 88), pic.heightAnchor.constraint(equalToConstant: 88),
+                                 edit.topAnchor.constraint(equalTo: pic.bottomAnchor, constant: 4), edit.centerXAnchor.constraint(equalTo: head.centerXAnchor)])
+    tableView.tableHeaderView = head
+    NotificationCenter.default.addObserver(self, selector: #selector(changed), name: .talkChanged, object: nil)
+  }
+  private func picMenu() -> [UIMenuElement] {
+    var xs: [UIMenuElement] = []
+    if UIImagePickerController.isSourceTypeAvailable(.camera) {
+      xs.append(UIAction(title: "Take Photo", image: UIImage(systemName: "camera")) { [weak self] _ in
+        let p = UIImagePickerController(); p.sourceType = .camera; p.delegate = self; self?.present(p, animated: true)
+      })
+    }
+    xs.append(UIAction(title: "Choose Photo", image: UIImage(systemName: "photo.on.rectangle")) { [weak self] _ in
+      var c = PHPickerConfiguration(); c.filter = .images; c.selectionLimit = 1
+      let p = PHPickerViewController(configuration: c); p.delegate = self; self?.present(p, animated: true)
+    })
+    if let g = g, g.pic != nil, Talk.shared.clients[g.client]?.logo != nil {
+      xs.append(UIAction(title: "Use Client Logo", image: UIImage(systemName: "building.2")) { [weak self] _ in self?.setPic(nil, nil) })
+    }
+    return xs
+  }
+  @objc private func changed() {
+    guard let g = g else { dismiss(animated: true); return }
+    if !spin.isAnimating { pic.set(group: g) }
+    tableView.reloadSections(IndexSet(integer: 1), with: .none)
+  }
+  private func save() {
+    let n = (field.text ?? "").trimmingCharacters(in: .whitespaces)
+    if let g = g, !n.isEmpty, n != g.name {
+      Net.shared.act(["act": "rename", "group": group, "name": n]) { j in
+        if (j?["ok"] as? Bool) == true { Talk.shared.refresh(); Talk.shared.sync() } else { toast(j?["error"] as? String ?? "Couldn’t do that — try again") }
+      }
+    }
+    dismiss(animated: true)
+  }
+  func textFieldShouldReturn(_ t: UITextField) -> Bool { t.resignFirstResponder(); return true }
+
+  // ---------- the list ----------
+  override func numberOfSections(in tv: UITableView) -> Int { 2 }
+  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { s == 0 ? 1 : people.count }
+  override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? { s == 0 ? "Group Name" : "Members" }
+  override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
+    s == 0 ? "Edit the picture: Take Photo · Choose Photo · Use Client Logo."
+      : "The creator, Super Admins and Office Admins can change the picture and name and remove people. The creator stays unless a Super or Office Admin removes them."
+  }
+  override func tableView(_ tv: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
+    let c = tv.dequeueReusableCell(withIdentifier: "c", for: ip)
+    // (Apple's content view first, ours into it — Group Info's lesson)
+    if c.contentConfiguration == nil { c.contentConfiguration = UIListContentConfiguration.cell() }
+    c.contentView.subviews.filter { $0.tag == 77 }.forEach { $0.removeFromSuperview() }
+    c.selectionStyle = .none
+    if ip.section == 0 {
+      var cfg = UIListContentConfiguration.cell(); cfg.text = " "; c.contentConfiguration = cfg
+      field.tag = 77; field.translatesAutoresizingMaskIntoConstraints = false; c.contentView.addSubview(field)
+      NSLayoutConstraint.activate([field.leadingAnchor.constraint(equalTo: c.contentView.layoutMarginsGuide.leadingAnchor), field.trailingAnchor.constraint(equalTo: c.contentView.layoutMarginsGuide.trailingAnchor),
+                                   field.topAnchor.constraint(equalTo: c.contentView.topAnchor), field.bottomAnchor.constraint(equalTo: c.contentView.bottomAnchor)])
+      return c
+    }
+    let T = Talk.shared, id = people[ip.row], p = T.people[id]
+    var cfg = UIListContentConfiguration.subtitleCell()
+    cfg.text = id == T.me?.id ? "You" : T.name(id)
+    let tag = g?.creator == id ? "Admin" : g?.second == id ? "Second Admin" : g?.admins.contains(id) == true ? "Admin" : nil
+    let role = p?.contact == true ? "Client" : p?.role
+    cfg.secondaryText = [role, tag].compactMap { $0 }.joined(separator: " · ")
+    cfg.secondaryTextProperties.color = p?.contact == true ? .systemOrange : .secondaryLabel
+    cfg.secondaryTextProperties.font = p?.contact == true ? .systemFont(ofSize: 13, weight: .semibold) : .systemFont(ofSize: 13)
+    cfg.image = UIImage(systemName: "circle.fill"); cfg.imageProperties.tintColor = .clear
+    cfg.imageProperties.reservedLayoutSize = CGSize(width: 38, height: 38); cfg.imageProperties.maximumSize = CGSize(width: 38, height: 38)
+    cfg.directionalLayoutMargins.top = 9; cfg.directionalLayoutMargins.bottom = 9
+    c.contentConfiguration = cfg
+    let a = Avatar(frame: CGRect(x: 16, y: 10, width: 38, height: 38)); a.tag = 77; a.isUserInteractionEnabled = false; a.set(person: p)
+    c.contentView.addSubview(a)
+    return c
+  }
+  private func canRemove(_ id: String) -> Bool {
+    guard let g = g else { return false }
+    let T = Talk.shared
+    return id != T.me?.id && T.canManage(g) && (id != g.creator || T.boss)
+  }
+  override func tableView(_ tv: UITableView, canEditRowAt ip: IndexPath) -> Bool { ip.section == 1 }
+  override func tableView(_ tv: UITableView, editingStyleForRowAt ip: IndexPath) -> UITableViewCell.EditingStyle {
+    ip.section == 1 && canRemove(people[ip.row]) ? .delete : .none
+  }
+  override func tableView(_ tv: UITableView, shouldIndentWhileEditingRowAt ip: IndexPath) -> Bool { ip.section == 1 }
+  override func tableView(_ tv: UITableView, titleForDeleteConfirmationButtonForRowAt ip: IndexPath) -> String? { "Remove" }
+  override func tableView(_ tv: UITableView, commit s: UITableViewCell.EditingStyle, forRowAt ip: IndexPath) {
+    guard s == .delete, ip.section == 1 else { return }
+    let id = people[ip.row], name = Talk.shared.name(id)
+    // (gone from the list at once — Apple's own row animation; the server's answer then draws it as it is)
+    gone.insert(id); tv.deleteRows(at: [ip], with: .automatic)
+    Net.shared.act(["act": "removePerson", "group": group, "id": id]) { [weak self] j in
+      if (j?["ok"] as? Bool) == true { toast("\(name) removed"); Talk.shared.refresh(); Talk.shared.sync() }
+      else { toast(j?["error"] as? String ?? "Couldn’t do that — try again"); self?.gone.remove(id); self?.tableView.reloadSections(IndexSet(integer: 1), with: .automatic) }
+    }
+  }
+
+  // ---------- the picture ----------
+  func picker(_ p: PHPickerViewController, didFinishPicking r: [PHPickerResult]) {
+    p.dismiss(animated: true)
+    guard let ip = r.first?.itemProvider, ip.canLoadObject(ofClass: UIImage.self) else { return }
+    ip.loadObject(ofClass: UIImage.self) { [weak self] obj, _ in
+      guard let img = obj as? UIImage else { return }
+      DispatchQueue.main.async { self?.upload(img) }
+    }
+  }
+  func imagePickerController(_ p: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+    p.dismiss(animated: true)
+    if let img = info[.originalImage] as? UIImage { upload(img) }
+  }
+  func imagePickerControllerDidCancel(_ p: UIImagePickerController) { p.dismiss(animated: true) }
+  private func upload(_ img: UIImage) {
+    let side: CGFloat = 640, s = side / min(img.size.width, img.size.height)
+    let sq = UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in img.draw(in: CGRect(x: (side - img.size.width * s) / 2, y: (side - img.size.height * s) / 2, width: img.size.width * s, height: img.size.height * s)) }
+    guard let d = sq.jpegData(compressionQuality: 0.85) else { return }
+    pic.show(sq); spin.startAnimating()
+    Net.shared.upload(d, name: "group.jpg", progress: { _ in }) { [weak self] fid in
+      guard let fid = fid else { self?.spin.stopAnimating(); if let g = self?.g { self?.pic.set(group: g) }; toast("The picture didn’t upload — try again"); return }
+      try? d.write(to: Net.local(fid))
+      self?.setPic(fid, sq)
+    }
+  }
+  private func setPic(_ fid: String?, _ shown: UIImage?) {
+    if shown == nil { spin.startAnimating() }
+    Net.shared.act(["act": "setPic", "group": group, "file": fid.map { $0 as Any } ?? NSNull()]) { [weak self] j in
+      if (j?["ok"] as? Bool) == true { Talk.shared.refresh(); Talk.shared.sync() } else { toast(j?["error"] as? String ?? "Couldn’t do that — try again") }
+      self?.spin.stopAnimating(); if let g = self?.g { self?.pic.set(group: g) }
+      if let self = self { (self.tableView.tableHeaderView?.subviews.compactMap { $0 as? UIButton }.first)?.menu = UIMenu(children: self.picMenu()) }
     }
   }
 }
