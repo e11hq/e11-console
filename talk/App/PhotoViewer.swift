@@ -42,6 +42,7 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     if #available(iOS 26.0, *) { pager.topEdgeEffect.isHidden = true; pager.bottomEdgeEffect.isHidden = true }
     view.addSubview(pager)
     pages = items.map { ZoomPage(msg: $0) }
+    pages.forEach { $0.onPlaying = { [weak self] in if self?.chrome == true { self?.toggleChrome() } } }
     pages.forEach { pager.addSubview($0) }
     // (the one opened and its neighbours: their pictures there from the first frame — read now if the chat hadn't)
     for i in max(0, at - 1)...min(items.count - 1, at + 1) where pages[i].image.image == nil {
@@ -145,6 +146,11 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     if !placed { placed = true; pager.contentOffset.x = CGFloat(at) * view.bounds.width; showCurrent() }
   }
   private var placed = false
+  // (a video plays the moment it's on show — opened, or swiped to: no ▶ to tap first, Haris 2026-11-14; the buttons step
+  //  aside once it plays, as Photos; a tap brings them back with ⏸)
+  private var opened = false
+  override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); opened = true; pages[safe: at]?.start() }
+  override func viewWillDisappear(_ a: Bool) { super.viewWillDisappear(a); pages.forEach { $0.stop() } }
 
   // opening: out of its bubble (the design's "Opening a photo") — the picture flies from the bubble to its place
   override func viewWillAppear(_ a: Bool) {
@@ -185,6 +191,8 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
   }
   private func showCurrent() {
     guard let m = items[safe: at] else { return }
+    for (i, p) in pages.enumerated() where i != at { p.stop() }
+    if opened { pages[at].start() }
     let T = Talk.shared
     who.text = m.by == T.me?.id ? "You" : T.name(m.by)
     let f = DateFormatter(); f.dateStyle = .short; f.timeStyle = .short
@@ -211,6 +219,7 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
   private var stripPlaced = false
   @objc private func toggleChrome() {
     chrome.toggle()
+    pages[safe: at]?.chrome = chrome
     UIView.animate(withDuration: 0.2) { self.top.alpha = self.chrome ? 1 : 0; self.foot.alpha = self.chrome ? 1 : 0; self.setNeedsStatusBarAppearanceUpdate() }
   }
 
@@ -258,6 +267,7 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     return f
   }
   private func close(from page: ZoomPage? = nil) {
+    pages.forEach { $0.stop() }
     let page = page ?? pages[safe: at]
     guard let page = page, let m = items[safe: at], let spot = source?(m), let w = spot.0.window else {
       UIView.animate(withDuration: 0.2, animations: { self.view.alpha = 0 }) { _ in self.dismiss(animated: false) }; return
@@ -309,6 +319,12 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
 final class ZoomPage: UIScrollView, UIScrollViewDelegate {
   let image = UIImageView(), doubleTap = UITapGestureRecognizer()
   private let msg: Msg
+  // a video, playing in place (Apple's player layer over its first picture, fading in once its first frame is there)
+  final class PlayerView: UIView { override class var layerClass: AnyClass { AVPlayerLayer.self }; var pl: AVPlayerLayer { layer as! AVPlayerLayer } }
+  private var player: AVPlayer?, playerView: PlayerView?, ready: NSKeyValueObservation?, rate: NSKeyValueObservation?, ended: NSObjectProtocol?
+  private var want = false, atEnd = false
+  var onPlaying: (() -> Void)?
+  var chrome = true { didSet { button(animated: true) } }
   init(msg: Msg) {
     self.msg = msg; super.init(frame: .zero)
     delegate = self; minimumZoomScale = 1; maximumZoomScale = 4; showsVerticalScrollIndicator = false; showsHorizontalScrollIndicator = false
@@ -326,7 +342,9 @@ final class ZoomPage: UIScrollView, UIScrollViewDelegate {
       var c = UIButton.Configuration.filled(); c.cornerStyle = .capsule; c.baseBackgroundColor = UIColor(white: 0, alpha: 0.45); c.baseForegroundColor = .white
       c.image = UIImage(systemName: "play.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold)); play.configuration = c
       play.frame = CGRect(x: 0, y: 0, width: 70, height: 70); play.tag = 7
-      play.addAction(UIAction { [weak self] _ in self?.play() }, for: .touchUpInside)
+      play.addAction(UIAction { [weak self] _ in guard let self = self else { return }
+        if (self.player?.timeControlStatus ?? .paused) != .paused { self.want = false; self.held = true; self.player?.pause(); self.button(animated: true) } else { self.held = false; self.start() } }, for: .touchUpInside)
+      play.alpha = 0   // (it plays by itself: the ▶ only once it's paused or ended)
       addSubview(play)
     }
   }
@@ -348,17 +366,49 @@ final class ZoomPage: UIScrollView, UIScrollViewDelegate {
     else { let p = g.location(in: image); zoom(to: CGRect(x: p.x - 60, y: p.y - 60, width: 120, height: 120), animated: true) }
   }
   func reset() { setZoomScale(1, animated: false) }
-  private func play() {
-    guard let f = msg.file else { return }
+  // on show: it plays (from the phone's copy — fetched first if it isn't there yet); off show: it pauses
+  func start() {
+    guard msg.kind == "video", let f = msg.file else { return }
+    want = true
+    try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+    if let p = player { if atEnd { atEnd = false; p.seek(to: .zero) }; if !held { p.play() }; return }
     Net.shared.file(f.id) { [weak self] url in DispatchQueue.main.async {
-      guard let self = self, let url = url, let vc = self.window?.rootViewController?.presentedViewController ?? self.window?.rootViewController else { return }
-      let named = FileManager.default.temporaryDirectory.appendingPathComponent(f.name)
-      try? FileManager.default.removeItem(at: named); try? FileManager.default.copyItem(at: url, to: named)
-      let p = AVPlayerViewController(); p.player = AVPlayer(url: named)
-      var top = vc; while let n = top.presentedViewController { top = n }
-      top.present(p, animated: true) { p.player?.play() }
+      guard let self = self, let url = url, self.want, self.player == nil else { return }
+      // (under its own name, so the player knows its kind — the phone's copy has none)
+      let named = FileManager.default.temporaryDirectory.appendingPathComponent(f.id.replacingOccurrences(of: "/", with: "_") + "-" + f.name)
+      if !FileManager.default.fileExists(atPath: named.path) { try? FileManager.default.copyItem(at: url, to: named) }
+      let p = AVPlayer(url: named); p.actionAtItemEnd = .pause
+      let v = PlayerView(); v.pl.player = p; v.pl.videoGravity = .resizeAspect; v.alpha = 0; v.isUserInteractionEnabled = false
+      v.frame = self.image.bounds; v.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+      self.image.addSubview(v)   // (inside the picture: it follows the finger when swiped down, and flies back with it)
+      self.player = p; self.playerView = v
+      self.ready = v.pl.observe(\.isReadyForDisplay, options: [.initial, .new]) { l, _ in
+        guard l.isReadyForDisplay else { return }
+        DispatchQueue.main.async { UIView.animate(withDuration: 0.18) { v.alpha = 1 } }
+      }
+      self.rate = p.observe(\.timeControlStatus, options: [.new]) { [weak self] pl, _ in
+        DispatchQueue.main.async { guard let self = self else { return }; if pl.timeControlStatus == .playing { self.onPlaying?() }; self.button(animated: true) }
+      }
+      self.ended = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: p.currentItem, queue: .main) { [weak self] _ in self?.atEnd = true; self?.button(animated: true) }
+      p.play()
     } }
   }
+  func stop() { want = false; held = false; player?.pause(); button(animated: false) }
+  private var held = false   // (paused with ⏸ — its ▶ stays until tapped)
+  // ▶ once paused with ⏸ or ended; ⏸ while it plays and the buttons are shown; nothing while it plays on its own or loads
+  private func button(animated: Bool) {
+    guard let b = viewWithTag(7) as? UIButton else { return }
+    let playing = player?.timeControlStatus == .playing
+    let name = playing ? "pause.fill" : "play.fill"
+    let alpha: CGFloat = playing ? (chrome ? 1 : 0) : (held || atEnd ? 1 : 0)
+    guard b.alpha != alpha || b.configuration?.image?.accessibilityIdentifier != name else { return }
+    let set = {
+      let img = UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold)); img?.accessibilityIdentifier = name
+      b.configuration?.image = img; b.alpha = alpha
+    }
+    if animated { UIView.transition(with: b, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction], animations: set) } else { set() }
+  }
+  deinit { if let e = ended { NotificationCenter.default.removeObserver(e) } }
   static func fit(_ size: CGSize, in b: CGRect) -> CGRect {
     guard size.width > 0, size.height > 0 else { return b }
     let k = min(b.width / size.width, b.height / size.height), w = size.width * k, h = size.height * k
