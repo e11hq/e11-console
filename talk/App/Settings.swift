@@ -187,7 +187,8 @@ enum TalkPrefs {
 
 /* Notifications (the board "Notifications"): MESSAGES — Show Notifications, Sound, Show Message Preview: iPhone's own for
    E11 Talk, shown as they are; a switch changed opens iPhone's Settings for E11 Talk (only iPhone can change them) and the
-   page shows what was set when you come back. WHILE E11 TALK IS OPEN — In-App Sounds (the send and arrive sounds), In-App
+   page shows what was set when you come back; Mentions Only in Muted Groups — kept on the server (it sends the
+   notifications), on until turned off. WHILE E11 TALK IS OPEN — In-App Sounds (the send and arrive sounds), In-App
    Banners (a message from another group while you're in the app). */
 final class NotificationsVC: UITableViewController {
   init() { super.init(style: .insetGrouped) }
@@ -207,21 +208,33 @@ final class NotificationsVC: UITableViewController {
         guard v != self.sys else { return }
         self.sys = v
         // (only the switches moved — Apple's own switch animation; the rows stay as they are)
-        for (ip, sw) in self.switches where ip.section == 0 { sw.setOn([v.0, v.1, v.2][ip.row], animated: self.view.window != nil) }
+        for (ip, sw) in self.switches where ip.section == 0 && ip.row < 3 { sw.setOn([v.0, v.1, v.2][ip.row], animated: self.view.window != nil) }
       }
     }
   }
   override func numberOfSections(in tv: UITableView) -> Int { 2 }
-  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { [3, 2][s] }
+  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { [4, 2][s] }
   override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? { ["Messages", "While E11 Talk Is Open"][s] }
   override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
-    s == 0 ? "iPhone keeps these for E11 Talk — changing one opens Settings." : "The sounds are E11 Console’s: a soft swoop when you send, a soft pop when one arrives."
+    s == 0 ? "A muted group still tells you when someone @mentions you." : "The sounds are E11 Console’s: a soft swoop when you send, a soft pop when one arrives."
   }
   override func tableView(_ tv: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
     let c = UITableViewCell(style: .default, reuseIdentifier: nil); c.selectionStyle = .none
     var cfg = UIListContentConfiguration.cell()
     let sw = switches[ip] ?? UISwitch(); switches[ip] = sw
-    if ip.section == 0 {
+    if ip == IndexPath(row: 3, section: 0) {
+      cfg.text = "Mentions Only in Muted Groups"
+      sw.isOn = Talk.shared.mutedMentions
+      sw.addAction(UIAction(identifier: .init("e11.notif")) { [weak sw] _ in
+        guard let on = sw?.isOn else { return }
+        // (shown at once; the server's answer puts it back if it couldn't be kept)
+        Talk.shared.mutedMentions = on
+        Net.shared.act(["act": "setOpt", "key": "mutedMentions", "on": on]) { j in
+          guard (j?["ok"] as? Bool) != true else { return }
+          Talk.shared.mutedMentions = !on; sw?.setOn(!on, animated: true); toast("Couldn’t change that — try again")
+        }
+      }, for: .valueChanged)
+    } else if ip.section == 0 {
       cfg.text = ["Show Notifications", "Sound", "Show Message Preview"][ip.row]
       sw.isOn = [sys.on, sys.sound, sys.preview][ip.row]
       sw.addAction(UIAction(identifier: .init("e11.notif")) { [weak self, weak sw] _ in if let sw = sw { self?.toSystem(ip.row, sw) } }, for: .valueChanged)
