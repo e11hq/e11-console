@@ -30,12 +30,13 @@ final class MediaVC: UIViewController, UICollectionViewDelegate, QLPreviewContro
     cv = UICollectionView(frame: view.bounds, collectionViewLayout: layout())
     cv.autoresizingMask = [.flexibleWidth, .flexibleHeight]; cv.backgroundColor = .clear; cv.delegate = self
     view.addSubview(cv)
-    // (Apple's segmented control under Apple's bar, the list starting under it)
+    // (Media · Files · Links in Apple's bar, where the title was — B, Haris 2026-11-13: under the bar, the frost behind them
+    //  went each time they were pressed; in the bar, Apple's bar, its frost and the press are all one. The title stays the
+    //  page's name for ‹ and VoiceOver.)
     seg.translatesAutoresizingMaskIntoConstraints = false
-    let holder = UIView(); holder.addSubview(seg)
-    NSLayoutConstraint.activate([seg.leadingAnchor.constraint(equalTo: holder.leadingAnchor, constant: 16), seg.trailingAnchor.constraint(equalTo: holder.trailingAnchor, constant: -16),
-                                 seg.topAnchor.constraint(equalTo: holder.topAnchor, constant: 4), seg.bottomAnchor.constraint(equalTo: holder.bottomAnchor, constant: -8)])
-    stackSeg(holder)
+    let w = seg.widthAnchor.constraint(equalToConstant: 240); w.priority = .defaultHigh; w.isActive = true
+    seg.apportionsSegmentWidthsByContent = false
+    navigationItem.titleView = seg
 
     let grid = UICollectionView.CellRegistration<PicCell, String> { [weak self] c, _, id in if let m = self?.byId[id] { c.set(m) } }
     let row = UICollectionView.CellRegistration<UICollectionViewListCell, String> { [weak self] c, _, id in if let m = self?.byId[id] { self?.fillRow(c, m) } }
@@ -67,25 +68,6 @@ final class MediaVC: UIViewController, UICollectionViewDelegate, QLPreviewContro
     NotificationCenter.default.addObserver(self, selector: #selector(changed), name: .talkChanged, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(gone(_:)), name: .talkGone, object: nil)
     reload(animated: false, layout: false)
-  }
-  // (the control stays under Apple's bar; the list starts under it)
-  private func stackSeg(_ holder: UIView) {
-    holder.translatesAutoresizingMaskIntoConstraints = false
-    view.addSubview(holder)
-    NSLayoutConstraint.activate([holder.leadingAnchor.constraint(equalTo: view.leadingAnchor), holder.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-                                 holder.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor), holder.heightAnchor.constraint(equalToConstant: 44)])
-    cv.contentInset.top = 44; cv.verticalScrollIndicatorInsets.top = 44
-    holder.backgroundColor = .clear
-    // (the pictures scrolled up under the control showed through it — Haris 2026-11-13: the control is one of the bar's
-    //  own, so Apple's top frost reaches down behind it, as under a search bar; before iOS 26, Apple's bar material)
-    if #available(iOS 26.0, *) {
-      let i = UIScrollEdgeElementContainerInteraction(); i.scrollView = cv; i.edge = .top
-      holder.addInteraction(i)
-    } else {
-      let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
-      blur.frame = holder.bounds; blur.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-      holder.insertSubview(blur, at: 0)
-    }
   }
   @objc private func changed() { reload(animated: view.window != nil, layout: false) }
   @objc private func gone(_ n: Notification) { if (n.object as? String) == group { navigationController?.popToRootViewController(animated: true) } }
