@@ -161,7 +161,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       .filter((g) => !isContact(u) || g.client === u.client);
     const ids = new Set([u.id]);
     groups.forEach((g) => g.members.forEach((m) => ids.add(m)));
-    const pins = { groups: Q.pinsOf.all(u.id, 'group').map((r) => r.id), clients: Q.pinsOf.all(u.id, 'client').map((r) => r.id), clientGroups: Q.pinsOf.all(u.id, 'cgroup').map((r) => r.id) };
+    const pins = { groups: Q.pinsOf.all(u.id, 'group').map((r) => r.id), clients: Q.pinsOf.all(u.id, 'client').map((r) => r.id), clientGroups: Q.pinsOf.all(u.id, 'cgroup').map((r) => r.id), clientsTab: Q.pinsOf.all(u.id, 'cclient').map((r) => r.id) };
     // a client contact: their own client, their groups and the people in them — nothing else
     if (isContact(u)) {
       const c = clientById(u.client);
@@ -585,8 +585,9 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       }
       case 'pin': case 'pinClient': {
         // (the Clients tab keeps its own pins — up to 5 there too: Haris 2026-11-05)
-        const kind = b.act === 'pin' ? (b.tab === 'clients' ? 'cgroup' : 'group') : 'client', id = String(b.id || '');
-        if (kind !== 'client') { const [, e] = needGroup(u, id); if (e) return e; } else if (!clientById(id)) return bad('That client isn’t there');
+        // (and its own pinned clients — Haris 2026-11-13: "each tab have its own")
+        const kind = b.act === 'pin' ? (b.tab === 'clients' ? 'cgroup' : 'group') : (b.tab === 'clients' ? 'cclient' : 'client'), id = String(b.id || '');
+        if (kind !== 'client' && kind !== 'cclient') { const [, e] = needGroup(u, id); if (e) return e; } else if (!clientById(id)) return bad('That client isn’t there');
         if (b.on) {
           const pins = Q.pinsOf.all(u.id, kind).map((r) => r.id);
           if (!pins.includes(id) && pins.length >= MAX_PINS) return { ok: false, full: true, pins, error: 'Pinned is full' };

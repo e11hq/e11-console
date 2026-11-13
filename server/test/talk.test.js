@@ -112,6 +112,9 @@ test('pins: up to 5 groups — a 6th says Pinned is full; clients pinned apart; 
   assert.equal(full.full, true); assert.equal(full.pins.length, 5);
   assert.ok((await act('am', { act: 'pinClient', id: 'p2', on: true })).ok);
   assert.deepEqual((await state('am')).pins.clients, ['p2']);
+  // (the Clients tab keeps its own pinned clients — Haris 2026-11-13)
+  assert.ok((await act('am', { act: 'pinClient', id: 'p1', on: true, tab: 'clients' })).ok);
+  const st = await state('am'); assert.deepEqual(st.pins.clients, ['p2']); assert.deepEqual(st.pins.clientsTab, ['p1']);
   const mu = await act('am', { act: 'mute', group: G, until: 'always' });
   assert.ok(mu.ok && mu.mutedUntil > clock);
 });
