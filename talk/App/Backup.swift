@@ -130,6 +130,9 @@ final class Backup {
     }
   }
   func restore(_ uid: String, meta: BackupMeta, progress: @escaping (Double) -> Void, _ done: @escaping (String?) -> Void) {
+    // (what's on the phone written down first — a restore any time keeps the messages already here: the board's Chat Backup,
+    //  "Messages already here are kept", Haris 2026-11-13)
+    Talk.shared.flush()
     let dst = Talk.shared.localDir, fdst = Net.filesDir
     q.async { [self] in
       var err: String?
@@ -152,8 +155,15 @@ final class Backup {
           let ok = fetch(u, wait: chats.contains(u) ? 120 : 60)
           if ok {
             let into = (chats.contains(u) ? dst : fdst).appendingPathComponent(u.lastPathComponent)
-            try? fm.removeItem(at: into)
-            if (try? fm.copyItem(at: u, to: into)) == nil, chats.contains(u) { err = "Couldn’t restore \(u.lastPathComponent)" }
+            if chats.contains(u), u.lastPathComponent.hasPrefix("g-"), fm.fileExists(atPath: into.path) {
+              // (a chat already on the phone: the backup's messages joined to it, each message once, in order)
+              if !Backup.merge(u, into: into) { err = "Couldn’t restore \(u.lastPathComponent)" }
+            } else if fm.fileExists(atPath: into.path), !chats.contains(u) {
+              // (a photo or file already here: kept as it is)
+            } else {
+              try? fm.removeItem(at: into)
+              if (try? fm.copyItem(at: u, to: into)) == nil, chats.contains(u) { err = "Couldn’t restore \(u.lastPathComponent)" }
+            }
           } else if chats.contains(u) { err = "iCloud is taking too long — try again on Wi-Fi" }
           done += 1
           let p = Double(done) / Double(max(1, all.count))
@@ -163,7 +173,8 @@ final class Backup {
       } else { err = Backup.noICloud }
       DispatchQueue.main.async {
         if err == nil {
-          Talk.shared.syncedUpTo = meta.seq
+          // (never back before what this phone already has — the newer messages are here)
+          Talk.shared.syncedUpTo = max(Talk.shared.syncedUpTo, meta.seq)
           Talk.shared.reloadFromDisk()
           UserDefaults.standard.set(meta.at.timeIntervalSince1970, forKey: "talk_backup_at"); UserDefaults.standard.set(meta.size, forKey: "talk_backup_size")
         }
@@ -177,9 +188,10 @@ final class Backup {
 final class RestoreVC: UIViewController {
   private let meta: BackupMeta, uid: String
   var onDone: (() -> Void)?
+  var anyTime = false   // (from Settings › Chat Backup: messages already here are kept, and Cancel instead of Skip)
   private let bar = UIProgressView(progressViewStyle: .default), status = UILabel()
   private let restoreB = UIButton(configuration: .filled()), skipB = UIButton(configuration: .plain())
-  init(uid: String, meta: BackupMeta) { self.uid = uid; self.meta = meta; super.init(nibName: nil, bundle: nil); isModalInPresentation = true }
+  init(uid: String, meta: BackupMeta) { self.uid = uid; self.meta = meta; super.init(nibName: nil, bundle: nil) }
   required init?(coder: NSCoder) { fatalError() }
   override func viewDidLoad() {
     super.viewDidLoad()
@@ -189,9 +201,11 @@ final class RestoreVC: UIViewController {
     let title = UILabel(); title.text = "Restore your chats"; title.font = .systemFont(ofSize: 26, weight: .bold); title.textAlignment = .center
     let f = DateFormatter(); f.dateStyle = .medium; f.timeStyle = .short
     let sub = UILabel(); sub.numberOfLines = 0; sub.textAlignment = .center; sub.textColor = .secondaryLabel; sub.font = .systemFont(ofSize: 16)
-    sub.text = "A backup was found in your iCloud.\n\(f.string(from: meta.at)) · \(ByteCountFormatter.string(fromByteCount: Int64(meta.size), countStyle: .file)) · \(meta.groups) chat\(meta.groups == 1 ? "" : "s")\n\nIf you skip, chats from before can’t be brought back later."
+    let what = "\(f.string(from: meta.at)) · \(ByteCountFormatter.string(fromByteCount: Int64(meta.size), countStyle: .file)) · \(meta.groups) chat\(meta.groups == 1 ? "" : "s")"
+    sub.text = anyTime ? "Your last backup in iCloud:\n\(what)\n\nMessages already on this iPhone are kept." : "A backup was found in your iCloud.\n\(what)\n\nYou can restore it any time later from Settings › Chat Backup."
+    isModalInPresentation = !anyTime
     restoreB.configuration?.title = "Restore"; restoreB.configuration?.cornerStyle = .large; restoreB.configuration?.buttonSize = .large
-    skipB.configuration?.title = "Skip"
+    skipB.configuration?.title = anyTime ? "Cancel" : "Skip"
     restoreB.addAction(UIAction { [weak self] _ in self?.go() }, for: .touchUpInside)
     skipB.addAction(UIAction { [weak self] _ in self?.skip() }, for: .touchUpInside)
     bar.isHidden = true; status.isHidden = true; status.textColor = .secondaryLabel; status.font = .systemFont(ofSize: 14); status.textAlignment = .center
@@ -218,69 +232,111 @@ final class RestoreVC: UIViewController {
     }
   }
   private func skip() {
-    let a = UIAlertController(title: "Skip restoring?", message: "Chats from before won’t be on this phone. New messages still come in.", preferredStyle: .alert)
+    if anyTime { dismiss(animated: true); return }
+    let a = UIAlertController(title: "Skip restoring?", message: "You can restore them any time from Settings › Chat Backup. New messages still come in.", preferredStyle: .alert)
     a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
     a.addAction(UIAlertAction(title: "Skip", style: .destructive) { [weak self] _ in self?.dismiss(animated: true) { self?.onDone?() } })
     present(a, animated: true)
   }
 }
 
-// ---------- Settings → Chat backup ----------
+// ---------- Settings → Chat Backup (the design's board "Chat Backup", Haris 2026-11-13): ICLOUD — Last Backup · Size ·
+// Back Up Now; Automatic Backup (Daily …) · Include Videos; Restore From Backup, any time — Apple's grouped list ----------
 final class BackupVC: UITableViewController {
   init() { super.init(style: .insetGrouped) }
   required init?(coder: NSCoder) { fatalError() }
   private let B = Backup.shared
   override func viewDidLoad() {
-    super.viewDidLoad(); title = "Chat backup"
+    super.viewDidLoad(); title = "Chat Backup"
     navigationItem.largeTitleDisplayMode = .never
-    NotificationCenter.default.addObserver(tableView!, selector: #selector(UITableView.reloadData), name: .talkBackup, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(changed), name: .talkBackup, object: nil)
+  }
+  // (only the rows that show something new set again, crossfading — the rule every page carries)
+  @objc private func changed() {
+    guard view.window != nil else { tableView.reloadData(); return }
+    UIView.transition(with: tableView, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction]) {
+      UIView.performWithoutAnimation { self.tableView.reloadSections([0, 1], with: .none) }
+    }
   }
   override func numberOfSections(in tv: UITableView) -> Int { 3 }
-  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { [2, 1, 1][s] }
+  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { [3, 2, 1][s] }
+  override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? { s == 0 ? "iCloud" : nil }
   override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
     switch s {
-    case 0: return B.lastError ?? "Your chats, photos, files and voice messages are kept in your own iCloud — only you can see them. On a new phone, sign in to E11 Talk and you’ll be asked to restore them."
-    case 1: return "Backs up when you leave E11 Talk, once the time has passed. Use Wi-Fi when you can."
-    default: return "Videos can make the backup much bigger."
+    case 0: return B.lastError ?? "On from the start, every day — your chats backed up to your own iCloud, the last 90 days, as on your iPhone. Nobody else can see it."
+    case 1: return nil
+    default: return "Brings back the chats from your last backup, any time — on this iPhone or a new one. Messages already here are kept."
     }
   }
   override func tableView(_ tv: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
     let c = UITableViewCell(style: .value1, reuseIdentifier: nil)
     var cfg = UIListContentConfiguration.valueCell()
+    c.selectionStyle = .none
     switch (ip.section, ip.row) {
     case (0, 0):
-      cfg = .subtitleCell()
-      let f = RelativeDateTimeFormatter(); f.unitsStyle = .full
-      cfg.text = "Last backup"
-      cfg.secondaryText = B.lastAt.map { f.localizedString(for: $0, relativeTo: Date()).capitalizingFirst + " · " + ByteCountFormatter.string(fromByteCount: Int64(B.lastSize), countStyle: .file) } ?? "Never"
-      cfg.secondaryTextProperties.color = .secondaryLabel
-      cfg.image = UIImage(systemName: "icloud"); c.selectionStyle = .none
+      let f = DateFormatter(); f.doesRelativeDateFormatting = true; f.dateStyle = .medium; f.timeStyle = .short
+      cfg.text = "Last Backup"; cfg.secondaryText = B.lastAt.map { f.string(from: $0) } ?? "Never"
     case (0, 1):
+      cfg.text = "Size"; cfg.secondaryText = B.lastAt == nil ? "—" : ByteCountFormatter.string(fromByteCount: Int64(B.lastSize), countStyle: .file)
+    case (0, 2):
       cfg = .cell()
-      cfg.text = B.running ? "Backing up…" : "Back up now"; cfg.textProperties.color = B.running ? .secondaryLabel : Look.accent
-      if B.running { let sp = UIActivityIndicatorView(style: .medium); sp.startAnimating(); c.accessoryView = sp }
+      cfg.text = B.running ? "Backing Up…" : "Back Up Now"; cfg.textProperties.color = B.running ? .secondaryLabel : Look.accent
+      if B.running { let sp = UIActivityIndicatorView(style: .medium); sp.startAnimating(); c.accessoryView = sp } else { c.selectionStyle = .default }
     case (1, 0):
-      cfg.text = "Automatic backup"; cfg.secondaryText = B.every.title
+      cfg.text = "Automatic Backup"
       let b = UIButton(configuration: .plain()); b.showsMenuAsPrimaryAction = true; b.changesSelectionAsPrimaryAction = true
       b.menu = UIMenu(children: Backup.Every.allCases.map { e in UIAction(title: e.title, state: e == B.every ? .on : .off) { [weak self] _ in self?.B.every = e } })
       b.configuration?.title = B.every.title; b.configuration?.image = UIImage(systemName: "chevron.up.chevron.down", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold))
       b.configuration?.imagePlacement = .trailing; b.configuration?.imagePadding = 4; b.configuration?.baseForegroundColor = .secondaryLabel
-      b.sizeToFit(); c.accessoryView = b; cfg.secondaryText = nil; c.selectionStyle = .none
-    default:
-      cfg.text = "Include videos"
+      b.sizeToFit(); c.accessoryView = b
+    case (1, 1):
+      cfg.text = "Include Videos"
       let sw = UISwitch(); sw.isOn = B.videos; sw.addAction(UIAction { [weak self] a in self?.B.videos = (a.sender as? UISwitch)?.isOn ?? false }, for: .valueChanged)
-      c.accessoryView = sw; c.selectionStyle = .none
+      c.accessoryView = sw
+    default:
+      cfg = .cell(); cfg.text = "Restore From Backup"; cfg.textProperties.color = B.running ? .secondaryLabel : Look.accent
+      c.selectionStyle = B.running ? .none : .default
     }
     c.contentConfiguration = cfg
     return c
   }
   override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) {
     tv.deselectRow(at: ip, animated: true)
-    guard ip == IndexPath(row: 1, section: 0), !B.running else { return }
-    B.backUp { err in
-      if let e = err { toast(e.count > 60 ? "Couldn’t back up — see below" : e) }
-      else { UINotificationFeedbackGenerator().notificationOccurred(.success); toast("Backed up to iCloud") }
+    guard !B.running else { return }
+    if ip == IndexPath(row: 2, section: 0) {
+      B.backUp { err in
+        if let e = err { toast(e.count > 60 ? "Couldn’t back up — see below" : e) }
+        else { UINotificationFeedbackGenerator().notificationOccurred(.success); toast("Backed up to iCloud") }
+      }
+    } else if ip.section == 2 { restoreAnyTime() }
+  }
+  // Restore From Backup, any time (the rule: always restorable here, not only on a new phone) — the backup found in iCloud,
+  // then the same restore screen as a new phone's, keeping the messages already here
+  private func restoreAnyTime() {
+    guard let uid = Talk.shared.me?.id else { return }
+    B.find(uid) { [weak self] meta in
+      guard let self = self else { return }
+      guard let meta = meta else {
+        let a = UIAlertController(title: "No Backup Found", message: "There’s no E11 Talk backup in your iCloud yet. " + "Back up now to make one.", preferredStyle: .alert)
+        a.addAction(UIAlertAction(title: "OK", style: .default)); self.present(a, animated: true); return
+      }
+      let r = RestoreVC(uid: uid, meta: meta); r.anyTime = true
+      self.present(r, animated: true)
     }
   }
 }
 private extension String { var capitalizingFirst: String { prefix(1).uppercased() + dropFirst() } }
+extension Backup {
+  // a chat from the backup joined to the one on the phone: every message once (the phone's copy of one it has both of), in
+  // time order; who has read what — the phone's
+  static func merge(_ from: URL, into: URL) -> Bool {
+    guard let a = try? Data(contentsOf: from), let b = try? Data(contentsOf: into),
+          let old = try? JSONDecoder().decode(GroupLog.self, from: a), var here = try? JSONDecoder().decode(GroupLog.self, from: b) else { return false }
+    let have = Set(here.msgs.map { $0.id })
+    here.msgs = (here.msgs + old.msgs.filter { !have.contains($0.id) }).sorted { $0.at < $1.at }
+    for (p, r) in old.readBy where here.readBy[p] == nil { here.readBy[p] = r }
+    if here.myRead == nil { here.myRead = old.myRead }
+    guard let d = try? JSONEncoder().encode(here) else { return false }
+    return (try? d.write(to: into, options: .atomic)) != nil
+  }
+}
