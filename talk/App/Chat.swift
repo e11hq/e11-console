@@ -1799,7 +1799,7 @@ final class BubbleCell: UITableViewCell {
   private var wMine: NSLayoutConstraint!, wTheirs: NSLayoutConstraint!, top: NSLayoutConstraint!, stackTrail: NSLayoutConstraint!
   private var reactsLead: NSLayoutConstraint!, reactsTrail: NSLayoutConstraint!, bubbleBottom: NSLayoutConstraint!, reactsBottom: NSLayoutConstraint!
   private var msg: Msg?
-  private var media = false, caption = false, tailOn = false, isMine = false, framed = false, overPhoto = false, shownFile: String?
+  private var media = false, caption = false, tailOn = false, isMine = false, framed = false, overPhoto = false, headed = false, shownFile: String?
   // held: the bubble with its tail, in the row's own space (shifted so `origin` is 0,0)
   private var linkShown: String?
   private var reactsFor: String?, reactsShown = false
@@ -2044,9 +2044,11 @@ final class BubbleCell: UITableViewCell {
   // under a photo as a coloured edge and a second tail: the old way read the sizes before they were laid out)
   private func shapePhoto() {
     photo.layer.cornerRadius = framed ? 14 : media ? 19 : 0; photo.layer.cornerCurve = .continuous
-    photo.layer.maskedCorners = caption && !framed ? [.layerMinXMinYCorner, .layerMaxXMinYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+    photo.layer.maskedCorners = headed ? (caption ? [] : [.layerMinXMaxYCorner, .layerMaxXMaxYCorner])
+      : caption && !framed ? [.layerMinXMinYCorner, .layerMaxXMinYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
     photo.layer.mask = nil
-    bubble.fillTop = media ? (caption ? photoH.constant - 1 : .greatestFiniteMagnitude) : 0
+    // (someone else's photo with their name and role over it, in the bubble — the bubble's colour round the head)
+    bubble.fillTop = headed ? 0 : media ? (caption ? photoH.constant - 1 : .greatestFiniteMagnitude) : 0
   }
   private var group: Group?, log: GroupLog?
 
@@ -2097,7 +2099,10 @@ final class BubbleCell: UITableViewCell {
     wMine.isActive = mine && !isPhoto && !isVoice; wTheirs.isActive = !mine && !isPhoto && !isVoice
     stackTrail.constant = mine ? -11 : -12
     bubble.fill = mine ? Look.mine : Look.theirs
-    tailOn = run.last && (!isPhoto || caption || framed)
+    // (someone else's photo, first of their run: their name and role on the bubble above it, WhatsApp's way — not over
+    //  the photo — Haris 2026-11-13)
+    headed = isPhoto && !mine && run.first && !framed
+    tailOn = run.last && (!isPhoto || caption || framed || headed)
     bubble.tail = (mine, tailOn)
     let ink: UIColor = mine ? .white : .label, dim: UIColor = mine ? Look.mineTime : Look.roleInk
     // the name: over a photo for one, else at the top (others', first of a run)
@@ -2105,8 +2110,8 @@ final class BubbleCell: UITableViewCell {
     let p = T.people[m.by]
     let client = p?.contact == true && !T.isContact
     let role = client ? "Client" : (p?.role ?? "")
-    nameL.isHidden = !showName || (isPhoto && !framed); roleL.isHidden = nameL.isHidden || role.isEmpty
-    photoName.isHidden = !(showName && isPhoto && !framed); photoRole.isHidden = photoName.isHidden || role.isEmpty; diag.isHidden = photoName.isHidden
+    nameL.isHidden = !showName || (isPhoto && !framed && !headed); roleL.isHidden = nameL.isHidden || role.isEmpty
+    photoName.isHidden = !(showName && isPhoto && !framed && !headed); photoRole.isHidden = photoName.isHidden || role.isEmpty; diag.isHidden = photoName.isHidden
     for (n, r) in [(nameL, roleL), (photoName, photoRole)] {
       n.text = p?.name ?? "Someone"; n.textColor = Look.person(m.by)
       r.text = role; r.font = .systemFont(ofSize: 12, weight: client ? .semibold : .regular)
@@ -2153,7 +2158,9 @@ final class BubbleCell: UITableViewCell {
     if isPhoto, let f = m.file {
       let w: CGFloat = mine ? 236 : 262, ratio = CGFloat((f.h ?? 3) / max(1, f.w ?? 4))
       photoH.constant = min(330, max(120, w * ratio))
-      if framed { photoWrap.reach(0, 8, caption ? 0 : 3, mine ? 7 : 8) } else { photoWrap.reach(8, 12, caption ? 0 : 7, mine ? 11 : 12) }
+      if framed { photoWrap.reach(0, 8, caption ? 0 : 3, mine ? 7 : 8) }
+      else if headed { photoWrap.reach(0, 12, caption ? 0 : 7, 12) }
+      else { photoWrap.reach(8, 12, caption ? 0 : 7, mine ? 11 : 12) }
       if let s = f.secs { vlen.text = String(format: "%d:%02d", Int(s) / 60, Int(s) % 60) }
       // (the same photo drawn again keeps its picture — it blanked for a moment on every redraw, all photos flashing)
       let known = isVideo ? BubbleCell.frames.object(forKey: f.id as NSString) : BubbleCell.pictures.object(forKey: f.id as NSString)
