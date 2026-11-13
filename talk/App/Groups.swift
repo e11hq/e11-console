@@ -759,7 +759,12 @@ final class ContactsVC: UITableViewController {
     cfg.image = UIImage(systemName: "circle.fill"); cfg.imageProperties.tintColor = .clear; cfg.imageProperties.reservedLayoutSize = CGSize(width: 40, height: 40)
     cfg.directionalLayoutMargins.top = 10; cfg.directionalLayoutMargins.bottom = 10
     c.contentConfiguration = cfg
-    let a = Avatar(frame: CGRect(x: 16, y: 12, width: 40, height: 40)); a.autoresizingMask = [.flexibleTopMargin, .flexibleBottomMargin]; a.set(name: k.name, color: Look.color(for: k.id), picture: Talk.shared.clients[k.client]?.logo, logo: true); c.contentView.addSubview(a)   // (their client's logo when it has one, else initials)
+    let a = Avatar(frame: CGRect(x: 16, y: 12, width: 40, height: 40)); a.set(name: k.name, color: Look.color(for: k.id), picture: Talk.shared.clients[k.client]?.logo, logo: true); c.contentView.addSubview(a)
+    // (held in the row's middle whatever its height — the row's own height came after the picture was placed, and it
+    //  sat at the top, Haris 2026-11-13)
+    a.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([a.leadingAnchor.constraint(equalTo: c.contentView.leadingAnchor, constant: 16), a.centerYAnchor.constraint(equalTo: c.contentView.centerYAnchor),
+                                 a.widthAnchor.constraint(equalToConstant: 40), a.heightAnchor.constraint(equalToConstant: 40)])   // (their client's logo when it has one, else initials)
     let n = UILabel(); n.text = "\(k.groups) group\(k.groups == 1 ? "" : "s")"; n.font = .systemFont(ofSize: 14); n.textColor = .secondaryLabel; n.sizeToFit(); c.accessoryView = n
     c.selectionStyle = .none
     return c
