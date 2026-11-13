@@ -94,6 +94,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
     table.register(ChatRowCell.self, forCellReuseIdentifier: ChatRowCell.id)
     table.sectionHeaderTopPadding = 6
     view.addSubview(table)
+    setContentScrollView(table, for: .top)
     table.register(AgencyCell.self, forCellReuseIdentifier: AgencyCell.id)
     table.register(GroupCell.self, forCellReuseIdentifier: GroupCell.id)
     data = UITableViewDiffableDataSource<String, Row>(tableView: table) { [weak self] tv, ip, row in
@@ -263,7 +264,18 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
     guard !rows.isEmpty else { return }
     snap.reconfigureItems(rows); data.applySteady(snap, in: table, animated: view.window != nil)
   }
-  override func viewWillAppear(_ a: Bool) { super.viewWillAppear(a); reload(animated: false) }
+  override func viewWillAppear(_ a: Bool) {
+    super.viewWillAppear(a)
+    // (Apple's bar told which list is the page's — the page also holds Apple's empty view behind the list, itself a little
+    //  list of its own; coming back, the bar could follow that empty one and keep its small title: the check's notes, a tab
+    //  coming back, room 116 of 189 — Haris 2026-11-13, seen on his phone. E11 Console's My Tasks and Inbox had the same,
+    //  2026-11-09: Apple's setContentScrollView.)
+    setContentScrollView(table, for: .top)
+    // (the page's first showing sets its list — a client's page had nothing until then: Haris 2026-11-13, "the groups are
+    //  coming empty"; after that it's kept up to date while away and not set again as it comes back)
+    if !shownOnce { shownOnce = true; reload(animated: false) }
+  }
+  private var shownOnce = false
 
   @objc func changed() { reload(animated: view.window != nil) }
   func updateSearchResults(for s: UISearchController) { reload(animated: false) }
@@ -508,7 +520,10 @@ final class GroupsVC: ListVC {
       line = cs.isEmpty ? "No groups yet" : "\(cs.count) client\(cs.count == 1 ? "" : "s")" + (un > 0 ? " · \(un) unread" : "")
     }
     if #available(iOS 26.0, *), navigationItem.subtitle != line {
-      if view.window != nil, let bar = navigationController?.navigationBar { UIView.transition(with: bar, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction], animations: nil) }
+      // (crossfaded only while the bar is still — never as a page or the app comes back, when Apple is putting its big
+      //  title back: Haris 2026-11-13)
+      if view.window != nil, transitionCoordinator == nil, navigationController?.transitionCoordinator == nil, UIApplication.shared.applicationState == .active,
+         let bar = navigationController?.navigationBar { UIView.transition(with: bar, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction], animations: nil) }
       navigationItem.subtitle = line
     }
   }
@@ -712,7 +727,10 @@ final class ClientGroupsVC: ListVC {
     let n = "\(gs.count) group\(gs.count == 1 ? "" : "s")" + (clientsTab ? " with the client" : "")
     let sub = n + (un > 0 ? " · \(un) unread" : "")
     if #available(iOS 26.0, *), navigationItem.subtitle != sub {
-      if view.window != nil, let bar = navigationController?.navigationBar { UIView.transition(with: bar, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction], animations: nil) }
+      // (crossfaded only while the bar is still — never as a page or the app comes back, when Apple is putting its big
+      //  title back: Haris 2026-11-13)
+      if view.window != nil, transitionCoordinator == nil, navigationController?.transitionCoordinator == nil, UIApplication.shared.applicationState == .active,
+         let bar = navigationController?.navigationBar { UIView.transition(with: bar, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction], animations: nil) }
       navigationItem.subtitle = sub
     }
     setLogo(); repaintPillsIfNeeded()
