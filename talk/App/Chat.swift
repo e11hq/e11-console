@@ -1448,7 +1448,8 @@ final class Bleed: UIView {
 
 final class BubbleCell: UITableViewCell {
   // (a logo on a link card: drawn in the middle with room around it — a third of the card's height each side)
-  static func padded(_ i: UIImage) -> UIImage {
+  static func padded(_ raw: UIImage) -> UIImage {
+    let i = BubbleCell.trimmed(raw)
     let W = max(i.size.width, i.size.height * 1.91) * 1.5, H = W / 1.91
     let k = min(W * 0.6 / max(i.size.width, 1), H * 0.45 / max(i.size.height, 1))
     let w = i.size.width * k, h = i.size.height * k
@@ -1460,6 +1461,22 @@ final class BubbleCell: UITableViewCell {
       if let c = bg { c.setFill(); UIRectFill(CGRect(x: 0, y: 0, width: W, height: H)) }
       i.draw(in: CGRect(x: (W - w) / 2, y: (H - h) / 2, width: w, height: h))
     }
+  }
+  // a logo without the clear border its file may have round it (else its edge reads as clear, and its own background
+  // colour is missed — the client contact's picture, Haris 2026-11-13)
+  static func trimmed(_ i: UIImage) -> UIImage {
+    guard let cg = i.cgImage, cg.width > 4, cg.height > 4, cg.width * cg.height <= 1_500_000 else { return i }
+    let w = cg.width, h = cg.height
+    var px = [UInt8](repeating: 0, count: w * h * 4)
+    guard let ctx = CGContext(data: &px, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpaceCreateDeviceRGB(),
+                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return i }
+    ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+    var x0 = w, y0 = h, x1 = -1, y1 = -1
+    for y in 0..<h { for x in 0..<w where px[(y * w + x) * 4 + 3] > 12 { if x < x0 { x0 = x }; if x > x1 { x1 = x }; if y < y0 { y0 = y }; if y > y1 { y1 = y } } }
+    guard x1 >= x0, y1 >= y0, (x1 - x0 + 1) < w || (y1 - y0 + 1) < h else { return i }
+    // (the bitmap's rows run top-down here, as the image's own)
+    guard let cut = cg.cropping(to: CGRect(x: x0, y: y0, width: x1 - x0 + 1, height: y1 - y0 + 1)) else { return i }
+    return UIImage(cgImage: cut, scale: i.scale, orientation: i.imageOrientation)
   }
   // the colour at a logo's edge — the middle of its left and top sides, a little in (a rounded corner is clear) — when
   // both are the same solid colour; nil for a clear or mixed edge

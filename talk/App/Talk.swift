@@ -612,7 +612,8 @@ final class Avatar: UIView {
   // a picture straight in (one just picked, before it's uploaded)
   func show(_ i: UIImage) { want = nil; img.image = i; img.isHidden = false; lbl.isHidden = true }
   // a logo drawn whole in the middle of a circle: its corners inside it, with a little room
-  static func inCircle(_ i: UIImage, side: CGFloat = 120) -> UIImage {
+  static func inCircle(_ raw: UIImage, side: CGFloat = 120) -> UIImage {
+    let i = BubbleCell.trimmed(raw)
     let s = i.size; guard s.width > 0, s.height > 0 else { return i }
     let k = side * 0.8 / (s.width * s.width + s.height * s.height).squareRoot()
     let w = s.width * k, h = s.height * k
