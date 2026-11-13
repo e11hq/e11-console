@@ -1187,7 +1187,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (what lifts is a picture of the bubble drawn inside its own shape only — tail and all — with nothing round it:
     //  E11 Console's lesson for its folder tiles (Haris 2026-11-11): iPhone kept lifting the row's whole square, white or
     //  black round the bubble, whatever shape it was told — Haris 2026-11-13. The shadow in the same shape, as Messages.)
-    let r = cell.heldRect, shape = cell.heldPath(origin: r.origin)
+    // (the picture's box on the screen's own pixels — at a part-pixel place the picture drew a pixel off the bubble, and the
+    //  lift and the settling back each showed a one-pixel shift: Haris 2026-11-13)
+    let k = cell.traitCollection.displayScale > 0 ? cell.traitCollection.displayScale : UIScreen.main.scale
+    let h = cell.heldRect
+    let x0 = floor(h.minX * k) / k, y0 = floor(h.minY * k) / k, x1 = ceil(h.maxX * k) / k, y1 = ceil(h.maxY * k) / k
+    let r = CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0)
+    let shape = cell.heldPath(origin: r.origin)
     // (drawn without the reaction pill over the bubble's foot — it showed cut off in the lifted picture, Haris 2026-11-13; the
     //  pill itself fades away as the bubble lifts and back after)
     let img = cell.withoutBesides {
