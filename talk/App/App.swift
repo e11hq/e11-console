@@ -230,6 +230,8 @@ final class SettingsVC: UITableViewController {
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
     defer { shownOnce = true }
+    // (the temporary check's notes: shown afresh each time Settings comes up)
+    if shownOnce { UIView.performWithoutAnimation { tableView.reloadSections([2], with: .none) } }
     if shownOnce, let r = rows1.firstIndex(of: .starred) { UIView.performWithoutAnimation { tableView.reloadRows(at: [IndexPath(row: r, section: 1)], with: .none) } }
   }
   override func numberOfSections(in tv: UITableView) -> Int { 3 }

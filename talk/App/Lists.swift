@@ -442,17 +442,23 @@ final class GroupsVC: ListVC {
   // ---------- a TEMPORARY check (Haris 2026-11-13: "1") — what makes the big title small while the list is at its top.
   // Nothing on the page changes: each moment it goes small at the top is noted with what was happening, and Settings
   // shows the notes under the version. Taken out once the cause is found. ----------
-  private var bigBarH: CGFloat = 0, smallAtTop = false, lastEvent = "—"
+  // (measured by the room above the list — the bar's own height doesn't change on iOS 26 — and looked at on every
+  //  layout, scroll, coming back to the page and the app coming back)
+  private var bigTop: CGFloat = 0, smallAtTop = false, lastEvent = "—"
   private func note(_ e: String) { lastEvent = e + " " + DiagTitle.clock() }
-  override func viewDidLayoutSubviews() {
-    super.viewDidLayoutSubviews()
-    guard let bar = navigationController?.navigationBar, !Talk.shared.isContact else { return }
-    if bigBarH == 0, view.window != nil, bar.frame.height > 80 { bigBarH = bar.frame.height }
-    guard bigBarH > 0 else { return }
-    let small = bar.frame.height < bigBarH - 20 && table.contentOffset.y <= -table.adjustedContentInset.top + 1 && !search.isActive
+  override func viewDidLayoutSubviews() { super.viewDidLayoutSubviews(); look() }
+  override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); look() }
+  func scrollViewDidScroll(_ s: UIScrollView) { look() }
+  private func look() {
+    guard !Talk.shared.isContact, navigationController != nil else { return }
+    let top = table.adjustedContentInset.top
+    // (as the page first shows: big title, search bar away — a search bar pulled out later isn't counted)
+    if bigTop == 0, view.window != nil, !search.isActive, table.contentOffset.y <= -top + 1 { bigTop = top }
+    guard bigTop > 0 else { return }
+    let small = top < bigTop - 20 && table.contentOffset.y <= -top + 1 && !search.isActive && !table.isTracking
     if small && !smallAtTop {
       let app = UIApplication.shared.applicationState == .background ? "in the background" : UIApplication.shared.applicationState == .inactive ? "leaving or coming back" : "open"
-      DiagTitle.add("\(clientsTab ? "Clients" : "E11 Agency") went small at the top — app \(app), page \(view.window == nil ? "off screen" : "on screen"), last: \(lastEvent)")
+      DiagTitle.add("\(clientsTab ? "Clients" : "E11 Agency") went small at the top — app \(app), page \(view.window == nil ? "off screen" : "on screen"), room \(Int(top)) of \(Int(bigTop)), last: \(lastEvent)")
     }
     smallAtTop = small
   }
@@ -466,6 +472,7 @@ final class GroupsVC: ListVC {
     super.viewDidLoad()
     NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in self?.note("app to the background") }
     NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in self?.note("app coming back") }
+    NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in self?.look() }
     view.backgroundColor = GroupsVC.pageBg; table.backgroundColor = GroupsVC.pageBg
     table.separatorInset = UIEdgeInsets(top: 0, left: 80, bottom: 0, right: 0)
     table.separatorColor = Look.dyn(0x2A2B2E, 0xDCDCE0)
