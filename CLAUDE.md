@@ -467,6 +467,10 @@ something held (the forward button, reactions). A change in place crossfades to 
 comes fades in, what goes fades out; something hidden for a moment (while held, while searching) fades out and back. Together
 with "redraw" meaning no slide and no other heights changing: the change fades, and nothing else moves. Before any change is
 called done, check every moment of it — opening, closing, holding, letting go, a change arriving — for a snap.
+**Haris's own exceptions stay (Haris 2026-11-13: "the one i did on purpose stays as it is"):** the no-snap, no-slide and
+redraw rules never undo an exception Haris chose on purpose — e.g. a chat's cover and its title bar when it's tapped, the
+squash and stretch between tabs, My Tasks' / the Inbox's title exception — each stays exactly as he made it. When a fix for
+these rules would touch something that might be one, ask him first.
 **What you do shows at once, every Apple page — now and later (Haris, 2026-11-09 20:11):** anything you remove, add, tick or
 change on a page (a file trashed, a checklist item ticked, a status set…) shows on the page at once — the gone one fades
 out and the rest slide in, Apple's own list animation — never waiting for the server's answer. The server's answer then
