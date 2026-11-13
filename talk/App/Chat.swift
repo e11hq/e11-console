@@ -2160,7 +2160,8 @@ final class BubbleCell: UITableViewCell {
       let w: CGFloat = mine ? 236 : 262, ratio = CGFloat((f.h ?? 3) / max(1, f.w ?? 4))
       photoH.constant = min(330, max(120, w * ratio))
       if framed { photoWrap.reach(0, 8, caption ? 0 : 3, mine ? 7 : 8) }
-      else if headed { photoWrap.reach(0, 12, caption ? 0 : 7, 12) }
+      // (as much room under the role as above the name — Haris 2026-11-13)
+      else if headed { photoWrap.reach(-8, 12, caption ? 0 : 7, 12) }
       else { photoWrap.reach(8, 12, caption ? 0 : 7, mine ? 11 : 12) }
       if let s = f.secs { vlen.text = String(format: "%d:%02d", Int(s) / 60, Int(s) % 60) }
       // (the same photo drawn again keeps its picture — it blanked for a moment on every redraw, all photos flashing)
