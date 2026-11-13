@@ -146,6 +146,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         if let g = Talk.shared.groups[self.group] { c.set(g) }
         c.onPic = { [weak self] in self?.editGroup() }
         c.onAdd = { [weak self] in self?.addMembers() }
+        c.onDescribe = { [weak self] in self?.describe() }
         return c
       }
     }
@@ -617,6 +618,23 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let n = UINavigationController(rootViewController: EditGroupVC(group: group))
     if let s = n.sheetPresentationController { s.detents = [.large()]; s.prefersGrabberVisible = true }
     present(n, animated: true)
+  }
+  // (Add description / a tap on it: Apple's alert with its text field — empty clears it)
+  private func describe() {
+    guard !peek, let g = Talk.shared.groups[group], Talk.shared.canManage(g) else { return }
+    let a = UIAlertController(title: "Group Description", message: "Everyone in the group sees it at the start of the chat.", preferredStyle: .alert)
+    a.addTextField { t in t.text = g.about; t.placeholder = "Add description"; t.autocapitalizationType = .sentences; t.clearButtonMode = .whileEditing }
+    a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+    let save = UIAlertAction(title: "Save", style: .default) { [weak self, weak a] _ in
+      guard let self = self else { return }
+      let t = (a?.textFields?.first?.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      guard t != (g.about ?? "") else { return }
+      Net.shared.act(["act": "describe", "group": self.group, "about": String(t.prefix(500))]) { j in
+        if (j?["ok"] as? Bool) == true { Talk.shared.refresh(); Talk.shared.sync() } else { toast(j?["error"] as? String ?? "Couldn’t do that — try again") }
+      }
+    }
+    a.addAction(save); a.preferredAction = save
+    present(a, animated: true)
   }
   private func addMembers() {
     guard !peek, let g = Talk.shared.groups[group], Talk.shared.canManage(g) else { return }
@@ -1355,12 +1373,13 @@ final class DayHeader: UITableViewHeaderFooterView {
    no part for it, as the day chips); the button is Apple's own (a grey capsule button), the sheets Apple's. */
 final class IntroCell: UITableViewCell {
   private let card = UIView(), pic = Avatar(frame: CGRect(x: 0, y: 0, width: 48, height: 48)), badge = UIButton(type: .system)
-  private let title = UILabel(), sub = UILabel(), add = UIButton(type: .system), stack = UIStackView()
-  var onPic: (() -> Void)?, onAdd: (() -> Void)?
+  private let title = UILabel(), sub = UILabel(), about = UILabel(), describe = UIButton(type: .system), add = UIButton(type: .system), stack = UIStackView()
+  var onPic: (() -> Void)?, onAdd: (() -> Void)?, onDescribe: (() -> Void)?
+  private var canEdit = false
   static let cardBg = Look.dyn(0x262628, 0xFFFFFF), btnBg = Look.dyn(0x3A3A3E, 0xEFEFF4)
   // (what the card shows — it's set again only when one of these changed)
   static func sig(_ g: Group) -> Int {
-    var h = Hasher(); h.combine(g.name); h.combine(g.pic); h.combine(g.creator); h.combine(g.createdAt)
+    var h = Hasher(); h.combine(g.name); h.combine(g.pic); h.combine(g.about); h.combine(g.creator); h.combine(g.createdAt)
     h.combine(Talk.shared.canManage(g)); h.combine(Talk.shared.people[g.creator]?.name); h.combine(Talk.shared.clients[g.client]?.logo); h.combine(Talk.shared.me?.id)
     return h.finalize()
   }
@@ -1379,6 +1398,16 @@ final class IntroCell: UITableViewCell {
     badge.translatesAutoresizingMaskIntoConstraints = false; picBox.addSubview(badge)
     title.font = .systemFont(ofSize: 17, weight: .bold); title.textAlignment = .center; title.numberOfLines = 0
     sub.font = .systemFont(ofSize: 14); sub.textColor = .secondaryLabel; sub.textAlignment = .center; sub.numberOfLines = 0
+    // the description — its admins tap it to change it; with none, its admins get Add description (Apple's plain button)
+    about.font = .systemFont(ofSize: 15); about.textColor = .label; about.textAlignment = .center; about.numberOfLines = 0
+    about.isUserInteractionEnabled = true
+    about.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(aboutTap)))
+    var d = UIButton.Configuration.plain()
+    d.baseForegroundColor = Look.linkInk; d.contentInsets = .zero; d.imagePadding = 6
+    d.image = UIImage(systemName: "pencil", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold))
+    d.attributedTitle = AttributedString("Add description", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 15, weight: .semibold)]))
+    describe.configuration = d
+    describe.addAction(UIAction { [weak self] _ in self?.onDescribe?() }, for: .touchUpInside)
     var b = UIButton.Configuration.gray()
     b.cornerStyle = .capsule; b.baseBackgroundColor = IntroCell.btnBg; b.baseForegroundColor = .label
     b.image = UIImage(systemName: "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .semibold)); b.imagePadding = 6
@@ -1386,8 +1415,9 @@ final class IntroCell: UITableViewCell {
     add.configuration = b
     add.addAction(UIAction { [weak self] _ in self?.onAdd?() }, for: .touchUpInside)
     stack.axis = .vertical; stack.alignment = .center
-    [picBox, title, sub, add].forEach { stack.addArrangedSubview($0) }
-    stack.setCustomSpacing(16, after: picBox); stack.setCustomSpacing(4, after: title); stack.setCustomSpacing(14, after: sub)
+    [picBox, title, sub, about, describe, add].forEach { stack.addArrangedSubview($0) }
+    stack.setCustomSpacing(16, after: picBox); stack.setCustomSpacing(4, after: title); stack.setCustomSpacing(12, after: sub)
+    stack.setCustomSpacing(14, after: about); stack.setCustomSpacing(14, after: describe)
     card.addSubview(stack); contentView.addSubview(card)
     [card, stack, add].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
     NSLayoutConstraint.activate([
@@ -1400,7 +1430,7 @@ final class IntroCell: UITableViewCell {
       card.centerXAnchor.constraint(equalTo: contentView.centerXAnchor), card.widthAnchor.constraint(equalToConstant: 268),
       stack.topAnchor.constraint(equalTo: card.topAnchor, constant: 22), stack.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -12),
       stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 12), stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12),
-      title.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor), sub.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor),
+      title.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor), about.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor), sub.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor),
       add.widthAnchor.constraint(equalTo: stack.widthAnchor), { let h = add.heightAnchor.constraint(equalToConstant: 40); h.priority = .init(999); return h }()])
   }
   required init?(coder: NSCoder) { fatalError() }
@@ -1412,10 +1442,15 @@ final class IntroCell: UITableViewCell {
     title.text = mine ? "You created this group" : "\(who) added you"
     let f = DateFormatter(); f.setLocalizedDateFormatFromTemplate("ddMMyyyy")
     sub.text = "Group created \(f.string(from: Date(timeIntervalSince1970: g.createdAt / 1000))) by \(mine ? "you" : who)"
-    // (only its admins can add people — for everyone else the card ends at the line above)
+    let text = (g.about ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    about.text = text; about.isHidden = text.isEmpty
+    describe.isHidden = !text.isEmpty || !can
+    canEdit = can
+    // (only its admins can add people — for everyone else the card ends at the last line above)
     add.isHidden = !can
-    stack.setCustomSpacing(can ? 14 : 0, after: sub)
+    stack.setCustomSpacing(can ? 14 : 0, after: about)
   }
+  @objc private func aboutTap() { if canEdit { onDescribe?() } }
 }
 
 /* A message sent and one arriving (Haris 2026-11-11): E11 Console's own comment sounds — iPhone's system sound service,
