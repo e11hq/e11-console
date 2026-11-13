@@ -264,9 +264,6 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
     guard !rows.isEmpty else { return }
     snap.reconfigureItems(rows); data.applySteady(snap, in: table, animated: view.window != nil)
   }
-  // (coming back to the page: what changed while away set, but the list not laid out here — laid out before Apple's bar
-  //  had put its big title back, it kept the small bar's room and the title stayed small: the check's note, Clients,
-  //  "page coming back", room 116 of 189 — Haris 2026-11-13. Apple lays it out with its bar, as the page shows.)
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
     // (Apple's bar told which list is the page's — the page also holds Apple's empty view behind the list, itself a little
@@ -274,9 +271,10 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
     //  coming back, room 116 of 189 — Haris 2026-11-13, seen on his phone. E11 Console's My Tasks and Inbox had the same,
     //  2026-11-09: Apple's setContentScrollView.)
     setContentScrollView(table, for: .top)
-    appearing = true; reload(animated: false); appearing = false
+    // (no setting the list again here — it's kept up to date while away; set again as the page came back, the list
+    //  moved under Apple's bar before it had put its big title back — the check's notes, Haris 2026-11-13)
   }
-  private var appearing = false
+
   @objc func changed() { reload(animated: view.window != nil) }
   func updateSearchResults(for s: UISearchController) { reload(animated: false) }
   func build() -> [(String, String, [Row])] { [] }
@@ -307,7 +305,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
     for r in snap.itemIdentifiers { newSigs[r] = sig(r) }
     snap.reconfigureItems(snap.itemIdentifiers.filter { old.indexOfItem($0) != nil && sigs[$0] != newSigs[$0] })
     sigs = newSigs
-    data.applySteady(snap, in: table, animated: animated, layout: !appearing)
+    data.applySteady(snap, in: table, animated: animated)
     emptyNote()
   }
   func emptyNote() {}
@@ -559,11 +557,16 @@ final class GroupsVC: ListVC {
       line = cs.isEmpty ? "No groups yet" : "\(cs.count) client\(cs.count == 1 ? "" : "s")" + (un > 0 ? " · \(un) unread" : "")
     }
     if #available(iOS 26.0, *), navigationItem.subtitle != line {
-      if view.window != nil, let bar = navigationController?.navigationBar { UIView.transition(with: bar, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction], animations: nil) }
+      // (crossfaded only while the bar is still — never as a page or the app comes back, when Apple is putting its big
+      //  title back: Haris 2026-11-13)
+      if view.window != nil, transitionCoordinator == nil, navigationController?.transitionCoordinator == nil, UIApplication.shared.applicationState == .active,
+         let bar = navigationController?.navigationBar { UIView.transition(with: bar, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction], animations: nil) }
       navigationItem.subtitle = line
+      note("line changed")
     }
   }
   override func reload(animated: Bool) {
+    note("list set again")
     super.reload(animated: animated)
     setLine()
   }
@@ -763,7 +766,10 @@ final class ClientGroupsVC: ListVC {
     let n = "\(gs.count) group\(gs.count == 1 ? "" : "s")" + (clientsTab ? " with the client" : "")
     let sub = n + (un > 0 ? " · \(un) unread" : "")
     if #available(iOS 26.0, *), navigationItem.subtitle != sub {
-      if view.window != nil, let bar = navigationController?.navigationBar { UIView.transition(with: bar, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction], animations: nil) }
+      // (crossfaded only while the bar is still — never as a page or the app comes back, when Apple is putting its big
+      //  title back: Haris 2026-11-13)
+      if view.window != nil, transitionCoordinator == nil, navigationController?.transitionCoordinator == nil, UIApplication.shared.applicationState == .active,
+         let bar = navigationController?.navigationBar { UIView.transition(with: bar, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction], animations: nil) }
       navigationItem.subtitle = sub
     }
     setLogo(); repaintPillsIfNeeded()
