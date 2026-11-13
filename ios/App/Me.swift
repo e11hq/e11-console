@@ -4407,7 +4407,7 @@ final class SigninCodeVC: UIViewController {
       self.present(a, animated: true)
     }, for: .primaryActionTriggered)
     let foot = UILabel(); foot.numberOfLines = 0; foot.textAlignment = .center; foot.font = .preferredFont(forTextStyle: .footnote); foot.textColor = .secondaryLabel
-    foot.text = "The message has \(first)’s email, the code, when it stops working and your name — ready for WhatsApp."
+    foot.text = "Ready to send on WhatsApp."   // (short, so it fits the half-height sheet — Haris 2026-11-13)
     let stack = UIStackView(arrangedSubviews: [person, digits, note, copy, share, foot])
     stack.axis = .vertical; stack.alignment = .center; stack.spacing = 18; stack.setCustomSpacing(10, after: copy)
     stack.translatesAutoresizingMaskIntoConstraints = false
@@ -4468,7 +4468,7 @@ final class AwaySheetVC: UIViewController, UITableViewDataSource, UITableViewDel
     if first { sh.invalidateDetents() } else { sh.animateChanges { sh.invalidateDetents() } }
   }
   func presentationControllerDidDismiss(_ presentationController: UIPresentationController) { let d = done; done = nil; d?(nil) }
-  private var footerWords: String { "Every notification from E11 Console and E11 Talk pauses until \(AwaySheetVC.label(picker.date)), 9:00 AM — the morning summary and @mentions too. The Inbox and your chats still collect everything." }
+  private var footerWords: String { "Every notification pauses until \(AwaySheetVC.label(picker.date)), 9:00 AM. Your Inbox and chats still get everything." }
   // (the words under the calendar crossfade to the new day — nothing else moves)
   private func footerAgain() {
     guard let v = table.footerView(forSection: 0) else { return }
