@@ -2112,7 +2112,11 @@ final class MeCtl {
       if v != day { self.pfSet("away", ["value": v], page: nil); self.settle(h) }
     }
     let nav = UINavigationController(rootViewController: vc)
-    if let sh = nav.sheetPresentationController { sh.detents = [.large()]; sh.prefersGrabberVisible = true }
+    // (the sheet as tall as what's in it — the calendar and the words under it — not the whole screen: Haris 2026-11-13)
+    if let sh = nav.sheetPresentationController {
+      sh.detents = [.custom(identifier: .init("fit")) { [weak vc] c in min(c.maximumDetentValue, vc?.fitHeight ?? 560) }]
+      sh.prefersGrabberVisible = true
+    }
     nav.presentationController?.delegate = vc
     main.topMost().present(nav, animated: true)
   }
@@ -4452,6 +4456,17 @@ final class AwaySheetVC: UIViewController, UITableViewDataSource, UITableViewDel
     view.addSubview(table)
   }
   private func finish(_ v: String?) { let d = done; done = nil; dismiss(animated: true) { d?(v) } }
+  // (its height: the list's own, under the bar — the sheet's one detent follows it)
+  private(set) var fitHeight: CGFloat?
+  override func viewDidLayoutSubviews() {
+    super.viewDidLayoutSubviews()
+    let h = (table.contentSize.height + table.adjustedContentInset.top + 12).rounded()
+    guard table.contentSize.height > 0, h != fitHeight else { return }
+    let first = fitHeight == nil
+    fitHeight = h
+    guard let sh = navigationController?.sheetPresentationController else { return }
+    if first { sh.invalidateDetents() } else { sh.animateChanges { sh.invalidateDetents() } }
+  }
   func presentationControllerDidDismiss(_ presentationController: UIPresentationController) { let d = done; done = nil; d?(nil) }
   private var footerWords: String { "Every notification from E11 Console and E11 Talk pauses until \(AwaySheetVC.label(picker.date)), 9:00 AM — the morning summary and @mentions too. The Inbox and your chats still collect everything." }
   // (the words under the calendar crossfade to the new day — nothing else moves)
