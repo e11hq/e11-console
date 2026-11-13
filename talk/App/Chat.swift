@@ -518,7 +518,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     spotW?.constant = min(titleV.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).width, max(140, UIScreen.main.bounds.width - 150))
     // a client group, to staff: the band under the bar and the box's hint — the client can see what's written here
     let shared = g.withClient && !T.isContact
-    bar.placeholder = shared ? "Message — client can see this" : ""
+    bar.placeholder = shared ? "Message client" : ""   // (Haris 2026-11-13: just "Message client")
     if clientLine.isHidden == shared {
       // ("Client can see this group" coming or going fades, the pinned bar under it gliding to its place)
       if view.window != nil {
