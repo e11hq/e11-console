@@ -34,8 +34,9 @@ targets:
         com.apple.developer.icloud-container-identifiers: [iCloud.ae.e11.talk]
         com.apple.developer.ubiquity-container-identifiers: [iCloud.ae.e11.talk]
         com.apple.developer.icloud-services: [CloudDocuments]
-        # (the shared sign-in: E11 Console's key for this person, read from the group both apps share — the plan)
-        keychain-access-groups: ["$(AppIdentifierPrefix)ae.e11.talk.ios", "$(AppIdentifierPrefix)ae.e11.shared"]
+        # (the shared sign-in: E11 Console's key for this person, read from the group E11 Console already keeps it in —
+        #  its own first group, ae.e11.console.shared (shared with its widget); Talk's own items stay in its own group, first)
+        keychain-access-groups: ["$(AppIdentifierPrefix)ae.e11.talk.ios", "$(AppIdentifierPrefix)ae.e11.console.shared"]
     info:
       path: App/Info.plist
       properties:
@@ -59,5 +60,5 @@ targets:
         NSPhotoLibraryAddUsageDescription: Save photos and videos from your groups to Photos.
         NSMicrophoneUsageDescription: Record voice messages and the sound of videos you send.
         TalkServerURL: https://talk-test.e11hq.com
-        SharedKeychainGroup: $(AppIdentifierPrefix)ae.e11.shared
+        SharedKeychainGroup: $(AppIdentifierPrefix)ae.e11.console.shared
         NSFaceIDUsageDescription: Face ID signs you back in to E11 Talk.
