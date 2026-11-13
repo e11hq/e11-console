@@ -4,12 +4,30 @@ import Security
 /* Talking to the server (server/src/talk.js — /api/talk/…). E11 Talk's own sign-in for now (Haris 2026-11-06: before
    the App Store it becomes shared with E11 Console): Cloudflare's email code in a web page once, then its sign-in cookie
    is kept in the Keychain and sent with every request. Built on the test server first (talk-test.e11hq.com). */
+// The server E11 Talk is on: the one E11 Console is on (Haris 2026-11-13: "Follow E11 Console") — Console's live copy →
+// talk.e11hq.com, its test copy → talk-test.e11hq.com, the App Review copy → the same review address. Console tells it
+// through the sign-in it shares with its widget (SignInKeys.consoleSignIn). Talk's own "App Review sign-in" puts it on the
+// App Review copy until signing out. No Console on the phone (a client contact): the build's own server.
 enum Server {
-  static var url: String {
-    if let s = UserDefaults.standard.string(forKey: "talk_server"), !s.isEmpty { return s }
+  private(set) static var url: String = resolve()
+  static var host: String { URL(string: url)?.host ?? "" }
+  static var review: Bool { host.hasPrefix("review.") }
+  static var reviewURL: String { Bundle.main.object(forInfoDictionaryKey: "TalkReviewServerURL") as? String ?? "https://review.e11hq.com" }
+  // (asked again before signing in and at the start: E11 Console may have moved — Talk's sign-in and copy are per server)
+  static func follow() {
+    let u = resolve()
+    guard u != url else { return }
+    url = u; Net.shared.reload()
+  }
+  private static func resolve() -> String {
+    if UserDefaults.standard.bool(forKey: "talk_review") { return reviewURL }
+    if let h = SignInKeys.consoleSignIn.flatMap({ URL(string: $0.server)?.host }) {
+      if h == "console.e11hq.com" { return "https://talk.e11hq.com" }
+      if h == "test.e11hq.com" { return "https://talk-test.e11hq.com" }
+      if h.hasPrefix("review.") { return "https://" + h }
+    }
     return Bundle.main.object(forInfoDictionaryKey: "TalkServerURL") as? String ?? "https://talk-test.e11hq.com"
   }
-  static var host: String { URL(string: url)?.host ?? "" }
 }
 
 enum Keychain {
@@ -41,6 +59,7 @@ final class Net {
     return URLSession(configuration: c)
   }()
   init() { cookie = Keychain.get("cookie-" + Server.host) }
+  func reload() { stopListening(); cookie = Keychain.get("cookie-" + Server.host) }   // (another server: its own sign-in)
   var signedIn: Bool { !(cookie ?? "").isEmpty }
 
   func request(_ path: String, method: String = "GET", json: [String: Any]? = nil, body: Data? = nil, type: String? = nil) -> URLRequest {

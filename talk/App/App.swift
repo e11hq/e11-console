@@ -100,6 +100,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
   #endif
   private func start() {
     guard let w = window else { return }
+    Server.follow()
+    if !Net.shared.signedIn, let c = SignInKeys.consoleReviewCookie { Net.shared.cookie = c }   // (App Review: Console's sign-in carried over)
     guard Net.shared.signedIn else { showSignIn(); return }
     Talk.shared.loadLocal()
     Talk.shared.prune()
@@ -178,6 +180,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
     if (tabs?.viewControllers?.count ?? 0) > 1 { let n = T.groups.values.filter { $0.withClient }.reduce(0) { $0 + T.unread($1.id) }; tabs?.viewControllers?[1].tabBarItem.badgeValue = n > 0 && !T.isContact ? "\(n)" : nil }
   }
   private func showSignIn() {
+    Server.follow()
     let s = SignInVC()
     s.onDone = { [weak self] in self?.start() }
     window?.rootViewController = s
@@ -206,6 +209,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
     SignInKeys.dropOwn()   // (a client contact's own key for Face ID let go)
     UserDefaults.standard.removeObject(forKey: "talk_via_console")
     Talk.shared.signOut()
+    UserDefaults.standard.removeObject(forKey: "talk_review")   // (off the App Review copy — after its own copy is gone)
     showSignIn()
   }
   private func askNotifications() {

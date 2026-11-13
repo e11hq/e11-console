@@ -11,7 +11,18 @@ import Security
      password. Then Talk keeps its own device key, and Face ID signs it back in. */
 enum SignInKeys {
   // E11 Console's host for this E11 Talk's server (talk-test → test, talk → console)
-  static var consoleHost: String { Server.host.hasPrefix("talk-test.") ? "test.e11hq.com" : "console.e11hq.com" }
+  static var consoleHost: String { Server.review ? Server.host : Server.host.hasPrefix("talk-test.") ? "test.e11hq.com" : "console.e11hq.com" }
+  // the server E11 Console is on and its sign-in's cookies — what Console shares with its widget (its WidgetShare)
+  static var consoleSignIn: (server: String, cookie: String)? {
+    guard let s = read(service: "ae.e11.console.widget", account: "signin", group: shared), let d = s.data(using: .utf8),
+          let o = try? JSONSerialization.jsonObject(with: d) as? [String: String], let sv = o["server"], !sv.isEmpty else { return nil }
+    return (sv, o["cookie"] ?? "")
+  }
+  // on the App Review copy: E11 Console's own review sign-in, carried over (its e11_rv cookie) — Haris 2026-11-13 "Both ways"
+  static var consoleReviewCookie: String? {
+    guard Server.review, let c = consoleSignIn, URL(string: c.server)?.host == Server.host else { return nil }
+    return c.cookie.split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }.first { $0.hasPrefix("e11_rv=") && $0.count > 7 }
+  }
   private static var shared: String? { (Bundle.main.object(forInfoDictionaryKey: "SharedKeychainGroup") as? String).flatMap { $0.contains("$(") ? nil : $0 } }
   // E11 Console's key on this phone (its own service and account, in the shared group)
   static var consoleKey: String? { read(service: "ae.e11.console.signin", account: "signin-key:" + consoleHost, group: shared) }

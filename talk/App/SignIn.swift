@@ -10,6 +10,7 @@ final class SignInVC: UIViewController, WKNavigationDelegate {
   var cover: UIView?           // (board 53 over the page)
   private var web: WKWebView!
   private let top = UIView(), logo = UIImageView(), titleL = UILabel(), sub = UILabel(), spin = UIActivityIndicatorView(style: .medium)
+  private let reviewB = UIButton(configuration: .plain())   // ("App Review sign-in", as E11 Console has under its page)
 
   override func viewDidLoad() {
     super.viewDidLoad()
@@ -24,8 +25,56 @@ final class SignInVC: UIViewController, WKNavigationDelegate {
     sub.text = "With your work email — a one-time code is sent to it."; sub.font = .systemFont(ofSize: 15); sub.textColor = .secondaryLabel; sub.textAlignment = .center; sub.numberOfLines = 2
     [logo, titleL, sub].forEach { top.addSubview($0) }
     view.addSubview(top); view.addSubview(web); view.addSubview(spin)
+    var rc = UIButton.Configuration.plain()
+    rc.attributedTitle = AttributedString("App Review sign-in", attributes: AttributeContainer([.font: UIFont.preferredFont(forTextStyle: .footnote)]))
+    rc.baseForegroundColor = .secondaryLabel
+    reviewB.configuration = rc
+    reviewB.addAction(UIAction { [weak self] _ in self?.reviewSignIn() }, for: .primaryActionTriggered)
+    view.addSubview(reviewB)
+    // (on the App Review copy there's no page of ours to show: its own sign-in, at once)
+    if Server.review { sub.text = "The App Review copy — made-up people and chats."; web.isHidden = true }
+    else { spin.startAnimating(); web.load(URLRequest(url: URL(string: Server.url + "/api/talk/state")!)) }
+  }
+  override func viewDidAppear(_ animated: Bool) {
+    super.viewDidAppear(animated)
+    if Server.review, presentedViewController == nil, !asked { asked = true; reviewSignIn() }
+  }
+  private var asked = false
+
+  /* App Review sign-in (Haris 2026-11-13 "Both ways"): the reviewer's email and password for the App Review copy, in
+     Apple's own alert — the same account as E11 Console's "App Review sign-in". Talk then stays on that copy until
+     signing out. (Signed in to Console's App Review copy already: Talk takes that sign-in by itself, no alert.) */
+  private func reviewSignIn(error: String? = nil, email: String = "") {
+    let a = UIAlertController(title: "App Review Sign-in", message: error ?? "The email and password given to App Review.", preferredStyle: .alert)
+    a.addTextField { t in t.placeholder = "Email"; t.text = email; t.keyboardType = .emailAddress; t.textContentType = .username; t.autocapitalizationType = .none; t.autocorrectionType = .no }
+    a.addTextField { t in t.placeholder = "Password"; t.isSecureTextEntry = true; t.textContentType = .password }
+    a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+    a.addAction(UIAlertAction(title: "Sign In", style: .default) { [weak self, weak a] _ in
+      let em = a?.textFields?[0].text ?? "", pw = a?.textFields?[1].text ?? ""
+      self?.reviewSend(em, pw)
+    })
+    present(a, animated: true)
+  }
+  private func reviewSend(_ email: String, _ password: String) {
     spin.startAnimating()
-    web.load(URLRequest(url: URL(string: Server.url + "/api/talk/state")!))
+    var r = URLRequest(url: URL(string: Server.reviewURL + "/review/api/sign-in")!, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+    r.httpMethod = "POST"; r.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    r.httpBody = try? JSONSerialization.data(withJSONObject: ["email": email, "password": password])
+    URLSession.shared.dataTask(with: r) { d, _, _ in
+      let j = d.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+      DispatchQueue.main.async { [weak self] in
+        guard let self = self else { return }
+        self.spin.stopAnimating()
+        guard (j?["ok"] as? Bool) == true, let tok = j?["token"] as? String, !tok.isEmpty else {
+          self.reviewSignIn(error: (j?["error"] as? String) ?? "Couldn’t reach the App Review copy. Check your internet connection and try again.", email: email)
+          return
+        }
+        UserDefaults.standard.set(true, forKey: "talk_review")
+        Server.follow()
+        Net.shared.cookie = "e11_rv=" + tok
+        self.onDone?()
+      }
+    }.resume()
   }
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
@@ -34,7 +83,9 @@ final class SignInVC: UIViewController, WKNavigationDelegate {
     logo.frame = CGRect(x: (W - 72) / 2, y: 0, width: 72, height: 72)
     titleL.frame = CGRect(x: 20, y: 86, width: W - 40, height: 30)
     sub.frame = CGRect(x: 32, y: 120, width: W - 64, height: 44)
-    web.frame = CGRect(x: 0, y: top.frame.maxY + 6, width: W, height: view.bounds.height - top.frame.maxY - 6)
+    let rs = reviewB.sizeThatFits(CGSize(width: W - 40, height: 44))
+    reviewB.frame = CGRect(x: (W - rs.width) / 2, y: view.bounds.height - s.bottom - rs.height - 4, width: rs.width, height: rs.height)
+    web.frame = CGRect(x: 0, y: top.frame.maxY + 6, width: W, height: reviewB.frame.minY - top.frame.maxY - 10)
     spin.center = CGPoint(x: W / 2, y: web.frame.minY + 60)
   }
   func webView(_ w: WKWebView, didFinish n: WKNavigation!) {
