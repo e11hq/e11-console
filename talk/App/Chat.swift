@@ -745,7 +745,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       return old.indexOfItem($0) != nil && sigs["#intro"] != newSigs["#intro"]
     })
     sigs = newSigs
-    data.apply(snap, animatingDifferences: animated && old.numberOfItems > 0)
+    // (only messages changing in place — a reaction, a tick, an edit, a card brought up to date: set at once, with nothing in
+    //  the chat sliding — Haris 2026-11-13 "nothing slides while anything changes"; a message come or gone still fades)
+    if old.sectionIdentifiers == snap.sectionIdentifiers && old.itemIdentifiers == snap.itemIdentifiers {
+      UIView.performWithoutAnimation { data.apply(snap, animatingDifferences: false); table.layoutIfNeeded() }
+    } else {
+      data.apply(snap, animatingDifferences: animated && old.numberOfItems > 0)
+    }
   }
   private func toBottom(_ animated: Bool) {
     let s = data.snapshot()
