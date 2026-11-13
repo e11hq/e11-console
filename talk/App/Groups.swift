@@ -59,7 +59,8 @@ final class NewGroupVC: UITableViewController, UITextFieldDelegate, UISearchBarD
     let cname = T.clients[c]?.name ?? "Client"
     return T.contacts.filter { $0.client == c && match($0.name, cname) }.map { Person(id: $0.id, name: $0.name, role: "Client · \(cname)", photo: nil, color: nil, gone: false, contact: true, client: c) }
   }
-  // sections: 0 the picture and name · 1 Client · 2 search · 3 the team · 4 the client's contacts (when there are any) —
+  // sections: 0 the picture and name · 1 Client · 2 the team, its search on top (Haris 2026-11-13: part of the list) ·
+  // 3 the client's contacts (when there are any) —
   // Apple's change-only list: a search, a client picked or a change from elsewhere only adds and takes away the rows that
   // differ (the whole list was reloaded on every letter — Haris 2026-11-13)
   private var data: TitledSource<Int, String>!
@@ -71,7 +72,7 @@ final class NewGroupVC: UITableViewController, UITextFieldDelegate, UISearchBarD
     data.defaultRowAnimation = .fade
     data.head = { [weak self] s in self?.headTitle(s) }
     data.foot = { [weak self] s in self?.footTitle(s) }
-    data.canEdit = { [weak self] ip in ip.section >= 3 && self?.data.itemIdentifier(for: ip) != "none" }
+    data.canEdit = { [weak self] ip in ip.section >= 2 && !["none", "find"].contains(self?.data.itemIdentifier(for: ip) ?? "none") }
     NotificationCenter.default.addObserver(self, selector: #selector(changed), name: .talkChanged, object: nil)
     reload(animated: false)
   }
@@ -83,9 +84,9 @@ final class NewGroupVC: UITableViewController, UITextFieldDelegate, UISearchBarD
     picked = picked.filter { can.contains($0) }
     let t = team, k = contacts
     var snap = NSDiffableDataSourceSnapshot<Int, String>()
-    snap.appendSections([0, 1, 2, 3]); snap.appendItems(["pic"], toSection: 0); snap.appendItems(["client"], toSection: 1); snap.appendItems(["find"], toSection: 2)
-    snap.appendItems(t.isEmpty && k.isEmpty && !q.isEmpty ? ["none"] : t.map { $0.id }, toSection: 3)
-    if !k.isEmpty { snap.appendSections([4]); snap.appendItems(k.map { $0.id }, toSection: 4) }
+    snap.appendSections([0, 1, 2]); snap.appendItems(["pic"], toSection: 0); snap.appendItems(["client"], toSection: 1)
+    snap.appendItems(["find"] + (t.isEmpty && k.isEmpty && !q.isEmpty ? ["none"] : t.map { $0.id }), toSection: 2)
+    if !k.isEmpty { snap.appendSections([3]); snap.appendItems(k.map { $0.id }, toSection: 3) }
     var newSigs: [String: Int] = [:]
     byId = [:]
     for p in t + k { byId[p.id] = p; var h = Hasher(); h.combine(p.name); h.combine(p.role); h.combine(p.picture); newSigs[p.id] = h.finalize() }
@@ -99,7 +100,7 @@ final class NewGroupVC: UITableViewController, UITextFieldDelegate, UISearchBarD
     for id in picked { if let ip = data.indexPath(for: id) { tableView.selectRow(at: ip, animated: false, scrollPosition: .none) } }
   }
   private func headTitle(_ s: Int) -> String? {
-    s == 3 ? (picked.isEmpty ? "Team" : "\(picked.count) \(picked.count == 1 ? "Person" : "People") Added") : s == 4 ? "Client Contacts" : nil
+    s == 2 ? (picked.isEmpty ? "Team" : "\(picked.count) \(picked.count == 1 ? "Person" : "People") Added") : s == 3 ? "Client Contacts" : nil
   }
   private func footTitle(_ s: Int) -> String? {
     if s == 1 { return "The picture is the client’s logo from Client Assets until you choose another." }
@@ -140,8 +141,8 @@ final class NewGroupVC: UITableViewController, UITextFieldDelegate, UISearchBarD
       cfg.secondaryText = client.flatMap { Talk.shared.clients[$0]?.name } ?? "Pick a client"
       c.contentConfiguration = cfg; c.accessoryType = fixed ? .none : .disclosureIndicator; c.selectionStyle = fixed ? .none : .default
     case "find":
-      // (Apple's search bar on the page, as drawn — no box behind it)
-      c.selectionStyle = .none; var bg = UIBackgroundConfiguration.clear(); bg.backgroundColor = .clear; c.backgroundConfiguration = bg
+      // (Apple's search bar as the first row of the team's list, on the list's own card — Haris 2026-11-13)
+      c.selectionStyle = .none
       c.contentConfiguration = UIListContentConfiguration.cell()
       find.tag = 77; find.frame = c.contentView.bounds; find.autoresizingMask = [.flexibleWidth, .flexibleHeight]; c.contentView.addSubview(find)
     case "none": PickRows.noResults(c)
@@ -171,7 +172,7 @@ final class NewGroupVC: UITableViewController, UITextFieldDelegate, UISearchBarD
   }
   // ("N People Added" over the team, crossfading to its new words)
   private func counted() {
-    guard let h = tableView.headerView(forSection: 3), let t = headTitle(3), h.textLabel?.text != t else { return }
+    guard let h = tableView.headerView(forSection: 2), let t = headTitle(2), h.textLabel?.text != t else { return }
     UIView.transition(with: h, duration: 0.15, options: [.transitionCrossDissolve, .allowUserInteraction]) { h.textLabel?.text = t; h.setNeedsLayout(); h.layoutIfNeeded() }
   }
   // ---------- the picture ----------
