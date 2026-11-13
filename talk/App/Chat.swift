@@ -1653,6 +1653,16 @@ final class BubbleCell: UITableViewCell {
   }
   var find: (String, Bool)?   // (searching: the words, and whether this is the match shown)
   static let findAll = Look.rgb(0x7A5626), findNow = Look.rgb(0xD9952F)
+  // a card's name with the search's matches marked (the E11 link card's, the task card's)
+  static func marked(_ t: String, font: UIFont, ink: UIColor, find f: (String, Bool)) -> NSAttributedString {
+    let a = NSMutableAttributedString(string: t, attributes: [.font: font, .foregroundColor: ink])
+    var from = t.startIndex
+    while let r = t.range(of: f.0, options: [.caseInsensitive, .diacriticInsensitive], range: from..<t.endIndex) {
+      a.addAttributes([.backgroundColor: f.1 ? findNow : findAll, .foregroundColor: UIColor.white], range: NSRange(r, in: t))
+      from = r.upperBound
+    }
+    return a
+  }
   let bubble = BubbleShape()
   private let stack = UIStackView()
   private let nameL = UILabel(), roleL = UILabel(), textL = UILabel(), footL = UILabel(), stamp = UILabel()
@@ -2143,7 +2153,7 @@ final class BubbleCell: UITableViewCell {
     taskWrap.isHidden = m.task == nil || m.deleted
     if let t = m.task, !m.deleted {
       taskWrap.reach(nameL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
-      taskCard.set(Talk.shared.liveTask(t), mine: mine, ink: ink); wideCard = true
+      taskCard.set(Talk.shared.liveTask(t), mine: mine, ink: ink, find: find); wideCard = true
     }
     let words = a.length > 0
     textL.isHidden = !words
@@ -3052,13 +3062,14 @@ final class TaskCardView: UIView {
     isAccessibilityElement = true; accessibilityTraits = .link
   }
   required init?(coder: NSCoder) { fatalError() }
-  func set(_ t: Msg.TaskCard, mine: Bool, ink: UIColor) {
+  func set(_ t: Msg.TaskCard, mine: Bool, ink: UIColor, find: (String, Bool)? = nil) {
     let sub: UIColor = mine ? UIColor.white.withAlphaComponent(0.8) : .secondaryLabel
     let mark = NSTextAttachment(image: UIImage(systemName: "checkmark.square", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold))!.withTintColor(sub))
     let h = NSMutableAttributedString(attachment: mark)
     h.append(NSAttributedString(string: "  TASK" + (t.client.isEmpty ? "" : " · " + t.client.uppercased()), attributes: [.foregroundColor: sub, .kern: 0.4]))
     head.attributedText = h
     title.text = t.title; title.textColor = ink
+    if let f = find, !f.0.isEmpty { title.attributedText = BubbleCell.marked(t.title, font: title.font, ink: ink, find: f) }
     status.text = t.status; status.backgroundColor = Look.hex(t.color) ?? .systemGray; status.isHidden = t.status.isEmpty
     due.textColor = sub; due.text = TaskCardView.dueText(t.due); due.isHidden = due.text == nil
     faces.arrangedSubviews.forEach { $0.removeFromSuperview() }
@@ -3150,15 +3161,7 @@ final class E11CardView: UIView {
     head.attributedText = h
     title.text = l.title; title.textColor = ink
     // (searching the chat: the name marked in amber where it matches, as in a message's words)
-    if let f = find, !f.0.isEmpty, let t = l.title {
-      let a = NSMutableAttributedString(string: t, attributes: [.font: title.font!, .foregroundColor: ink])
-      var from = t.startIndex
-      while let r = t.range(of: f.0, options: [.caseInsensitive, .diacriticInsensitive], range: from..<t.endIndex) {
-        a.addAttributes([.backgroundColor: f.1 ? BubbleCell.findNow : BubbleCell.findAll, .foregroundColor: UIColor.white], range: NSRange(r, in: t))
-        from = r.upperBound
-      }
-      title.attributedText = a
-    }
+    if let f = find, !f.0.isEmpty, let t = l.title { title.attributedText = BubbleCell.marked(t, font: title.font, ink: ink, find: f) }
     sub.text = l.sub; sub.textColor = subInk; sub.isHidden = (l.sub ?? "").isEmpty
     line.backgroundColor = subInk.withAlphaComponent(0.3)
     open.text = "Open in E11 Console ›"; open.textColor = ink

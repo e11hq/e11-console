@@ -435,7 +435,7 @@ final class Talk {
         // (staff: an E11 link card's file or folder name and client, and a task card's title, as they are now — Haris 2026-11-13)
         if !isContact {
           if let l = m.link.map({ liveLink($0) }), l.e11 != nil { hay += " " + (l.title ?? "") + " " + (l.client ?? "") }
-          if let t = m.task.map({ liveTask($0) }) { hay += " " + t.title }
+          if let t = m.task.map({ liveTask($0) }) { hay += " " + t.title + " " + t.client }
         }
         if hay.range(of: n, options: [.caseInsensitive, .diacriticInsensitive]) != nil { out.append((g, m)) }
       }
