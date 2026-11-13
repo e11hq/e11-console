@@ -540,29 +540,44 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private var finding = false
   private var finds: [String] = [], findAt = 0, findQ = "", findCur: String?
   private var findSet = Set<String>()
-  private func setBarButtons() {
+  // (search in and out with Apple's own crossfade: the bar's items set animated — on iOS 26 the 🔍 / ✕ glass morphs —
+  //  and the name and the search field fading over each other, the keyboard rising with it; Haris 2026-11-13: A)
+  private static let swap: TimeInterval = 0.25
+  private func setBarButtons(animated: Bool = false) {
     let find = UIBarButtonItem(title: nil, image: UIImage(systemName: "magnifyingglass"), primaryAction: UIAction { [weak self] _ in self?.startFind() }, menu: nil)
-    navigationItem.rightBarButtonItems = [find]
+    navigationItem.setRightBarButtonItems([find], animated: animated)
     let t = UIBarButtonItem(customView: titleSpot)
-    titleV.isHidden = false
     if #available(iOS 26.0, *) { t.hidesSharedBackground = true }
     navigationItem.leftItemsSupplementBackButton = true
-    navigationItem.leftBarButtonItems = [t]
-    navigationItem.titleView = nil
-    navigationItem.hidesBackButton = false
+    navigationItem.setLeftBarButtonItems([t], animated: animated)
+    navigationItem.setHidesBackButton(false, animated: animated)
+    titleV.isHidden = false
+    guard animated, navigationItem.titleView != nil else { navigationItem.titleView = nil; titleV.alpha = 1; return }
+    titleV.alpha = 0
+    UIView.animate(withDuration: ChatVC.swap, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+      self.findBox.alpha = 0; self.titleV.alpha = 1
+    } completion: { _ in
+      if !self.finding { self.navigationItem.titleView = nil; self.findBox.alpha = 1 }
+    }
   }
-  func startFind(focus: Bool = true) {
+  func startFind(focus: Bool = true, animated: Bool = true) {
     guard !finding else { return }
     findBar.placeholder = "Search in this chat"; findBar.delegate = self; findBar.text = ""
     bar.box.resignFirstResponder(); bar.isHidden = true; findAcc.isHidden = false
     finding = true; finds = []; findQ = ""; findCur = nil; findSet = []
     findAcc.show(0, 0, typed: false)
-    navigationItem.leftBarButtonItems = nil; titleV.isHidden = true
-    navigationItem.hidesBackButton = true
+    navigationItem.setLeftBarButtonItems(nil, animated: animated)
+    navigationItem.setHidesBackButton(true, animated: animated)
     navigationItem.titleView = findBox
     let close = UIBarButtonItem(title: nil, image: UIImage(systemName: "xmark"), primaryAction: UIAction { [weak self] _ in self?.endFind() }, menu: nil)
     close.accessibilityLabel = "Close the search"
-    navigationItem.rightBarButtonItems = [close]
+    navigationItem.setRightBarButtonItems([close], animated: animated)
+    if animated {
+      findBox.alpha = 0
+      UIView.animate(withDuration: ChatVC.swap, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+        self.findBox.alpha = 1; self.titleV.alpha = 0
+      } completion: { _ in if self.finding { self.titleV.isHidden = true } }
+    } else { findBox.alpha = 1; titleV.isHidden = true }
     if focus { findBar.searchTextField.becomeFirstResponder() }
   }
   func focusFind() { if finding { findBar.searchTextField.becomeFirstResponder() } }
@@ -574,7 +589,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let was = findSet
     finds = []; findSet = []; findQ = ""; findCur = nil
     remark(was)
-    setBarButtons()
+    setBarButtons(animated: !leaving)
     if !leaving { fitBottom() }
   }
   private func runFind() {
