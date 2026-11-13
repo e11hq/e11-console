@@ -1100,14 +1100,16 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private func holdPreview(_ tv: UITableView, _ c: UIContextMenuConfiguration) -> UITargetedPreview? {
     guard let id = c.identifier as? String, let ip = data.indexPath(for: item(id)), let cell = tv.cellForRow(at: ip) as? BubbleCell else { return nil }
     // (the bubble's own shape, tail and all, lifting from the row — not a rounded box that cut the tail away)
+    // (the row's own content is what lifts, its visible part the bubble's shape: the tail lies outside the bubble view
+    //  itself, and a shape reaching outside the lifted view is ignored by iPhone — it lifted the bubble's whole square, white
+    //  or black round it; Haris 2026-11-13. The forward button beside it stays outside the shape, so it doesn't lift.)
     let p = UIPreviewParameters(); p.backgroundColor = .clear
-    p.visiblePath = cell.heldPath(origin: cell.bubble.frame.origin)
+    p.visiblePath = cell.heldPath(origin: .zero)
     // (no shadow under the lifted bubble — Haris 2026-11-13: the shadow's own shape, a single point hidden in the middle of
-    //  the bubble; an empty shadow path made iPhone drop the bubble's shape too, lifting a square box round it)
-    let mid = CGPoint(x: cell.bubble.bounds.midX, y: cell.bubble.bounds.midY)
-    p.shadowPath = UIBezierPath(rect: CGRect(x: mid.x - 0.5, y: mid.y - 0.5, width: 1, height: 1))
-    // (the bubble alone — the whole row lifted its forward button too, a faint box behind the preview, Haris 2026-11-12)
-    return UITargetedPreview(view: cell.bubble, parameters: p)
+    //  the bubble)
+    let f = cell.bubble.frame
+    p.shadowPath = UIBezierPath(rect: CGRect(x: f.midX - 0.5, y: f.midY - 0.5, width: 1, height: 1))
+    return UITargetedPreview(view: cell.contentView, parameters: p)
   }
   // the design (board 33): the reactions on top, then Reply · Forward · Copy · Star · (line) · Delete — Forward comes with
   // the forward sheet (stage 5); yours also keep Edit (15 minutes) and Info, files Save / Share, as the app has them today
