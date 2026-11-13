@@ -320,10 +320,22 @@ final class StorageVC: UITableViewController {
   private func update(fade: Bool) {
     let r = Storage.report(), s = Self.sign(r)
     guard s != sig else { return }
+    let was = rep
     rep = r; sig = s
     guard fade else { tableView.reloadData(); return }
-    UIView.transition(with: tableView, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction]) {
-      UIView.performWithoutAnimation { self.tableView.reloadData() }
+    // (only the rows that show something new set again — the bar, a group's size; the groups' list itself changing:
+    //  Apple's list animation, rows coming and going)
+    if was.groups.map({ $0.0 }) == r.groups.map({ $0.0 }) {
+      var ips = [IndexPath(row: 0, section: 0)].filter { _ in was.total != r.total || was.kinds != r.kinds }
+      if let gs = parts.firstIndex(of: .groups) { for (i, g) in r.groups.enumerated() where was.groups[i].1 != g.1 { ips.append(IndexPath(row: i, section: gs)) } }
+      guard !ips.isEmpty else { return }
+      UIView.transition(with: tableView, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction]) {
+        UIView.performWithoutAnimation { self.tableView.reloadRows(at: ips, with: .none) }
+      }
+    } else {
+      UIView.transition(with: tableView, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction]) {
+        UIView.performWithoutAnimation { self.tableView.reloadData() }
+      }
     }
   }
   // (the board: the bar; By Group; Auto-download — a switch for each kind; Use Mobile Data, for all of them)

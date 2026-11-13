@@ -250,14 +250,34 @@ final class BackupVC: UITableViewController {
     super.viewDidLoad(); title = "Chat Backup"
     navigationItem.largeTitleDisplayMode = .never
     NotificationCenter.default.addObserver(self, selector: #selector(changed), name: .talkBackup, object: nil)
+    lastError = B.lastError
   }
   // (only the rows that show something new set again, crossfading — the rule every page carries)
-  @objc private func changed() {
-    guard view.window != nil else { tableView.reloadData(); return }
-    UIView.transition(with: tableView, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction]) {
-      UIView.performWithoutAnimation { self.tableView.reloadSections([0, 1], with: .none) }
+  // (each row's fingerprint: what it shows — only a row whose words changed is set again)
+  private var shown: [IndexPath: String] = [:]
+  private func sig(_ ip: IndexPath) -> String {
+    switch (ip.section, ip.row) {
+    case (0, 0): return "\(B.lastAt?.timeIntervalSince1970 ?? 0)"
+    case (0, 1): return "\(B.lastSize)|\(B.lastAt == nil)"
+    case (0, 2), (2, 0): return "\(B.running)"
+    case (1, 0): return B.every.title
+    case (1, 1): return "\(B.videos)"
+    default: return ""
     }
   }
+  @objc private func changed() {
+    let all = [IndexPath(row: 0, section: 0), IndexPath(row: 1, section: 0), IndexPath(row: 2, section: 0), IndexPath(row: 0, section: 1), IndexPath(row: 1, section: 1), IndexPath(row: 0, section: 2)]
+    let moved = all.filter { shown[$0] != nil && shown[$0] != sig($0) }
+    let footer = B.lastError != lastError; lastError = B.lastError
+    guard !moved.isEmpty || footer else { return }
+    guard view.window != nil else { tableView.reloadData(); return }
+    UIView.transition(with: tableView, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction]) {
+      UIView.performWithoutAnimation {
+        if footer { self.tableView.reloadSections([0], with: .none) } else { self.tableView.reloadRows(at: moved, with: .none) }
+      }
+    }
+  }
+  private var lastError: String?
   override func numberOfSections(in tv: UITableView) -> Int { 3 }
   override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { [3, 2, 1][s] }
   override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? { s == 0 ? "iCloud" : nil }
@@ -269,6 +289,7 @@ final class BackupVC: UITableViewController {
     }
   }
   override func tableView(_ tv: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
+    shown[ip] = sig(ip)
     let c = UITableViewCell(style: .value1, reuseIdentifier: nil)
     var cfg = UIListContentConfiguration.valueCell()
     c.selectionStyle = .none

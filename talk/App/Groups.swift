@@ -726,58 +726,93 @@ final class AddPeopleVC: UITableViewController, UISearchResultsUpdating {
 final class ContactsVC: UITableViewController {
   init() { super.init(style: .insetGrouped) }
   required init?(coder: NSCoder) { fatalError() }
+  // (one taken off: gone at once — the server's answer then draws the page as it is, a failure bringing it back)
+  private var removing = Set<String>()
   private var byClient: [(Client, [Contact])] {
     let T = Talk.shared
     return T.clientOrder.compactMap { id in
       guard let c = T.clients[id] else { return nil }
-      let ks = T.contacts.filter { $0.client == id }
+      let ks = T.contacts.filter { $0.client == id && !removing.contains($0.id) }
       return ks.isEmpty ? nil : (c, ks)
     }
   }
+  /* (the rules every page carries: Apple's change-only list — a contact set again only when what it shows changed
+     (a fingerprint), crossfading in place; one added or removed fading in or out; never the whole list drawn again on
+     every change, as it was) */
+  private var data: Source!
+  private var sigs: [String: String] = [:]
   override func viewDidLoad() {
     super.viewDidLoad()
     title = "Client Contacts"   // (the board's words, Title Case as Apple's)
     navigationItem.rightBarButtonItem = UIBarButtonItem(title: nil, image: UIImage(systemName: "plus"), primaryAction: UIAction { [weak self] _ in
       self?.present(UINavigationController(rootViewController: NewContactVC()), animated: true)
     }, menu: nil)
-    NotificationCenter.default.addObserver(tableView!, selector: #selector(UITableView.reloadData), name: .talkChanged, object: nil)
+    tableView.register(UITableViewCell.self, forCellReuseIdentifier: "k")
+    data = Source(tableView: tableView) { [weak self] tv, ip, id in
+      let c = tv.dequeueReusableCell(withIdentifier: "k", for: ip); self?.fill(c, id); return c
+    }
+    data.owner = self
+    data.defaultRowAnimation = .fade
+    NotificationCenter.default.addObserver(self, selector: #selector(changed), name: .talkChanged, object: nil)
+    reload(animated: false)
     Talk.shared.refresh()
   }
-  override func numberOfSections(in tv: UITableView) -> Int { max(1, byClient.count) }
-  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { byClient.isEmpty ? 0 : byClient[s].1.count }
-  override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? { byClient.isEmpty ? nil : byClient[s].0.name }   // (the client's name, as the board)
-  override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
-    s == max(1, byClient.count) - 1 ? (byClient.isEmpty ? "No client contacts yet. Tap + to add one. " : "") + "Client contacts only see the groups they’re added to. Super Admins and Office Admins add and remove them." : nil
+  @objc private func changed() { reload(animated: view.window != nil) }
+  private func sig(_ k: Contact) -> String { [k.name, k.email, "\(k.groups)", Talk.shared.clients[k.client]?.logo ?? ""].joined(separator: "|") }
+  private func reload(animated: Bool) {
+    let groups = byClient
+    var snap = NSDiffableDataSourceSnapshot<String, String>()
+    var new: [String: String] = [:]
+    for (c, ks) in groups { snap.appendSections([c.id]); snap.appendItems(ks.map { $0.id }, toSection: c.id); for k in ks { new[k.id] = sig(k) } }
+    if groups.isEmpty { snap.appendSections(["none"]) }
+    let old = data.snapshot()
+    snap.reconfigureItems(new.keys.filter { old.indexOfItem($0) != nil && sigs[$0] != new[$0] })
+    sigs = new
+    data.applySteady(snap, in: tableView, animated: animated)
   }
-  // (Apple's own height for the name and the email under it — the fixed 58 cut the email, Haris 2026-11-13)
-  override func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat { UITableView.automaticDimension }
-  override func tableView(_ tv: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
-    let k = byClient[ip.section].1[ip.row]
-    let c = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
-    var cfg = c.defaultContentConfiguration()
+  private func contact(_ id: String) -> Contact? { Talk.shared.contacts.first { $0.id == id } }
+  private func fill(_ c: UITableViewCell, _ id: String) {
+    guard let k = contact(id) else { return }
+    c.contentView.subviews.filter { $0.tag == 77 }.forEach { $0.removeFromSuperview() }
+    var cfg = UIListContentConfiguration.subtitleCell()
     cfg.text = k.name; cfg.secondaryText = k.email; cfg.secondaryTextProperties.color = .secondaryLabel
     cfg.image = UIImage(systemName: "circle.fill"); cfg.imageProperties.tintColor = .clear; cfg.imageProperties.reservedLayoutSize = CGSize(width: 40, height: 40)
     cfg.directionalLayoutMargins.top = 10; cfg.directionalLayoutMargins.bottom = 10
     c.contentConfiguration = cfg
-    let a = Avatar(frame: CGRect(x: 16, y: 12, width: 40, height: 40)); a.set(name: k.name, color: Look.color(for: k.id), picture: Talk.shared.clients[k.client]?.logo, logo: true); c.contentView.addSubview(a)
-    // (held in the row's middle whatever its height — the row's own height came after the picture was placed, and it
-    //  sat at the top, Haris 2026-11-13)
+    // (their client's logo when it has one, else initials — held in the row's middle whatever its height, Haris 2026-11-13)
+    let a = Avatar(frame: CGRect(x: 16, y: 12, width: 40, height: 40)); a.tag = 77; a.isUserInteractionEnabled = false
+    a.set(name: k.name, color: Look.color(for: k.id), picture: Talk.shared.clients[k.client]?.logo, logo: true); c.contentView.addSubview(a)
     a.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([a.leadingAnchor.constraint(equalTo: c.contentView.leadingAnchor, constant: 16), a.centerYAnchor.constraint(equalTo: c.contentView.centerYAnchor),
-                                 a.widthAnchor.constraint(equalToConstant: 40), a.heightAnchor.constraint(equalToConstant: 40)])   // (their client's logo when it has one, else initials)
+                                 a.widthAnchor.constraint(equalToConstant: 40), a.heightAnchor.constraint(equalToConstant: 40)])
     let n = UILabel(); n.text = "\(k.groups) group\(k.groups == 1 ? "" : "s")"; n.font = .systemFont(ofSize: 14); n.textColor = .secondaryLabel; n.sizeToFit(); c.accessoryView = n
     c.selectionStyle = .none
-    return c
+  }
+  // (Apple's own height for the name and the email under it — the fixed 58 cut the email, Haris 2026-11-13)
+  override func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat { UITableView.automaticDimension }
+  fileprivate final class Source: UITableViewDiffableDataSource<String, String> {
+    weak var owner: ContactsVC?
+    // (the client's name, as the board)
+    override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? {
+      let id = snapshot().sectionIdentifiers[s]; return Talk.shared.clients[id]?.name
+    }
+    override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
+      let ids = snapshot().sectionIdentifiers
+      guard s == ids.count - 1 else { return nil }
+      return (ids == ["none"] ? "No client contacts yet. Tap + to add one. " : "") + "Client contacts only see the groups they’re added to. Super Admins and Office Admins add and remove them."
+    }
   }
   override func tableView(_ tv: UITableView, trailingSwipeActionsConfigurationForRowAt ip: IndexPath) -> UISwipeActionsConfiguration? {
-    let k = byClient[ip.section].1[ip.row]
+    guard let id = data.itemIdentifier(for: ip), let k = contact(id) else { return nil }
     let a = UIContextualAction(style: .destructive, title: "Remove") { [weak self] _, _, done in
       let al = UIAlertController(title: "Remove \(k.name)?", message: "They leave every group and can’t sign in to E11 Talk any more.", preferredStyle: .alert)
       al.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in done(false) })
       al.addAction(UIAlertAction(title: "Remove", style: .destructive) { _ in
+        // (gone at once, fading out — the server's answer then draws the page as it is; a failure brings it back)
+        self?.removing.insert(k.id); self?.reload(animated: true); done(true)
         Net.shared.act(["act": "removeContact", "id": k.id]) { j in
-          if (j?["ok"] as? Bool) == true { toast("\(k.name) removed"); Talk.shared.refresh(); Talk.shared.sync() } else { toast(j?["error"] as? String ?? "Couldn’t remove them") }
-          done(true)
+          if (j?["ok"] as? Bool) == true { toast("\(k.name) removed"); Talk.shared.refresh(); Talk.shared.sync() }
+          else { self?.removing.remove(k.id); self?.reload(animated: true); toast(j?["error"] as? String ?? "Couldn’t remove them") }
         }
       })
       self?.present(al, animated: true)
@@ -794,6 +829,7 @@ final class NewContactVC: UITableViewController, UITextFieldDelegate {
   override func viewDidLoad() {
     super.viewDidLoad()
     title = "New Client Contact"
+    tableView.keyboardDismissMode = .interactive   // (the keyboard rule: dragging down takes the keyboard with the finger)
     navigationItem.leftBarButtonItem = UIBarButtonItem(systemItem: .cancel, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
     navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Add", primaryAction: UIAction { [weak self] _ in self?.add() })
     navigationItem.rightBarButtonItem?.style = .done
