@@ -615,11 +615,10 @@ final class GroupInfoVC: UITableViewController {
 // ---------- Add Members (step 1f — the design's board 41): Apple's sheet; ✕ · Add Members · Add in Apple's bar, "N selected"
 // under the title; Apple's search; the team, then the client's contacts (Super / Office Admins); Apple's own round
 // selection marks (the list's multiple selection); the footer as drawn ----------
-final class AddPeopleVC: UITableViewController, UISearchBarDelegate {
+final class AddPeopleVC: UITableViewController, UISearchResultsUpdating {
   let group: String
   private var picked = Set<String>()
   private var q = ""
-  private let find = UISearchBar()
   private var data: TitledSource<String, String>!
   private var byId: [String: Person] = [:], sigs: [String: Int] = [:]
   init(group: String) { self.group = group; super.init(style: .insetGrouped) }
@@ -644,8 +643,9 @@ final class AddPeopleVC: UITableViewController, UISearchBarDelegate {
     let add = UIBarButtonItem(title: "Add", primaryAction: UIAction { [weak self] _ in self?.add() })
     if #available(iOS 26.0, *) { add.style = .prominent } else { add.style = .done }
     add.isEnabled = false; navigationItem.rightBarButtonItem = add
-    // (Search people as the first row of the Team list, as New Group's — Haris 2026-11-13)
-    find.placeholder = "Search people"; find.searchBarStyle = .minimal; find.delegate = self
+    let sc = UISearchController(searchResultsController: nil); sc.searchResultsUpdater = self; sc.obscuresBackgroundDuringPresentation = false
+    sc.searchBar.placeholder = "Search people"
+    navigationItem.searchController = sc; navigationItem.hidesSearchBarWhenScrolling = false
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "c")
     // (the keyboard follows a drag down; a tap on a person picks them, as Apple's own pickers — Haris 2026-11-13: yes)
     tableView.keyboardDismissMode = .interactive
@@ -655,12 +655,7 @@ final class AddPeopleVC: UITableViewController, UISearchBarDelegate {
     //  the whole list was reloaded on every letter, Haris 2026-11-13)
     data = TitledSource(tableView: tableView) { [weak self] tv, ip, id in
       let c = tv.dequeueReusableCell(withIdentifier: "c", for: ip)
-      c.contentView.subviews.filter { $0.tag == 77 }.forEach { $0.removeFromSuperview() }
-      c.selectionStyle = .default
-      if id == "find", let f = self?.find {
-        c.selectionStyle = .none; c.contentConfiguration = UIListContentConfiguration.cell()
-        f.tag = 77; f.frame = c.contentView.bounds; f.autoresizingMask = [.flexibleWidth, .flexibleHeight]; c.contentView.addSubview(f)
-      } else if id == "none" { PickRows.noResults(c) } else if let p = self?.byId[id] { PickRows.person(c, p, size: 40) }
+      if id == "none" { PickRows.noResults(c) } else if let p = self?.byId[id] { PickRows.person(c, p, size: 40) }
       return c
     }
     data.defaultRowAnimation = .fade
@@ -672,7 +667,7 @@ final class AddPeopleVC: UITableViewController, UISearchBarDelegate {
       guard let self = self, s == self.data.snapshot().numberOfSections - 1 else { return nil }
       return Talk.shared.boss ? "Adding a client contact moves the group to the Clients tab and marks it “Client can see this group”. People already in the group aren’t listed." : "People already in the group aren’t listed."
     }
-    data.canEdit = { [weak self] ip in !["none", "find"].contains(self?.data.itemIdentifier(for: ip) ?? "none") }
+    data.canEdit = { [weak self] ip in self?.data.itemIdentifier(for: ip) != "none" }
     NotificationCenter.default.addObserver(self, selector: #selector(changed), name: .talkChanged, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(changed), name: .talkGroup, object: group)
     reload(animated: false)
@@ -683,19 +678,19 @@ final class AddPeopleVC: UITableViewController, UISearchBarDelegate {
     navigationItem.rightBarButtonItem?.isEnabled = !picked.isEmpty
     if #available(iOS 26.0, *) { navigationItem.subtitle = picked.isEmpty ? nil : "\(picked.count) selected" }
   }
-  func searchBar(_ b: UISearchBar, textDidChange t: String) {
-    let n = t.trimmingCharacters(in: .whitespaces); guard n != q else { return }
+  func updateSearchResults(for sc: UISearchController) {
+    let n = (sc.searchBar.text ?? "").trimmingCharacters(in: .whitespaces); guard n != q else { return }
     q = n; reload(animated: true)
   }
-  func searchBarSearchButtonClicked(_ b: UISearchBar) { b.resignFirstResponder() }
   private func reload(animated: Bool) {
     // (someone added elsewhere, or gone from the team, is no longer picked)
     let all = people(""); let can = Set((all.team + all.contacts).map { $0.id })
     let before = picked.count; picked = picked.filter { can.contains($0) }; if picked.count != before { counted() }
     let (team, cs) = people(q)
     var snap = NSDiffableDataSourceSnapshot<String, String>()
-    snap.appendSections(["team"]); snap.appendItems(["find"] + team.map { $0.id } + (team.isEmpty && cs.isEmpty && !q.isEmpty ? ["none"] : []), toSection: "team")
+    if !team.isEmpty { snap.appendSections(["team"]); snap.appendItems(team.map { $0.id }, toSection: "team") }
     if !cs.isEmpty { snap.appendSections(["contacts"]); snap.appendItems(cs.map { $0.id }, toSection: "contacts") }
+    if team.isEmpty && cs.isEmpty { snap.appendSections(["none"]); if !q.isEmpty { snap.appendItems(["none"], toSection: "none") } }
     var newSigs: [String: Int] = [:]
     byId = [:]
     for p in team + cs { byId[p.id] = p; var h = Hasher(); h.combine(p.name); h.combine(p.role); h.combine(p.picture); newSigs[p.id] = h.finalize() }
@@ -707,7 +702,7 @@ final class AddPeopleVC: UITableViewController, UISearchBarDelegate {
   private func reselect() {
     for id in picked { if let ip = data.indexPath(for: id) { tableView.selectRow(at: ip, animated: false, scrollPosition: .none) } }
   }
-  override func tableView(_ tv: UITableView, willSelectRowAt ip: IndexPath) -> IndexPath? { ["none", "find"].contains(data.itemIdentifier(for: ip) ?? "none") ? nil : ip }
+  override func tableView(_ tv: UITableView, willSelectRowAt ip: IndexPath) -> IndexPath? { data.itemIdentifier(for: ip) == "none" ? nil : ip }
   override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) {
     guard let id = data.itemIdentifier(for: ip), byId[id] != nil else { return }
     picked.insert(id); UISelectionFeedbackGenerator().selectionChanged(); counted()
