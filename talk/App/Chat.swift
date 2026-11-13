@@ -987,6 +987,12 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         let i = min(k, 3), b = c.photo.bounds, t = (b.width - 2) / 2
         return (c.photo, CGRect(x: b.minX + CGFloat(i % 2) * (t + 2), y: b.minY + CGFloat(i / 2) * (t + 2), width: t, height: t))
       }
+      v.beside = { [weak self] x, on in
+        guard let self = self else { return }
+        let id = self.albums.first(where: { $0.value.contains { $0.id == x.id } })?.key ?? x.id
+        guard let ip = self.data.indexPath(for: item(id)), let c = self.table.cellForRow(at: ip) as? BubbleCell else { return }
+        if on { UIView.animate(withDuration: Crossfade.time, delay: 0, options: [.allowUserInteraction]) { c.besides(1) } } else { c.besides(0) }
+      }
       v.onReply = { [weak self] x in self?.startReply(x) }
       v.onForward = { [weak self] x in self?.forward(x) }
       v.onDelete = { [weak self] x in self?.askDelete(x) }
@@ -1182,10 +1188,14 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     //  E11 Console's lesson for its folder tiles (Haris 2026-11-11): iPhone kept lifting the row's whole square, white or
     //  black round the bubble, whatever shape it was told — Haris 2026-11-13. The shadow in the same shape, as Messages.)
     let r = cell.heldRect, shape = cell.heldPath(origin: r.origin)
-    let img = UIGraphicsImageRenderer(bounds: CGRect(origin: .zero, size: r.size)).image { ctx in
-      shape.addClip()
-      ctx.cgContext.translateBy(x: -r.minX, y: -r.minY)
-      cell.contentView.drawHierarchy(in: cell.contentView.bounds, afterScreenUpdates: false)
+    // (drawn without the reaction pill over the bubble's foot — it showed cut off in the lifted picture, Haris 2026-11-13; the
+    //  pill itself fades away as the bubble lifts and back after)
+    let img = cell.withoutBesides {
+      UIGraphicsImageRenderer(bounds: CGRect(origin: .zero, size: r.size)).image { ctx in
+        shape.addClip()
+        ctx.cgContext.translateBy(x: -r.minX, y: -r.minY)
+        cell.contentView.layer.render(in: ctx.cgContext)
+      }
     }
     let iv = UIImageView(image: img); iv.frame = CGRect(origin: .zero, size: r.size); iv.backgroundColor = .clear
     let p = UIPreviewParameters(); p.backgroundColor = .clear
@@ -1806,6 +1816,13 @@ final class BubbleCell: UITableViewCell {
   private var reactsFor: String?, reactsShown = false
   // the forward button and the reactions — beside the bubble, not lifted with it
   func besides(_ a: CGFloat) { fwdB.alpha = a; reacts.alpha = a }
+  // (a picture of the bubble taken with what's beside it out of the way)
+  func withoutBesides<T>(_ f: () -> T) -> T {
+    let r = reacts.isHidden, w = fwdB.isHidden
+    reacts.isHidden = true; fwdB.isHidden = true
+    defer { reacts.isHidden = r; fwdB.isHidden = w }
+    return f()
+  }
   var heldRect: CGRect { let f = bubble.frame; return CGRect(x: f.minX - (tailOn && !isMine ? 10 : 0), y: f.minY, width: f.width + (tailOn ? 10 : 0), height: f.height) }
   func heldPath(origin o: CGPoint) -> UIBezierPath {
     let f = bubble.frame

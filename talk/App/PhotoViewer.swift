@@ -14,6 +14,9 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
   // where a photo shows in the chat: the view and the part of it that is this photo (the whole bubble picture, or its
   // square in an album's grid)
   var source: ((Msg) -> (UIView, CGRect)?)?
+  // (what sits beside the photo in the chat — its reactions, the forward button: away while the picture flies out and back,
+  //  faded in once it has landed; the flying picture went over the reaction and cut it, Haris 2026-11-13)
+  var beside: ((Msg, Bool) -> Void)?
   var onReply: ((Msg) -> Void)?, onForward: ((Msg) -> Void)?, onDelete: ((Msg) -> Void)?, onReact: ((Msg) -> Void)?, onShow: ((Msg) -> Void)?
 
   private let back = UIView(), pager = UIScrollView()
@@ -157,6 +160,7 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     // (the flying picture starts as the bubble's photo looks — its corners and its shades — and the photo in the bubble
     //  is hidden meanwhile: nothing of it shows twice, nothing appears afterwards, Haris 2026-11-12)
     let fly = PhotoViewerVC.flier(img, like: whole ? src : nil); fly.frame = from
+    beside?(m, false)
     // (under the buttons — it flew over ☺︎ and Reply and cut them, Haris 2026-11-12)
     view.insertSubview(fly, aboveSubview: pager); pager.alpha = 0; back.alpha = 0; top.alpha = 0; foot.alpha = 0
     if whole { src.alpha = 0 }
@@ -266,11 +270,13 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     let fly = PhotoViewerVC.flier(pic, like: whole ? src : nil); fly.frame = from
     let radius = fly.layer.cornerRadius; fly.layer.cornerRadius = 0; fly.shades.forEach { $0.alpha = 0 }
     view.insertSubview(fly, aboveSubview: pager); page.image.isHidden = true; if whole { src.alpha = 0 }
+    beside?(m, false)
+    let back = beside
     UIView.animate(withDuration: 0.32, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0) {
       fly.frame = to; fly.layer.cornerRadius = radius; fly.shades.forEach { $0.alpha = 1 }; self.back.alpha = 0; self.top.alpha = 0; self.foot.alpha = 0
     } completion: { _ in
-      if whole { src.alpha = 1; self.dismiss(animated: false) }
-      else { UIView.animate(withDuration: 0.12, animations: { fly.alpha = 0 }) { _ in self.dismiss(animated: false) } }   // (an album's square: the grid's own picture under it)
+      if whole { src.alpha = 1; self.dismiss(animated: false); back?(m, true) }
+      else { UIView.animate(withDuration: 0.12, animations: { fly.alpha = 0 }) { _ in self.dismiss(animated: false); back?(m, true) } }   // (an album's square: the grid's own picture under it)
     }
   }
 
