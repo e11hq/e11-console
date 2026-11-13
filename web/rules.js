@@ -689,10 +689,18 @@ var E11Rules = (() => {
     const assignable = (x) => !!x && x.active !== false && (ASSIGNABLE.has(x.role) || x.id === cdUserId());
     const struck = (v) => `<span class="chg-old">${esc(trunc(v, 80))}</span>`;
     // who may be picked (the people sheet): those assigned first, then everyone else who may be assigned
+    // Out of Office (Haris 2026-11-13): "Out of office until Fri 20 Nov" while it lasts (until 9:00 AM Dubai that day)
+    const OOO_WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], OOO_MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    function awayLine(x) {
+      const d = x && x.away;
+      if (!d || !/^\d{4}-\d\d-\d\d$/.test(d) || nowMs() >= Date.parse(d + 'T05:00:00Z')) return '';
+      const t = new Date(d + 'T12:00:00Z');
+      return `Out of office until ${OOO_WD[t.getUTCDay()]} ${t.getUTCDate()} ${OOO_MO[t.getUTCMonth()]}`;
+    }
     function assignPool(t) {
       const ids = t.assignees || [];
       const others = users.filter((x) => assignable(x) && !ids.includes(x.id)).sort((a, b) => fullName(a).localeCompare(fullName(b)));
-      return ids.map(userById).filter(Boolean).concat(others).map((x) => ({ id: x.id, name: fullName(x), role: x.id === cdUserId() ? 'Creative Director' : ({ production: 'Production', social: 'Social', freelancer: 'Freelancer' })[x.role] || '', on: ids.includes(x.id), photo: x.avatar || null, initials: initials(fullName(x) || '?'), color: rgbOf(avColor(x.id)) }));
+      return ids.map(userById).filter(Boolean).concat(others).map((x) => ({ id: x.id, name: fullName(x), role: x.id === cdUserId() ? 'Creative Director' : ({ production: 'Production', social: 'Social', freelancer: 'Freelancer' })[x.role] || '', on: ids.includes(x.id), away: awayLine(x), photo: x.avatar || null, initials: initials(fullName(x) || '?'), color: rgbOf(avColor(x.id)) }));
     }
     function syncCDOf(t) {
       if (!needsCD(t)) return;

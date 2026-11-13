@@ -252,6 +252,12 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     return W;
   }
 
+  const OOO_WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], OOO_MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function oooDay(d) { const t = new Date(d + 'T12:00:00Z'); return `${OOO_WD[t.getUTCDay()]} ${t.getUTCDate()} ${OOO_MO[t.getUTCMonth()]}`; }
+  function oooLine(u, nowMs) {
+    const d = u && u.away, t = typeof nowMs === 'function' ? nowMs() : Number(nowMs) || Date.now();
+    return d && /^\d{4}-\d\d-\d\d$/.test(d) && t < Date.parse(d + 'T05:00:00Z') ? 'Out of office until ' + oooDay(d) : '';
+  }
   // ---------- Me: your card and the Work rows (NativeMe model(): card, work) ----------
   M.me = function (R, data, meId, nowMs, env) {
     const W = world(R, data, meId, nowMs, env), u = W.me();
@@ -267,7 +273,9 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     if (!offTabs) work.push({ k: 'team', t: 'Team members', s: '', sym: 'person.2.fill', col: [88, 86, 214] });
     if (W.isManager()) { const n = W.trash.length; work.push({ k: 'trash', t: 'Trash', s: n ? `${plural(n, 'item')} · restore within ${TRASH_DAYS} days` : `Deleted items wait here ${TRASH_DAYS} days`, sym: 'trash.fill', col: [142, 142, 147] }); }
     return {
-      card: { id: u.id, name: W.fullName(u), role: W.designationOf(u), email: u.email, photo: W.photoOf(u), ini: initials(W.fullName(u)), rgb: W.rgb(avColor(u.id)) },
+      card: { id: u.id, name: W.fullName(u), role: W.designationOf(u), email: u.email, photo: W.photoOf(u), ini: initials(W.fullName(u)), rgb: W.rgb(avColor(u.id)), away: oooLine(u, nowMs) },
+      // (Out of Office — the day you're back while it lasts, its words for the row: Haris 2026-11-13)
+      away: oooLine(u, nowMs) ? { day: u.away, label: oooDay(u.away) } : null,
       work,
       // (the morning summary row: Production and Social — app.js Digest.wants; step 9)
       digest: u.role === 'production' || u.role === 'social' ? { on: !((u.prefs || {}).digestOff) } : null,
