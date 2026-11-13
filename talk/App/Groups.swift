@@ -1083,11 +1083,16 @@ enum PickRows {
 // in its place — the old picture of it fading out over the new one fading in — with nothing around it moving.
 enum Crossfade {
   static let time: TimeInterval = 0.22
-  // pictures of the rows about to change, laid over them where they are
+  // pictures of the rows about to change, laid over them where they are — inside the row itself, so the picture goes
+  // wherever the row goes: laid on the list, a row moving under it (a message growing as the list keeps its end in place)
+  // left the picture behind, the old look sliding away from the new — the card "flying down" (Haris 2026-11-13)
   static func cover(_ cells: [UIView], in host: UIView) -> [UIView] {
     cells.compactMap { c in
-      guard let s = c.snapshotView(afterScreenUpdates: false) else { return nil }
-      s.frame = c.frame; s.isUserInteractionEnabled = false; host.addSubview(s); return s
+      let into = (c as? UITableViewCell)?.contentView ?? (c as? UICollectionViewCell)?.contentView ?? c
+      // (a still picture — a snapshot view can go on showing the row as it changes)
+      guard into.bounds.width > 0, into.bounds.height > 0 else { return nil }
+      let img = UIGraphicsImageRenderer(bounds: into.bounds).image { _ in into.drawHierarchy(in: into.bounds, afterScreenUpdates: false) }
+      let s = UIImageView(image: img); s.frame = into.bounds; s.isUserInteractionEnabled = false; into.addSubview(s); return s
     }
   }
   // the old picture fading away over the new look, already there under it — the new one isn't faded in too: both half
