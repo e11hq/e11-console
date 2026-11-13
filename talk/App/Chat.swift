@@ -793,7 +793,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       // (…and crossfading to its new look in its place — nothing snapping in: Haris 2026-11-13)
       let ids = animated && view.window != nil ? snap.reconfiguredItemIdentifiers : []
       let shots = Crossfade.cover(ids.compactMap { data.indexPath(for: $0).flatMap { table.cellForRow(at: $0) } }, in: table)
-      UIView.performWithoutAnimation { data.apply(snap, animatingDifferences: false); table.layoutIfNeeded() }
+      // (a message grown or shrunk — a reaction's pill under it: the messages below slide smoothly to make room, never
+      //  jumping — Haris 2026-11-13; the bubble's own content is set without animation in the cell, so it doesn't slide)
+      if ids.isEmpty { UIView.performWithoutAnimation { data.apply(snap, animatingDifferences: false); table.layoutIfNeeded() } }
+      else { data.apply(snap, animatingDifferences: true) }
       Crossfade.run(shots, new: ids.compactMap { data.indexPath(for: $0).flatMap { table.cellForRow(at: $0)?.contentView } })
     } else {
       data.apply(snap, animatingDifferences: animated && old.numberOfItems > 0)
