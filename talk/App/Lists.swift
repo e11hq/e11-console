@@ -5,7 +5,9 @@ import UIKit
    unread of its groups), newest activity first (Haris 2026-11-06: "like WhatsApp"); a client → its groups, newest
    first, each with its own unread count. Holding a group: Pin · Mute · Mark as read · Group info · Leave.
    Each row is kept by its id and only redrawn when what it shows changes (iPhone's diffable lists). */
-enum Row: Hashable { case group(String), client(String), found(String, String) }   // (found: a message — its group, its id)
+enum Row: Hashable { case group(String), client(String), found(String, String), hit(String) }   // (found: a message — its group, its id)
+// (hit: a client found by search — its own row, never the list's: a client's row from search handed back to the list kept
+//  search's marked words after the search was closed, as Console's Home once did — Haris 2026-11-13)
 
 final class ChatRowCell: UITableViewCell {
   static let id = "row"
@@ -102,6 +104,10 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
       let c = tv.dequeueReusableCell(withIdentifier: AgencyCell.id, for: ip) as! AgencyCell
       c.show(clientRow(id)); return c
     }
+    if case .hit(let id) = row {
+      let c = tv.dequeueReusableCell(withIdentifier: AgencyCell.id, for: ip) as! AgencyCell
+      c.show(clientRow(id)); return c
+    }
     let c = tv.dequeueReusableCell(withIdentifier: ChatRowCell.id, for: ip) as! ChatRowCell
     fill(c, row); return c
   }
@@ -130,7 +136,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
     let cid = Talk.shared.groups[gid]?.client
     var snap = data.snapshot()
     let rows = snap.itemIdentifiers.filter { r in
-      switch r { case .group(let id): return id == gid; case .client(let id): return id == cid; default: return false }
+      switch r { case .group(let id): return id == gid; case .client(let id), .hit(let id): return id == cid; default: return false }
     }
     guard !rows.isEmpty else { return }
     snap.reconfigureItems(rows); data.applySteady(snap, in: table, animated: view.window != nil)
@@ -145,7 +151,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
   func sig(_ r: Row) -> Int {
     let T = Talk.shared; var h = Hasher()
     switch r {
-    case .client(let id): h.combine(clientRow(id).sig)
+    case .client(let id), .hit(let id): h.combine(clientRow(id).sig)
     case .group(let id):
       guard let g = T.groups[id] else { return 0 }
       h.combine(g.name); h.combine(g.pic); h.combine(g.muted); h.combine(g.withClient); h.combine(T.unread(id)); h.combine(T.activity(g))
@@ -183,7 +189,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
       guard let g = T.groups[gid], let m = T.log(gid).msgs.first(where: { $0.id == mid }) else { return }
       c.avatar.set(group: g)
       c.show(title: g.name, sub: "\(T.name(m.by)): " + Talk.preview(m), time: Look.time(m.at), unread: 0, pinned: false, muted: false)
-    case .client(let id):
+    case .client(let id), .hit(let id):
       guard let cl = T.clients[id] else { return }
       c.avatar.set(client: cl)
       let gs = T.groups(of: id, withClient: clientsTab)
@@ -215,7 +221,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
     guard let row = data.itemIdentifier(for: ip) else { return }
     switch row {
     case .group(let id): navigationController?.pushViewController(ChatVC(group: id), animated: true)
-    case .client(let id): navigationController?.pushViewController(ClientGroupsVC(client: id, clientsTab: clientsTab), animated: true)
+    case .client(let id), .hit(let id): navigationController?.pushViewController(ClientGroupsVC(client: id, clientsTab: clientsTab), animated: true)
     case .found(let gid, let mid): navigationController?.pushViewController(ChatVC(group: gid, focus: mid), animated: true)
     }
   }
@@ -230,7 +236,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
       guard let self = self else { return nil }
       switch row {
       case .group(let id), .found(let id, _): return self.groupMenu(id)
-      case .client(let id):
+      case .client(let id), .hit(let id):
         let on = Talk.shared.pinnedClients.contains(id)
         return UIMenu(children: [UIAction(title: on ? "Unpin" : "Pin", image: UIImage(systemName: on ? "pin.slash" : "pin")) { _ in self.pin(client: id, !on) }])
       }
@@ -404,11 +410,18 @@ final class GroupsVC: ListVC {
     super.reload(animated: animated)
     setLine()
   }
-  // searching: the filters fade away (board 19), back when it closes
-  private func pillsShown(_ on: Bool) {
+  // searching: the filters go, their room with them, so the results start right under the search bar (board 19; as
+  // Console's My Tasks All / Done — Haris 2026-11-13) — faded and closed alongside Apple's own search transition, back
+  // the same way when it closes
+  private func pillsShown(_ on: Bool, _ s: UISearchController) {
     guard let h = table.tableHeaderView, !Talk.shared.isContact else { return }
-    UIView.animate(withDuration: Crossfade.time, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState]) { h.alpha = on ? 1 : 0 }
-    h.isUserInteractionEnabled = on
+    h.isUserInteractionEnabled = on; h.clipsToBounds = true
+    let change = { [weak self] in
+      guard let self = self else { return }
+      h.alpha = on ? 1 : 0; h.frame.size.height = on ? 46 : 0; self.table.tableHeaderView = h; self.table.layoutIfNeeded()
+    }
+    if let tc = s.transitionCoordinator ?? transitionCoordinator { tc.animate(alongsideTransition: { _ in change() }) }
+    else { UIView.animate(withDuration: Crossfade.time, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState], animations: change) }
   }
   override func build() -> [(String, String, [Row])] {
     let T = Talk.shared
@@ -426,7 +439,7 @@ final class GroupsVC: ListVC {
         hits[g.client] = (gid, m)
       }
       let found = mine.filter { (T.clients[$0]?.name.lowercased().contains(query) ?? false) || hits[$0] != nil }
-      return [("found", "", found.map { .client($0) })]
+      return [("found", "", found.map { .hit($0) })]
     }
     // (A: the filters keep this tab a list of clients — the ones with unread, or with a mention of you)
     let keep: (String) -> Bool = { [filter, clientsTab] c in
@@ -465,8 +478,8 @@ final class GroupsVC: ListVC {
   }
 }
 extension GroupsVC: UISearchControllerDelegate {
-  func willPresentSearchController(_ s: UISearchController) { pillsShown(false) }
-  func willDismissSearchController(_ s: UISearchController) { pillsShown(true) }
+  func willPresentSearchController(_ s: UISearchController) { pillsShown(false, s) }
+  func willDismissSearchController(_ s: UISearchController) { pillsShown(true, s) }
 }
 
 // A client's row on E11 Agency (board 1): Apple's own list cell — the logo (a rounded square), the name, the newest
