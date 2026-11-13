@@ -1462,6 +1462,14 @@ final class BubbleCell: UITableViewCell {
       i.draw(in: CGRect(x: (W - w) / 2, y: (H - h) / 2, width: w, height: h))
     }
   }
+  // words that start right to left (their first letter Arabic or Hebrew)
+  static func rightToLeft(_ t: String) -> Bool {
+    for u in t.unicodeScalars where CharacterSet.letters.contains(u) {
+      let v = u.value
+      return (0x0590...0x08FF).contains(v) || (0xFB1D...0xFDFF).contains(v) || (0xFE70...0xFEFF).contains(v)
+    }
+    return false
+  }
   // a logo without the clear border its file may have round it (else its edge reads as clear, and its own background
   // colour is missed — the client contact's picture, Haris 2026-11-13)
   static func trimmed(_ i: UIImage) -> UIImage {
@@ -2002,10 +2010,15 @@ final class BubbleCell: UITableViewCell {
       e.append(NSAttributedString(string: "\n")); e.append(NSAttributedString(attachment: room))
       textL.attributedText = e
     } else if words {
-      let room = NSTextAttachment(image: BubbleCell.clear); room.bounds = CGRect(x: 0, y: 0, width: ceil(stamp.intrinsicContentSize.width) + 10, height: 1)
+      // (right-to-left words — Arabic, Urdu, Hebrew: the room at their end would be on the left, under the time on the
+      //  right, so the time takes its own line under them, the words kept to the right — Haris 2026-11-13)
+      let rtl = BubbleCell.rightToLeft(m.text)
+      let room = NSTextAttachment(image: BubbleCell.clear); room.bounds = CGRect(x: 0, y: 0, width: ceil(stamp.intrinsicContentSize.width) + 10, height: rtl ? 16 : 1)
+      if rtl { a.append(NSAttributedString(string: "\n")) }
       a.append(NSAttributedString(attachment: room))
       // (the design: 17 on a 22 line)
       let ps = NSMutableParagraphStyle(); ps.minimumLineHeight = 22; ps.maximumLineHeight = 22
+      if rtl { ps.alignment = .right; ps.baseWritingDirection = .rightToLeft }
       a.addAttributes([.paragraphStyle: ps, .baselineOffset: (22 - UIFont.systemFont(ofSize: 17).lineHeight) / 4], range: NSRange(location: 0, length: a.length))
       textL.attributedText = a
     } else if !isPhoto && !isVoice {
