@@ -302,7 +302,7 @@ final class GroupInfoVC: UITableViewController {
   init(group: String) { self.group = group; super.init(style: .insetGrouped); hidesBottomBarWhenPushed = true }
   required init?(coder: NSCoder) { fatalError() }
   private var g: Group? { Talk.shared.groups[group] }
-  enum Row: Hashable { case media, member(String), addMembers, mute, makeMeAdmin, second, leave, delete }
+  enum Row: Hashable { case media, starred, member(String), addMembers, mute, makeMeAdmin, second, leave, delete }
   private var data: TitledSource<Int, Row>!
   private var sigs: [Row: Int] = [:]
   private let head = UIView(), pic = Avatar(frame: CGRect(x: 0, y: 0, width: 116, height: 116)), nameL = UILabel(), subL = UILabel()
@@ -393,7 +393,7 @@ final class GroupInfoVC: UITableViewController {
     var snap = NSDiffableDataSourceSnapshot<Int, Row>()
     var newSigs: [Row: Int] = [:]
     func add(_ sec: Int, _ rows: [Row]) { snap.appendSections([sec]); snap.appendItems(rows, toSection: sec) }
-    add(0, [.media])
+    add(0, [.media, .starred])   // (Starred Messages of this group — Haris 2026-11-13)
     add(1, members.map { Row.member($0) } + (can ? [.addMembers] : []))
     add(2, [.mute] + (T.boss && !T.isAdmin(g) ? [.makeMeAdmin] : []))
     if (g.creator == me && g.creatorAdmin) || T.boss { add(3, [.second]) }
@@ -402,6 +402,7 @@ final class GroupInfoVC: UITableViewController {
       var h = Hasher()
       switch r {
       case .media: h.combine(mediaCount()); h.combine(latestPics().map { $0.id })
+      case .starred: h.combine(Talk.shared.starred.filter { $0.group == group }.count)
       case .member(let id): h.combine(T.name(id)); h.combine(T.people[id]?.role); h.combine(g.admins.contains(id)); h.combine(T.people[id]?.picture); h.combine(T.people[id]?.contact)
       case .mute: h.combine(g.muted); h.combine(g.mutedUntil)
       case .second: h.combine(g.second)
@@ -459,6 +460,11 @@ final class GroupInfoVC: UITableViewController {
                                    strip.bottomAnchor.constraint(equalTo: c.contentView.bottomAnchor, constant: -12), strip.heightAnchor.constraint(equalToConstant: 76)])
       strip.isHidden = latestPics().isEmpty
       if latestPics().isEmpty { cfg.directionalLayoutMargins.bottom = 11 }
+    case .starred:
+      // (this group's starred messages — the count and ›, as the row above)
+      let n = T.starred.filter { $0.group == group }.count
+      cfg.text = "Starred Messages"; cfg.secondaryText = n == 0 ? "None" : "\(n)"
+      c.accessoryType = .disclosureIndicator
     case .member(let id):
       let p = T.people[id]
       cfg = UIListContentConfiguration.subtitleCell()
@@ -524,6 +530,7 @@ final class GroupInfoVC: UITableViewController {
     tv.deselectRow(at: ip, animated: true)
     guard let g = g, let row = data.itemIdentifier(for: ip) else { return }
     switch row {
+    case .starred: navigationController?.pushViewController(StarredVC(group: group), animated: true)
     case .media: navigationController?.pushViewController(MediaVC(group: group), animated: true)   // (step 1b — mock-up approved 2026-11-13)
     case .member(let id): personSheet(id, g, at: tv.cellForRow(at: ip))
     case .addMembers:

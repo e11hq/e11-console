@@ -3373,10 +3373,13 @@ final class ChangeNotesVC: UITableViewController {
 final class StarredVC: UITableViewController {
   private var data: UITableViewDiffableDataSource<Int, String>!
   private var sigs: [String: Int] = [:]
-  init() { super.init(style: .insetGrouped) }
+  // (only: one group's — from its Group Info, Haris 2026-11-13; nil: every group's, from Settings)
+  private let only: String?
+  init(group: String? = nil) { only = group; super.init(style: .insetGrouped) }
   required init?(coder: NSCoder) { fatalError() }
   private func key(_ s: Talk.Starred) -> String { s.group + "|" + s.id }
-  private var byKey: [String: Talk.Starred] { Dictionary(Talk.shared.starred.map { (key($0), $0) }, uniquingKeysWith: { a, _ in a }) }
+  private var mine: [Talk.Starred] { Talk.shared.starred.filter { only == nil || $0.group == only } }
+  private var byKey: [String: Talk.Starred] { Dictionary(mine.map { (key($0), $0) }, uniquingKeysWith: { a, _ in a }) }
   override func viewDidLoad() {
     super.viewDidLoad()
     title = "Starred Messages"
@@ -3385,7 +3388,7 @@ final class StarredVC: UITableViewController {
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "s")
     data = StarSource(tableView: tableView) { [weak self] tv, ip, k in
       let c = tv.dequeueReusableCell(withIdentifier: "s", for: ip)
-      if let s = self?.byKey[k] { StarredVC.fill(c, s) }
+      if let s = self?.byKey[k] { StarredVC.fill(c, s, group: self?.only == nil) }
       return c
     }
     (data as? StarSource)?.onDelete = { [weak self] ip in self?.unstar(ip) }
@@ -3395,18 +3398,18 @@ final class StarredVC: UITableViewController {
     reload(animated: false)
   }
   @objc private func changed() { reload(animated: view.window != nil) }
-  static func fill(_ c: UITableViewCell, _ s: Talk.Starred) {
+  static func fill(_ c: UITableViewCell, _ s: Talk.Starred, group: Bool = true) {
     let T = Talk.shared
     var cfg = UIListContentConfiguration.subtitleCell()
     cfg.text = s.text; cfg.textProperties.numberOfLines = 3
-    cfg.secondaryText = [T.groups[s.group]?.name ?? "A group you left", T.name(s.by), Look.time(s.at)].joined(separator: " · ")
+    cfg.secondaryText = ((group ? [T.groups[s.group]?.name ?? "A group you left"] : []) + [T.name(s.by), Look.time(s.at)]).joined(separator: " · ")
     cfg.secondaryTextProperties.color = .secondaryLabel
     cfg.textToSecondaryTextVerticalPadding = 4
     c.contentConfiguration = cfg
     c.accessoryType = T.groups[s.group] == nil ? .none : .disclosureIndicator
   }
   private func reload(animated: Bool) {
-    let list = Talk.shared.starred
+    let list = mine
     var snap = NSDiffableDataSourceSnapshot<Int, String>()
     snap.appendSections([0]); snap.appendItems(list.map { key($0) }, toSection: 0)
     var newSigs: [String: Int] = [:]
@@ -3431,11 +3434,17 @@ final class StarredVC: UITableViewController {
     }
   }
   override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
-    Talk.shared.starred.isEmpty ? nil : "Tap one to jump to it in its chat. Hold a message › Star to add one."
+    mine.isEmpty ? nil : "Tap one to jump to it in its chat. Hold a message › Star to add one."
   }
   override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) {
     tv.deselectRow(at: ip, animated: true)
     guard let k = data.itemIdentifier(for: ip), let s = byKey[k], Talk.shared.groups[s.group] != nil else { return }
+    // (from the group's own Group Info: back to the chat already open under it, at the message — not a second chat)
+    if let chat = navigationController?.viewControllers.compactMap({ $0 as? ChatVC }).last(where: { $0.group == s.group }) {
+      navigationController?.popToViewController(chat, animated: true)
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { chat.jump(to: s.id) }
+      return
+    }
     navigationController?.pushViewController(ChatVC(group: s.group, focus: s.id), animated: true)
   }
   override func tableView(_ tv: UITableView, trailingSwipeActionsConfigurationForRowAt ip: IndexPath) -> UISwipeActionsConfiguration? {
