@@ -130,11 +130,11 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     let t = UITabBarController()
     let groups = UINavigationController(rootViewController: GroupsVC())
     groups.navigationBar.prefersLargeTitles = true
-    groups.tabBarItem = UITabBarItem(title: "Groups", image: UIImage(systemName: "bubble.left.and.bubble.right"), selectedImage: UIImage(systemName: "bubble.left.and.bubble.right.fill"))
-    // (staff: Groups · Clients · Settings — the Clients tab is groups with a client contact in them)
+    groups.tabBarItem = UITabBarItem(title: "E11 Agency", image: UIImage(systemName: "bubble.left.and.bubble.right"), selectedImage: UIImage(systemName: "bubble.left.and.bubble.right.fill"))
+    // (staff: E11 Agency · Clients · Settings (board 1) — the Clients tab is groups with a client contact in them)
     let clients = UINavigationController(rootViewController: GroupsVC(clientsTab: true))
     clients.navigationBar.prefersLargeTitles = true
-    clients.tabBarItem = UITabBarItem(title: "Clients", image: UIImage(systemName: "person.2"), selectedImage: UIImage(systemName: "person.2.fill"))
+    clients.tabBarItem = UITabBarItem(title: "Clients", image: UIImage(systemName: "briefcase"), selectedImage: UIImage(systemName: "briefcase.fill"))   // (board 1: the briefcase)
     let settings = UINavigationController(rootViewController: SettingsVC())
     settings.navigationBar.prefersLargeTitles = true
     settings.tabBarItem = UITabBarItem(title: "Settings", image: UIImage(systemName: "gearshape"), selectedImage: UIImage(systemName: "gearshape.fill"))
