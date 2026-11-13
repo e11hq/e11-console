@@ -506,12 +506,14 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       if headSig != 0, view.window != nil { UIView.transition(with: titleV, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction], animations: nil) }
       headSig = hsig
       titleL.text = g.name
-      titlePic.set(group: g)
+      // (a client contact sees E11's own picture on the chat, as their list shows it — board 42)
+      if T.isContact { titlePic.setE11() } else { titlePic.set(group: g) }
     }
     // (the people: a client first, as "Rania (Oasis Coffee)"; the team by full name; You last — cut short by the bar)
     let others = g.members.filter { $0 != T.me?.id }.compactMap { T.people[$0] }
     let clients = others.filter { $0.contact }.map { p in p.client.flatMap { T.clients[$0]?.name }.map { "\(p.name) (\($0))" } ?? p.name }
-    let team = others.filter { !$0.contact }.map { $0.name }
+    // (a client contact: the team by first name — "Lana, Omar, Nadia, You", board 42)
+    let team = others.filter { !$0.contact }.map { T.isContact ? String($0.name.split(separator: " ").first ?? Substring($0.name)) : $0.name }
     membersLine = (clients + team + ["You"]).joined(separator: ", ")
     showTyping(animated: false)
     // (# tasks: staff groups only — never with a client, never for a client contact)
