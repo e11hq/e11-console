@@ -146,6 +146,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         c.onReplyTap = { [weak self] rid in self?.jump(to: rid) }
         c.onFileTap = { [weak self, weak c] m in self?.openFrom = (m.kind == "photo" || m.kind == "video") ? c?.photo : nil; self?.open(m) }
         c.onRetry = { [weak self] m in guard let self = self else { return }; Talk.shared.retry(self.group, m) }
+        c.onReactsTap = { [weak self] m in self?.whoReacted(m) }
         c.onForward = { [weak self] m in self?.forward(m) }
         return c
       case .intro:
@@ -1342,6 +1343,12 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     (host ?? self).present(a, animated: true)
   }
 
+  // who reacted: Apple's sheet, half height (mock-up "Talk — Reactions sheet")
+  private func whoReacted(_ m: Msg) {
+    let v = ReactionsVC(group: group, msg: m.id) { [weak self] in self?.react(m, nil) }
+    if let sh = v.sheetPresentationController { sh.detents = [.medium(), .large()]; sh.prefersGrabberVisible = true }
+    present(v, animated: true)
+  }
   func react(_ m: Msg, _ e: String?) {
     // (picked in the hold menu: put on once the menu has gone and the bubble is back in place — drawn while it was still
     //  lifted, the bubble and its photo flashed, Haris 2026-11-12)
@@ -1872,6 +1879,7 @@ final class BubbleCell: UITableViewCell {
   private var fwdMine: NSLayoutConstraint!, fwdTheirs: NSLayoutConstraint!
   var onReplyTap: ((String) -> Void)?
   var onFileTap: ((Msg) -> Void)?
+  var onReactsTap: ((Msg) -> Void)?   // (who reacted — the sheet)
   var onRetry: ((Msg) -> Void)?
 
   override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
@@ -1975,6 +1983,8 @@ final class BubbleCell: UITableViewCell {
     face.isUserInteractionEnabled = false; contentView.addSubview(face)
     reacts.font = .systemFont(ofSize: 14); reacts.backgroundColor = Look.theirs; reacts.layer.cornerRadius = 13; reacts.layer.masksToBounds = true
     reacts.layer.borderWidth = 2; reacts.layer.borderColor = Look.chatBg.resolvedColor(with: traitCollection).cgColor
+    reacts.isUserInteractionEnabled = true
+    reacts.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(reactsTap)))
     contentView.addSubview(reacts)
     sysL.font = .systemFont(ofSize: 12); sysL.textColor = Look.dyn(0xE5E5EA, 0x000000); sysL.backgroundColor = Look.dyn(0x181818, 0xFFFFFF); sysL.numberOfLines = 0; sysL.textAlignment = .center
     sysL.layer.cornerRadius = 8; sysL.layer.cornerCurve = .continuous; sysL.layer.masksToBounds = true
@@ -2552,6 +2562,7 @@ final class BubbleCell: UITableViewCell {
     }
   }
   private var cardState: Auto.State = .here
+  @objc private func reactsTap() { if let m = msg { onReactsTap?(m) } }
   @objc private func fileTap(_ g: UITapGestureRecognizer) {
     guard let m = msg else { return }
     // (in an album: the one under the finger — the fourth for the rest)
