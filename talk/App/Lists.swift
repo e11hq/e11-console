@@ -94,6 +94,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
     table.register(ChatRowCell.self, forCellReuseIdentifier: ChatRowCell.id)
     table.sectionHeaderTopPadding = 6
     view.addSubview(table)
+    setContentScrollView(table, for: .top)
     table.register(AgencyCell.self, forCellReuseIdentifier: AgencyCell.id)
     table.register(GroupCell.self, forCellReuseIdentifier: GroupCell.id)
     data = UITableViewDiffableDataSource<String, Row>(tableView: table) { [weak self] tv, ip, row in
@@ -266,7 +267,15 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
   // (coming back to the page: what changed while away set, but the list not laid out here — laid out before Apple's bar
   //  had put its big title back, it kept the small bar's room and the title stayed small: the check's note, Clients,
   //  "page coming back", room 116 of 189 — Haris 2026-11-13. Apple lays it out with its bar, as the page shows.)
-  override func viewWillAppear(_ a: Bool) { super.viewWillAppear(a); appearing = true; reload(animated: false); appearing = false }
+  override func viewWillAppear(_ a: Bool) {
+    super.viewWillAppear(a)
+    // (Apple's bar told which list is the page's — the page also holds Apple's empty view behind the list, itself a little
+    //  list of its own; coming back, the bar could follow that empty one and keep its small title: the check's notes, a tab
+    //  coming back, room 116 of 189 — Haris 2026-11-13, seen on his phone. E11 Console's My Tasks and Inbox had the same,
+    //  2026-11-09: Apple's setContentScrollView.)
+    setContentScrollView(table, for: .top)
+    appearing = true; reload(animated: false); appearing = false
+  }
   private var appearing = false
   @objc func changed() { reload(animated: view.window != nil) }
   func updateSearchResults(for s: UISearchController) { reload(animated: false) }
