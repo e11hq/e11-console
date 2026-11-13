@@ -817,6 +817,12 @@ final class MeCtl {
     let kinds = Set(stack.map { $0.kind })
     let env: Any = p["env"] ?? (["shell": SHELL_VERSION] as [String: Any])
     if let x = AppData.shared.meModel("me", "me", [env]) { for k in ["card", "work"] { if let v = x[k] { m[k] = v } }; if !has("digest") { m["digest"] = x["digest"] }; m["away"] = x["away"] ?? NSNull() }
+    // (Out of Office as you set it, at once — until the server's answer is in the copy: what you do shows at once)
+    if let a = awayLocal {
+      let label = a.map { AwaySheetVC.label(day: $0) } ?? ""
+      m["away"] = a.map { ["day": $0, "label": label] as [String: Any] } ?? NSNull()
+      if var c = m["card"] as? [String: Any] { c["away"] = a == nil ? "" : "Out of office until " + label; m["card"] = c }
+    }
     // (step 9: Me's own rows the page gave, when it hasn't — no website, or offline: About, the owner, the version, the Test
     //  site rows, the sync line — from what the server said at the start and the app's own state)
     let st = main.startInfo
@@ -1943,7 +1949,7 @@ final class MeCtl {
         let aw = model["away"] as? [String: Any], day = aw?["day"] as? String, label = aw?["label"] as? String ?? ""
         var rows = [SetItem(key: "away", title: "Out of Office", sub: day == nil ? "" : "Until \(label), 9:00 AM", sym: "sun.max.fill", col: .systemOrange, toggle: day != nil, flip: { [weak self, weak h] on in
           guard let self = self, let h = h else { return }
-          if on { self.awayPick(h, day: nil) } else { self.pfSet("away", ["value": NSNull()], page: nil); self.settle(h) }
+          if on { self.awayPick(h, day: nil) } else { self.awaySet(nil, h) }
         })]
         if let d = day { rows.append(SetItem(key: "awayBack", title: "Back On", value: label, tap: { [weak self, weak h] in if let h = h { self?.awayPick(h, day: d) } })) }
         out.append(head(h, "away", "")); out.append(group(h, "away", rows))
@@ -2104,12 +2110,26 @@ final class MeCtl {
     h.setContent(out)
   }
   // a switch the page may not change (Face ID asked and cancelled): back as the page has it, a moment later
+  // (shown at once; the server's answer then stands — a failure puts it back as it was)
+  private var awayLocal: String??
+  private func awaySet(_ day: String?, _ h: HomeView) {
+    guard mineNow else { h.meSwitchBack("away"); return }
+    awayLocal = .some(day); redraw()
+    let body: [String: Any] = ["ev": "pfSet", "field": "away", "value": day.map { $0 as Any } ?? NSNull(), "op": UUID().uuidString]
+    main.serverTask.request("/api/app/act", body: body) { [weak self, weak h] j in
+      guard let self = self else { return }
+      if let ch = j?["changes"] as? [[String: Any]], !ch.isEmpty { AppData.shared.applyLocal(ch) }
+      if (j?["ok"] as? Bool) == true { if let m = (j?["messages"] as? [String])?.first(where: { !$0.isEmpty }) { h?.toast(["t": m]) } }
+      else { UINotificationFeedbackGenerator().notificationOccurred(.error); h?.toast(["t": j == nil ? "No connection — try again" : j?["error"] as? String ?? "That didn’t work — try again"]) }
+      self.awayLocal = nil; self.redraw()
+    }
+  }
   // the day you're back: Apple's sheet with Apple's calendar (Turn On, or Save when changing it); Cancel puts the switch back
   private func awayPick(_ h: HomeView, day: String?) {
     let vc = AwaySheetVC(day: day) { [weak self, weak h] picked in
       guard let self = self, let h = h else { return }
       guard let v = picked else { h.meSwitchBack("away"); return }
-      if v != day { self.pfSet("away", ["value": v], page: nil); self.settle(h) }
+      if v != day { self.awaySet(v, h) }
     }
     let nav = UINavigationController(rootViewController: vc)
     // (the sheet as tall as what's in it — the calendar and the words under it — not the whole screen: Haris 2026-11-13)
@@ -4432,6 +4452,10 @@ final class AwaySheetVC: UIViewController, UITableViewDataSource, UITableViewDel
   private static var cal: Calendar { var c = Calendar(identifier: .gregorian); c.timeZone = dubai; return c }
   static func dayString(_ d: Date) -> String { let f = DateFormatter(); f.calendar = cal; f.timeZone = dubai; f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd"; return f.string(from: d) }
   static func label(_ d: Date) -> String { let f = DateFormatter(); f.timeZone = dubai; f.locale = Locale(identifier: "en_GB"); f.dateFormat = "EEE d MMM"; return f.string(from: d) }
+  static func label(day: String) -> String {
+    let f = DateFormatter(); f.calendar = cal; f.timeZone = dubai; f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd HH:mm"
+    return f.date(from: day + " 12:00").map { label($0) } ?? day
+  }
   init(day: String?, done: @escaping (String?) -> Void) {
     changing = day != nil; self.done = done
     super.init(nibName: nil, bundle: nil)

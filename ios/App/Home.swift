@@ -96,6 +96,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   fileprivate var mePics: [String: UIImage] = [:]
   fileprivate var mePicAsked = Set<String>()
   fileprivate var meDrawn: [String: String] = [:]
+  fileprivate var meFeet: [Int: String] = [:]   // (each group's footer words as drawn — a change crossfades in place)
   private var listDrawn: [String: String] = [:]
   // (the groups' headings and "nothing due" lines kept by their group in Apple's list — made new on every draw before)
   private var heads: [String: UILabel] = [:], empties: [String: UILabel] = [:]
@@ -2686,9 +2687,30 @@ extension HomeView {
     let changed = snap.itemIdentifiers.filter { had.contains($0) && meDrawn[$0] != sigs[$0] }
     meDrawn = sigs
     if !changed.isEmpty { snap.reconfigureItems(changed); Main.meRows += changed.count }
+    // (a group's footer whose words changed — Out of Office's, on ↔ off: Haris 2026-11-13 — crossfades in place; the rows
+    //  below slide only if its height changed. Nothing else is drawn again.)
+    var feet: [Int: String] = [:]; for (k, sec) in secs { if let f = sec.foot { feet[k] = f.string } }
+    let feetChanged = feet.keys.filter { meFeet[$0] != nil && meFeet[$0] != feet[$0] && ds.snapshot().sectionIdentifiers.contains($0) }
+    meFeet = feet
+    defer { refeet(feetChanged, animated: animated) }
     // (nothing came, went or changed: nothing applied at all)
     if changed.isEmpty, snap.sectionIdentifiers == ds.snapshot().sectionIdentifiers, snap.itemIdentifiers == ds.snapshot().itemIdentifiers { return }
     ds.apply(snap, animatingDifferences: animated)
+  }
+  private func refeet(_ ss: [Int], animated: Bool) {
+    guard !ss.isEmpty, let cv = list else { return }
+    var moved = false
+    for s in ss {
+      guard let v = cv.supplementaryView(forElementKind: UICollectionView.elementKindSectionFooter, at: IndexPath(item: 0, section: s)) as? UICollectionViewListCell,
+            let sec = meSection(s), let f = sec.foot else { continue }
+      var c = UIListContentConfiguration.groupedFooter(); c.attributedText = f; c.textProperties.alignment = sec.footCentred ? .center : .natural
+      if animated && v.window != nil { UIView.transition(with: v, duration: 0.25, options: [.transitionCrossDissolve, .allowUserInteraction]) { v.contentConfiguration = c } }
+      else { v.contentConfiguration = c }
+      moved = true
+    }
+    guard moved else { return }
+    // (its height from its new words — the rows under it slide to it, Apple's own layout animation)
+    if animated { UIView.animate(withDuration: 0.3) { cv.collectionViewLayout.invalidateLayout(); cv.layoutIfNeeded() } } else { cv.collectionViewLayout.invalidateLayout() }
   }
   // what a row shows, to tell whether it changed: a settings row by its item, your card by its words and photo, a block of
   // the page's own always (it draws itself, keeping what's the same)
