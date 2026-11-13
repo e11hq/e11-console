@@ -1125,11 +1125,11 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     //  itself, and a shape reaching outside the lifted view is ignored by iPhone — it lifted the bubble's whole square, white
     //  or black round it; Haris 2026-11-13. The forward button beside it stays outside the shape, so it doesn't lift.)
     let p = UIPreviewParameters(); p.backgroundColor = .clear
-    p.visiblePath = cell.heldPath(origin: .zero)
-    // (no shadow under the lifted bubble — Haris 2026-11-13: the shadow's own shape, a single point hidden in the middle of
-    //  the bubble)
-    let f = cell.bubble.frame
-    p.shadowPath = UIBezierPath(rect: CGRect(x: f.midX - 0.5, y: f.midY - 0.5, width: 1, height: 1))
+    // (the shadow given the same shape as what lifts — E11 Console's way for its file tiles, "no box around it in light or
+    //  dark" (Haris 2026-11-10 / 11): a shadow of any other shape — none, or a single point to hide it — made iPhone lift a
+    //  white / black box round the bubble, Haris 2026-11-13. Apple's own faint lift shadow, in the bubble's shape, as Messages.)
+    let shape = cell.heldPath(origin: .zero)
+    p.visiblePath = shape; p.shadowPath = shape
     return UITargetedPreview(view: cell.contentView, parameters: p)
   }
   // the design (board 33): the reactions on top, then Reply · Forward · Copy · Star · (line) · Delete — Forward comes with
