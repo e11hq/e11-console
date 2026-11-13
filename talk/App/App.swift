@@ -61,7 +61,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
   }
 }
 
-final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControllerDelegate {
   var window: UIWindow?
   static weak var current: SceneDelegate?
   private(set) var tabs: UITabBarController?
@@ -130,6 +130,11 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak sp] in sp?.finish() }
     Net.shared.listen()
   }
+  // a tab tapped again: on its first page, the list back to its start (deeper, Apple's own goes back to the first page)
+  func tabBarController(_ c: UITabBarController, shouldSelect vc: UIViewController) -> Bool {
+    if vc === c.selectedViewController, let n = vc as? UINavigationController, n.viewControllers.count == 1, let l = n.topViewController as? ListVC { l.toStart() }
+    return true
+  }
   private func mainTabs() -> UITabBarController {
     let t = UITabBarController()
     let groups = UINavigationController(rootViewController: GroupsVC())
@@ -143,6 +148,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     settings.navigationBar.prefersLargeTitles = true
     settings.tabBarItem = UITabBarItem(title: "Settings", image: UIImage(systemName: "gearshape"), selectedImage: UIImage(systemName: "gearshape.fill"))
     t.viewControllers = [groups, clients, settings]
+    t.delegate = self
     tabs = t
     NotificationCenter.default.addObserver(self, selector: #selector(badge), name: .talkChanged, object: nil)
     shape()

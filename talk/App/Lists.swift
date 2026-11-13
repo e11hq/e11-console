@@ -78,6 +78,17 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
   let search = UISearchController(searchResultsController: nil)
   var query: String { (search.searchBar.text ?? "").trimmingCharacters(in: .whitespaces).lowercased() }
   var sections: [String: String] = [:]   // section key → its heading
+  // (the tab tapped again on its first page: back to the list's start — the big title open, the search still tucked away,
+  //  as it was when the page first showed; Apple's own smooth scroll — Haris 2026-11-13)
+  private var startY: CGFloat?
+  override func viewDidAppear(_ a: Bool) {
+    super.viewDidAppear(a)
+    if startY == nil, !table.isDragging, !table.isDecelerating { startY = table.contentOffset.y }
+  }
+  func toStart() {
+    guard let y = startY, !search.isActive else { return }
+    table.setContentOffset(CGPoint(x: table.contentOffset.x, y: y), animated: true)
+  }
   var clientsTab = false                  // (the Clients tab: groups with a client contact in them)
   // All · Unread · Mentions (boards 1 and 2) — shared by E11 Agency and a client's page: the same buttons, the same ways
   var filter = 0
