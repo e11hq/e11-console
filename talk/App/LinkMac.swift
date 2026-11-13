@@ -11,39 +11,78 @@ final class LinkedDevicesVC: UITableViewController {
   init() { super.init(style: .insetGrouped) }
   required init?(coder: NSCoder) { fatalError() }
   private var macs: [LinkedMac] { Talk.shared.macs }
+  /* (the board 45: LINKED MACS — each Mac in its tile, when it was last active, › to unlink; then Link a Mac as Apple's
+     filled button with its line. Only a Mac that changed is set again, crossfading; one linked or unlinked fades.) */
+  private enum Row: Hashable { case mac(String), link }
+  private var data: UITableViewDiffableDataSource<Int, Row>!
+  private var sigs: [String: String] = [:]
   override func viewDidLoad() {
     super.viewDidLoad(); title = "Linked Devices"
     navigationItem.largeTitleDisplayMode = .never
-    NotificationCenter.default.addObserver(tableView!, selector: #selector(UITableView.reloadData), name: .talkChanged, object: nil)
+    tableView.register(UITableViewCell.self, forCellReuseIdentifier: "c")
+    data = Source(tableView: tableView) { [weak self] tv, ip, r in
+      let c = tv.dequeueReusableCell(withIdentifier: "c", for: ip); self?.fill(c, r); return c
+    }
+    (data as? Source)?.owner = self
+    data.defaultRowAnimation = .fade
+    NotificationCenter.default.addObserver(self, selector: #selector(changed), name: .talkChanged, object: nil)
+    reload(animated: false)
     Talk.shared.refresh()
   }
-  override func numberOfSections(in tv: UITableView) -> Int { 2 }
-  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { s == 0 ? 1 : macs.count }
-  override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? { s == 1 && !macs.isEmpty ? "Linked Macs" : nil }
-  override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
-    s == 0 ? "On the Mac: E11 Console › E11 Talk at the bottom of the sidebar, then scan the code it shows. The Mac must be signed in as you."
-      : macs.isEmpty ? nil : "A linked Mac gets your chats straight from your iPhone and keeps up by itself. It unlinks after 30 days if this iPhone doesn’t open E11 Talk. Tap one to unlink it."
+  @objc private func changed() { reload(animated: view.window != nil) }
+  private func sig(_ m: LinkedMac) -> String { m.name + "|" + when(m) }
+  private func reload(animated: Bool) {
+    var snap = NSDiffableDataSourceSnapshot<Int, Row>()
+    if !macs.isEmpty { snap.appendSections([0]); snap.appendItems(macs.map { .mac($0.id) }, toSection: 0) }
+    snap.appendSections([1]); snap.appendItems([.link], toSection: 1)
+    var new: [String: String] = [:]
+    for m in macs { new[m.id] = sig(m) }
+    let old = data.snapshot()
+    snap.reconfigureItems(macs.filter { old.indexOfItem(.mac($0.id)) != nil && sigs[$0.id] != new[$0.id] }.map { .mac($0.id) })
+    sigs = new
+    data.applySteady(snap, in: tableView, animated: animated)
   }
-  override func tableView(_ tv: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
-    let c = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
-    var cfg = c.defaultContentConfiguration()
-    if ip.section == 0 {
-      cfg.text = "Link a Mac"; cfg.textProperties.color = Look.accent
-      cfg.image = UIImage(systemName: "qrcode.viewfinder"); cfg.imageProperties.tintColor = Look.accent
-    } else {
-      let m = macs[ip.row], f = RelativeDateTimeFormatter(); f.unitsStyle = .full
-      cfg.text = m.name
-      cfg.secondaryText = "Last active " + f.localizedString(for: Date(timeIntervalSince1970: m.seenAt / 1000), relativeTo: Date())
-      cfg.secondaryTextProperties.color = .secondaryLabel
-      cfg.image = UIImage(systemName: "laptopcomputer"); cfg.imageProperties.tintColor = .secondaryLabel
+  // "Active today, 9:12 PM" · "Active yesterday" · "Active Nov 10" (the board's)
+  private func when(_ m: LinkedMac) -> String {
+    let d = Date(timeIntervalSince1970: m.seenAt / 1000), cal = Calendar.current
+    if cal.isDateInToday(d) { let f = DateFormatter(); f.timeStyle = .short; f.dateStyle = .none; return "Active today, " + f.string(from: d) }
+    if cal.isDateInYesterday(d) { return "Active yesterday" }
+    let f = DateFormatter(); f.setLocalizedDateFormatFromTemplate("MMMd"); return "Active " + f.string(from: d)
+  }
+  private func fill(_ c: UITableViewCell, _ r: Row) {
+    c.contentView.subviews.filter { $0.tag == 78 }.forEach { $0.removeFromSuperview() }
+    switch r {
+    case .mac(let id):
+      guard let m = macs.first(where: { $0.id == id }) else { return }
+      var cfg = UIListContentConfiguration.subtitleCell()
+      cfg.text = m.name; cfg.secondaryText = when(m); cfg.secondaryTextProperties.color = .secondaryLabel
+      cfg.image = Tile.make(0x5E5CE6, "desktopcomputer"); cfg.imageToTextPadding = 12
+      c.contentConfiguration = cfg; c.accessoryType = .disclosureIndicator; c.selectionStyle = .default
+      c.backgroundConfiguration = nil
+    case .link:
+      // (Apple's filled button on the page's own ground, as the board's)
+      c.contentConfiguration = nil; c.accessoryType = .none; c.selectionStyle = .none
+      var bg = UIBackgroundConfiguration.clear(); bg.backgroundColor = .clear; c.backgroundConfiguration = bg
+      var bc = UIButton.Configuration.filled(); bc.title = "Link a Mac"; bc.cornerStyle = .capsule; bc.baseBackgroundColor = Look.dyn(0x2F7BFF, 0x2F7BFF)
+      bc.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { var a = $0; a.font = .systemFont(ofSize: 17, weight: .semibold); return a }
+      let b = UIButton(configuration: bc, primaryAction: UIAction { [weak self] _ in self?.scan() }); b.tag = 78
+      b.frame = c.contentView.bounds; b.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+      c.contentView.addSubview(b)
     }
-    c.contentConfiguration = cfg
-    return c
+  }
+  override func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat { data.itemIdentifier(for: ip) == .link ? 50 : UITableView.automaticDimension }
+  private final class Source: UITableViewDiffableDataSource<Int, Row> {
+    weak var owner: LinkedDevicesVC?
+    override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? { snapshot().sectionIdentifiers[s] == 0 ? "Linked Macs" : nil }
+    override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
+      snapshot().sectionIdentifiers[s] == 0
+        ? "A linked Mac gets your chats straight from your iPhone and keeps up by itself. It unlinks after 30 days if this iPhone doesn’t open E11 Talk."
+        : "On the Mac: E11 Console › E11 Talk › Link this Mac, then scan its code. The Mac must be signed in as you."
+    }
   }
   override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) {
     tv.deselectRow(at: ip, animated: true)
-    if ip.section == 0 { scan(); return }
-    let m = macs[ip.row]
+    guard case .mac(let id)? = data.itemIdentifier(for: ip), let m = macs.first(where: { $0.id == id }) else { return }
     let a = UIAlertController(title: m.name, message: "Unlink this Mac? Its E11 Talk chats are removed from it.", preferredStyle: .actionSheet)
     a.addAction(UIAlertAction(title: "Unlink", style: .destructive) { _ in
       Net.shared.act(["act": "unlinkMac", "id": m.id]) { j in
@@ -109,9 +148,11 @@ final class ScanVC: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
   var onCode: ((String) -> Void)?
   private let session = AVCaptureSession()
   private var preview: AVCaptureVideoPreviewLayer?
-  private let frameV = UIView(), hint = UILabel(), panel = UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterialDark))
+  // (the board 46: the camera dimmed round Apple's scanner frame — its four corners — the words under it, white and grey)
+  private let dim = CAShapeLayer(), corners = CAShapeLayer(), hint = UILabel(), line = UILabel()
   private let bar = UIProgressView(progressViewStyle: .default)
   private var busy = false
+  private var hole = CGRect.zero
   override func viewDidLoad() {
     super.viewDidLoad()
     view.backgroundColor = .black
@@ -124,22 +165,35 @@ final class ScanVC: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
       if session.canAddOutput(out) { session.addOutput(out); out.setMetadataObjectsDelegate(self, queue: .main); out.metadataObjectTypes = [.qr] }
       let p = AVCaptureVideoPreviewLayer(session: session); p.videoGravity = .resizeAspectFill; view.layer.addSublayer(p); preview = p
     }
-    frameV.layer.borderColor = UIColor.white.cgColor; frameV.layer.borderWidth = 3; frameV.layer.cornerRadius = 22; frameV.layer.cornerCurve = .continuous
-    view.addSubview(frameV)
-    hint.text = "Point at the code on your Mac"; hint.textColor = .white; hint.font = .systemFont(ofSize: 17, weight: .semibold); hint.textAlignment = .center; hint.numberOfLines = 0
-    panel.layer.cornerRadius = 18; panel.clipsToBounds = true
-    panel.contentView.addSubview(hint); bar.isHidden = true; bar.progressTintColor = Look.accent; panel.contentView.addSubview(bar)
-    view.addSubview(panel)
+    dim.fillColor = UIColor.black.withAlphaComponent(0.55).cgColor; dim.fillRule = .evenOdd; view.layer.addSublayer(dim)
+    corners.strokeColor = UIColor.white.cgColor; corners.fillColor = UIColor.clear.cgColor; corners.lineWidth = 4; corners.lineCap = .round
+    view.layer.addSublayer(corners)
+    hint.text = "Point your iPhone at the code on your Mac"; hint.textColor = .white; hint.font = .systemFont(ofSize: 17); hint.textAlignment = .center; hint.numberOfLines = 0
+    line.text = "E11 Console on the Mac › E11 Talk › Link this Mac. The code works once, for 2 minutes."
+    line.textColor = UIColor(white: 0.68, alpha: 1); line.font = .systemFont(ofSize: 14); line.textAlignment = .center; line.numberOfLines = 0
+    bar.isHidden = true; bar.progressTintColor = Look.accent
+    [hint, line, bar].forEach { view.addSubview($0) }
     DispatchQueue.global(qos: .userInitiated).async { [session] in session.startRunning() }
   }
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
     preview?.frame = view.bounds
-    let s = min(view.bounds.width - 80, 280)
-    frameV.frame = CGRect(x: (view.bounds.width - s) / 2, y: view.bounds.midY - s / 2 - 30, width: s, height: s)
-    panel.frame = CGRect(x: 24, y: frameV.frame.maxY + 36, width: view.bounds.width - 48, height: bar.isHidden ? 64 : 84)
-    hint.frame = CGRect(x: 16, y: 10, width: panel.bounds.width - 32, height: 44)
-    bar.frame = CGRect(x: 20, y: 62, width: panel.bounds.width - 40, height: 4)
+    let s = min(view.bounds.width - 132, 260)
+    hole = CGRect(x: (view.bounds.width - s) / 2, y: view.bounds.midY - s / 2 - 70, width: s, height: s)
+    let d = UIBezierPath(rect: view.bounds); d.append(UIBezierPath(roundedRect: hole, cornerRadius: 30)); dim.path = d.cgPath; dim.frame = view.bounds
+    // (the frame's four corners, each 44 along with the frame's own rounding)
+    let r: CGFloat = 30, k: CGFloat = 44, h = hole, c = UIBezierPath()
+    c.move(to: CGPoint(x: h.minX, y: h.minY + k)); c.addLine(to: CGPoint(x: h.minX, y: h.minY + r)); c.addArc(withCenter: CGPoint(x: h.minX + r, y: h.minY + r), radius: r, startAngle: .pi, endAngle: .pi * 1.5, clockwise: true); c.addLine(to: CGPoint(x: h.minX + k, y: h.minY))
+    c.move(to: CGPoint(x: h.maxX - k, y: h.minY)); c.addLine(to: CGPoint(x: h.maxX - r, y: h.minY)); c.addArc(withCenter: CGPoint(x: h.maxX - r, y: h.minY + r), radius: r, startAngle: .pi * 1.5, endAngle: 0, clockwise: true); c.addLine(to: CGPoint(x: h.maxX, y: h.minY + k))
+    c.move(to: CGPoint(x: h.maxX, y: h.maxY - k)); c.addLine(to: CGPoint(x: h.maxX, y: h.maxY - r)); c.addArc(withCenter: CGPoint(x: h.maxX - r, y: h.maxY - r), radius: r, startAngle: 0, endAngle: .pi / 2, clockwise: true); c.addLine(to: CGPoint(x: h.maxX - k, y: h.maxY))
+    c.move(to: CGPoint(x: h.minX + k, y: h.maxY)); c.addLine(to: CGPoint(x: h.minX + r, y: h.maxY)); c.addArc(withCenter: CGPoint(x: h.minX + r, y: h.maxY - r), radius: r, startAngle: .pi / 2, endAngle: .pi, clockwise: true); c.addLine(to: CGPoint(x: h.minX, y: h.maxY - k))
+    corners.path = c.cgPath; corners.frame = view.bounds
+    let w = view.bounds.width - 80
+    let hh = ceil(hint.sizeThatFits(CGSize(width: w, height: 200)).height)
+    hint.frame = CGRect(x: 40, y: hole.maxY + 42, width: w, height: hh)
+    let lh = ceil(line.sizeThatFits(CGSize(width: w, height: 200)).height)
+    line.frame = CGRect(x: 40, y: hint.frame.maxY + 10, width: w, height: lh)
+    bar.frame = CGRect(x: 60, y: line.frame.maxY + 20, width: view.bounds.width - 120, height: 4)
   }
   override func viewWillDisappear(_ a: Bool) { super.viewWillDisappear(a); let s = session; DispatchQueue.global().async { s.stopRunning() } }
   func metadataOutput(_ o: AVCaptureMetadataOutput, didOutput objs: [AVMetadataObject], from c: AVCaptureConnection) {
@@ -147,14 +201,14 @@ final class ScanVC: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
     guard v.hasPrefix("e11talk-link:") else { hint.text = "That isn’t an E11 Console code"; return }
     busy = true
     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-    frameV.layer.borderColor = Look.accent.cgColor
+    corners.strokeColor = Look.accent.cgColor
     hint.text = "Linking…"
     onCode?(String(v.dropFirst("e11talk-link:".count)))
   }
   func failed(_ why: String) {
     UINotificationFeedbackGenerator().notificationOccurred(.error)
-    hint.text = why; frameV.layer.borderColor = UIColor.systemRed.cgColor
-    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in self?.busy = false; self?.frameV.layer.borderColor = UIColor.white.cgColor; self?.hint.text = "Point at the code on your Mac" }
+    hint.text = why; corners.strokeColor = UIColor.systemRed.cgColor
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in self?.busy = false; self?.corners.strokeColor = UIColor.white.cgColor; self?.hint.text = "Point your iPhone at the code on your Mac" }
   }
   func linked(_ name: String) {
     let s = session; DispatchQueue.global().async { s.stopRunning() }

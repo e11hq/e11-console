@@ -803,31 +803,40 @@ final class NewContactVC: UITableViewController, UITextFieldDelegate {
     let e = (email.text ?? "").trimmingCharacters(in: .whitespaces)
     navigationItem.rightBarButtonItem?.isEnabled = !(name.text ?? "").trimmingCharacters(in: .whitespaces).isEmpty && e.contains("@") && e.contains(".") && client != nil
   }
+  // (the board 51: Name and Email in one box, Client in its own with the client picked and ›; the line under it)
   override func numberOfSections(in tv: UITableView) -> Int { 2 }
   override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { s == 0 ? 2 : 1 }
-  override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? { s == 0 ? "Contact" : "Client (from E11 Console)" }
   override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
-    s == 1 ? "They sign in to E11 Talk with a one-time code sent to this email — E11 Talk only, never E11 Console. Only Super Admins and Office Admins add client contacts and put them in groups." : nil
+    // (the board's words wait for the shared sign-in — today a contact signs in with a code sent to their email)
+    s == 1 ? "They sign in to E11 Talk only, with a one-time code sent to this email. They’re in no group until someone adds them to one." : nil
+  }
+  private let clientCell = UITableViewCell(style: .value1, reuseIdentifier: nil)
+  private func setClientRow() {
+    var cfg = UIListContentConfiguration.valueCell()
+    cfg.text = "Client"
+    cfg.secondaryText = client.flatMap { Talk.shared.clients[$0]?.name } ?? "Choose"
+    clientCell.contentConfiguration = cfg; clientCell.accessoryType = .disclosureIndicator
   }
   override func tableView(_ tv: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
-    let c = UITableViewCell(style: .value1, reuseIdentifier: nil)
-    if ip.section == 0 {
-      c.selectionStyle = .none
-      let l = UILabel(frame: CGRect(x: 20, y: 0, width: 70, height: 44)); l.text = ip.row == 0 ? "Name" : "Email"; l.textColor = .secondaryLabel
-      let f = ip.row == 0 ? name : email
-      f.frame = CGRect(x: 96, y: 0, width: tv.bounds.width - 96 - 52, height: 44)
-      c.contentView.addSubview(l); c.contentView.addSubview(f)
-    } else {
-      var cfg = c.defaultContentConfiguration()
-      if let cl = client.flatMap({ Talk.shared.clients[$0] }) { cfg.text = cl.name } else { cfg.text = "Pick their client"; cfg.textProperties.color = .secondaryLabel }
-      c.contentConfiguration = cfg; c.accessoryType = .disclosureIndicator
-    }
+    if ip.section == 1 { setClientRow(); return clientCell }
+    let c = UITableViewCell(style: .default, reuseIdentifier: nil)
+    c.selectionStyle = .none
+    let l = UILabel(frame: CGRect(x: 16, y: 0, width: 70, height: 44)); l.text = ip.row == 0 ? "Name" : "Email"; l.font = .systemFont(ofSize: 17)
+    let f = ip.row == 0 ? name : email
+    f.font = .systemFont(ofSize: 17)
+    f.frame = CGRect(x: 98, y: 0, width: tv.bounds.width - 32 - 98 - 8, height: 44); f.autoresizingMask = [.flexibleWidth]
+    c.contentView.addSubview(l); c.contentView.addSubview(f)
     return c
   }
   override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) {
     tv.deselectRow(at: ip, animated: true)
     guard ip.section == 1 else { return }
-    navigationController?.pushViewController(ClientPickVC(selected: client) { [weak self] id in self?.client = id; self?.check(); self?.tableView.reloadSections([1], with: .none) }, animated: true)
+    // (the client picked: only its row's words crossfade — nothing else set again)
+    navigationController?.pushViewController(ClientPickVC(selected: client) { [weak self] id in
+      guard let self = self else { return }
+      self.client = id; self.check()
+      UIView.transition(with: self.clientCell.contentView, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction]) { self.setClientRow() }
+    }, animated: true)
   }
   private func add() {
     guard let c = client else { return }
