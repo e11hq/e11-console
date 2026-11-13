@@ -680,7 +680,8 @@ export function createServer(cfg) {
       const r = signinReq(Object.fromEntries(url.searchParams));
       if (!r || url.searchParams.get('response_type') !== 'code') return page(res, 400, 'Sign-in link not valid', 'Open E11 Console again to sign in.');
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', ...noStore, 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'" });
-      return res.end(signinPage({ mark: mark(), req: r }));
+      // (E11 Talk's app adds app=talk: the page's name its own — a client contact never sees E11 Console's)
+      return res.end(signinPage({ mark: mark(), req: r, app: url.searchParams.get('app') === 'talk' ? 'talk' : 'console' }));
     }
     if (p === '/oidc/token' && req.method === 'POST') {
       const raw = await readRaw(req, 64 * 1024).catch(() => Buffer.alloc(0));

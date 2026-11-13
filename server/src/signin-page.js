@@ -2,7 +2,7 @@
 // password, or a sign-in code (an admin's, or the owner's own) → set a password → in. One page, its steps drawn by a
 // little script; everything checked by the server (signin.js). Light and dark follow the phone. No outside files.
 
-export function signinPage({ mark = '', req = {} }) {
+export function signinPage({ mark = '', req = {}, app = 'console' }) {
   // (inside a <script> block nothing is HTML-decoded: only what could close the block is escaped)
   const reqJson = JSON.stringify(req).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
   return `<!doctype html>
@@ -12,7 +12,7 @@ export function signinPage({ mark = '', req = {} }) {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="color-scheme" content="light dark">
-<title>Sign in · E11 Console</title>
+<title>Sign in · ${app === 'talk' ? 'E11 Talk' : 'E11 Console'}</title>
 <style>
 :root{--bg:#F2F2F7;--card:#fff;--ink:#000;--sub:#6C6C70;--btn:#000;--btnInk:#fff;--line:#E5E5EA;--blue:#007AFF;--bad:#D70015}
 @media (prefers-color-scheme: dark){:root{--bg:#000;--card:#1C1C1E;--ink:#fff;--sub:#98989F;--btn:#fff;--btnInk:#000;--line:#38383A;--blue:#0A84FF;--bad:#FF6961}}
