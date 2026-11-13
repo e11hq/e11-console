@@ -274,8 +274,19 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
     // (the page's first showing sets its list — a client's page had nothing until then: Haris 2026-11-13, "the groups are
     //  coming empty"; after that it's kept up to date while away and not set again as it comes back)
     if !shownOnce { shownOnce = true; reload(animated: false) }
+    // (back from a client's page or a chat with the list left at its start: the list put back at its start as it was — while
+    //  the page was away its list was moved up to the small bar's room, and Apple's bar came back small: the check's note,
+    //  "page coming back from a client's page", room 116 of 189 — Haris 2026-11-13)
+    if let o = leftAtTop, table.contentOffset.y > o + 0.5 { table.contentOffset = CGPoint(x: table.contentOffset.x, y: o) }
+    leftAtTop = nil
   }
-  private var shownOnce = false
+  private var shownOnce = false, leftAtTop: CGFloat?
+  override func viewWillDisappear(_ a: Bool) {
+    super.viewWillDisappear(a)
+    // (leaving with the big title out and the list at its start: where that start is, to come back to)
+    let atTop = table.contentOffset.y <= -table.adjustedContentInset.top + 0.5
+    leftAtTop = atTop && navigationItem.largeTitleDisplayMode != .never && !search.isActive ? table.contentOffset.y : nil
+  }
 
   @objc func changed() { reload(animated: view.window != nil) }
   func updateSearchResults(for s: UISearchController) { reload(animated: false) }
