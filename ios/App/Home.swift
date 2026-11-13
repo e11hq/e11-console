@@ -2693,7 +2693,7 @@ extension HomeView {
   // what a row shows, to tell whether it changed: a settings row by its item, your card by its words and photo, a block of
   // the page's own always (it draws itself, keeping what's the same)
   func meSig(_ key: String) -> String {
-    if key == "me:card", let c = listViews[key] as? MeCardBlock { let x = c.info; return "\(x.name)|\(x.role)|\(x.email)|\(MePhoto.shared.image.map { "\(ObjectIdentifier($0).hashValue)" } ?? "-")\(MePhoto.shared.initials ?? "")|\(look.key)" }
+    if key == "me:card", let c = listViews[key] as? MeCardBlock { let x = c.info; return "\(x.name)|\(x.role)|\(x.email)|\(c.away)|\(MePhoto.shared.image.map { "\(ObjectIdentifier($0).hashValue)" } ?? "-")\(MePhoto.shared.initials ?? "")|\(look.key)" }
     if let e = listViews[key] as? AppleEmpty { return "u|" + e.sig + "|\(look.key)" }   // (Apple's empty state: by its words)
     if let it = meItems[key] { return it.sig + "|\(it.toggle.map { $0 ? "1" : "0" } ?? "")|\(look.key)" }
     if let v = listViews[key] { return "b|\(itemHeight(key, v))" }   // (a block's own height changed — its cell sized again)
@@ -2731,6 +2731,12 @@ extension HomeView {
       cf.text = x.name; cf.textProperties.font = .systemFont(ofSize: 21, weight: .semibold); cf.textProperties.color = L.title
       cf.secondaryText = [x.role, x.email].filter { !$0.isEmpty }.joined(separator: "\n")
       cf.secondaryTextProperties.font = .systemFont(ofSize: 14); cf.secondaryTextProperties.color = .secondaryLabel; cf.secondaryTextProperties.numberOfLines = 2
+      // (Out of Office: the line in orange under them while it lasts — Haris 2026-11-13)
+      if !c.away.isEmpty {
+        let a = NSMutableAttributedString(string: cf.secondaryText ?? "", attributes: [.foregroundColor: UIColor.secondaryLabel])
+        a.append(NSAttributedString(string: (a.length > 0 ? "\n" : "") + c.away, attributes: [.foregroundColor: UIColor.systemOrange, .font: UIFont.systemFont(ofSize: 14, weight: .semibold)]))
+        cf.secondaryAttributedText = a; cf.secondaryTextProperties.numberOfLines = 3
+      }
       cf.textToSecondaryTextVerticalPadding = 3
       cf.image = c.photo.map { roundPic($0, initials: nil, color: nil, size: 62) }
       cf.imageProperties.maximumSize = CGSize(width: 62, height: 62); cf.imageProperties.reservedLayoutSize = CGSize(width: 62, height: 0); cf.imageProperties.cornerRadius = 31

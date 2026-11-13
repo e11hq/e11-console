@@ -1383,7 +1383,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   func pickPeople() {
     guard let pool = model?["pool"] as? [[String: Any]], !pool.isEmpty else { return }
     var on = pool.map { ($0["on"] as? Bool) == true }
-    let rows: [[String: Any]] = pool.enumerated().map { i, p in ["i": i, "label": (p["id"] as? String) == (model?["me"] as? String) ? "Me" : (p["name"] as? String ?? ""), "sub": p["role"] as? String ?? "", "person": personArg(p), "checked": on[i], "multi": true, "find": (p["name"] as? String ?? "") + " " + (p["role"] as? String ?? "")] }
+    let rows: [[String: Any]] = pool.enumerated().map { i, p in ["i": i, "label": (p["id"] as? String) == (model?["me"] as? String) ? "Me" : (p["name"] as? String ?? ""), "sub": p["role"] as? String ?? "", "away": p["away"] as? String ?? "", "person": personArg(p), "checked": on[i], "multi": true, "find": (p["name"] as? String ?? "") + " " + (p["role"] as? String ?? "")] }
     // (in their groups, as the website's sheet: Production, Social, Freelancers, Creative Director — whoever is on it ticked)
     let order: [(String, String)] = [("Production", "Production"), ("Social", "Social"), ("Freelancer", "Freelancers"), ("Creative Director", "Creative Director"), ("", "Others")]
     let sections: [[String: Any]] = order.compactMap { key, head in

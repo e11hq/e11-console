@@ -2770,7 +2770,8 @@ enum FocusAfterPicker {
 final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISheetPresentationControllerDelegate, UISearchBarDelegate {
   struct Chip { let i: Int; let swatch: String?; let label: String?; let color: UIColor?; let on: Bool; let disabled: Bool }
   struct Row { let i: Int; let label: String; let sub: String?; let icon: String?; let danger: Bool; let checked: Bool; let disabled: Bool; let dot: UIColor?; let tint: UIColor?; let locked: Bool; let chips: [Chip]?; let chipKind: String; var multi: Bool = false
-    var pic: UIImage? = nil; var initials: String? = nil; var picColor: UIColor? = nil; var find: String = ""; var accent: Bool = false; var red: Bool = false }
+    var pic: UIImage? = nil; var initials: String? = nil; var picColor: UIColor? = nil; var find: String = ""; var accent: Bool = false; var red: Bool = false
+    var away: String? = nil }   // (Out of Office: "Out of office until Fri 20 Nov", orange under the role — Haris 2026-11-13)
   struct Section { let header: String?; let rows: [Row]; var photo: UIImage? = nil; var initials: String? = nil; var color: UIColor? = nil }
   private var sections: [Section] = []
   // (a sheet with a search box: everything, what the search shows, the ticks flipped here, the typed entry option)
@@ -2830,7 +2831,8 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
                    locked: (r["locked"] as? Bool) == true, chips: chips, chipKind: r["kind"] as? String ?? "", multi: (r["multi"] as? Bool) == true,
                    pic: NativeSheetVC.photo(r["person"]), initials: (r["person"] as? [String: Any])?["initials"] as? String,
                    picColor: NativeSheetVC.color((r["person"] as? [String: Any])?["color"]), find: ((r["find"] as? String) ?? (r["label"] as? String) ?? "").lowercased(),
-                   accent: (r["accent"] as? Bool) == true, red: (r["red"] as? Bool) == true)
+                   accent: (r["accent"] as? Bool) == true, red: (r["red"] as? Bool) == true,
+                   away: (r["away"] as? String).flatMap { $0.isEmpty ? nil : $0 })
       }
       if !rows.isEmpty {
         var sc = Section(header: (sec["header"] as? String).flatMap { $0.isEmpty ? nil : $0 }, rows: rows)
@@ -3041,7 +3043,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
       default: return 30 + 20
       }
     }
-    return r.sub == nil ? 52 : 66
+    return r.sub == nil && r.away == nil ? 52 : r.away != nil && r.sub != nil ? 82 : 66
   }
   func numberOfSections(in tableView: UITableView) -> Int { sections.count }
   func tableView(_ tableView: UITableView, numberOfRowsInSection s: Int) -> Int { sections[s].rows.count }
@@ -3087,10 +3089,15 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     if let chips = r.chips { return chipCell(chips, kind: r.chipKind) }
     let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
     cell.insetsLayoutMarginsFromSafeArea = false; cell.contentView.insetsLayoutMarginsFromSafeArea = false
-    var c = r.sub == nil ? cell.defaultContentConfiguration() : UIListContentConfiguration.subtitleCell()
+    var c = r.sub == nil && r.away == nil ? cell.defaultContentConfiguration() : UIListContentConfiguration.subtitleCell()
     c.text = r.label
     c.secondaryText = r.sub
     c.secondaryTextProperties.color = .secondaryLabel
+    if let aw = r.away {
+      let a = NSMutableAttributedString(string: r.sub ?? "", attributes: [.foregroundColor: UIColor.secondaryLabel])
+      a.append(NSAttributedString(string: (a.length > 0 ? "\n" : "") + aw, attributes: [.foregroundColor: UIColor.systemOrange, .font: UIFont.systemFont(ofSize: UIFont.preferredFont(forTextStyle: .subheadline).pointSize, weight: .semibold)]))
+      c.secondaryAttributedText = a; c.secondaryTextProperties.numberOfLines = 2
+    }
     // (accent: the words and the icon in blue — Turn on link)
     // (red: in red where it is, not moved down with Delete — Turn off link)
     let tint: UIColor = r.disabled ? .tertiaryLabel : r.danger || r.red ? .systemRed : r.accent ? .systemBlue : .label

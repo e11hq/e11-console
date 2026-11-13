@@ -294,6 +294,7 @@ final class SetGroup: UIView, HomeBlock {
 // your card at the top of Me: photo, name, role, email, ›
 final class MeCardBlock: AssetTile, HomeBlock {
   private let card = UIView(), pic = UIImageView(), name = UILabel(), role = UILabel(), mail = UILabel(), chev = UIImageView()
+  private(set) var away = ""   // (Out of Office: "Out of office until Fri 20 Nov", orange under the role — Haris 2026-11-13)
   var photo: UIImage? { pic.image }
   private var photoPath: String?
   override init(frame: CGRect) {
@@ -311,7 +312,7 @@ final class MeCardBlock: AssetTile, HomeBlock {
   func set(_ c: [String: Any], look L: HomeLook) {
     card.backgroundColor = L.card
     name.text = c["name"] as? String; name.textColor = L.title
-    role.text = c["role"] as? String; mail.text = c["email"] as? String
+    role.text = c["role"] as? String; mail.text = c["email"] as? String; away = c["away"] as? String ?? ""
     ini = c["ini"] as? String ?? ""; rgb = NativeSheetVC.color(c["rgb"]) ?? .systemGray
     MePhoto.shared.who(ini, rgb)
     paintPic()
@@ -815,7 +816,7 @@ final class MeCtl {
     let has = { (k: String) in p[k] != nil && !(p[k] is NSNull) }
     let kinds = Set(stack.map { $0.kind })
     let env: Any = p["env"] ?? (["shell": SHELL_VERSION] as [String: Any])
-    if let x = AppData.shared.meModel("me", "me", [env]) { for k in ["card", "work"] { if let v = x[k] { m[k] = v } }; if !has("digest") { m["digest"] = x["digest"] } }
+    if let x = AppData.shared.meModel("me", "me", [env]) { for k in ["card", "work"] { if let v = x[k] { m[k] = v } }; if !has("digest") { m["digest"] = x["digest"] }; m["away"] = x["away"] ?? NSNull() }
     // (step 9: Me's own rows the page gave, when it hasn't — no website, or offline: About, the owner, the version, the Test
     //  site rows, the sync line — from what the server said at the start and the app's own state)
     let st = main.startInfo
@@ -1937,6 +1938,17 @@ final class MeCtl {
         card.onTap = { [weak self] in self?.open("profile") }   // (the app's own My profile, 2026-11-03)
         out.append(card)
       } else { let n = part(h, "wait") { AppleEmpty() }; n.setLoading(); out.append(n) }
+      // Out of Office (Haris 2026-11-13, mock-up "Out of Office" approved): your own switch and the day you're back
+      if model["card"] != nil {
+        let aw = model["away"] as? [String: Any], day = aw?["day"] as? String, label = aw?["label"] as? String ?? ""
+        var rows = [SetItem(key: "away", title: "Out of Office", sub: day == nil ? "" : "Until \(label), 9:00 AM", sym: "sun.max.fill", col: .systemOrange, toggle: day != nil, flip: { [weak self, weak h] on in
+          guard let self = self, let h = h else { return }
+          if on { self.awayPick(h, day: nil) } else { self.pfSet("away", ["value": NSNull()], page: nil); self.settle(h) }
+        })]
+        if let d = day { rows.append(SetItem(key: "awayBack", title: "Back On", value: label, tap: { [weak self, weak h] in if let h = h { self?.awayPick(h, day: d) } })) }
+        out.append(head(h, "away", "")); out.append(group(h, "away", rows))
+        out.append(foot(h, "away", day == nil ? "Going away? Pause every notification from E11 Console and E11 Talk until the day you’re back." : "Every notification from E11 Console and E11 Talk is paused until \(label), 9:00 AM. The Inbox and your chats still collect everything. Turn it off any time."))
+      }
       let work = ((model["work"] as? [[String: Any]]) ?? []).map { w -> SetItem in
         let k = w["k"] as? String ?? ""
         var it = SetItem(key: k, title: w["t"] as? String ?? "", sub: w["s"] as? String ?? "", sym: w["sym"] as? String, col: NativeSheetVC.color(w["col"]),
@@ -2092,6 +2104,18 @@ final class MeCtl {
     h.setContent(out)
   }
   // a switch the page may not change (Face ID asked and cancelled): back as the page has it, a moment later
+  // the day you're back: Apple's sheet with Apple's calendar (Turn On, or Save when changing it); Cancel puts the switch back
+  private func awayPick(_ h: HomeView, day: String?) {
+    let vc = AwaySheetVC(day: day) { [weak self, weak h] picked in
+      guard let self = self, let h = h else { return }
+      guard let v = picked else { h.meSwitchBack("away"); return }
+      if v != day { self.pfSet("away", ["value": v], page: nil); self.settle(h) }
+    }
+    let nav = UINavigationController(rootViewController: vc)
+    if let sh = nav.sheetPresentationController { sh.detents = [.large()]; sh.prefersGrabberVisible = true }
+    nav.presentationController?.delegate = vc
+    main.topMost().present(nav, animated: true)
+  }
   private func settle(_ h: HomeView) { DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self, weak h] in if let h = h { self?.blocks(h); h.setNeedsLayout() } } }
 
   private var team: [String: Any] { (model["team"] as? [String: Any]) ?? [:] }
@@ -4390,5 +4414,69 @@ final class SigninCodeVC: UIViewController {
       stack.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 8), stack.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -8),
       copy.widthAnchor.constraint(equalTo: stack.widthAnchor), share.widthAnchor.constraint(equalTo: stack.widthAnchor),
     ])
+  }
+}
+
+// Out of Office — the day you're back (Haris 2026-11-13, mock-up "Out of Office", board 2): Apple's sheet, Apple's grouped
+// list with Apple's calendar in it, the words under it saying until when; 9:00 AM Dubai time that day it ends by itself
+final class AwaySheetVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UIAdaptivePresentationControllerDelegate {
+  private let table = UITableView(frame: .zero, style: .insetGrouped)
+  private let picker = UIDatePicker()
+  private let changing: Bool
+  private var done: ((String?) -> Void)?
+  private static let dubai = TimeZone(identifier: "Asia/Dubai")!
+  private static var cal: Calendar { var c = Calendar(identifier: .gregorian); c.timeZone = dubai; return c }
+  static func dayString(_ d: Date) -> String { let f = DateFormatter(); f.calendar = cal; f.timeZone = dubai; f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd"; return f.string(from: d) }
+  static func label(_ d: Date) -> String { let f = DateFormatter(); f.timeZone = dubai; f.locale = Locale(identifier: "en_GB"); f.dateFormat = "EEE d MMM"; return f.string(from: d) }
+  init(day: String?, done: @escaping (String?) -> Void) {
+    changing = day != nil; self.done = done
+    super.init(nibName: nil, bundle: nil)
+    let c = AwaySheetVC.cal, today = c.startOfDay(for: Date())
+    picker.datePickerMode = .date; picker.preferredDatePickerStyle = .inline
+    picker.calendar = c; picker.timeZone = AwaySheetVC.dubai
+    picker.minimumDate = c.date(byAdding: .day, value: 1, to: today); picker.maximumDate = c.date(byAdding: .day, value: 365, to: today)
+    let f = DateFormatter(); f.calendar = c; f.timeZone = AwaySheetVC.dubai; f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd HH:mm"
+    picker.date = day.flatMap { f.date(from: $0 + " 12:00") } ?? c.date(byAdding: .day, value: 7, to: today.addingTimeInterval(12 * 3600))!
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    title = "Out of Office"
+    navigationItem.leftBarButtonItem = UIBarButtonItem(systemItem: .cancel, primaryAction: UIAction { [weak self] _ in self?.finish(nil) })
+    let ok = UIBarButtonItem(title: changing ? "Save" : "Turn On", primaryAction: UIAction { [weak self] _ in guard let self = self else { return }; self.finish(AwaySheetVC.dayString(self.picker.date)) })
+    if #available(iOS 26, *) { ok.style = .prominent } else { ok.style = .done }
+    navigationItem.rightBarButtonItem = ok
+    picker.addAction(UIAction { [weak self] _ in self?.footerAgain() }, for: .valueChanged)
+    table.dataSource = self; table.delegate = self
+    table.frame = view.bounds; table.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    view.addSubview(table)
+  }
+  private func finish(_ v: String?) { let d = done; done = nil; dismiss(animated: true) { d?(v) } }
+  func presentationControllerDidDismiss(_ presentationController: UIPresentationController) { let d = done; done = nil; d?(nil) }
+  private var footerWords: String { "Every notification from E11 Console and E11 Talk pauses until \(AwaySheetVC.label(picker.date)), 9:00 AM — the morning summary and @mentions too. The Inbox and your chats still collect everything." }
+  // (the words under the calendar crossfade to the new day — nothing else moves)
+  private func footerAgain() {
+    guard let v = table.footerView(forSection: 0) else { return }
+    var c = UIListContentConfiguration.groupedFooter(); c.text = footerWords
+    UIView.transition(with: v, duration: 0.25, options: [.transitionCrossDissolve, .allowUserInteraction]) { v.contentConfiguration = c }
+  }
+  func numberOfSections(in tableView: UITableView) -> Int { 1 }
+  func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { 1 }
+  func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? { "The day you’re back" }
+  func tableView(_ tableView: UITableView, viewForFooterInSection section: Int) -> UIView? {
+    let v = UITableViewHeaderFooterView(reuseIdentifier: nil)
+    var c = UIListContentConfiguration.groupedFooter(); c.text = footerWords; v.contentConfiguration = c
+    return v
+  }
+  func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+    let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+    cell.selectionStyle = .none
+    picker.translatesAutoresizingMaskIntoConstraints = false
+    cell.contentView.addSubview(picker)
+    NSLayoutConstraint.activate([
+      picker.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor, constant: 8), picker.trailingAnchor.constraint(equalTo: cell.contentView.trailingAnchor, constant: -8),
+      picker.topAnchor.constraint(equalTo: cell.contentView.topAnchor, constant: 4), picker.bottomAnchor.constraint(equalTo: cell.contentView.bottomAnchor, constant: -4),
+    ])
+    return cell
   }
 }
