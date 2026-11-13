@@ -3112,7 +3112,11 @@ final class MessageBar: UIView, UITextViewDelegate {
       var c = UIButton.Configuration.plain()
       c.title = name; c.baseForegroundColor = .label; c.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 60, bottom: 0, trailing: 16)
       c.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { var a = $0; a.font = .systemFont(ofSize: 17, weight: .medium); return a }
-      if let role = Talk.shared.people[id]?.role, !role.isEmpty {
+      // (Out of Office in E11 Console: that line in orange in the role's place, as the board — Haris 2026-11-13)
+      if let away = Talk.shared.people[id]?.awayLine {
+        c.subtitle = away; c.titlePadding = 1
+        c.subtitleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { var a = $0; a.font = .systemFont(ofSize: 13, weight: .semibold); a.foregroundColor = .systemOrange; return a }
+      } else if let role = Talk.shared.people[id]?.role, !role.isEmpty {
         c.subtitle = role; c.titlePadding = 1
         c.subtitleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { var a = $0; a.font = .systemFont(ofSize: 13); a.foregroundColor = .secondaryLabel; return a }
       }

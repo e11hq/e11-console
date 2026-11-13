@@ -5,10 +5,19 @@ import LinkPresentation
    phone only — WhatsApp's way: the server passes each one on and lets it go once every member's phone has it).
    Everything new comes as events (server/src/talk.js): applied here, kept on the phone, then the server is told
    (ack) so it can let them go. */
-struct Person { let id: String; let name: String; let role: String; let photo: String?; let color: String?; let gone: Bool; var contact: Bool = false; var client: String? = nil }
+struct Person { let id: String; let name: String; let role: String; let photo: String?; let color: String?; let gone: Bool; var contact: Bool = false; var client: String? = nil
+  var away: String? = nil }   // (Out of Office in E11 Console: the day they're back, 'YYYY-MM-DD' — Haris 2026-11-13)
 // a person's picture: their E11 Console photo — a client contact's is their client's logo (Client Assets), else initials
 extension Person {
   var picture: String? { contact ? client.flatMap { Talk.shared.clients[$0]?.logo } : photo }
+  // "Out of office until Fri 20 Nov" while it lasts (until 9:00 AM Dubai that day), else nil
+  var awayLine: String? {
+    guard let d = away, d.count == 10 else { return nil }
+    let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.timeZone = TimeZone(identifier: "Asia/Dubai"); f.dateFormat = "yyyy-MM-dd HH:mm"
+    guard let ends = f.date(from: d + " 09:00"), Date() < ends else { return nil }
+    let g = DateFormatter(); g.locale = Locale(identifier: "en_GB"); g.timeZone = TimeZone(identifier: "Asia/Dubai"); g.dateFormat = "EEE d MMM"
+    return "Out of office until " + g.string(from: ends)
+  }
 }
 struct Contact { let id: String; let name: String; let email: String; let client: String; let groups: Int }
 struct LinkedMac { let id: String; let name: String; let linkedAt: Double; let seenAt: Double }
@@ -174,7 +183,7 @@ final class Talk {
     func person(_ p: [String: Any]) -> Person? {
       guard let id = p["id"] as? String else { return nil }
       return Person(id: id, name: p["name"] as? String ?? "", role: p["role"] as? String ?? "", photo: p["photo"] as? String, color: p["color"] as? String, gone: (p["gone"] as? Bool) == true,
-                    contact: (p["contact"] as? Bool) == true, client: p["client"] as? String)
+                    contact: (p["contact"] as? Bool) == true, client: p["client"] as? String, away: p["away"] as? String)
     }
     if let m = j["me"] as? [String: Any] { me = person(m); canMake = (m["canMake"] as? Bool) == true; boss = (m["boss"] as? Bool) == true; isContact = (m["contact"] as? Bool) == true; myEmail = m["email"] as? String; mutedMentions = ((m["opts"] as? [String: Any])?["mutedMentions"] as? Bool) ?? true }
     contacts = ((j["contacts"] as? [[String: Any]]) ?? []).compactMap { c in
