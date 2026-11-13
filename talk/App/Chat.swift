@@ -18,7 +18,7 @@ enum ChatItem: Hashable { case msg(String); case intro }
 // TEMPORARY (Haris 2026-11-13: "dig it properly"): times each step of a chat opening, shown as a line once it's open —
 // taken out again once the slow step is found and fixed (Don't 2)
 enum OpenProbe {
-  static var t0 = CACurrentMediaTime(), marks: [(String, Double)] = [], cells = 0, cellMs = 0.0, pics = 0, picMs = 0.0, on = false
+  static var t0 = CACurrentMediaTime(), marks: [(String, Double)] = [], cells = 0, cellMs = 0.0, pics = 0, picMs = 0.0, on = false, why = ""
   static func start() { t0 = CACurrentMediaTime(); marks = []; cells = 0; cellMs = 0; pics = 0; picMs = 0; on = true }
   static func mark(_ k: String) { if on { marks.append((k, (CACurrentMediaTime() - t0) * 1000)) } }
   static func line() -> String {
@@ -772,6 +772,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
   // each message kept by its id; only one that shows something new is drawn again
   private func reload(animated: Bool) {
+    let rt = CACurrentMediaTime(); defer { if OpenProbe.on && scrolledOnce { OpenProbe.mark("reload\(Int((CACurrentMediaTime() - rt) * 1000))ms") } }
     let l = Talk.shared.log(group)
     var snap = NSDiffableDataSourceSnapshot<String, ChatItem>()
     var newKeyOf: [String: String] = [:], newIdOf: [String: String] = [:]

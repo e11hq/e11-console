@@ -170,7 +170,7 @@ final class Talk {
     let pt = CACurrentMediaTime()   // (TEMPORARY: OpenProbe)
     for g in dirty { if let l = logs[g], let d = try? JSONEncoder().encode(l) { try? d.write(to: logFile(g), options: .atomic) } }
     dirty.removeAll()
-    if OpenProbe.on { OpenProbe.marks.append(("save\(Int((CACurrentMediaTime() - pt) * 1000))ms", (CACurrentMediaTime() - OpenProbe.t0) * 1000)) }
+    if OpenProbe.on { OpenProbe.marks.append(("save\(Int((CACurrentMediaTime() - pt) * 1000))ms\(OpenProbe.why)", (CACurrentMediaTime() - OpenProbe.t0) * 1000)); OpenProbe.why = "" }
   }
 
   func refresh(_ done: (() -> Void)? = nil) {
@@ -242,6 +242,7 @@ final class Talk {
       self.syncing = false
       guard let j = j, (j["ok"] as? Bool) == true else { done?(); return }
       let evs = (j["events"] as? [[String: Any]]) ?? []
+      if OpenProbe.on { OpenProbe.why = "(sync \(evs.count): " + Set(evs.compactMap { $0["type"] as? String }).sorted().joined(separator: ",") + (((j["more"] as? Bool) == true) ? " more" : "") + ")" }
       var touched = Set<String>(), groupChanged = false
       for e in evs { if let g = self.apply(e, &groupChanged) { touched.insert(g) } }
       self.flush()
