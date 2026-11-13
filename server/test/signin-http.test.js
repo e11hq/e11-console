@@ -124,3 +124,33 @@ test("the iPhone app's way back from signing in: a tiny page, signed in only", a
   assert.equal(r.status, 200);
   assert.ok((await r.text()).length < 200);
 });
+
+test("a client contact (E11 Talk only): their first code when added, a password, their own device key; E11 Console still refuses them", async () => {
+  app.store.importAll({ projects: [{ id: 'p9', name: 'Oasis Coffee', color: '#a0522d', order: 9 }] }, 'test');
+  const H = (who) => ({ 'X-Dev-Email': who });
+  const added = await post('/api/talk/act', { act: 'addContact', name: 'Layla Saeed', email: 'layla@oasis.test', client: 'p9' }, H('omar@e11.test'));
+  assert.equal(added.ok, true, JSON.stringify(added));
+  assert.match(added.signin.code, /^\d{4}$/);
+  assert.match(added.signin.message, /E11 Talk/);
+  assert.doesNotMatch(added.signin.message, /E11 Console/);
+  assert.equal((await api('start', { email: 'layla@oasis.test' })).ok, true);
+  const t = await api('code', { email: 'layla@oasis.test', code: added.signin.code });
+  assert.equal(t.ok, true);
+  assert.equal((await api('setpw', { ticket: t.ticket, password: 'sunny-latte-9' })).ok, true);
+  // (a new code for a forgotten password: admins only)
+  assert.equal((await post('/api/talk/act', { act: 'contactCode', id: added.contact.id }, H('sara@e11.test'))).ok, false);
+  const again = await post('/api/talk/act', { act: 'contactCode', id: added.contact.id }, H('omar@e11.test'));
+  assert.equal(again.ok, true); assert.equal(again.signin.newUser, false);
+  // (their own E11 Talk's key for Face ID, and whose key it is — Talk's "Continue as …")
+  const k = await post('/api/talk/device', { name: 'iPhone' }, H('layla@oasis.test'));
+  assert.equal(k.ok, true);
+  const who = await api('who', { key: k.key });
+  assert.equal(who.name, 'Layla Saeed'); assert.equal(who.role, 'Client');
+  assert.equal((await api('device', { key: k.key })).ok, true);
+  // (E11 Console's pages: never for a client contact)
+  assert.notEqual((await fetch(base + '/api/me', { headers: H('layla@oasis.test') })).status, 200);
+  // (a team member's E11 Console key: whose it is, for E11 Talk's card)
+  const sk = await post('/api/signin/device', { name: 'iPhone' }, H('lina@e11.test'));
+  const sw = await api('who', { key: sk.key });
+  assert.equal(sw.name, 'Lina Haddad'); assert.equal((await api('who', { key: 'nope.nope' })).ok, false);
+});

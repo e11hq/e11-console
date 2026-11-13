@@ -194,6 +194,8 @@ export function createSignin({ db, now = () => Date.now(), ownerEmail = '', owne
     q.devUsed.run(now(), d.id);
     return { ok: true, email: d.email };
   }
+  // (whose key it is, without using it — E11 Talk's "Continue as …" before Face ID)
+  function keyEmail(key) { const d = deviceRow(key); return d ? d.email : null; }
   function dropDevice(key) { const d = deviceRow(key); if (d) q.devGone.run(d.id); return { ok: true }; }
 
   // ---------- OpenID Connect: what Cloudflare asks of its sign-in provider ----------
@@ -251,5 +253,5 @@ export function createSignin({ db, now = () => Date.now(), ownerEmail = '', owne
     return u ? { sub: a.email, email: a.email, email_verified: true, name: u.name || a.email } : null;
   }
 
-  return { start, signInPassword, makeCode, useCode, useOwnerCode, setPassword, revokedBefore, codesRecord, endAll, deviceKey, useDevice, dropDevice, discovery, jwks, client, redirectOk, authCode, exchange, userinfo, readTicket };
+  return { start, signInPassword, makeCode, keyEmail, useCode, useOwnerCode, setPassword, revokedBefore, codesRecord, endAll, deviceKey, useDevice, dropDevice, discovery, jwks, client, redirectOk, authCode, exchange, userinfo, readTicket };
 }

@@ -24,7 +24,7 @@ const PHONE_MS = 30 * 86400000;         // a linked Mac goes when its phone hasn
 const rid = (p) => p + '-' + crypto.randomBytes(8).toString('hex');
 const clip = (s, n) => String(s == null ? '' : s).slice(0, n);
 
-export function createTalk({ dataDir, store, access, apns = null, now = () => Date.now(), dbFile, links = () => null }) {
+export function createTalk({ dataDir, store, access, apns = null, now = () => Date.now(), dbFile, links = () => null, signinCode = null }) {
   const file = dbFile || path.join(dataDir, 'db', 'talk.sqlite');
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
   const relay = path.join(dataDir, 'talk-relay');
@@ -378,7 +378,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     if (ks.some((k) => (contactRow(k) || {}).client !== g.client)) return bad('A client contact can only join their own client’s groups');
     return null;
   }
-  const CONTACT_ACTS = new Set(['send', 'edit', 'del', 'react', 'read', 'leave', 'pin', 'mute', 'typing']);
+  const CONTACT_ACTS = new Set(['send', 'edit', 'del', 'react', 'read', 'leave', 'pin', 'mute', 'typing', 'setOpt']);   // (setOpt: their own notification choices)
 
   // ---------- typing (step 5, Haris 2026-11-12): passed straight to the group's other phones and Macs that are listening —
   // nothing kept; a phone shows it for a few seconds unless told again ----------
@@ -468,7 +468,19 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         if (db.prepare('SELECT 1 FROM contacts WHERE lower(email) = ? AND gone = 0').get(email)) return bad('That email is a client contact already');
         const id = rid('k');
         db.prepare('INSERT INTO contacts (id, email, name, client, by, at) VALUES (?, ?, ?, ?, ?, ?)').run(id, email, name, c.id, u.id, t);
-        return { ok: true, contact: { id, name, email, client: c.id, groups: 0 } };
+        // (their first sign-in code, shown to pass on — board 51; none where our own sign-in isn't on)
+        const sign = signinCode ? signinCode(email, u, { name, client: c.name }) : null;
+        return { ok: true, contact: { id, name, email, client: c.id, groups: 0 }, ...(sign && sign.ok ? { signin: sign } : {}) };
+      }
+      // a new sign-in code for a client contact (forgot their password) — Super Admins and Office Admins
+      case 'contactCode': {
+        if (!isBoss(u)) return bad('Only Super Admins and Office Admins', 403);
+        const k = db.prepare('SELECT * FROM contacts WHERE id = ? AND gone = 0').get(String(b.id || ''));
+        if (!k) return bad('No such client contact');
+        if (!signinCode) return bad('Sign-in codes aren’t on here yet');
+        const c = clientById(k.client);
+        const sign = signinCode(k.email, u, { name: k.name, client: c ? c.name : '' });
+        return sign && sign.ok ? { ok: true, signin: sign } : bad((sign && sign.error) || 'Couldn’t make a code — try again');
       }
       case 'removeContact': {
         if (!isBoss(u)) return bad('Only Super Admins and Office Admins remove client contacts', 403);
@@ -877,6 +889,8 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     return { ok: true, made };
   }
   const isAdminOf = (u, gid) => { const g = Q.group.get(gid); return !!g && isAdmin(u, g); };
-  return { state, act, sync, ack, sample, upload, tasksChanged, contactByEmail, fileFor, filePath, fetched, listen, sweep, isAdminOf,
+  // (whose E11 Console key — board 53's card: name, role, colour)
+  function personByEmail(e) { const u = access.userByEmail(e); if (u) return personOf(u); const k = contactByEmail(e); return k ? { id: k.id, name: k.name, role: 'Client', photo: null, color: null } : null; }
+  return { state, act, sync, ack, sample, upload, tasksChanged, contactByEmail, personByEmail, fileFor, filePath, fetched, listen, sweep, isAdminOf,
     linkCode, linkStatus, macFor, unlinkMac, history, hasFiles, resend, close: () => { clearInterval(sweepTimer); for (const set of listeners.values()) for (const r of set) try { r.end(); } catch { /* fine */ } db.close(); } };
 }

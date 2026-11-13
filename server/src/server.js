@@ -10,6 +10,12 @@ import { createAuth } from './auth.js';
 import { createSignin } from './signin.js';
 import { signinPage } from './signin-page.js';
 // The message an admin sends with a sign-in code (Haris 2026-11-11, project doc own-sign-in-plan.md): new user or forgot password
+// a client contact's: E11 Talk only (Haris 2026-11-11 — Console's steps, in E11 Talk)
+function talkSigninMessage({ first, email, code, until, by, newUser }) {
+  return newUser
+    ? `Hi ${first},\n\nWelcome to E11 Talk, where we'll chat with you about your work. Here's how to sign in for the first time:\n\n1. Get E11 Talk from the App Store on your iPhone\n2. Your email (your username): ${email}\n3. Your sign-in code: ${code}\n4. Set your own password; the app opens once it's set.\n\nThe code works once and only until ${until}. If it runs out, just ask me for a new one.\n\nYou'll stay signed in, and Face ID gets you back in.\n\nPlease don't share this code with anyone.\n\n${by}`
+    : `Hi ${first},\n\nHere's a new sign-in code for E11 Talk:\n\nEmail: ${email}\nCode: ${code}\n\nSign in with it and set a new password. Your old password stops working once you do. The code works once and only until ${until}.\n\nPlease don't share this code with anyone.\n\n${by}`;
+}
 function signinMessage({ first, email, code, until, by, newUser, site }) {
   return newUser
     ? `Hi ${first},\n\nWelcome to E11 Console! Here's how to sign in for the first time:\n\n1. Open E11 Console: the iPhone app, the Mac app, or ${site}\n2. Your email (your username): ${email}\n3. Your sign-in code: ${code}\n4. Set your own password; the app opens once it's set.\n\nThe code works once and only until ${until}. If it runs out, just ask me for a new one.\n\nOn your iPhone or Mac you'll stay signed in, and Face ID / Touch ID gets you back in.\n\nPlease don't share this code with anyone.\n\n${by}`
@@ -61,7 +67,8 @@ export function createServer(cfg) {
   const signin = cfg.signinIssuer ? createSignin({
     db: store.db, now: cfg.now, ownerEmail: cfg.adminEmail, ownerCodeHash: cfg.ownerCodeHash, issuer: cfg.signinIssuer.replace(/\/$/, ''),
     clients: cfg.signinClients || [], keyFile: path.join(dataDir, 'signin-key.pem'),
-    findUser: (e) => access.userByEmail(e), onCodeUsed: (x) => codeUsedNotice(x),
+    // (a client contact signs in to E11 Talk only, the same way — E11 Console's pages still refuse them: who())
+    findUser: (e) => access.userByEmail(e) || talkContact(e), onCodeUsed: (x) => codeUsedNotice(x),
   }) : null;
   // The App Review copy (review.js): only when REVIEW_PASSWORD is set — never on the live or test copy
   const review = cfg.reviewPassword ? createReview({ store, password: cfg.reviewPassword, email: cfg.reviewEmail || undefined }) : null;
@@ -78,7 +85,17 @@ export function createServer(cfg) {
   // E11 Talk (talk.js): its own database, its own phones for notifications (the same Apple key, its own app)
   const talkApns = createApns({ store, keyFile: cfg.apnsKeyFile, keyId: cfg.apnsKeyId, teamId: cfg.apnsTeamId, topic: cfg.talkTopic || 'ae.e11.talk.ios', kvPrefix: 'talk-apns', hosts: cfg.apnsHosts, connectOpts: cfg.apnsConnectOpts });
   let talk = null;
-  const talkNow = () => talk || (talk = createTalk({ dataDir, store, access, apns: talkApns, dbFile: cfg.talkDbFile, now: cfg.now || (() => Date.now()), links: () => fileLinks }));
+  const talkNow = () => talk || (talk = createTalk({ dataDir, store, access, apns: talkApns, dbFile: cfg.talkDbFile, now: cfg.now || (() => Date.now()), links: () => fileLinks, signinCode: talkSigninCode }));
+  function talkContact(e) { try { return talkNow().contactByEmail(e); } catch { return null; } }
+  // a client contact's sign-in code (board 51): made by a Super / Office Admin, shown with the message to pass on
+  function talkSigninCode(email, by, { name = '', client = '' } = {}) {
+    if (!signin) return null;
+    const r = signin.makeCode(email, by.email);
+    if (!r.ok) return r;
+    const until = new Date(r.expires).toLocaleString('en-GB', { timeZone: process.env.TZ || 'Asia/Dubai', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true });
+    const first = String(name || email).split(/\s+/)[0], newUser = !r.hasPassword, byName = by.name || by.email;
+    return { ok: true, code: r.code, expires: r.expires, until, email: r.email, name, newUser, by: byName, message: talkSigninMessage({ first, email: r.email, code: r.code, until, by: byName, newUser, client }) };
+  }
   { const webSend = webPush.sendTo;
     webPush.sendTo = async (userId, msg, opts) => {
       // (the iPhone app: expense claims only as rules.js onPhone says — everyone's own claim approved / paid / added, the
@@ -619,6 +636,12 @@ export function createServer(cfg) {
         if (req.method !== 'HEAD') res.on('finish', () => t.fetched(dev, f.id));   // (the whole file reached the phone)
         return req.method === 'HEAD' ? res.end() : fs.createReadStream(full).pipe(res);
       }
+      // (a client contact's own E11 Talk, signed in: its device key for Face ID — staff use E11 Console's, shared on the phone)
+      if (signin && p === '/api/talk/device' && req.method === 'POST') {
+        const b = await readBody(req, 4096);
+        if (b.drop) return out(signin.dropDevice(b.key));
+        return out(signin.deviceKey(u.email, b.key, b.name));
+      }
       if (p === '/api/talk/push' && req.method === 'POST') {
         const b = await readBody(req, 16 * 1024);
         if (b.off) { talkApns.unregister(b.token); return out({ ok: true }); }
@@ -686,6 +709,11 @@ export function createServer(cfg) {
       if (what === 'setpw') { const x = signin.setPassword(body.ticket, body.password); return x.ok ? finish(res, x.email, r) : json(res, 200, x); }
       // (the app, after Face ID / Touch ID: its device key instead of the password)
       if (what === 'device') { const x = signin.useDevice(body.key); return x.ok ? finish(res, x.email, r) : json(res, 200, x); }
+      // (E11 Talk, before Face ID: whose E11 Console key this is — board 53's "Continue as …"; the key is the secret)
+      if (what === 'who') {
+        const e = signin.keyEmail(body.key), w = e ? talkNow().personByEmail(e) : null;
+        return json(res, 200, w ? { ok: true, name: w.name || e, role: w.role || '', color: w.color || null } : { ok: false });
+      }
     }
     return json(res, 404, { ok: false, error: 'Not found' });
   }
