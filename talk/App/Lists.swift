@@ -102,9 +102,9 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
   //  away again: back here it's hidden, out only as the list is pulled down — Haris 2026-11-13)
   override func viewDidDisappear(_ animated: Bool) {
     super.viewDidDisappear(animated)
-    UIView.performWithoutAnimation { if search.isActive { search.searchBar.text = ""; search.isActive = false } }
-    foldSearch(animated: false)
+    if search.isActive { backToTop = true; UIView.performWithoutAnimation { search.searchBar.text = ""; search.isActive = false } }
   }
+  private var backToTop = false   // (left while searching: back at the top of the list, as the page first came)
   // the search bar put away: the list taken up by the search bar's own room, as a finger scrolling it would — Apple then
   // folds the bar away itself (handing Apple the search again left a bar pulled out still out — Haris 2026-11-13)
   private var foldedTop: CGFloat?   // (the room above the list with the search bar put away — as the page first came)
@@ -112,12 +112,22 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
     super.viewDidAppear(a)
     if foldedTop == nil, navigationItem.hidesSearchBarWhenScrolling { foldedTop = table.adjustedContentInset.top }
   }
-  func foldSearch(animated: Bool) {
+  func foldSearch(animated: Bool, toTop: Bool = false) {
     guard navigationItem.hidesSearchBarWhenScrolling, !search.isActive, let folded = foldedTop else { return }
+    navigationController?.view.layoutIfNeeded()
     let top = table.adjustedContentInset.top, extra = top - folded
-    guard extra > 1, table.contentOffset.y < -folded else { return }   // (the bar out, and the list still showing it)
+    // (the bar out and the list still showing it — or back from a search: the list at its start, the bar away)
+    guard toTop || (extra > 1 && table.contentOffset.y < -folded) else { return }
     table.setContentOffset(CGPoint(x: table.contentOffset.x, y: -folded), animated: animated)
   }
+  // (a short list can't be scrolled far enough for Apple to fold the bar as it's pushed up: a push up, let go, folds it)
+  private var pushedUp = false
+  func scrollViewWillEndDragging(_ s: UIScrollView, withVelocity v: CGPoint, targetContentOffset t: UnsafeMutablePointer<CGPoint>) {
+    pushedUp = v.y > 0 || s.panGestureRecognizer.translation(in: s).y < 0
+  }
+  func scrollViewDidEndDragging(_ s: UIScrollView, willDecelerate d: Bool) { if !d { settleSearch() } }
+  func scrollViewDidEndDecelerating(_ s: UIScrollView) { settleSearch() }
+  private func settleSearch() { if pushedUp { pushedUp = false; foldSearch(animated: true) } }
   // a row's cell: the group rows as before (a client's groups — step 2b); a client's row Apple's own cell (2a)
   func cell(_ tv: UITableView, _ ip: IndexPath, _ row: Row) -> UITableViewCell {
     if case .client(let id) = row {
@@ -161,7 +171,12 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
     guard !rows.isEmpty else { return }
     snap.reconfigureItems(rows); data.applySteady(snap, in: table, animated: view.window != nil)
   }
-  override func viewWillAppear(_ a: Bool) { super.viewWillAppear(a); reload(animated: false) }
+  override func viewWillAppear(_ a: Bool) {
+    super.viewWillAppear(a); reload(animated: false)
+    // (coming back: the search bar away again — and at the list's start if a search was open when the page went)
+    let top = backToTop; backToTop = false
+    UIView.performWithoutAnimation { foldSearch(animated: false, toTop: top) }
+  }
   @objc func changed() { reload(animated: view.window != nil) }
   func updateSearchResults(for s: UISearchController) { reload(animated: false) }
   func build() -> [(String, String, [Row])] { [] }
@@ -503,7 +518,7 @@ extension GroupsVC: UISearchControllerDelegate {
   // (a search closed: the search bar folds away again — out only as the list is pulled down; Haris 2026-11-13)
   func didDismissSearchController(_ s: UISearchController) {
     guard view.window != nil else { return }
-    DispatchQueue.main.async { [weak self] in self?.foldSearch(animated: true) }
+    DispatchQueue.main.async { [weak self] in self?.foldSearch(animated: true, toTop: true) }
   }
 }
 
