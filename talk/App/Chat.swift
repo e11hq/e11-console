@@ -1154,17 +1154,19 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   func tableView(_ tv: UITableView, previewForHighlightingContextMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? { holdPreview(tv, c) }
   private func holdPreview(_ tv: UITableView, _ c: UIContextMenuConfiguration) -> UITargetedPreview? {
     guard let id = c.identifier as? String, let ip = data.indexPath(for: item(id)), let cell = tv.cellForRow(at: ip) as? BubbleCell else { return nil }
-    // (the bubble's own shape, tail and all, lifting from the row — not a rounded box that cut the tail away)
-    // (the row's own content is what lifts, its visible part the bubble's shape: the tail lies outside the bubble view
-    //  itself, and a shape reaching outside the lifted view is ignored by iPhone — it lifted the bubble's whole square, white
-    //  or black round it; Haris 2026-11-13. The forward button beside it stays outside the shape, so it doesn't lift.)
+    // (what lifts is a picture of the bubble drawn inside its own shape only — tail and all — with nothing round it:
+    //  E11 Console's lesson for its folder tiles (Haris 2026-11-11): iPhone kept lifting the row's whole square, white or
+    //  black round the bubble, whatever shape it was told — Haris 2026-11-13. The shadow in the same shape, as Messages.)
+    let r = cell.heldRect, shape = cell.heldPath(origin: r.origin)
+    let img = UIGraphicsImageRenderer(bounds: CGRect(origin: .zero, size: r.size)).image { ctx in
+      shape.addClip()
+      ctx.cgContext.translateBy(x: -r.minX, y: -r.minY)
+      cell.contentView.drawHierarchy(in: cell.contentView.bounds, afterScreenUpdates: false)
+    }
+    let iv = UIImageView(image: img); iv.frame = CGRect(origin: .zero, size: r.size); iv.backgroundColor = .clear
     let p = UIPreviewParameters(); p.backgroundColor = .clear
-    // (the shadow given the same shape as what lifts — E11 Console's way for its file tiles, "no box around it in light or
-    //  dark" (Haris 2026-11-10 / 11): a shadow of any other shape — none, or a single point to hide it — made iPhone lift a
-    //  white / black box round the bubble, Haris 2026-11-13. Apple's own faint lift shadow, in the bubble's shape, as Messages.)
-    let shape = cell.heldPath(origin: .zero)
     p.visiblePath = shape; p.shadowPath = shape
-    return UITargetedPreview(view: cell.contentView, parameters: p)
+    return UITargetedPreview(view: iv, parameters: p, target: UIPreviewTarget(container: cell.contentView, center: CGPoint(x: r.midX, y: r.midY)))
   }
   // the design (board 33): the reactions on top, then Reply · Forward · Copy · Star · (line) · Delete — Forward comes with
   // the forward sheet (stage 5); yours also keep Edit (15 minutes) and Info, files Save / Share, as the app has them today
@@ -1917,8 +1919,10 @@ final class BubbleCell: UITableViewCell {
     stackTrail = stack.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -11)
     reactsLead = reacts.leadingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: 12)
     reactsTrail = reacts.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -12)
-    bubbleBottom = bubble.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -3)
-    reactsBottom = reacts.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -3)
+    // (below the words' own hold on their size (750): while the row's height glides — a reaction added — the bubble keeps
+    //  its size and nothing inside it moves; it was squeezed, its card sliding inside it: Haris 2026-11-13)
+    bubbleBottom = bubble.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -3); bubbleBottom.priority = .init(700)
+    reactsBottom = reacts.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -3); reactsBottom.priority = .init(700)
     NSLayoutConstraint.activate([
       top,
       stack.topAnchor.constraint(equalTo: bubble.topAnchor, constant: 8), stack.bottomAnchor.constraint(equalTo: bubble.bottomAnchor, constant: -7),
