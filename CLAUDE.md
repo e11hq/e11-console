@@ -121,6 +121,12 @@ screens dark, the main five light); the startup logo animation stays as Talk has
 **E11 Talk is built exactly as its mock-ups (Haris 2026-11-11 23:41):** the canvas "E11 Talk — design" is followed strictly —
 every gap, size, colour, placement and every animation, done the Apple way (Apple's parts and Apple's animations set to
 match, never our own drawing). Light and dark follow the iPhone. Decisions: project doc `claude/talk-design-reference.md`.
+**E11 Talk's messages — one steady behaviour for every bubble (Haris 2026-11-13: "nothing slides while anything changes"):**
+a message that changes in place — a reaction, a tick, an edit, a card or link brought up to date, a picture arriving — is set at
+once, with nothing in the chat sliding: no row moving, no words or pictures inside the bubble moving (set and laid out without
+animation — `ChatVC.reload` applies a change with the same rows unanimated; the cell is set inside `performWithoutAnimation`).
+Only a message coming or going fades in or out. A chat opens where it should without moving (cards kept on the phone). Held:
+the bubble lifts in its own shape, tail and all, with nothing round it and no shadow. Every bubble kind, now and later.
 **E11 Talk is always the account E11 Console is signed in as (Haris 2026-11-11 23:55):** never a different account on the
 same phone; no "Use Another Account" in Talk (dropped, Haris 23:55) — to change account, sign out of E11 Console. Client contacts (no Console)
 sign in to Talk only, with Console's sign-in steps (email, password; first time the admin's sign-in code + new password).
