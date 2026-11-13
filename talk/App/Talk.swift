@@ -453,6 +453,7 @@ final class Talk {
   // seen up to the newest: the others see "Seen by"; my unread count goes
   func markRead(_ g: String) {
     var l = log(g)
+    if unmark(g) { NotificationCenter.default.post(name: .talkChanged, object: nil); badge() }
     guard let last = l.msgs.last(where: { !$0.pending }), l.myRead != last.id else { return }
     l.myRead = last.id; logs[g] = l; saveSoon(g)
     if last.by != me?.id { Net.shared.act(["act": "read", "group": g, "upto": last.id]) }
@@ -501,7 +502,28 @@ final class Talk {
   }
 
   // ---------- for the lists ----------
-  func unread(_ g: String) -> Int {
+  // (Mark as Unread — WhatsApp's, Haris 2026-11-13: a chat you've read marked to come back to; a dot on its row with no
+  //  number, counted as 1 everywhere (the tabs, the app's badge, E11 Console's Talk button) until the chat is opened again.
+  //  Kept on this phone.)
+  private var markKey: String { "talk_marked_unread_" + Server.host }
+  private(set) lazy var marked: Set<String> = Set(UserDefaults.standard.stringArray(forKey: markKey) ?? [])
+  func markUnread(_ g: String) {
+    guard realUnread(g) == 0, !marked.contains(g) else { return }
+    marked.insert(g); UserDefaults.standard.set(Array(marked), forKey: markKey)
+    NotificationCenter.default.post(name: .talkChanged, object: nil); badge()
+  }
+  private func unmark(_ g: String) -> Bool {
+    guard marked.remove(g) != nil else { return false }
+    UserDefaults.standard.set(Array(marked), forKey: markKey); return true
+  }
+  func unread(_ g: String) -> Int { max(realUnread(g), marked.contains(g) ? 1 : 0) }
+  // what a row shows: the number, or -1 for the dot alone (marked unread)
+  func unreadShown(_ g: String) -> Int { let r = realUnread(g); return r > 0 ? r : marked.contains(g) ? -1 : 0 }
+  func clientUnreadShown(_ c: String, withClient: Bool? = nil) -> Int {
+    let gs = groups(of: c, withClient: withClient), r = gs.reduce(0) { $0 + realUnread($1.id) }
+    return r > 0 ? r : gs.contains { marked.contains($0.id) } ? -1 : 0
+  }
+  func realUnread(_ g: String) -> Int {
     let l = log(g), my = me?.id ?? ""
     let from = l.myRead.flatMap { r in l.msgs.firstIndex { $0.id == r } }.map { $0 + 1 } ?? 0
     return l.msgs[min(from, l.msgs.count)...].filter { $0.by != my && $0.kind != "sys" && !$0.deleted }.count

@@ -57,8 +57,8 @@ final class ChatRowCell: UITableViewCell {
       UIView.transition(with: sub, duration: 0.2, options: [.transitionCrossDissolve, .beginFromCurrentState]) { self.sub.text = s; self.sub.textColor = ink }
     } else { sub.layer.removeAllAnimations(); sub.text = s; sub.textColor = ink }
     chipL.text = chip; chipL.isHidden = chip == nil
-    time.textColor = unread > 0 ? Look.accent : .secondaryLabel
-    badge.isHidden = unread == 0; badge.text = unread > 99 ? "99+" : "\(unread)"
+    time.textColor = unread != 0 ? Look.accent : .secondaryLabel
+    badge.isHidden = unread == 0; badge.text = unread < 0 ? "" : unread > 99 ? "99+" : "\(unread)"   // (-1: marked unread — the dot alone)
     badge.backgroundColor = muted ? .systemGray3 : Look.accent
     icons.arrangedSubviews.forEach { $0.removeFromSuperview() }
     if muted { icons.addArrangedSubview(icon("bell.slash.fill")) }
@@ -230,7 +230,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
     }
     let pinned = (g.withClient ? T.pinnedClientGroups : T.pinnedGroups).contains(id)
     return GroupCell.Model(id: id, group: g, name: g.name, line: line, typing: typing != nil, ticks: ticks,
-                           time: Look.time(hit?.at ?? T.activity(g)), unread: T.unread(id), pinned: pinned, muted: g.muted,
+                           time: Look.time(hit?.at ?? T.activity(g)), unread: T.unreadShown(id), pinned: pinned, muted: g.muted,
                            chip: clientsTab && g.withClient && !T.isContact, find: hit != nil || g.name.lowercased().contains(query) ? query : "")
   }
 
@@ -248,7 +248,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
     if let (gid, m) = hits[id], let g = T.groups[gid] { line = said(g, m) }
     else if let g = gs.first(where: { T.typingLine($0.id) != nil }), let t = T.typingLine(g.id) { line = "\(g.name) · \(t)"; blue = true }
     else if let g = gs.first, let m = T.last(g.id) { line = said(g, m) }
-    let un = T.clientUnread(id, withClient: clientsTab)
+    let un = T.clientUnreadShown(id, withClient: clientsTab)
     return AgencyCell.Model(id: id, client: T.clients[id], name: T.clients[id]?.name ?? "", line: line, typing: blue,
                             time: Look.time(T.clientActivity(id, withClient: clientsTab)), unread: un,
                             pinned: T.pinned(clientsTab: clientsTab).contains(id), find: query, twoLines: hits[id] != nil)
@@ -291,7 +291,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
     case .group(let id):
       if let m = groupModel(id) { return m.sig }
       guard let g = T.groups[id] else { return 0 }
-      h.combine(g.name); h.combine(g.pic); h.combine(g.muted); h.combine(g.withClient); h.combine(T.unread(id)); h.combine(T.activity(g))
+      h.combine(g.name); h.combine(g.pic); h.combine(g.muted); h.combine(g.withClient); h.combine(T.unreadShown(id)); h.combine(T.activity(g))
       h.combine(T.last(id)?.id); h.combine(T.last(id)?.text); h.combine(T.typingLine(id)); h.combine(T.pinnedGroups.contains(id)); h.combine(T.pinnedClientGroups.contains(id))
       h.combine(T.clients[g.client]?.logo)
     case .found(let g, let m): h.combine(g); h.combine(m); h.combine(query)
@@ -321,7 +321,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
       let typing = T.typingLine(id)
       let line = typing ?? m.map { ($0.kind == "sys" ? "" : "\(T.name($0.by)): ") + Talk.preview($0) } ?? "No messages yet"
       let pinned = (g.withClient ? T.pinnedClientGroups : T.pinnedGroups).contains(id)
-      c.show(title: g.name, sub: line, time: Look.time(T.activity(g)), unread: T.unread(id), pinned: pinned, muted: g.muted, chip: g.withClient && !T.isContact ? "With Client" : nil, typing: typing != nil)
+      c.show(title: g.name, sub: line, time: Look.time(T.activity(g)), unread: T.unreadShown(id), pinned: pinned, muted: g.muted, chip: g.withClient && !T.isContact ? "With Client" : nil, typing: typing != nil)
     case .found(let gid, let mid):
       guard let g = T.groups[gid], let m = T.log(gid).msgs.first(where: { $0.id == mid }) else { return }
       c.avatar.set(group: g)
@@ -335,7 +335,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
       let typing = gs.lazy.compactMap { T.typingLine($0.id) }.first
       let line = typing ?? newest.map { (_, m) in (m.kind == "sys" ? "" : "\(T.name(m.by)): ") + Talk.preview(m) } ?? "\(gs.count) group\(gs.count == 1 ? "" : "s")"
       c.show(title: cl.name, sub: typing == nil && clientsTab && newest == nil ? "\(gs.count) group\(gs.count == 1 ? "" : "s") with the client" : line, time: Look.time(T.clientActivity(id, withClient: clientsTab)),
-             unread: T.clientUnread(id, withClient: clientsTab), pinned: T.pinned(clientsTab: clientsTab).contains(id), muted: false, typing: typing != nil)
+             unread: T.clientUnreadShown(id, withClient: clientsTab), pinned: T.pinned(clientsTab: clientsTab).contains(id), muted: false, typing: typing != nil)
     }
   }
   // (a group drawn as Apple's own cell takes its own height — two lines of its message; the rest keep the list's)
@@ -395,6 +395,19 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
     guard let id = c.identifier as? String else { return }
     animator.addCompletion { [weak self] in self?.navigationController?.pushViewController(ChatVC(group: id), animated: true) }
   }
+  // swiping a group right: Unread / Read (WhatsApp's — Haris 2026-11-13), Apple's own swipe
+  func tableView(_ tv: UITableView, leadingSwipeActionsConfigurationForRowAt ip: IndexPath) -> UISwipeActionsConfiguration? {
+    let gid: String? = { switch data.itemIdentifier(for: ip) { case .group(let id)?, .ghit(let id)?: return id; default: return nil } }()
+    guard let id = gid, Talk.shared.groups[id] != nil else { return nil }
+    let T = Talk.shared, isUnread = T.unread(id) > 0
+    let a = UIContextualAction(style: .normal, title: isUnread ? "Read" : "Unread") { _, _, done in
+      if isUnread { T.markRead(id) } else { T.markUnread(id) }
+      done(true)
+    }
+    a.image = UIImage(systemName: isUnread ? "envelope.open.fill" : "envelope.badge.fill"); a.backgroundColor = Look.accent
+    let c = UISwipeActionsConfiguration(actions: [a]); c.performsFirstActionWithFullSwipe = true
+    return c
+  }
   // swiping a group (the design's board 58): Delete, for its admins — asked first (board 59)
   func tableView(_ tv: UITableView, trailingSwipeActionsConfigurationForRowAt ip: IndexPath) -> UISwipeActionsConfiguration? {
     let gid: String? = { switch data.itemIdentifier(for: ip) { case .group(let id)?, .ghit(let id)?: return id; default: return nil } }()
@@ -418,7 +431,9 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
           UIAction(title: "Always") { _ in GroupActions.mute(id, -1) }])
     // (board 27's order; Leave stays in Group Info)
     return UIMenu(children: [
-      UIAction(title: "Mark as Read", image: UIImage(systemName: "envelope.open")) { _ in T.markRead(id) },
+      T.unread(id) > 0
+        ? UIAction(title: "Mark as Read", image: UIImage(systemName: "envelope.open")) { _ in T.markRead(id) }
+        : UIAction(title: "Mark as Unread", image: UIImage(systemName: "envelope.badge")) { _ in T.markUnread(id) },
       UIAction(title: pinned ? "Unpin" : "Pin", image: UIImage(systemName: pinned ? "pin.slash" : "pin")) { [weak self] _ in self?.pin(group: id, !pinned) },
       mute,
       UIAction(title: "Group Info", image: UIImage(systemName: "info.circle")) { [weak self] _ in self?.navigationController?.pushViewController(GroupInfoVC(group: id), animated: true) },
@@ -642,8 +657,8 @@ final class AgencyCell: UITableViewCell {
   }
   private var rightW: CGFloat = 0
   func show(_ m: Model) {
-    time.text = m.time; time.textColor = m.unread > 0 ? Look.dyn(0x5AA9FF, 0x2F7BFF) : .secondaryLabel
-    badge.isHidden = m.unread == 0; badge.text = m.unread > 99 ? "99+" : "\(m.unread)"; badge.backgroundColor = Look.dyn(0x2F7BFF, 0x2F7BFF)
+    time.text = m.time; time.textColor = m.unread != 0 ? Look.dyn(0x5AA9FF, 0x2F7BFF) : .secondaryLabel
+    badge.isHidden = m.unread == 0; badge.text = m.unread < 0 ? "" : m.unread > 99 ? "99+" : "\(m.unread)"; badge.backgroundColor = Look.dyn(0x2F7BFF, 0x2F7BFF)
     mark.image = UIImage(systemName: m.pinned ? "pin.fill" : "chevron.right", withConfiguration: UIImage.SymbolConfiguration(pointSize: m.pinned ? 12 : 13, weight: .semibold))
     mark.tintColor = m.pinned ? .secondaryLabel : .tertiaryLabel
     let tw = ceil(time.sizeThatFits(CGSize(width: 140, height: 20)).width)
@@ -661,7 +676,7 @@ final class AgencyCell: UITableViewCell {
     contentConfiguration = cfg
     [logo, time, badge, mark].forEach { contentView.bringSubviewToFront($0) }
     if let c = m.client { logo.set(client: c) } else { logo.set(name: m.name, color: Look.color(for: m.id), picture: nil) }
-    accessibilityLabel = [m.name, m.line, m.time, m.unread > 0 ? "\(m.unread) unread" : nil, m.pinned ? "Pinned" : nil].compactMap { $0 }.joined(separator: ", ")
+    accessibilityLabel = [m.name, m.line, m.time, m.unread > 0 ? "\(m.unread) unread" : m.unread < 0 ? "Marked as unread" : nil, m.pinned ? "Pinned" : nil].compactMap { $0 }.joined(separator: ", ")
     setNeedsLayout()
   }
   override func layoutSubviews() {
@@ -855,15 +870,15 @@ final class GroupCell: UITableViewCell {
   private var rightW: CGFloat = 0
   private var badgeW: NSLayoutConstraint!
   func show(_ m: Model) {
-    time.text = m.time; time.textColor = m.unread > 0 ? Look.dyn(0x5AA9FF, 0x2F7BFF) : .secondaryLabel
-    badge.text = m.unread > 99 ? "99+" : "\(m.unread)"; badge.backgroundColor = m.muted ? .systemGray3 : Look.dyn(0x2F7BFF, 0x2F7BFF)
+    time.text = m.time; time.textColor = m.unread != 0 ? Look.dyn(0x5AA9FF, 0x2F7BFF) : .secondaryLabel
+    badge.text = m.unread < 0 ? "" : m.unread > 99 ? "99+" : "\(m.unread)"; badge.backgroundColor = m.muted ? .systemGray3 : Look.dyn(0x2F7BFF, 0x2F7BFF)
     // (under the time: muted · unread · pinned — board 2's order)
     marks.arrangedSubviews.forEach { $0.removeFromSuperview() }
     let sym = { (n: String) -> UIImageView in
       let v = UIImageView(image: UIImage(systemName: n, withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold))); v.tintColor = .secondaryLabel; return v
     }
     if m.muted { marks.addArrangedSubview(sym("speaker.slash.fill")) }
-    if m.unread > 0 { badgeW.constant = max(22, ceil(badge.sizeThatFits(.zero).width) + 2); marks.addArrangedSubview(badge) }
+    if m.unread != 0 { badgeW.constant = m.unread < 0 ? 22 : max(22, ceil(badge.sizeThatFits(.zero).width) + 2); marks.addArrangedSubview(badge) }
     if m.pinned { marks.addArrangedSubview(sym("pin.fill")) }
     let tw = ceil(time.sizeThatFits(CGSize(width: 140, height: 20)).width)
     let mw = ceil(marks.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).width)
@@ -894,7 +909,7 @@ final class GroupCell: UITableViewCell {
     contentConfiguration = cfg
     [pic, time, marks].forEach { contentView.bringSubviewToFront($0) }
     if Talk.shared.isContact { pic.setE11() } else if let g = m.group { pic.set(group: g) }
-    accessibilityLabel = [m.name, m.chip ? "With Client" : nil, m.line, m.time, m.unread > 0 ? "\(m.unread) unread" : nil, m.muted ? "Muted" : nil, m.pinned ? "Pinned" : nil].compactMap { $0 }.joined(separator: ", ")
+    accessibilityLabel = [m.name, m.chip ? "With Client" : nil, m.line, m.time, m.unread > 0 ? "\(m.unread) unread" : m.unread < 0 ? "Marked as unread" : nil, m.muted ? "Muted" : nil, m.pinned ? "Pinned" : nil].compactMap { $0 }.joined(separator: ", ")
     setNeedsLayout()
   }
   override func layoutSubviews() {
