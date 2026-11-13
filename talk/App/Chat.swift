@@ -311,7 +311,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (a page with its name in the middle of its bar — a client's page since 2b: no big title to fold, so no cover and
     //  nothing held still — the chat's picture and name come in with the chat, Apple's own push, Haris 2026-11-13: "we can
     //  have normal behaviour")
-    guard full - rowBottom > 1 else { pinTitle(); return }
+    //  — it's already in its place on the chat (viewDidLoad): left there, not taken off and put back as the chat comes in,
+    //  which held the chat's opening a moment (a chat with messages laid out again first — Haris 2026-11-13)
+    guard full - rowBottom > 1 else { return }
     // (WhatsApp's: the chat's picture and name are there at once, in their place, as the chat opens — held still above the
     //  slide and given back to the page as it arrives, in the same spot; going back they slide away with the page)
     titleV.removeFromSuperview(); titleV.translatesAutoresizingMaskIntoConstraints = false
