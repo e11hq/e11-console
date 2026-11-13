@@ -866,7 +866,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     table.contentInset.bottom = cover + 8
     table.verticalScrollIndicatorInsets.bottom = cover
     downBottom.constant = -(cover + 25)
-    if grew && (wasAtEnd || !scrolledAway) { toBottom(false) }
+    // (only for our own message box: a keyboard come for something else — the group's description in Apple's alert — leaves
+    //  the chat where it is; it went to the newest, Haris 2026-11-13)
+    if grew && (wasAtEnd || !scrolledAway) && (bar.box.isFirstResponder || presentedViewController == nil) { toBottom(false) }
   }
   // (you scrolled up to read: the keyboard or the bar growing doesn't pull you back down)
   private var scrolledAway: Bool { table.contentOffset.y + table.bounds.height < table.contentSize.height - 160 }
