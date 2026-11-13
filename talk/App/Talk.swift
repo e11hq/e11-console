@@ -649,10 +649,27 @@ func toast(_ text: String, in v: UIView? = nil) {
   l.backgroundColor = .secondarySystemGroupedBackground; l.layer.cornerRadius = 14; l.layer.masksToBounds = true
   let w = min(host.bounds.width - 48, l.sizeThatFits(CGSize(width: host.bounds.width - 48, height: 80)).width + 32)
   let h = l.sizeThatFits(CGSize(width: w, height: 80)).height + 20
-  l.frame = CGRect(x: (host.bounds.width - w) / 2, y: host.bounds.height - host.safeAreaInsets.bottom - 110 - h, width: w, height: h)
+  // (just above whatever is at the bottom of the screen on show — the tab bar, a chat's message bar, or the bottom edge; a
+  //  fixed height left it floating high on pages with neither, as Group Info — Haris 2026-11-13)
+  let room: CGFloat = {
+    guard v == nil, let top = topScreen(host.rootViewController) else { return 16 }
+    if top is ChatVC { return 76 }
+    if let tb = top.tabBarController, !tb.tabBar.isHidden, tb.tabBar.alpha > 0, !(top.navigationController?.viewControllers.contains { $0.hidesBottomBarWhenPushed } ?? false) {
+      return max(16, tb.tabBar.frame.height - host.safeAreaInsets.bottom + 12)
+    }
+    return 16
+  }()
+  l.frame = CGRect(x: (host.bounds.width - w) / 2, y: host.bounds.height - host.safeAreaInsets.bottom - room - h, width: w, height: h)
   l.alpha = 0; host.addSubview(l)
   UIView.animate(withDuration: 0.18) { l.alpha = 1 }
   DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) { UIView.animate(withDuration: 0.2, animations: { l.alpha = 0 }) { _ in l.removeFromSuperview() } }
+}
+// the screen on show: through what's presented, a navigation's top and a tab's selected
+func topScreen(_ vc: UIViewController?) -> UIViewController? {
+  if let p = vc?.presentedViewController, !p.isBeingDismissed { return topScreen(p) }
+  if let n = vc as? UINavigationController { return topScreen(n.visibleViewController) ?? n }
+  if let t = vc as? UITabBarController { return topScreen(t.selectedViewController) ?? t }
+  return vc
 }
 final class PaddedLabel: UILabel {
   override func drawText(in rect: CGRect) { super.drawText(in: rect.insetBy(dx: 16, dy: 10)) }

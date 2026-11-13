@@ -170,7 +170,7 @@ final class NewGroupVC: UITableViewController, UITextFieldDelegate, UISearchBarD
   // ("N People Added" over the team, crossfading to its new words)
   private func counted() {
     guard let h = tableView.headerView(forSection: 3), let t = headTitle(3), h.textLabel?.text != t else { return }
-    UIView.transition(with: h, duration: 0.15, options: [.transitionCrossDissolve, .allowUserInteraction]) { h.textLabel?.text = t }
+    UIView.transition(with: h, duration: 0.15, options: [.transitionCrossDissolve, .allowUserInteraction]) { h.textLabel?.text = t; h.setNeedsLayout(); h.layoutIfNeeded() }
   }
   // ---------- the picture ----------
   private func picMenu() -> [UIMenuElement] {
@@ -409,7 +409,7 @@ final class GroupInfoVC: UITableViewController {
     data.apply(snap, animatingDifferences: animated)
     // (someone added or gone: the title over the people says the new count, in place — the rest left as it is)
     if let i = snap.indexOfSection(1), let h = tableView.headerView(forSection: i), let t = headTitle(i), h.textLabel?.text != t {
-      UIView.transition(with: h, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction]) { h.textLabel?.text = t }
+      UIView.transition(with: h, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction]) { h.textLabel?.text = t; h.setNeedsLayout(); h.layoutIfNeeded() }   // (laid out again for the new words — they were cut to "16 MEMBE…")
     }
   }
 
