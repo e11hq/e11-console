@@ -498,12 +498,16 @@ final class GroupsVC: ListVC {
           : ("No Groups Yet", "When someone adds you to a group, its client shows here.")
       }
       let v = (table.backgroundView as? UIContentUnavailableView) ?? { let v = UIContentUnavailableView(configuration: e); v.alpha = 0; table.backgroundView = v; return v }()
-      v.configuration = e
+      // (the words set only while it shows — going away, it keeps what it said as it fades: switching back to All flashed
+      //  "No Groups" / "No Mentions" — Haris 2026-11-13; one empty to another crossfades)
+      if none, let was = v.configuration as? UIContentUnavailableConfiguration, was.text != e.text || was.secondaryText != e.secondaryText || (was.text == nil && was.image != e.image) {
+        if v.alpha > 0, view.window != nil { UIView.transition(with: v, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction]) { v.configuration = e } } else { v.configuration = e }
+      }
       let a: CGFloat = none ? 1 : 0
       if v.alpha != a { UIView.animate(withDuration: Crossfade.time) { v.alpha = a } }
     } else {
       let l = (table.backgroundView as? UILabel) ?? { let l = UILabel(); l.textAlignment = .center; l.textColor = .secondaryLabel; l.numberOfLines = 0; l.alpha = 0; table.backgroundView = l; return l }()
-      l.text = !query.isEmpty ? "No Results" : filter == 1 ? "No Unread Messages" : filter == 2 ? "No Mentions" : "No Groups Yet"
+      if none { l.text = !query.isEmpty ? "No Results" : filter == 1 ? "No Unread Messages" : filter == 2 ? "No Mentions" : "No Groups Yet" }
       let a: CGFloat = none ? 1 : 0
       if l.alpha != a { UIView.animate(withDuration: Crossfade.time) { l.alpha = a } }
     }
@@ -717,12 +721,16 @@ final class ClientGroupsVC: ListVC {
           : ("No Mentions", "Groups where someone @mentions you show here.")
       }
       let v = (table.backgroundView as? UIContentUnavailableView) ?? { let v = UIContentUnavailableView(configuration: e); v.alpha = 0; table.backgroundView = v; return v }()
-      v.configuration = e
+      // (the words set only while it shows — going away, it keeps what it said as it fades: switching back to All flashed
+      //  "No Groups" / "No Mentions" — Haris 2026-11-13; one empty to another crossfades)
+      if none, let was = v.configuration as? UIContentUnavailableConfiguration, was.text != e.text || was.secondaryText != e.secondaryText || (was.text == nil && was.image != e.image) {
+        if v.alpha > 0, view.window != nil { UIView.transition(with: v, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction]) { v.configuration = e } } else { v.configuration = e }
+      }
       let a: CGFloat = none ? 1 : 0
       if v.alpha != a { UIView.animate(withDuration: Crossfade.time) { v.alpha = a } }
     } else {
       let l = (table.backgroundView as? UILabel) ?? { let l = UILabel(); l.textAlignment = .center; l.textColor = .secondaryLabel; l.numberOfLines = 0; l.alpha = 0; table.backgroundView = l; return l }()
-      l.text = !query.isEmpty ? "No Results" : filter == 1 ? "No Unread Messages" : "No Mentions"
+      if none { l.text = !query.isEmpty ? "No Results" : filter == 1 ? "No Unread Messages" : "No Mentions" }
       let a: CGFloat = none ? 1 : 0
       if l.alpha != a { UIView.animate(withDuration: Crossfade.time) { l.alpha = a } }
     }
