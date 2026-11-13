@@ -220,7 +220,7 @@ final class SigninCodeVC: UIViewController {
   }
   static func present(_ signin: [String: Any], from vc: UIViewController) {
     let n = UINavigationController(rootViewController: SigninCodeVC(signin))
-    if let sh = n.sheetPresentationController { sh.detents = [.large()]; sh.prefersGrabberVisible = true }
+    if let sh = n.sheetPresentationController { sh.detents = [.medium(), .large()]; sh.prefersGrabberVisible = true }   // (half height first, as E11 Console's — Haris 2026-11-13)
     vc.present(n, animated: true)
   }
 }
