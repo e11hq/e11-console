@@ -18,6 +18,11 @@ gone — never rebuild a whole list or page for one change. Build new views with
 (`UIView.performWithoutAnimation`), then run only the screen's own change animation (new fades in, gone fades out,
 others slide only when something really came, went or changed height). Every new native screen is built this way.
 (Details: project doc `claude/ios-native-polish.md`.)
+**"Redraw" also means sliding and heights — every app (E11 Console, E11 Talk, any new one), now and later (Haris 2026-11-13: "by
+redraw i also mean … whenever you update anything the whole thing slides or the heights of other things re adjust"):** an
+update to one thing never makes the page slide, never moves what's around it, and never changes another row's height. A row
+that changes in place is set at once, laid out without animation, and only its own look changes; nothing else on the page
+moves. Rows slide only when a row really came or went. Talk's bubbles are the first done this way (the rule under E11 Talk).
 **Never skipped, and checked (Haris, 2026-11-08: "This rule should not be ignored and checked"):** every change to a
 native screen is checked against it before it's built — nothing drawn again that didn't change, nothing taken off a screen
 that stays (the task page's grey bands vanished on a redraw). The self-test checks it on every build: with a task open the
