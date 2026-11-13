@@ -494,12 +494,16 @@ final class AgencyCell: UITableViewCell {
     if !state.isHighlighted && !state.isSelected { bg.backgroundColor = .clear }
     backgroundConfiguration = bg
   }
+  // the words found: dark as the board (its brown, white words); light — the board draws none — a soft yellow behind the
+  // row's own ink, as iPhone marks words found (the brown was too strong on white — Haris 2026-11-13)
+  static let findBg = UIColor { $0.userInterfaceStyle == .dark ? Look.rgb(0x7A5626) : UIColor.systemYellow.withAlphaComponent(0.32) }
+  static let findInk = UIColor { $0.userInterfaceStyle == .dark ? .white : .label }
   private static func marked(_ t: String, _ q: String, font: UIFont, ink: UIColor) -> NSAttributedString {
     let a = NSMutableAttributedString(string: t, attributes: [.font: font, .foregroundColor: ink])
     guard !q.isEmpty else { return a }
     var from = t.startIndex
     while let r = t.range(of: q, options: [.caseInsensitive, .diacriticInsensitive], range: from..<t.endIndex) {
-      a.addAttributes([.backgroundColor: BubbleCell.findAll, .foregroundColor: UIColor.white], range: NSRange(r, in: t)); from = r.upperBound
+      a.addAttributes([.backgroundColor: AgencyCell.findBg, .foregroundColor: AgencyCell.findInk], range: NSRange(r, in: t)); from = r.upperBound
     }
     return a
   }
