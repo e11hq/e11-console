@@ -113,7 +113,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     if !Talk.shared.groups.isEmpty || Talk.shared.me != nil { sp.progress(0.7) }
     // a new phone (nothing of this account here yet): before anything comes in, look for an iCloud backup to restore
     let fresh = Talk.shared.isFresh
-    if fresh { Talk.shared.holdSync = true }
+    if fresh { Talk.shared.holdSync = true; sp.setup() }
     Talk.shared.refresh { [weak self, weak sp] in
       sp?.setName(Talk.shared.me?.name); sp?.progress(0.85)
       guard fresh, let uid = Talk.shared.me?.id else { Talk.shared.holdSync = false; Talk.shared.sync { sp?.finish() }; return }

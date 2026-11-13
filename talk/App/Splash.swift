@@ -13,6 +13,10 @@ final class SplashView: UIView {
   private var frac: CGFloat = 0
   private var ready = false, minTimeOver = false, leaving = false
   private let reduce = UIAccessibility.isReduceMotionEnabled
+  // the first start only (nothing of this account on the phone yet): Apple's spinner and "Setting up your account" in the
+  // thin bar's place, once the icon has put itself together — as E11 Console's first start (Haris 2026-11-13)
+  private let setupRow = UIStackView(), spinner = UIActivityIndicatorView(style: .medium), setupL = UILabel()
+  private var setupOn = false
 
   static func greeting(_ name: String?) -> String {
     let h = Calendar.current.component(.hour, from: Date())
@@ -36,7 +40,12 @@ final class SplashView: UIView {
     bar.backgroundColor = .tertiarySystemFill; bar.layer.cornerRadius = 1.5; bar.clipsToBounds = true
     fill.backgroundColor = Look.accent; bar.addSubview(fill)
     hint.text = "Tap to skip"; hint.font = .systemFont(ofSize: 11.5); hint.textColor = .tertiaryLabel; hint.textAlignment = .center
-    [greet, date, bar, hint].forEach { addSubview($0) }
+    setupL.text = "Setting up your account"
+    setupL.font = .preferredFont(forTextStyle: .footnote); setupL.adjustsFontForContentSizeCategory = true; setupL.textColor = .secondaryLabel
+    setupRow.axis = .vertical; setupRow.alignment = .center; setupRow.spacing = 12
+    setupRow.addArrangedSubview(spinner); setupRow.addArrangedSubview(setupL)
+    setupRow.alpha = 0; setupRow.isHidden = true
+    [greet, date, bar, hint, setupRow].forEach { addSubview($0) }
     addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(skip)))
     accessibilityLabel = "E11 Talk is opening"
     assemble()
@@ -59,6 +68,8 @@ final class SplashView: UIView {
     greet.frame = CGRect(x: (W - w) / 2 - 10, y: y, width: w + 20, height: gh); y += gh + 6
     date.frame = CGRect(x: (W - w) / 2, y: y, width: w, height: dh); y += dh + 30
     bar.frame = CGRect(x: (W - w) / 2, y: y, width: w, height: 3)
+    let rs = setupRow.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+    setupRow.frame = CGRect(x: 20, y: y - 6, width: W - 40, height: rs.height)
     fill.frame = CGRect(x: 0, y: 0, width: w * frac, height: 3)
     hint.frame = CGRect(x: 20, y: H - 22 - safeAreaInsets.bottom - 15, width: W - 40, height: 15)
   }
@@ -89,6 +100,17 @@ final class SplashView: UIView {
     UIView.animate(withDuration: 0.35) { self.fill.frame.size.width = self.bar.bounds.width * self.frac }
   }
   func setName(_ name: String?) { greet.attributedText = NSAttributedString(string: SplashView.greeting(name), attributes: [.font: UIFont.systemFont(ofSize: 26, weight: .semibold), .kern: -0.39, .foregroundColor: UIColor.label]); greet.textAlignment = .center }
+  // a first start: the spinner and its words take the bar's place once the icon has put itself together
+  func setup() {
+    guard !setupOn else { return }
+    setupOn = true
+    DispatchQueue.main.asyncAfter(deadline: .now() + (reduce ? 0 : 0.95)) { [weak self] in
+      guard let self = self, !self.leaving else { return }
+      self.spinner.startAnimating(); self.setupRow.isHidden = false
+      self.setNeedsLayout(); self.layoutIfNeeded()
+      UIView.animate(withDuration: 0.3) { self.setupRow.alpha = 1; self.bar.alpha = 0 }
+    }
+  }
   // the chat list is ready
   func finish() { ready = true; progress(1); maybeGo() }
   private func maybeGo() { if ready && minTimeOver { go() } }
