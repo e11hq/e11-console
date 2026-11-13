@@ -244,6 +244,9 @@ final class SettingsVC: UITableViewController {
       cfg.text = me?.name ?? "—"; cfg.textProperties.font = .systemFont(ofSize: 19, weight: .semibold)
       cfg.secondaryText = Talk.shared.isContact ? "\(me?.role ?? "") · client" : me?.role; cfg.secondaryTextProperties.color = .secondaryLabel
       cfg.image = UIImage(systemName: "circle.fill"); cfg.imageProperties.tintColor = .clear; cfg.imageProperties.reservedLayoutSize = CGSize(width: 56, height: 56)
+      // (Apple's content view in place first — its first configuration replaces the content view, and the photo went with
+      //  the old one, as Group Info's pictures did: Haris 2026-11-13)
+      if c.contentConfiguration == nil { c.contentConfiguration = cfg }
       let a = Avatar(frame: CGRect(x: 16, y: 10, width: 56, height: 56)); a.set(person: me); c.contentView.addSubview(a)
       c.selectionStyle = .none
     case (1, let r) where rows1[r] == .linked:
