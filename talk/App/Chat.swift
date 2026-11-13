@@ -46,6 +46,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private var downBottom: NSLayoutConstraint!
 
   private var focus: String?   // (opened from a search result: that message, highlighted)
+  // (a peek — the chat as the preview of a group held in a list, the design's board 27: read there, nothing is marked read,
+  //  no message box)
+  var peek = false
   init(group: String, focus: String? = nil) { self.group = group; self.focus = focus; super.init(nibName: nil, bundle: nil)
     // (Apple's own: the tab bar slides away with the list as the chat comes in, and back with the finger on the back swipe —
     //  Haris 2026-11-12, option A; it was hidden with Apple's call after arriving and faded, iOS 26 leaving it drawn)
@@ -263,6 +266,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     //  was left half under the message bar, Haris 2026-11-12)
     if !scrolledAway, focus == nil, !table.isDragging, !table.isDecelerating { toBottom(false) }
     Talk.shared.refreshTasks(group); Talk.shared.refreshLinks(group)
+    if peek { return }
     Talk.shared.markRead(group)
     ChatVC.open = group
   }
@@ -277,6 +281,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
+    if peek { bar.isHidden = true; return }
     if isMovingToParent { coverTitle() }
   }
   /* The list's big title folding into its bar as the chat comes in (Apple's, with the tab bar hidden as it's pushed —
@@ -622,7 +627,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         if end - self.table.contentOffset.y > 2 { self.toBottom(true) }
       }
     }
-    if view.window != nil, UIApplication.shared.applicationState == .active { Talk.shared.markRead(group) }
+    if view.window != nil, !peek, UIApplication.shared.applicationState == .active { Talk.shared.markRead(group) }
   }
   // each message kept by its id; only one that shows something new is drawn again
   private func reload(animated: Bool) {

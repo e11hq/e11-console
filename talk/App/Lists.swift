@@ -170,10 +170,14 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
     case .found(let gid, let mid): navigationController?.pushViewController(ChatVC(group: gid, focus: mid), animated: true)
     }
   }
-  // holding a group: Pin · Mute · Mark as read · Group info · Leave group; a client: Pin
+  // holding a group (the design's board 27): Apple's lift with the chat itself as the preview — reading it there marks
+  // nothing read — and Mark as Read · Pin · Mute · Group Info; a tap on the preview opens the chat. A client: Pin
   func tableView(_ tv: UITableView, contextMenuConfigurationForRowAt ip: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
     guard let row = data.itemIdentifier(for: ip) else { return nil }
-    return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
+    var peek: UIContextMenuContentPreviewProvider?
+    if case .group(let id) = row { peek = { let c = ChatVC(group: id); c.peek = true; return c } }
+    let gid: String? = { if case .group(let id) = row { return id }; return nil }()
+    return UIContextMenuConfiguration(identifier: gid as NSString?, previewProvider: peek) { [weak self] _ in
       guard let self = self else { return nil }
       switch row {
       case .group(let id), .found(let id, _): return self.groupMenu(id)
@@ -184,6 +188,19 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
     }
   }
   func tableView(_ tv: UITableView, previewForHighlightingContextMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? { nil }
+  func tableView(_ tv: UITableView, willPerformPreviewActionForMenuWith c: UIContextMenuConfiguration, animator: UIContextMenuInteractionCommitAnimating) {
+    guard let id = c.identifier as? String else { return }
+    animator.addCompletion { [weak self] in self?.navigationController?.pushViewController(ChatVC(group: id), animated: true) }
+  }
+  // swiping a group (the design's board 58): Delete, for its admins — asked first (board 59)
+  func tableView(_ tv: UITableView, trailingSwipeActionsConfigurationForRowAt ip: IndexPath) -> UISwipeActionsConfiguration? {
+    guard case .group(let id) = data.itemIdentifier(for: ip), let g = Talk.shared.groups[id], Talk.shared.canManage(g) else { return nil }
+    let del = UIContextualAction(style: .destructive, title: "Delete") { [weak self] _, _, done in
+      GroupActions.askDelete(g, from: self); done(false)
+    }
+    del.image = UIImage(systemName: "trash")
+    return UISwipeActionsConfiguration(actions: [del])
+  }
 
   func groupMenu(_ id: String) -> UIMenu? {
     let T = Talk.shared
@@ -195,12 +212,12 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
           UIAction(title: "8 Hours") { _ in GroupActions.mute(id, 8 * 3600) },
           UIAction(title: "1 Week") { _ in GroupActions.mute(id, 7 * 86400) },
           UIAction(title: "Always") { _ in GroupActions.mute(id, -1) }])
-    return UIMenu(title: g.name, children: [
+    // (board 27's order; Leave stays in Group Info)
+    return UIMenu(children: [
+      UIAction(title: "Mark as Read", image: UIImage(systemName: "envelope.open")) { _ in T.markRead(id) },
       UIAction(title: pinned ? "Unpin" : "Pin", image: UIImage(systemName: pinned ? "pin.slash" : "pin")) { [weak self] _ in self?.pin(group: id, !pinned) },
       mute,
-      UIAction(title: "Mark as read", image: UIImage(systemName: "checkmark.circle")) { _ in T.markRead(id) },
-      UIAction(title: "Group info", image: UIImage(systemName: "info.circle")) { [weak self] _ in self?.navigationController?.pushViewController(GroupInfoVC(group: id), animated: true) },
-      UIMenu(options: .displayInline, children: [UIAction(title: "Leave group", image: UIImage(systemName: "rectangle.portrait.and.arrow.right"), attributes: .destructive) { [weak self] _ in GroupActions.leave(id, from: self) }]),
+      UIAction(title: "Group Info", image: UIImage(systemName: "info.circle")) { [weak self] _ in self?.navigationController?.pushViewController(GroupInfoVC(group: id), animated: true) },
     ])
   }
   // up to 5: a 6th asks which one to unpin (Haris 2026-11-05)
@@ -209,10 +226,11 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
   private func pinThing(_ act: String, _ id: String, _ on: Bool, name: String, tab: String = "groups") {
     Net.shared.act(["act": act, "id": id, "on": on, "tab": tab]) { [weak self] j in
       if (j?["full"] as? Bool) == true, let pins = j?["pins"] as? [String] {
-        let a = UIAlertController(title: "Pinned is full", message: "Up to 5. Unpin one to pin “\(name)”. Your pins are yours — nobody else sees them.", preferredStyle: .actionSheet)
+        // (board 38's words)
+        let a = UIAlertController(title: "Pinned is full", message: "Unpin one to pin \(name). Up to 5 pinned.", preferredStyle: .actionSheet)
         for p in pins {
           let n = act == "pin" ? Talk.shared.groups[p]?.name : Talk.shared.clients[p]?.name
-          a.addAction(UIAlertAction(title: "Unpin “\(n ?? "…")”", style: .default) { _ in
+          a.addAction(UIAlertAction(title: "Unpin \(n ?? "…")", style: .default) { _ in
             Net.shared.act(["act": act, "id": p, "on": false, "tab": tab]) { _ in Net.shared.act(["act": act, "id": id, "on": true, "tab": tab]) { _ in Talk.shared.refresh() } }
           })
         }
@@ -358,6 +376,17 @@ enum GroupActions {
   static func mute(_ id: String, _ secs: Double?) {
     let until: Any = secs == nil ? 0 : secs! < 0 ? "always" : (Date().timeIntervalSince1970 + secs!) * 1000
     Net.shared.act(["act": "mute", "group": id, "until": until]) { _ in Talk.shared.refresh() }
+  }
+  // deleting a group (board 59): asked first, then gone for everyone
+  static func askDelete(_ g: Group, from vc: UIViewController?) {
+    let a = UIAlertController(title: "Delete “\(g.name)”?", message: "The group and its messages go for everyone in it. This can’t be undone.", preferredStyle: .alert)
+    a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+    a.addAction(UIAlertAction(title: "Delete", style: .destructive) { _ in
+      Net.shared.act(["act": "deleteGroup", "group": g.id]) { j in
+        if (j?["ok"] as? Bool) == true { toast("Group deleted"); Talk.shared.refresh(); Talk.shared.sync() } else { toast(j?["error"] as? String ?? "Couldn’t do that — try again") }
+      }
+    })
+    vc?.present(a, animated: true)
   }
   static func leave(_ id: String, from vc: UIViewController?) {
     let name = Talk.shared.groups[id]?.name ?? "this group"

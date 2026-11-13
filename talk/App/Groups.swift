@@ -467,11 +467,7 @@ final class GroupInfoVC: UITableViewController {
     case .makeMeAdmin: simple(["act": "makeMeAdmin", "group": group], done: "You’re an admin of this group")
     case .second: secondSheet(g, at: tv.cellForRow(at: ip))
     case .leave: GroupActions.leave(group, from: self)
-    case .delete:
-      let a = UIAlertController(title: "Delete “\(g.name)”?", message: "The group and its messages go for everyone in it.", preferredStyle: .alert)
-      a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-      a.addAction(UIAlertAction(title: "Delete", style: .destructive) { [weak self] _ in self?.simple(["act": "deleteGroup", "group": self?.group ?? ""], done: "Group deleted") })
-      present(a, animated: true)
+    case .delete: GroupActions.askDelete(g, from: self)
     }
   }
   // Search: back to the chat, its own search open
