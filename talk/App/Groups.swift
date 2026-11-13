@@ -736,7 +736,7 @@ final class ContactsVC: UITableViewController {
   }
   override func viewDidLoad() {
     super.viewDidLoad()
-    title = "Client contacts"
+    title = "Client Contacts"   // (the board's words, Title Case as Apple's)
     navigationItem.rightBarButtonItem = UIBarButtonItem(title: nil, image: UIImage(systemName: "plus"), primaryAction: UIAction { [weak self] _ in
       self?.present(UINavigationController(rootViewController: NewContactVC()), animated: true)
     }, menu: nil)
@@ -745,9 +745,9 @@ final class ContactsVC: UITableViewController {
   }
   override func numberOfSections(in tv: UITableView) -> Int { max(1, byClient.count) }
   override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { byClient.isEmpty ? 0 : byClient[s].1.count }
-  override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? { byClient.isEmpty ? nil : "\(byClient[s].0.name)’s contacts · \(byClient[s].1.count)" }
+  override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? { byClient.isEmpty ? nil : byClient[s].0.name }   // (the client's name, as the board)
   override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
-    s == max(1, byClient.count) - 1 ? (byClient.isEmpty ? "No client contacts yet. Tap + to add one — " : "") + "A contact signs in to E11 Talk with a one-time code sent to their email — E11 Talk only, never E11 Console. They see only the groups you add them to." : nil
+    s == max(1, byClient.count) - 1 ? (byClient.isEmpty ? "No client contacts yet. Tap + to add one. " : "") + "Client contacts only see the groups they’re added to. Super Admins and Office Admins add and remove them." : nil
   }
   override func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat { 58 }
   override func tableView(_ tv: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
@@ -786,7 +786,7 @@ final class NewContactVC: UITableViewController, UITextFieldDelegate {
   required init?(coder: NSCoder) { fatalError() }
   override func viewDidLoad() {
     super.viewDidLoad()
-    title = "New client contact"
+    title = "New Client Contact"
     navigationItem.leftBarButtonItem = UIBarButtonItem(systemItem: .cancel, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
     navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Add", primaryAction: UIAction { [weak self] _ in self?.add() })
     navigationItem.rightBarButtonItem?.style = .done

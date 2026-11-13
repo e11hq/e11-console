@@ -1600,12 +1600,12 @@ enum ChatSound {
   }
   // (several sent together — a forward to many groups, a few photos — one sound)
   private static var lastSend = Date.distantPast
-  static func send() { guard Date().timeIntervalSince(lastSend) > 0.4 else { return }; lastSend = Date(); play("chat-send") }
+  static func send() { guard TalkPrefs.inAppSounds, Date().timeIntervalSince(lastSend) > 0.4 else { return }; lastSend = Date(); play("chat-send") }
   // the voice note's own (Haris 2026-11-11): recording starts, a recording dropped into the bin
   static func voiceStart() { play("voice-start") }
   static func voiceCancel() { play("voice-cancel") }
   static func arrive() {
-    guard Date().timeIntervalSince(lastArrive) > 1.2 else { return }
+    guard TalkPrefs.inAppSounds, Date().timeIntervalSince(lastArrive) > 1.2 else { return }
     lastArrive = Date(); play("chat-arrive")
   }
 }

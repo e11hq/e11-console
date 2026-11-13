@@ -12,7 +12,7 @@ final class LinkedDevicesVC: UITableViewController {
   required init?(coder: NSCoder) { fatalError() }
   private var macs: [LinkedMac] { Talk.shared.macs }
   override func viewDidLoad() {
-    super.viewDidLoad(); title = "Linked devices"
+    super.viewDidLoad(); title = "Linked Devices"
     navigationItem.largeTitleDisplayMode = .never
     NotificationCenter.default.addObserver(tableView!, selector: #selector(UITableView.reloadData), name: .talkChanged, object: nil)
     Talk.shared.refresh()
@@ -21,8 +21,8 @@ final class LinkedDevicesVC: UITableViewController {
   override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { s == 0 ? 1 : macs.count }
   override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? { s == 1 && !macs.isEmpty ? "Linked Macs" : nil }
   override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
-    s == 0 ? "Open E11 Console on your Mac and click E11 Talk at the bottom of the sidebar — then scan the code it shows. The Mac must be signed in to E11 Console as you."
-      : macs.isEmpty ? nil : "A linked Mac gets your messages even when this phone is off. It’s unlinked if this phone doesn’t open E11 Talk for 30 days. Tap one to unlink it."
+    s == 0 ? "On the Mac: E11 Console › E11 Talk at the bottom of the sidebar, then scan the code it shows. The Mac must be signed in as you."
+      : macs.isEmpty ? nil : "A linked Mac gets your chats straight from your iPhone and keeps up by itself. It unlinks after 30 days if this iPhone doesn’t open E11 Talk. Tap one to unlink it."
   }
   override func tableView(_ tv: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
     let c = UITableViewCell(style: .subtitle, reuseIdentifier: nil)

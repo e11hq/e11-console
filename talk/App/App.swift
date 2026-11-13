@@ -31,7 +31,11 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
   func userNotificationCenter(_ c: UNUserNotificationCenter, willPresent n: UNNotification, withCompletionHandler done: @escaping (UNNotificationPresentationOptions) -> Void) {
     Talk.shared.sync()
     let g = (n.request.content.userInfo["e11"] as? [String: Any])?["groupId"] as? String
-    done(g != nil && g == ChatVC.open ? [] : [.banner, .sound, .list])
+    // (Settings › Notifications: In-App Banners and In-App Sounds)
+    var opts: UNNotificationPresentationOptions = [.list]
+    if TalkPrefs.inAppBanners { opts.insert(.banner) }
+    if TalkPrefs.inAppSounds { opts.insert(.sound) }
+    done(g != nil && g == ChatVC.open ? [] : opts)
   }
   // tapped: its group; replied from the banner: sent from there, without opening the app; Mark as read
   func userNotificationCenter(_ c: UNUserNotificationCenter, didReceive r: UNNotificationResponse, withCompletionHandler done: @escaping () -> Void) {
@@ -217,91 +221,6 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 }
 
 // ---------- Settings ----------
-final class SettingsVC: UITableViewController {
-  init() { super.init(style: .insetGrouped) }
-  required init?(coder: NSCoder) { fatalError() }
-  override func viewDidLoad() {
-    super.viewDidLoad(); title = "Settings"
-    NotificationCenter.default.addObserver(tableView!, selector: #selector(UITableView.reloadData), name: .talkChanged, object: nil)
-    NotificationCenter.default.addObserver(tableView!, selector: #selector(UITableView.reloadData), name: .talkBackup, object: nil)
-  }
-  private var shownOnce = false
-  // (back from Starred Messages: only its count set again)
-  override func viewWillAppear(_ a: Bool) {
-    super.viewWillAppear(a)
-    defer { shownOnce = true }
-    if shownOnce, let r = rows1.firstIndex(of: .starred) { UIView.performWithoutAnimation { tableView.reloadRows(at: [IndexPath(row: r, section: 1)], with: .none) } }
-  }
-  override func numberOfSections(in tv: UITableView) -> Int { 3 }
-  // (Super Admins and Office Admins also get "Client contacts")
-  private var boss: Bool { Talk.shared.boss }
-  private enum R1 { case starred, notif, backup, linked, storage, contacts }
-  private var rows1: [R1] { [.starred, .notif, .backup] + (Talk.shared.isContact ? [] : [.linked]) + [.storage] + (boss ? [.contacts] : []) }
-  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { [1, rows1.count, 1][s] }
-  override func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat { ip.section == 0 ? 76 : 48 }
-  override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
-    s == 1 ? "Chats live on this phone. The server only passes each message on and lets it go once everyone has it." : s == 2 ? "E11 Talk \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "")) · \(Server.host)" : nil
-  }
-  override func tableView(_ tv: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
-    let c = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
-    var cfg = c.defaultContentConfiguration()
-    switch (ip.section, ip.row) {
-    case (0, _):
-      let me = Talk.shared.me
-      cfg.text = me?.name ?? "—"; cfg.textProperties.font = .systemFont(ofSize: 19, weight: .semibold)
-      cfg.secondaryText = Talk.shared.isContact ? "\(me?.role ?? "") · client" : me?.role; cfg.secondaryTextProperties.color = .secondaryLabel
-      cfg.image = UIImage(systemName: "circle.fill"); cfg.imageProperties.tintColor = .clear; cfg.imageProperties.reservedLayoutSize = CGSize(width: 56, height: 56)
-      // (Apple's content view in place first — its first configuration replaces the content view, and the photo went with
-      //  the old one, as Group Info's pictures did: Haris 2026-11-13)
-      if c.contentConfiguration == nil { c.contentConfiguration = cfg }
-      let a = Avatar(frame: CGRect(x: 16, y: 10, width: 56, height: 56)); a.set(person: me); c.contentView.addSubview(a)
-      c.selectionStyle = .none
-    case (1, let r) where rows1[r] == .linked:
-      let n = Talk.shared.macs.count
-      cfg.text = "Linked devices"; cfg.secondaryText = n == 0 ? "Link a Mac" : "\(n) Mac\(n == 1 ? "" : "s")"
-      cfg.secondaryTextProperties.color = .secondaryLabel; cfg.image = UIImage(systemName: "laptopcomputer.and.iphone"); c.accessoryType = .disclosureIndicator
-    // (Starred Messages first, as the design's Settings — Haris 2026-11-13)
-    case (1, let r) where rows1[r] == .starred:
-      let n = Talk.shared.starred.count
-      cfg.text = "Starred Messages"; cfg.secondaryText = n == 0 ? nil : "\(n)"; cfg.secondaryTextProperties.color = .secondaryLabel
-      cfg.image = UIImage(systemName: "star"); c.accessoryType = .disclosureIndicator
-    case (1, let r) where rows1[r] == .notif: cfg.text = "Notifications"; cfg.image = UIImage(systemName: "bell.badge"); c.accessoryType = .disclosureIndicator
-    case (1, let r) where rows1[r] == .backup:
-      let B = Backup.shared, f = RelativeDateTimeFormatter(); f.unitsStyle = .short
-      cfg.text = "Chat backup"; cfg.secondaryText = B.every == .off && B.lastAt == nil ? "Off" : B.lastAt.map { "Last: " + f.localizedString(for: $0, relativeTo: Date()) } ?? "Not backed up yet"
-      cfg.secondaryTextProperties.color = .secondaryLabel; cfg.image = UIImage(systemName: "icloud"); c.accessoryType = .disclosureIndicator
-    case (1, let r) where rows1[r] == .contacts:
-      cfg.text = "Client contacts"; cfg.secondaryText = "\(Talk.shared.contacts.count) · who from each client can be in groups"; cfg.secondaryTextProperties.color = .secondaryLabel
-      cfg.image = UIImage(systemName: "person.crop.rectangle.stack"); c.accessoryType = .disclosureIndicator
-    case (1, let r) where rows1[r] == .storage:
-      let n = (try? FileManager.default.contentsOfDirectory(at: Net.filesDir, includingPropertiesForKeys: [.fileSizeKey]))?.reduce(0) { $0 + ((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) } ?? 0
-      cfg.text = "Storage"; cfg.secondaryText = ByteCountFormatter.string(fromByteCount: Int64(n), countStyle: .file) + " of photos and files on this phone"; cfg.image = UIImage(systemName: "internaldrive")
-      c.selectionStyle = .none
-    default: cfg.text = "Sign out"; cfg.textProperties.color = .systemRed; cfg.image = UIImage(systemName: "rectangle.portrait.and.arrow.right"); cfg.imageProperties.tintColor = .systemRed
-    }
-    c.contentConfiguration = cfg
-    return c
-  }
-  override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) {
-    tv.deselectRow(at: ip, animated: true)
-    if ip.section == 1 {
-      switch rows1[ip.row] {
-      case .starred: navigationController?.pushViewController(StarredVC(), animated: true); return
-      case .backup: navigationController?.pushViewController(BackupVC(), animated: true); return
-      case .linked: navigationController?.pushViewController(LinkedDevicesVC(), animated: true); return
-      case .contacts: navigationController?.pushViewController(ContactsVC(), animated: true); return
-      default: break
-      }
-    }
-    if ip.section == 1, rows1[ip.row] == .notif, let u = URL(string: UIApplication.openNotificationSettingsURLString) { UIApplication.shared.open(u) }
-    if ip.section == 2 {
-      let a = UIAlertController(title: "Sign out of E11 Talk?", message: "The chats on this phone are removed.", preferredStyle: .actionSheet)
-      a.addAction(UIAlertAction(title: "Sign out", style: .destructive) { _ in SceneDelegate.current?.signOutNow() })
-      a.addAction(UIAlertAction(title: "Cancel", style: .cancel)); present(a, animated: true)
-    }
-  }
-}
-
 // the tab bar beside a pushed chat (Console's way, its lesson 2026-11-08): hidden with Apple's call once the page has
 // arrived, back as the slide back to the tab's first screen begins (and hidden again if that slide is called off)
 // the navigation's delegate for one slide only: Message info hooked by the finger (SlideIn, driven by it)

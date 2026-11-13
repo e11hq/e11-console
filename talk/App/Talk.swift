@@ -97,6 +97,7 @@ extension Notification.Name {
 final class Talk {
   static let shared = Talk()
   private(set) var me: Person?
+  private(set) var myEmail: String?   // (a client contact's, for Settings' card — the board)
   private(set) var canMake = false, boss = false, isContact = false
   private(set) var contacts: [Contact] = []
   private(set) var pinnedClientGroups: [String] = []
@@ -174,7 +175,7 @@ final class Talk {
       return Person(id: id, name: p["name"] as? String ?? "", role: p["role"] as? String ?? "", photo: p["photo"] as? String, color: p["color"] as? String, gone: (p["gone"] as? Bool) == true,
                     contact: (p["contact"] as? Bool) == true, client: p["client"] as? String)
     }
-    if let m = j["me"] as? [String: Any] { me = person(m); canMake = (m["canMake"] as? Bool) == true; boss = (m["boss"] as? Bool) == true; isContact = (m["contact"] as? Bool) == true }
+    if let m = j["me"] as? [String: Any] { me = person(m); canMake = (m["canMake"] as? Bool) == true; boss = (m["boss"] as? Bool) == true; isContact = (m["contact"] as? Bool) == true; myEmail = m["email"] as? String }
     contacts = ((j["contacts"] as? [[String: Any]]) ?? []).compactMap { c in
       guard let id = c["id"] as? String else { return nil }
       return Contact(id: id, name: c["name"] as? String ?? "", email: c["email"] as? String ?? "", client: c["client"] as? String ?? "", groups: c["groups"] as? Int ?? 0)
