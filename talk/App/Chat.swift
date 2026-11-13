@@ -135,7 +135,12 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         c.contentView.isUserInteractionEnabled = !self.keyUp
         c.find = self.findSet.contains(id) ? (self.findQ, id == self.findCur) : nil
         c.album = self.albums[id] ?? []
-        if let m = self.msgs[id], let g = Talk.shared.groups[self.group] { c.set(m, group: g, log: Talk.shared.log(self.group), run: self.runs[id] ?? Run()) }
+        // (set and laid out with no animation: a reaction or a new tick changes the row, and only the row's height may move —
+        //  the words and pictures inside are already where they belong; laid out inside the list's animation, the whole
+        //  bubble's content slid in again: Haris 2026-11-13, the redraw rule)
+        if let m = self.msgs[id], let g = Talk.shared.groups[self.group] {
+          UIView.performWithoutAnimation { c.set(m, group: g, log: Talk.shared.log(self.group), run: self.runs[id] ?? Run()); c.contentView.layoutIfNeeded() }
+        }
         c.onReplyTap = { [weak self] rid in self?.jump(to: rid) }
         c.onFileTap = { [weak self, weak c] m in self?.openFrom = (m.kind == "photo" || m.kind == "video") ? c?.photo : nil; self?.open(m) }
         c.onRetry = { [weak self] m in guard let self = self else { return }; Talk.shared.retry(self.group, m) }
