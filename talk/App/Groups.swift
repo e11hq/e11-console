@@ -290,6 +290,10 @@ final class GroupInfoVC: UITableViewController, PHPickerViewControllerDelegate {
   private func fill(_ c: UITableViewCell, _ row: Row) {
     guard let g = g else { return }
     let T = Talk.shared, me = T.me?.id ?? ""
+    // (a row's first configuration puts Apple's own content view in place of the old one — the pictures and the photo
+    //  strip added before it went with the old one, and showed only once the row came back from reuse: Haris 2026-11-13.
+    //  So the row has Apple's content view first, and ours go into it.)
+    if c.contentConfiguration == nil { c.contentConfiguration = UIListContentConfiguration.valueCell() }
     c.contentView.subviews.filter { $0.tag == 77 }.forEach { $0.removeFromSuperview() }
     c.accessoryView = nil; c.accessoryType = .none; c.selectionStyle = .default
     var cfg = UIListContentConfiguration.valueCell()
@@ -356,10 +360,6 @@ final class GroupInfoVC: UITableViewController, PHPickerViewControllerDelegate {
       cfg = UIListContentConfiguration.cell(); cfg.text = "Delete Group"; cfg.textProperties.color = .systemRed
     }
     c.contentConfiguration = cfg
-    // (on a cell's first use Apple's content view is made only now, over the pictures and the strip put in before — they
-    //  showed only once the row was scrolled away and back: Haris 2026-11-13. The ring stays under Add Members' +.)
-    c.contentView.subviews.filter { $0.tag == 77 && $0.bounds.width != 40 }.forEach { c.contentView.bringSubviewToFront($0) }
-    c.contentView.subviews.filter { $0 is Avatar && $0.tag == 77 }.forEach { c.contentView.bringSubviewToFront($0) }
   }
   // (the gap between boxes 24, as under the three cards — Apple's were wider: Haris 2026-11-13)
   override func tableView(_ tv: UITableView, heightForHeaderInSection s: Int) -> CGFloat { 0.01 }
