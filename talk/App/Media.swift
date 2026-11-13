@@ -300,6 +300,6 @@ final class PicCell: UICollectionViewCell {
     if m.kind == "video" { let s = Int(f.secs ?? 0); play.text = "▶ \(s / 60):" + String(format: "%02d", s % 60); play.isHidden = false } else { play.isHidden = true }
     if let i = BubbleCell.cached(f.id) ?? ZoomPage.small(m, f) { img.image = i; return }
     img.image = nil
-    ZoomPage.thumb(m, f) { [weak self] i in guard let self = self, self.want == f.id else { return }; self.img.image = i }
+    ZoomPage.thumb(m, f) { [weak self] i in guard let self = self, self.want == f.id else { return }; self.img.land(i) }
   }
 }

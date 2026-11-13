@@ -495,8 +495,15 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   @objc private func head() {
     guard let g = Talk.shared.groups[group] else { return }
     let T = Talk.shared
-    titleL.text = g.name
-    titlePic.set(group: g)
+    // (a new name or picture crossfades in place — the no-snap rule)
+    var hs = Hasher(); hs.combine(g.name); hs.combine(g.pic); hs.combine(T.clients[g.client]?.logo)
+    let hsig = hs.finalize()
+    if hsig != headSig {
+      if headSig != 0, view.window != nil { UIView.transition(with: titleV, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction], animations: nil) }
+      headSig = hsig
+      titleL.text = g.name
+      titlePic.set(group: g)
+    }
     // (the people: a client first, as "Rania (Oasis Coffee)"; the team by full name; You last — cut short by the bar)
     let others = g.members.filter { $0 != T.me?.id }.compactMap { T.people[$0] }
     let clients = others.filter { $0.contact }.map { p in p.client.flatMap { T.clients[$0]?.name }.map { "\(p.name) (\($0))" } ?? p.name }
@@ -509,7 +516,17 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // a client group, to staff: the band under the bar and the box's hint — the client can see what's written here
     let shared = g.withClient && !T.isContact
     bar.placeholder = shared ? "Message — client can see this" : ""
-    if clientLine.isHidden == shared { clientLine.isHidden = !shared; pinTop.constant = shared ? 30 : 0; fitBottom() }
+    if clientLine.isHidden == shared {
+      // ("Client can see this group" coming or going fades, the pinned bar under it gliding to its place)
+      if view.window != nil {
+        if shared { clientLine.alpha = 0; clientLine.isHidden = false }
+        pinTop.constant = shared ? 30 : 0
+        UIView.animate(withDuration: 0.25, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+          self.clientLine.alpha = shared ? 1 : 0; self.view.layoutIfNeeded()
+        } completion: { _ in if !shared { self.clientLine.isHidden = true; self.clientLine.alpha = 1 } }
+        fitBottom()
+      } else { clientLine.isHidden = !shared; pinTop.constant = shared ? 30 : 0; fitBottom() }
+    }
     // (a pin just made here stands until the server's copy says the same — an update in between, still without it, took
     //  the bar away and brought it back: a flash, Haris 2026-11-12)
     // (@: the group's people)
@@ -563,7 +580,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   func startFind(focus: Bool = true, animated: Bool = true) {
     guard !finding else { return }
     findBar.placeholder = "Search in this chat"; findBar.delegate = self; findBar.text = ""
-    bar.box.resignFirstResponder(); bar.isHidden = true; findAcc.isHidden = false
+    bar.box.resignFirstResponder()
+    // (the message bar fades out and the search's own bar fades in — the no-snap rule, Haris 2026-11-13)
+    swapBars(showFind: true, animated: animated)
     finding = true; finds = []; findQ = ""; findCur = nil; findSet = []
     findAcc.show(0, 0, typed: false)
     navigationItem.setLeftBarButtonItems(nil, animated: animated)
@@ -581,10 +600,18 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     if focus { findBar.searchTextField.becomeFirstResponder() }
   }
   func focusFind() { if finding { findBar.searchTextField.becomeFirstResponder() } }
+  private func swapBars(showFind: Bool, animated: Bool) {
+    let inn: UIView = showFind ? findAcc : bar, out: UIView = showFind ? bar : findAcc
+    guard animated, view.window != nil else { out.isHidden = true; out.alpha = 1; inn.isHidden = false; inn.alpha = 1; return }
+    inn.alpha = 0; inn.isHidden = false
+    UIView.animate(withDuration: ChatVC.swap, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+      inn.alpha = 1; out.alpha = 0
+    } completion: { _ in if out.alpha == 0 { out.isHidden = true; out.alpha = 1 } }
+  }
   private func endFind(leaving: Bool = false) {
     guard finding else { return }
     finding = false
-    findAcc.isHidden = true; bar.isHidden = false
+    swapBars(showFind: false, animated: !leaving)
     findBar.searchTextField.resignFirstResponder()
     let was = findSet
     finds = []; findSet = []; findQ = ""; findCur = nil
@@ -1290,6 +1317,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     veil.alpha = 0; a.fractionComplete = 0.18   // (lighter again, Haris 2026-11-12 19:59)
     UIView.animate(withDuration: 0.25) { veil.alpha = 1 }
   }
+  private var headSig = 0
   private var holdVeil: UIVisualEffectView?, holdBlur: UIViewPropertyAnimator?
   private var holding = false, afterHold: (() -> Void)?
   func tableView(_ tv: UITableView, willEndContextMenuInteraction c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
@@ -1745,6 +1773,7 @@ final class BubbleCell: UITableViewCell {
   private var msg: Msg?
   private var media = false, caption = false, tailOn = false, isMine = false, framed = false, overPhoto = false, shownFile: String?
   // held: the bubble with its tail, in the row's own space (shifted so `origin` is 0,0)
+  private var linkShown: String?
   // the forward button and the reactions — beside the bubble, not lifted with it
   func besides(_ a: CGFloat) { fwdB.alpha = a; reacts.alpha = a }
   var heldRect: CGRect { let f = bubble.frame; return CGRect(x: f.minX - (tailOn && !isMine ? 10 : 0), y: f.minY, width: f.width + (tailOn ? 10 : 0), height: f.height) }
@@ -2070,8 +2099,8 @@ final class BubbleCell: UITableViewCell {
         quoteThumbW.constant = 54
         Net.shared.file(f.id) { [weak self] url in
           guard let self = self, self.msg?.id == m.id, let url = url else { return }
-          if o.kind == "video" { BubbleCell.frame(url, f.id) { [weak self] i in if self?.msg?.id == m.id { self?.quoteThumb.image = i } } }
-          else { self.quoteThumb.image = UIImage(contentsOfFile: url.path) }
+          if o.kind == "video" { BubbleCell.frame(url, f.id) { [weak self] i in if self?.msg?.id == m.id { self?.quoteThumb.land(i) } } }
+          else { self.quoteThumb.land(UIImage(contentsOfFile: url.path)) }
         }
       }
     }
@@ -2096,8 +2125,8 @@ final class BubbleCell: UITableViewCell {
       if album.count < 4, photo.image == nil, !isVideo || f.size <= 60 * 1024 * 1024 || FileManager.default.fileExists(atPath: Net.local(f.id).path) {
         Net.shared.file(f.id) { [weak self] url in
           guard let self = self, self.msg?.id == m.id, let url = url else { return }
-          if isVideo { BubbleCell.frame(url, f.id) { [weak self] img in if self?.msg?.id == m.id { self?.photo.image = img } } }
-          else { self.photo.image = BubbleCell.picture(url, f.id) }
+          if isVideo { BubbleCell.frame(url, f.id) { [weak self] img in if self?.msg?.id == m.id { self?.photo.land(img) } } }
+          else { self.photo.land(BubbleCell.picture(url, f.id)) }
         }
       }
     }
@@ -2181,17 +2210,21 @@ final class BubbleCell: UITableViewCell {
       if pv?.pic == nil { linkImg.contentMode = .scaleAspectFill }
       if let id = pv?.img {
         if let i = UIImage(contentsOfFile: Net.local(id).path) { linkImg.image = i }
-        else { linkImg.image = nil; Net.shared.file(id) { [weak self] url in guard let self = self, self.msg?.id == m.id, let url = url else { return }; self.linkImg.image = UIImage(contentsOfFile: url.path) } }
+        else { linkImg.image = nil; linkShown = nil; Net.shared.file(id) { [weak self] url in guard let self = self, self.msg?.id == m.id, let url = url else { return }; self.linkImg.land(UIImage(contentsOfFile: url.path)) } }
       } else if let p = pv?.pic {
         // (an E11 link: its page's own picture, kept once fetched; a logo (SVG — its own file, /view) whole, smaller, with
         //  room around it, not cropped to the card: Haris 2026-11-12)
         let logo = p.hasSuffix("/view")
-        linkImg.image = nil; linkImg.contentMode = logo ? .scaleAspectFit : .scaleAspectFill
-        Net.shared.picture(p, max: logo ? 600 : 160) { [weak self] i in
-          guard let self = self, self.msg?.id == m.id else { return }
-          self.linkImg.image = logo ? i.map { BubbleCell.padded($0) } : i
+        linkImg.contentMode = logo ? .scaleAspectFit : .scaleAspectFill
+        // (the same picture already shown stays — set again it blinked; a new one fades in once it's here)
+        if linkShown != p || linkImg.image == nil {
+          linkImg.image = nil; linkShown = p
+          Net.shared.picture(p, max: logo ? 600 : 160) { [weak self] i in
+            guard let self = self, self.msg?.id == m.id, self.linkShown == p else { return }
+            self.linkImg.land(logo ? i.map { BubbleCell.padded($0) } : i)
+          }
         }
-      } else { linkImg.image = nil }
+      } else { linkImg.image = nil; linkShown = nil }
     } else { linkImgOff.isActive = true; linkImgH.isActive = false }
     // (an E11 file or folder link: its live card, as a task's — the link's own box not shown)
     if let l = m.link.map({ Talk.shared.liveLink($0) }), l.e11 != nil, !m.deleted, !Talk.shared.isContact {
@@ -2384,7 +2417,7 @@ final class BubbleCell: UITableViewCell {
       if pics.allSatisfy({ $0 != nil }) { BubbleCell.pictures.setObject(img, forKey: key as NSString) }
       // (only the latest drawing for this bubble lands — an older one finishing late must not cover it)
       guard let self = self, self.msg?.id == m.id, self.shownFile == key else { return }
-      self.photo.image = img
+      self.photo.land(img)
       if pics.contains(where: { $0 == nil }), tries < 3 {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
           guard let self = self, self.msg?.id == m.id, self.shownFile == key else { return }
@@ -3153,7 +3186,7 @@ final class E11CardView: UIView {
   private let pic = UIImageView(), head = UILabel(), title = UILabel(), sub = UILabel(), line = UIView(), open = UILabel()
   private let col = UIStackView(), quiet = UIStackView(), qIcon = UIImageView(), qTitle = UILabel(), qSub = UILabel()
   private var picH: NSLayoutConstraint!, picOff: NSLayoutConstraint!
-  private var url: URL?, live = true
+  private var url: URL?, live = true, picShown: String?
   override init(frame: CGRect) {
     super.init(frame: frame)
     backgroundColor = UIColor.black.withAlphaComponent(0.22); layer.cornerRadius = 15; layer.cornerCurve = .continuous; clipsToBounds = true
@@ -3187,7 +3220,7 @@ final class E11CardView: UIView {
     quietBottom?.isActive = false
     if !live {
       // (turned off or deleted: the name and a line saying so — nothing to open)
-      picH.isActive = false; picOff.isActive = true; pic.image = nil
+      picH.isActive = false; picOff.isActive = true; pic.image = nil; picShown = nil
       qIcon.image = UIImage(systemName: state == "off" ? "nosign" : "trash")?.withTintColor(subInk, renderingMode: .alwaysOriginal)
       qTitle.text = l.title ?? (folder ? "Folder" : "File"); qTitle.textColor = ink.withAlphaComponent(0.85)
       qSub.text = state == "off" ? "This link was turned off" : folder ? "This folder was deleted" : "This file was deleted"; qSub.textColor = subInk
@@ -3200,11 +3233,12 @@ final class E11CardView: UIView {
     picOff.isActive = !hasPic; picH.isActive = hasPic
     let logo = l.pic?.hasSuffix("/view") == true
     pic.contentMode = logo ? .scaleAspectFit : .scaleAspectFill
-    if let p = l.pic {
-      pic.image = nil
+    // (the same picture already shown stays — set again it blinked; a new one fades in once it's here)
+    if let p = l.pic, picShown != p || pic.image == nil {
+      pic.image = nil; picShown = p
       Net.shared.picture(p, max: logo ? 600 : 160) { [weak self] i in
-        guard let self = self, still() == msg else { return }
-        self.pic.image = logo ? i.map { BubbleCell.padded($0) } : i
+        guard let self = self, still() == msg, self.picShown == p else { return }
+        self.pic.land(logo ? i.map { BubbleCell.padded($0) } : i)
       }
     }
     let mark = NSTextAttachment(image: UIImage(systemName: folder ? "folder" : "doc", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold))!.withTintColor(subInk))

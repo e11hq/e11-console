@@ -447,7 +447,7 @@ final class GroupInfoVC: UITableViewController {
       for m in latestPics() {
         let iv = UIImageView(); iv.contentMode = .scaleAspectFill; iv.clipsToBounds = true; iv.layer.cornerRadius = 8; iv.layer.cornerCurve = .continuous
         iv.backgroundColor = .tertiarySystemFill
-        if let f = m.file { if let i = BubbleCell.cached(f.id) ?? ZoomPage.small(m, f) { iv.image = i } else { ZoomPage.thumb(m, f) { iv.image = $0 } } }
+        if let f = m.file { if let i = BubbleCell.cached(f.id) ?? ZoomPage.small(m, f) { iv.image = i } else { ZoomPage.thumb(m, f) { iv.land($0) } } }
         strip.addArrangedSubview(iv)
       }
       while strip.arrangedSubviews.count < 4 { let v = UIView(); strip.addArrangedSubview(v) }

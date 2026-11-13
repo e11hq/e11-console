@@ -604,17 +604,27 @@ final class Avatar: UIView {
     let key = talkFile ?? picture
     want = key
     if let f = talkFile {
-      Net.shared.file(f) { [weak self] url in guard let self = self, self.want == key, let u = url, let i = UIImage(contentsOfFile: u.path) else { return }; self.img.image = i; self.img.isHidden = false; self.lbl.isHidden = true }
+      var now = true
+      Net.shared.file(f) { [weak self] url in guard let self = self, self.want == key, let u = url, let i = UIImage(contentsOfFile: u.path) else { return }; self.reveal(i, fade: !now) }
+      now = false
     } else if let p = picture { load(p, key, tries: 3) }
+  }
+  // the picture in place of the initials — one already on the phone just there, one arriving later fading in over them
+  // (the no-snap rule, Haris 2026-11-13)
+  private func reveal(_ i: UIImage, fade: Bool) {
+    let set = { self.img.image = i; self.img.isHidden = false; self.lbl.isHidden = true }
+    if fade, window != nil { UIView.transition(with: self, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction], animations: set) } else { set() }
   }
   // (a picture that didn't come is tried again by itself, a little later — never left as initials until the page is
   //  opened again: E11 Console's lesson, build 1690)
   private func load(_ p: String, _ key: String?, tries: Int) {
+    var now = true
     Net.shared.picture(p) { [weak self] i in
       guard let self = self, self.want == key else { return }
       guard let i = i else { if tries > 1 { DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in self?.load(p, key, tries: tries - 1) } }; return }
-      self.img.image = self.isLogo ? Avatar.inCircle(i) : i; self.img.isHidden = false; self.lbl.isHidden = true
+      self.reveal(self.isLogo ? Avatar.inCircle(i) : i, fade: !now)
     }
+    now = false
   }
   // a picture straight in (one just picked, before it's uploaded)
   func show(_ i: UIImage) { want = nil; img.image = i; img.isHidden = false; lbl.isHidden = true }
@@ -670,6 +680,14 @@ func topScreen(_ vc: UIViewController?) -> UIViewController? {
   if let n = vc as? UINavigationController { return topScreen(n.visibleViewController) ?? n }
   if let t = vc as? UITabBarController { return topScreen(t.selectedViewController) ?? t }
   return vc
+}
+// a picture landing after its view is up fades in (the no-snap rule, Haris 2026-11-13); off screen, or replacing one already
+// shown, it's just set
+extension UIImageView {
+  func land(_ i: UIImage?) {
+    guard window != nil, i != nil, image == nil else { image = i; return }
+    UIView.transition(with: self, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction]) { self.image = i }
+  }
 }
 final class PaddedLabel: UILabel {
   override func drawText(in rect: CGRect) { super.drawText(in: rect.insetBy(dx: 16, dy: 10)) }
