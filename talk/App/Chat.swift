@@ -763,7 +763,11 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (only messages changing in place — a reaction, a tick, an edit, a card brought up to date: set at once, with nothing in
     //  the chat sliding — Haris 2026-11-13 "nothing slides while anything changes"; a message come or gone still fades)
     if old.sectionIdentifiers == snap.sectionIdentifiers && old.itemIdentifiers == snap.itemIdentifiers {
+      // (…and crossfading to its new look in its place — nothing snapping in: Haris 2026-11-13)
+      let ids = animated && view.window != nil ? snap.reconfiguredItemIdentifiers : []
+      let shots = Crossfade.cover(ids.compactMap { data.indexPath(for: $0).flatMap { table.cellForRow(at: $0) } }, in: table)
       UIView.performWithoutAnimation { data.apply(snap, animatingDifferences: false); table.layoutIfNeeded() }
+      Crossfade.run(shots, new: ids.compactMap { data.indexPath(for: $0).flatMap { table.cellForRow(at: $0)?.contentView } })
     } else {
       data.apply(snap, animatingDifferences: animated && old.numberOfItems > 0)
     }

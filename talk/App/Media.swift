@@ -113,9 +113,12 @@ final class MediaVC: UIViewController, UICollectionViewDelegate, QLPreviewContro
     sigs = new
     if layout {
       // (another tab: its own items and layout, no animation between them)
-      UIView.performWithoutAnimation {
-        cv.setCollectionViewLayout(self.layout(), animated: false)
-        data.applySnapshotUsingReloadData(snap)
+      // (the new tab's content crossfades in over the old — nothing snapping: Haris 2026-11-13)
+      UIView.transition(with: cv, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction]) {
+        UIView.performWithoutAnimation {
+          self.cv.setCollectionViewLayout(self.layout(), animated: false)
+          self.data.applySnapshotUsingReloadData(snap)
+        }
       }
       cv.setContentOffset(CGPoint(x: 0, y: -cv.adjustedContentInset.top), animated: false)
     } else { data.applySteady(snap, in: cv, animated: animated) }

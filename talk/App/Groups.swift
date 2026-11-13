@@ -358,7 +358,10 @@ final class GroupInfoVC: UITableViewController {
   private func fillHead(_ g: Group) {
     let T = Talk.shared, can = T.canManage(g)
     var h = Hasher(); h.combine(g.name); h.combine(g.pic); h.combine(g.members.count); h.combine(can); h.combine(g.muted); h.combine(T.clients[g.client]?.name); h.combine(T.clients[g.client]?.logo)
-    let sig = h.finalize(); guard sig != headSig else { return }; headSig = sig
+    let sig = h.finalize(); guard sig != headSig else { return }
+    // (a change after the page is up — the name, the picture, Mute ↔ Muted — crossfades in place, nothing snapping)
+    if headSig != 0, view.window != nil { UIView.transition(with: head, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction], animations: nil) }
+    headSig = sig
     pic.set(group: g); nameL.text = g.name
     subL.text = [T.clients[g.client]?.name, "\(g.members.count) member\(g.members.count == 1 ? "" : "s")"].compactMap { $0 }.joined(separator: " · ")
     acts.arrangedSubviews.forEach { $0.removeFromSuperview() }
@@ -1076,11 +1079,34 @@ enum PickRows {
 
 // The redraw rule (Haris 2026-11-13: "nothing slides while anything changes"): rows that only change in place are set at
 // once, laid out without animation, nothing on the page moving; rows coming or going fade, the rest sliding to make room.
+// …and nothing snaps (Haris 2026-11-13: "things still appear in a snap"): a row changed in place crossfades to its new look
+// in its place — the old picture of it fading out over the new one fading in — with nothing around it moving.
+enum Crossfade {
+  static let time: TimeInterval = 0.22
+  // pictures of the rows about to change, laid over them where they are
+  static func cover(_ cells: [UIView], in host: UIView) -> [UIView] {
+    cells.compactMap { c in
+      guard let s = c.snapshotView(afterScreenUpdates: false) else { return nil }
+      s.frame = c.frame; s.isUserInteractionEnabled = false; host.addSubview(s); return s
+    }
+  }
+  // the new look fading in under the old picture fading out
+  static func run(_ shots: [UIView], new cells: [UIView]) {
+    guard !shots.isEmpty else { return }
+    cells.forEach { $0.alpha = 0 }
+    UIView.animate(withDuration: time, delay: 0, options: [.allowUserInteraction, .curveEaseInOut]) {
+      shots.forEach { $0.alpha = 0 }; cells.forEach { $0.alpha = 1 }
+    } completion: { _ in shots.forEach { $0.removeFromSuperview() }; cells.forEach { $0.alpha = 1 } }
+  }
+}
 extension UITableViewDiffableDataSource {
   func applySteady(_ snap: NSDiffableDataSourceSnapshot<SectionIdentifierType, ItemIdentifierType>, in tv: UITableView, animated: Bool, done: (() -> Void)? = nil) {
     let old = snapshot()
     if !animated || (old.sectionIdentifiers == snap.sectionIdentifiers && old.itemIdentifiers == snap.itemIdentifiers) {
+      let ids = animated ? snap.reconfiguredItemIdentifiers : []
+      let shots = Crossfade.cover(ids.compactMap { indexPath(for: $0).flatMap { tv.cellForRow(at: $0) } }, in: tv)
       UIView.performWithoutAnimation { apply(snap, animatingDifferences: false); tv.layoutIfNeeded() }
+      Crossfade.run(shots, new: ids.compactMap { indexPath(for: $0).flatMap { tv.cellForRow(at: $0)?.contentView } })
       done?()
     } else { apply(snap, animatingDifferences: true, completion: done) }
   }
@@ -1089,7 +1115,10 @@ extension UICollectionViewDiffableDataSource {
   func applySteady(_ snap: NSDiffableDataSourceSnapshot<SectionIdentifierType, ItemIdentifierType>, in cv: UICollectionView, animated: Bool, done: (() -> Void)? = nil) {
     let old = snapshot()
     if !animated || (old.sectionIdentifiers == snap.sectionIdentifiers && old.itemIdentifiers == snap.itemIdentifiers) {
+      let ids = animated ? snap.reconfiguredItemIdentifiers : []
+      let shots = Crossfade.cover(ids.compactMap { indexPath(for: $0).flatMap { cv.cellForItem(at: $0) } }, in: cv)
       UIView.performWithoutAnimation { apply(snap, animatingDifferences: false); cv.layoutIfNeeded() }
+      Crossfade.run(shots, new: ids.compactMap { indexPath(for: $0).flatMap { cv.cellForItem(at: $0)?.contentView } })
       done?()
     } else { apply(snap, animatingDifferences: true, completion: done) }
   }
