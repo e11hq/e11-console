@@ -2067,7 +2067,7 @@ final class BubbleCell: UITableViewCell {
     } else {
       // (staff: an E11 file or folder link becomes its card, and the address itself leaves the words — a client contact
       //  keeps the plain link, no card: Haris 2026-11-13)
-      let cardOn = !T.isContact && m.link?.e11 != nil
+      let cardOn = !T.isContact && m.link.map { T.liveLink($0).e11 != nil } == true
       let txt = cardOn ? m.text.replacingOccurrences(of: m.link?.url ?? "", with: "").trimmingCharacters(in: .whitespacesAndNewlines) : m.text
       a.append(NSAttributedString(string: txt, attributes: [.font: UIFont.systemFont(ofSize: 17), .foregroundColor: ink]))
       for id in m.mentions {
@@ -2097,7 +2097,9 @@ final class BubbleCell: UITableViewCell {
       }
     }
     linkWrap.isHidden = link == nil || isPhoto || isDoc
-    tight.isActive = !isPhoto && !isVoice && !isDoc && (link == nil || m.link?.img != nil || m.link?.pic != nil)
+    // (a link's preview box is a card: the bubble its widest, as a picture's — left to itself it shrank to a sliver, the
+    //  title and the address squeezed into it: Haris 2026-11-13)
+    tight.isActive = !isPhoto && !isVoice && !isDoc
     if link != nil && !m.deleted && !m.pending { fwdB.isHidden = false }
     linkWrap.reach(nameL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
     wideCard = false
@@ -2116,7 +2118,7 @@ final class BubbleCell: UITableViewCell {
       lf.append(NSAttributedString(string: "  " + site, attributes: [.foregroundColor: sub])); linkFoot.attributedText = lf
       let hasImg = pv?.img != nil || pv?.pic != nil
       linkImgOff.isActive = !hasImg; linkImgH.isActive = hasImg; linkPlay.isHidden = !(hasImg && pv?.video == true)
-      wideCard = hasImg
+      wideCard = true
       if pv?.pic == nil { linkImg.contentMode = .scaleAspectFill }
       if let id = pv?.img {
         if let i = UIImage(contentsOfFile: Net.local(id).path) { linkImg.image = i }
@@ -2133,10 +2135,10 @@ final class BubbleCell: UITableViewCell {
       } else { linkImg.image = nil }
     } else { linkImgOff.isActive = true; linkImgH.isActive = false }
     // (an E11 file or folder link: its live card, as a task's — the link's own box not shown)
-    if let l = m.link, l.e11 != nil, !m.deleted, !Talk.shared.isContact {
+    if let l = m.link.map({ Talk.shared.liveLink($0) }), l.e11 != nil, !m.deleted, !Talk.shared.isContact {
       linkWrap.isHidden = true; e11Wrap.isHidden = false; if !m.pending { fwdB.isHidden = false }
       e11Wrap.reach(nameL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
-      e11Card.set(Talk.shared.liveLink(l), mine: mine, ink: ink, msg: m.id) { [weak self] in self?.msg?.id }; wideCard = true
+      e11Card.set(l, mine: mine, ink: ink, msg: m.id) { [weak self] in self?.msg?.id }; wideCard = true
     } else { e11Wrap.isHidden = true }
     taskWrap.isHidden = m.task == nil || m.deleted
     if let t = m.task, !m.deleted {

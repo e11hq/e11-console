@@ -740,7 +740,10 @@ extension Talk {
     DispatchQueue.global(qos: .utility).async { if let d = try? JSONEncoder().encode(c) { try? d.write(to: cardsFile, options: .atomic) } }
   }
   private static var liveLinks: [String: Msg.LinkPrev] { get { cards.links } set { cards.links = newValue } }
-  func liveLink(_ l: Msg.LinkPrev) -> Msg.LinkPrev { l.e11 == nil ? l : Talk.liveLinks[l.url] ?? l }
+  // (an E11 link sent before the cards came — its message has no card of its own — gets its live card too: Haris 2026-11-13)
+  static let e11Pattern = try! NSRegularExpression(pattern: "^https?://files(-test)?\\.e11hq\\.com/[fd]/", options: [.caseInsensitive])
+  static func isE11(_ url: String) -> Bool { e11Pattern.firstMatch(in: url, range: NSRange(location: 0, length: (url as NSString).length)) != nil }
+  func liveLink(_ l: Msg.LinkPrev) -> Msg.LinkPrev { l.e11 == nil && !Talk.isE11(l.url) ? l : Talk.liveLinks[l.url] ?? l }
   static func linkCard(_ k: [String: Any]) -> Msg.LinkPrev? {
     guard let u = k["url"] as? String else { return nil }
     var l = Msg.LinkPrev(url: u, title: k["title"] as? String, site: k["site"] as? String, video: false, img: nil, icon: nil, e11: k["e11"] as? String,
@@ -749,7 +752,7 @@ extension Talk {
     return l
   }
   func refreshLinks(_ g: String) {
-    let urls = Array(Set(log(g).msgs.compactMap { $0.deleted ? nil : ($0.link?.e11 != nil ? $0.link?.url : nil) }))
+    let urls = Array(Set(log(g).msgs.compactMap { m in m.deleted ? nil : m.link.flatMap { $0.e11 != nil || Talk.isE11($0.url) ? $0.url : nil } }))
     guard !urls.isEmpty else { return }
     Net.shared.act(["act": "linkCards", "group": g, "urls": urls]) { j in
       let cards = ((j?["cards"] as? [[String: Any]]) ?? []).compactMap { Talk.linkCard($0) }
