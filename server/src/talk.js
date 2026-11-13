@@ -12,6 +12,7 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { isAway } from './away.js';
 
 const KEEP_MS = 30 * 86400000;          // never picked up: gone after 30 days
 const IDLE_MS = 90 * 86400000;          // a group with no new messages for 90 days is deleted (Haris 2026-11-05)
@@ -114,7 +115,8 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     if (u.title) return String(u.title);
     return access.isSuper(u) ? (u.role === 'admin' ? 'Super Admin' : ROLE[u.role] || 'Admin') : ROLE[u.role] || '';
   }
-  const personOf = (u) => ({ id: u.id, name: u.name || u.email, role: roleOf(u), photo: u.avatar || null, color: u.color || null });
+  // (away: Out of Office — the day they're back, while it lasts; shown in the @ list — Haris 2026-11-13)
+  const personOf = (u) => ({ id: u.id, name: u.name || u.email, role: roleOf(u), photo: u.avatar || null, color: u.color || null, ...(isAway(u, now()) ? { away: u.away } : {}) });
   // a client = a client of E11 Console (its Clients list), with its Client Assets logo when it has one
   function clientsFor(u) {
     return store.list('projects').filter((p) => !p.inactive && access.canSee(u, 'projects', p)).map((p) => {
@@ -350,6 +352,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     const t = now();
     for (const uid of memberIds(g)) {
       if (uid === from.id) continue;
+      if (isAway(userOf(uid), t)) continue;   // (Out of Office: paused until 9:00 AM the day they're back — Haris 2026-11-13)
       const pref = Q.pref.get(uid, 'group', g.id) || {};
       // (muted — but an @mention still comes, unless they turned that off: Settings › Notifications, Haris 2026-11-13)
       if (pref.muted_until && pref.muted_until > t && !(mentions.includes(uid) && optsOf(uid).mutedMentions)) continue;

@@ -9,10 +9,13 @@
 //   'notif'   body.k, body.on     a notification type on / off (prefs.notifOff)
 //   'digest'  body.on             the morning summary on / off (prefs.digestOff)
 //   'seen'    body.k, body.value  a pop-up seen (prefs.annSeen / profileAsked / claimNag) — step 9
+//   'away'    body.value          Out of Office: the day you're back 'YYYY-MM-DD' (after today, within a year — it ends
+//                                 9:00 AM Dubai that day), or null / '' = back now (away.js)
 //   'avatar'  body.value          the new photo's path (from the upload), or null = no photo; the old photo's file goes
 //                                 to the server's trash folder (filesGone) when nothing else uses it
 // It only ever edits the acting person's own record (u.id) — someone else's can't be named. Answers as the other acts:
 //   { ok: true, changes: [{ kind: 'users', id, base, data }], messages, answer: {}, filesGone? } | { ok: false, status, error }
+import { awayEnds } from './away.js';
 const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 // (web/appme-people.js NOTIF_TYPES: the keys My profile shows)
@@ -21,7 +24,7 @@ const MD = /^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 // (where the photo upload puts a profile photo — files.js processImage)
 const AVATAR_DIR = 'attachments/_avatars/';
 
-export function createMeActs({ store } = {}) {
+export function createMeActs({ store, now = () => Date.now() } = {}) {
   const fail = (status, error, extra = {}) => ({ ok: false, status, error, ...extra });
   const done = (changes, messages = [], answer = {}, more = {}) => ({ ok: true, changes, messages, answer, ...more });
   const text = (v, max = 120) => (typeof v === 'string' && v.length <= max ? v.trim() : null);
@@ -81,6 +84,13 @@ export function createMeActs({ store } = {}) {
       if (!!prefs().digestOff === !body.on) return done([], []);
       x.prefs.digestOff = !body.on;
       msgs.push(x.prefs.digestOff ? 'Morning summary off' : 'Morning summary on — 10:30 am, Monday to Friday');
+    } else if (field === 'away') {
+      const v = body.value == null || body.value === '' ? null : String(body.value);
+      const ends = v == null ? 0 : awayEnds(v), t = now();
+      if (v != null && (!ends || ends <= t || ends > t + 366 * 86400000)) return fail(400, 'Choose the day you’re back');
+      if (v === (x.away || null) || (v == null && !x.away)) return done([], []);
+      if (v == null) delete x.away; else x.away = v;
+      msgs.push(v == null ? 'Out of Office off' : 'Out of office until ' + new Date(ends).toLocaleDateString('en-GB', { timeZone: 'Asia/Dubai', weekday: 'short', day: 'numeric', month: 'short' }).replace(',', ''));
     } else if (field === 'avatar') {
       const v = body.value == null ? null : String(body.value);
       // (only a photo the upload made — never another file of the office's passed off as a picture)

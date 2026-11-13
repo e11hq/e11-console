@@ -36,6 +36,7 @@ import { createLinks } from './links.js';
 import { createViewCopies } from './viewcopy.js';
 import { createOffice } from './office.js';
 import { createApns } from './apns.js';
+import { isAway, AWAY_PASS } from './away.js';
 import { createTalk } from './talk.js';
 import { createHolidaySync, DEFAULT_HOLIDAYS_URL } from './holidays.js';
 import { createAppStart } from './appstart.js';
@@ -104,6 +105,8 @@ export function createServer(cfg) {
       // (the iPhone app: expense claims only as rules.js onPhone says — everyone's own claim approved / paid / added, the
       //  team's submitted ones to an Office Admin with finance access — and its badge counts the same; Haris 2026-11-10)
       const pu = store.get('users', String(userId));
+      // (Out of Office: nothing reaches their phone or browser until 9:00 AM the day they're back — the Inbox still has it)
+      if (isAway(pu, (cfg.now || Date.now)()) && !AWAY_PASS.has(String((msg && msg.tag) || ''))) return { sent: 0, removed: 0, apns: [], apnsWhy: 'away' };
       const claim = !homeView.onPhone({ kind: (msg && msg.kind) || '' }, pu);
       let phoneMsg = msg && Number.isInteger(msg.badge) ? { ...msg, badge: store.list('notifications').filter((x) => x.to === userId && !x.read && homeView.onPhone(x, pu)).length } : msg;
       // (held on the iPhone: Apple's expanded notification with the app's preview of it — a comment's with Reply, its thread

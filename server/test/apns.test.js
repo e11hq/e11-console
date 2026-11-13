@@ -98,3 +98,29 @@ test('no missed notifications: an app that confirms gets the ones it missed sent
   await post(AM, '/api/apns/unregister', { token: TOK });
   assert.equal(app.apns.pendingFor(TOK).length, 0);
 });
+test('Out of Office: nothing reaches the phone until 9:00 AM Dubai the day they are back; their own test still does (Haris 2026-11-13)', async () => {
+  await post(AM, '/api/apns/register', { token: GOOD, env: 'production' });
+  const day = (ms) => new Date(Date.now() + ms).toISOString().slice(0, 10);
+  const act = async (value) => (await post(AM, '/api/app/act', { ev: 'pfSet', field: 'away', value })).json();
+  assert.equal((await act(day(-86400000))).ok, false, 'a day already gone is refused');
+  assert.equal((await act('20-11-2026')).ok, false);
+  const on = await act(day(3 * 86400000));
+  assert.equal(on.ok, true); assert.match(on.messages[0], /^Out of office until /);
+  assert.equal(app.store.get('users', 'u-a').away, day(3 * 86400000));
+  got = [];
+  assert.equal((await app.webPush.sendTo('u-a', { title: 'T', body: 'paused', nid: 'n9' })).sent, 0);
+  assert.equal(got.length, 0, 'paused');
+  assert.equal((await app.webPush.sendTo('u-a', { title: 'E11 Console', body: 'test', tag: 'test' })).sent, 1, 'your own test still comes');
+  const off = await act(null);
+  assert.equal(off.ok, true); assert.equal(app.store.get('users', 'u-a').away, undefined);
+  got = [];
+  assert.equal((await app.webPush.sendTo('u-a', { title: 'T', body: 'back', nid: 'n10' })).sent, 1, 'back: it comes again');
+  await post(AM, '/api/apns/unregister', { token: GOOD });
+});
+test('Out of Office ends at 9:00 AM Dubai on the day back', async () => {
+  const { isAway } = await import('../src/away.js');
+  const u = { away: '2026-11-20' };
+  assert.equal(isAway(u, Date.parse('2026-11-20T08:59:00+04:00')), true);
+  assert.equal(isAway(u, Date.parse('2026-11-20T09:00:00+04:00')), false);
+  assert.equal(isAway({ away: 'soon' }, 0), false); assert.equal(isAway(null), false);
+});
