@@ -1097,8 +1097,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (the bubble's own shape, tail and all, lifting from the row — not a rounded box that cut the tail away)
     let p = UIPreviewParameters(); p.backgroundColor = .clear
     p.visiblePath = cell.heldPath(origin: cell.bubble.frame.origin)
-    // (no shadow under the lifted bubble — Apple's own setting for it, an empty shadow path: Haris 2026-11-13)
-    p.shadowPath = UIBezierPath()
+    // (no shadow under the lifted bubble — Haris 2026-11-13: the shadow's own shape, a single point hidden in the middle of
+    //  the bubble; an empty shadow path made iPhone drop the bubble's shape too, lifting a square box round it)
+    let mid = CGPoint(x: cell.bubble.bounds.midX, y: cell.bubble.bounds.midY)
+    p.shadowPath = UIBezierPath(rect: CGRect(x: mid.x - 0.5, y: mid.y - 0.5, width: 1, height: 1))
     // (the bubble alone — the whole row lifted its forward button too, a faint box behind the preview, Haris 2026-11-12)
     return UITargetedPreview(view: cell.bubble, parameters: p)
   }
