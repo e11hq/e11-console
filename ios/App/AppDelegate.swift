@@ -137,7 +137,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   var retrying = false
   var launchLock = true          // ask for Face ID when the app starts (not every time it comes back to the front)
   var authing = false            // Face ID is on screen (it makes the app inactive and active again: never a new lock)
-  // under the Cloudflare sign-in page only: "App Review sign-in" (Apple's reviewer can't get an E11 email code)
+  // under the sign-in page only (Cloudflare's, or our own): "App Review sign-in" (Apple's reviewer has no E11 account)
   lazy var reviewLink: UIButton = {
     let b = UIButton(type: .system)
     b.setTitle("App Review sign-in", for: .normal)
@@ -451,7 +451,9 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   }
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
     let onServer = webView.url?.host == serverHost
-    reviewLink.isHidden = !(webView.url?.host ?? "").hasSuffix(".cloudflareaccess.com")
+    // (and under our own sign-in page — signin.… — since Cloudflare's page is skipped (2026-11-11): the link had gone with it)
+    let signHost = webView.url?.host ?? ""
+    reviewLink.isHidden = !(signHost.hasSuffix(".cloudflareaccess.com") || signHost.hasPrefix("signin.") || signHost.hasPrefix("signin-"))
     webView.hideKeyboardBar()
     if onServer { shareSignIn(); bootPageArrived() }
     if onServer { tabCover = -1; view.setNeedsLayout(); flushPending() }
