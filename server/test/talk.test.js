@@ -128,7 +128,26 @@ test('files: uploaded in pieces, sent in a message, read by the group only, gone
   assert.equal(got.status, 200); assert.equal(await got.text(), 'PDFDATA');
   assert.equal((await fetch(base + '/api/talk/file/' + up.id, { headers: H('adm') })).status, 404, 'not for people outside the group');
   for (const w of ['am', 'des', 'sm', 'u6', 'fr', 'off']) { const s = await sync(w); if (s.last) await ack(w, s.last); }
-  assert.equal(fs.existsSync(path.join(dir, 'talk-relay', up.id)), false, 'the file is gone from the server');
+  // (Auto-download off: a phone takes the message without its file — kept for it, and it can still download it)
+  const file = path.join(dir, 'talk-relay', up.id);
+  assert.equal(fs.existsSync(file), true, 'kept for the phones that haven’t downloaded it');
+  const waiting = [];
+  for (const w of ['sm', 'u6', 'fr', 'off']) { const r = await fetch(base + '/api/talk/file/' + up.id, { headers: H(w) }); if (r.status === 200) { await r.text(); waiting.push(w); } }
+  assert.ok(waiting.length > 0, 'still downloadable after the message was taken');
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(fs.existsSync(file), false, 'the file is gone from the server once every phone has it');
+});
+
+test('Auto-download off: a file nobody downloads is kept 30 days from sending, then gone', async () => {
+  const up = await (await fetch(base + '/api/talk/upload?name=late.pdf&offset=0&last=1', { method: 'POST', headers: { 'X-Dev-Email': 'am@x.com', 'Content-Type': 'application/octet-stream' }, body: Buffer.from('LATE') })).json();
+  assert.ok((await act('am', { act: 'send', group: G, file: { id: up.id, kind: 'file', thumb: 'abc+/=' } })).ok);
+  const ev = (await sync('des')).events.find((e) => e.file && e.file.id === up.id);
+  assert.equal(ev.file.thumb, 'abc+/=', 'a tiny picture goes with it');
+  for (const w of ['am', 'des', 'sm', 'u6', 'fr', 'off']) { const s = await sync(w); if (s.last) await ack(w, s.last); }
+  clock += 29 * 86400000; app.talk.sweep();
+  assert.equal((await fetch(base + '/api/talk/file/' + up.id, { method: 'HEAD', headers: H('des') })).status, 200, 'still there at 29 days');
+  clock += 2 * 86400000; app.talk.sweep();
+  assert.equal((await fetch(base + '/api/talk/file/' + up.id, { headers: H('des') })).status, 404, 'gone after 30 days');
 });
 
 test('leaving, removing, deleting a group', async () => {

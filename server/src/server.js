@@ -616,6 +616,7 @@ export function createServer(cfg) {
           return req.method === 'HEAD' ? res.end() : fs.createReadStream(full, { start, end }).pipe(res);
         }
         res.writeHead(200, { 'Content-Type': type, 'Content-Length': size, 'Accept-Ranges': 'bytes', 'Cache-Control': 'private, max-age=86400' });
+        if (req.method !== 'HEAD') res.on('finish', () => t.fetched(dev, f.id));   // (the whole file reached the phone)
         return req.method === 'HEAD' ? res.end() : fs.createReadStream(full).pipe(res);
       }
       if (p === '/api/talk/push' && req.method === 'POST') {

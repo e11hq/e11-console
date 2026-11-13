@@ -45,6 +45,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     CREATE TABLE IF NOT EXISTS macs (id TEXT PRIMARY KEY, uid TEXT NOT NULL, name TEXT NOT NULL, linked_at INTEGER NOT NULL, seen_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS link_codes (code TEXT PRIMARY KEY, uid TEXT NOT NULL, name TEXT NOT NULL, at INTEGER NOT NULL, mac TEXT);
     CREATE TABLE IF NOT EXISTS phone_seen (uid TEXT PRIMARY KEY, at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS needs (file TEXT NOT NULL, uid TEXT NOT NULL, grp TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (file, uid));
     CREATE TABLE IF NOT EXISTS opts (uid TEXT NOT NULL, key TEXT NOT NULL, val INTEGER NOT NULL, PRIMARY KEY (uid, key));
   `);
   // (a group's pinned message — one, kept until unpinned or replaced; anyone in the group pins, Haris 2026-11-12)
@@ -66,6 +67,12 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     prefs: q('SELECT kind, id, pinned_at, muted_until FROM prefs WHERE uid = ?'),
     pref: q('SELECT pinned_at, muted_until FROM prefs WHERE uid = ? AND kind = ? AND id = ?'),
     opt: q('SELECT val FROM opts WHERE uid = ? AND key = ?'),
+    addNeed: q('INSERT OR IGNORE INTO needs (file, uid, grp, at) VALUES (?, ?, ?, ?)'),
+    gotNeed: q('DELETE FROM needs WHERE file = ? AND uid = ?'),
+    needed: q('SELECT 1 FROM needs WHERE file = ? LIMIT 1'),
+    needOf: q('SELECT grp FROM needs WHERE file = ? AND uid = ?'),
+    oldNeeds: q('SELECT DISTINCT file FROM needs WHERE at < ?'),
+    dropOldNeeds: q('DELETE FROM needs WHERE at < ?'),
     setOpt: q('INSERT INTO opts (uid, key, val) VALUES (?, ?, ?) ON CONFLICT(uid, key) DO UPDATE SET val = excluded.val'),
     setPin: q('INSERT INTO prefs (uid, kind, id, pinned_at) VALUES (?, ?, ?, ?) ON CONFLICT(uid, kind, id) DO UPDATE SET pinned_at = excluded.pinned_at'),
     setMute: q('INSERT INTO prefs (uid, kind, id, muted_until) VALUES (?, \'group\', ?, ?) ON CONFLICT(uid, kind, id) DO UPDATE SET muted_until = excluded.muted_until'),
@@ -295,6 +302,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   function dropFiles(ids) {
     for (const id of ids) {
       if (Q.fileInUse.get(`%"id":"${id}"%`)) continue;   // (still in an event someone hasn't picked up)
+      if (Q.needed.get(id)) continue;   // (someone's phone hasn't downloaded it yet — Auto-download off; at most 30 days)
       try { fs.rmSync(path.join(relay, id), { force: true }); } catch { /* fine */ }
       Q.dropFile.run(id);
     }
@@ -309,6 +317,10 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       Q.dropEvent.run(r.seq);
     }
     dropFiles(gone);
+    // files a phone never downloaded (Auto-download off): kept 30 days from sending, then let go
+    const unneeded = Q.oldNeeds.all(t - KEEP_MS).map((r) => r.file);
+    Q.dropOldNeeds.run(t - KEEP_MS);
+    dropFiles(unneeded);
     for (const r of Q.oldSent.all(t - KEEP_MS)) Q.dropSent.run(r.id);
     // uploads never sent in a message (or long gone)
     const stale = Q.oldFiles.all(t - KEEP_MS).map((r) => r.id);
@@ -621,7 +633,9 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
           if (!f || f.by !== u.id || !f.done) return bad('The file didn’t upload — try again');
           file = { id: f.id, name: f.name, size: f.size, kind: ['photo', 'video', 'file', 'voice'].includes(b.file.kind) ? b.file.kind : 'file',
             w: Number(b.file.w) || null, h: Number(b.file.h) || null, secs: Number(b.file.secs) || null,
-            wave: typeof b.file.wave === 'string' ? clip(b.file.wave.replace(/[^A-Za-z0-9+/=]/g, ''), 400) : null };   // (a voice message's waveform, made on the phone that recorded it)
+            wave: typeof b.file.wave === 'string' ? clip(b.file.wave.replace(/[^A-Za-z0-9+/=]/g, ''), 400) : null,
+            // (a photo's or video's tiny picture, made on the phone that sent it: shown blurred until the real one is downloaded)
+            ...(typeof b.file.thumb === 'string' && b.file.thumb.length <= 4000 ? { thumb: b.file.thumb.replace(/[^A-Za-z0-9+/=]/g, '') } : {}) };   // (a voice message's waveform, made on the phone that recorded it)
         }
         // (a task shared with # — staff groups only, a task this person sees; its card made here)
         let task = null;
@@ -648,6 +662,8 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         Q.putSent.run(id, g.id, u.id, t, JSON.stringify([file && file.id, link && link.img && link.img.id, link && link.icon && link.icon.id].filter(Boolean)));
         const seq = emit(g, 'msg', { id, cid: clip(b.cid, 60), kind: file ? file.kind : 'text', text, file, reply, mentions, ...(b.fwd === true ? { fwd: true } : {}), ...(link ? { link } : {}), ...(task ? { task } : {}),
           ...(file && typeof b.album === 'string' && /^[A-Za-z0-9-]{6,40}$/.test(b.album) ? { album: b.album } : {}) }, u.id);   // (album: photos and videos sent together — one album in the chat, Haris 2026-11-12)   // (fwd: forwarded from another chat — "Forwarded" over it)
+        // (each other member's phone downloads it — now, or later when their Auto-download is off; kept for them until then)
+        if (file) for (const uid of memberIds(g)) if (uid !== u.id) Q.addNeed.run(file.id, uid, g.id, t);
         Q.touch.run(t, g.id);
         notify(g, u, file && !text.trim() ? ({ photo: '📷 Photo', video: '🎥 Video', voice: '🎤 Voice message' }[file.kind] || `📄 ${file.name}`) : task && !text.trim() ? `☑️ ${task.title}` : text, id, mentions);
         return { ok: true, id, seq, at: t };
@@ -665,7 +681,9 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
           if (s.by !== u.id) return bad('Only your own messages', 403);
           if (t - s.at > DEL_ALL_MS) return bad('Too late to delete it for everyone');
           emit(g, 'del', { id: s.id }, u.id);
-          dropFiles(JSON.parse(s.files || '[]'));
+          const fl = JSON.parse(s.files || '[]');
+          for (const id of fl) db.prepare('DELETE FROM needs WHERE file = ?').run(id);   // (deleted for everyone: nobody downloads it any more)
+          dropFiles(fl);
           if ((pinOf(g) || {}).id === s.id) { db.prepare('UPDATE groups SET pin = NULL WHERE id = ?').run(g.id); changed(g, u.id); }
         } else {
           const emoji = b.emoji ? clip(b.emoji, 16) : null;
@@ -772,10 +790,19 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     if (f.by === pid) return f;
     const ev = db.prepare('SELECT e.grp FROM events e JOIN waiting w ON w.seq = e.seq WHERE w.uid = ? AND e.data LIKE ? LIMIT 1').get(u.id, `%"id":"${f.id}"%`);
     if (ev) return f;
+    // (a message's file their phone hasn't downloaded yet — while they're still in its group)
+    const need = isMacId(u.id) ? null : Q.needOf.get(f.id, u.id);
+    if (need && db.prepare('SELECT 1 FROM members WHERE grp = ? AND uid = ?').get(need.grp, u.id)) return f;
     const pic = db.prepare('SELECT g.id FROM groups g JOIN members m ON m.grp = g.id WHERE m.uid = ? AND g.pic = ? AND g.gone = 0 LIMIT 1').get(pid, f.id);
     return pic ? f : null;
   }
   const filePath = (f) => path.join(relay, f.id);
+  // a phone has the whole file now: it waits for that person no more (Auto-download off — Haris 2026-11-13)
+  function fetched(u, id) {
+    if (isMacId(u.id)) return;
+    Q.gotNeed.run(String(id), u.id);
+    if (!Q.needed.get(String(id))) dropFiles([String(id)]);
+  }
 
   // tasks changed in E11 Console: every phone listening hears their ids (nothing kept — the phone asks for the cards it shows)
   function tasksChanged(ids) {
@@ -850,6 +877,6 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     return { ok: true, made };
   }
   const isAdminOf = (u, gid) => { const g = Q.group.get(gid); return !!g && isAdmin(u, g); };
-  return { state, act, sync, ack, sample, upload, tasksChanged, contactByEmail, fileFor, filePath, listen, sweep, isAdminOf,
+  return { state, act, sync, ack, sample, upload, tasksChanged, contactByEmail, fileFor, filePath, fetched, listen, sweep, isAdminOf,
     linkCode, linkStatus, macFor, unlinkMac, history, hasFiles, resend, close: () => { clearInterval(sweepTimer); for (const set of listeners.values()) for (const r of set) try { r.end(); } catch { /* fine */ } db.close(); } };
 }
