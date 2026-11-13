@@ -327,3 +327,12 @@ test('a task card keeps up with its task; a task link in the words becomes its c
   const r = await act('adm', { act: 'taskCards', group: g, ids: ['t-live', 'nope'] });
   assert.ok(r.ok && r.cards.length === 1 && r.cards[0].title === 'New title' && r.cards[0].done === true, 'as it is now');
 });
+
+test('a group’s description: only its admins set it, everyone sees it, empty clears it', async () => {
+  const D = (await act('am', { act: 'newGroup', client: 'p1', name: 'Described', members: ['u-sm'] })).group.id;
+  assert.equal((await act('sm', { act: 'describe', group: D, about: 'Mine' })).ok, false, 'not an admin');
+  const r = await act('am', { act: 'describe', group: D, about: '  Briefs, rounds and approvals  ' });
+  assert.ok(r.ok, JSON.stringify(r)); assert.equal(r.group.about, 'Briefs, rounds and approvals');
+  const c = await act('am', { act: 'describe', group: D, about: '' });
+  assert.equal(c.group.about, null);
+});

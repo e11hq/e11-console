@@ -48,6 +48,8 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   `);
   // (a group's pinned message — one, kept until unpinned or replaced; anyone in the group pins, Haris 2026-11-12)
   try { db.exec('ALTER TABLE groups ADD COLUMN pin TEXT'); } catch { /* already there */ }
+  // (a group's description — the intro card at the start of its chat, Talk's board 4; Haris 2026-11-13, test first)
+  try { db.exec('ALTER TABLE groups ADD COLUMN about TEXT'); } catch { /* already there */ }
   const q = (sql) => db.prepare(sql);
   const Q = {
     group: q('SELECT * FROM groups WHERE id = ? AND gone = 0'),
@@ -150,7 +152,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     const pref = Q.pref.get(uid, 'group', g.id) || {};
     return { id: g.id, client: g.client, name: g.name, creator: g.creator, creatorAdmin: !g.creator_off, second: g.second || null, admins: adminsOf(g), pic: g.pic || null,
       createdAt: g.created_at, lastAt: g.last_at, members: ms.map((m) => m.uid), pinnedAt: pref.pinned_at || null, mutedUntil: pref.muted_until || null,
-      withClient: ms.some((m) => isContactId(m.uid)), pin: pinOf(g) };
+      withClient: ms.some((m) => isContactId(m.uid)), pin: pinOf(g), about: g.about || null };
   }
   const pinOf = (g) => { try { return g.pin ? JSON.parse(g.pin) : null; } catch { return null; } };
   // everything the app needs to draw its lists (the messages themselves come by sync)
@@ -512,6 +514,17 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         sys(Q.group.get(g.id), u.id, `${nameOf(u.id)} left`);
         emit(g, 'group', { group: g.id }, u.id, was);
         return { ok: true };
+      }
+      // the group's description: its admins set it, change it or clear it (empty)
+      case 'describe': {
+        const [g, e] = needGroup(u, b.group, { mustBeIn: !isBoss(u) }); if (e) return e;
+        if (!canManage(u, g)) return bad('Only the group’s admins change it', 403);
+        const about = clip(b.about || '', 500).trim();
+        if ((g.about || '') === about) return { ok: true, group: groupView(g, u.id) };
+        db.prepare('UPDATE groups SET about = ? WHERE id = ?').run(about || null, g.id);
+        sys(Q.group.get(g.id), u.id, about ? `${nameOf(u.id)} changed the group’s description` : `${nameOf(u.id)} removed the group’s description`);
+        changed(Q.group.get(g.id), u.id);
+        return { ok: true, group: groupView(Q.group.get(g.id), u.id) };
       }
       case 'rename': case 'setPic': {
         const [g, e] = needGroup(u, b.group, { mustBeIn: !isBoss(u) }); if (e) return e;
