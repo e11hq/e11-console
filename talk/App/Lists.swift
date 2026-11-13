@@ -373,17 +373,19 @@ final class GroupsVC: ListVC {
     title = T.isContact ? "Chats" : clientsTab ? "Clients" : "E11 Agency"
     table.tableHeaderView?.isHidden = T.isContact
     if T.isContact, table.tableHeaderView?.frame.height != 0 { table.tableHeaderView?.frame.size.height = 0; table.tableHeaderView = table.tableHeaderView }
-    // + only on the Clients tab (E11 Agency's groups are made from a client's page — board 25)
-    if clientsTab, T.canMake, T.boss, !T.isContact {
-      if navigationItem.leftBarButtonItem == nil { navigationItem.leftBarButtonItem = UIBarButtonItem(title: nil, image: UIImage(systemName: "plus"), primaryAction: UIAction { [weak self] _ in self?.newGroup() }, menu: nil) }
-    } else { navigationItem.leftBarButtonItem = nil }
-    // your E11 Console photo, top right in Apple's glass button (board 1) — made once, set again only when it changes
-    if navigationItem.rightBarButtonItem == nil {
+    // + top right (Haris 2026-11-13 — E11 Agency gets one too: a group for any client you can see in E11 Console, the
+    // client showing in the list once its first group is made; the Clients tab's for Super / Office Admins, as before)
+    if T.canMake, !T.isContact, !clientsTab || T.boss {
+      if navigationItem.rightBarButtonItem == nil { navigationItem.rightBarButtonItem = UIBarButtonItem(title: nil, image: UIImage(systemName: "plus"), primaryAction: UIAction { [weak self] _ in self?.newGroup() }, menu: nil) }
+    } else { navigationItem.rightBarButtonItem = nil }
+    // your E11 Console photo, top left in Apple's glass button (Haris 2026-11-13; was top right, board 1) — made once,
+    // set again only when it changes
+    if navigationItem.leftBarButtonItem == nil {
       meFace.translatesAutoresizingMaskIntoConstraints = false
       meFace.widthAnchor.constraint(equalToConstant: 38).isActive = true; meFace.heightAnchor.constraint(equalToConstant: 38).isActive = true
       meFace.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(toSettings)))
       meFace.accessibilityLabel = "You — Settings"; meFace.isAccessibilityElement = true
-      navigationItem.rightBarButtonItem = UIBarButtonItem(customView: meFace)
+      navigationItem.leftBarButtonItem = UIBarButtonItem(customView: meFace)
     }
     let key = [T.me?.id, T.me?.name, T.me?.color, T.me?.picture].map { $0 ?? "" }.joined(separator: "|")
     if key != meKey { meKey = key; meFace.set(person: T.me) }
@@ -573,7 +575,7 @@ final class ClientGroupsVC: ListVC {
     if Talk.shared.canMake && (!clientsTab || Talk.shared.boss) {
       navigationItem.rightBarButtonItem = UIBarButtonItem(title: nil, image: UIImage(systemName: "plus"), primaryAction: UIAction { [weak self] _ in
         guard let self = self else { return }
-        self.present(UINavigationController(rootViewController: NewGroupVC(client: self.client, forClient: self.clientsTab)), animated: true)
+        self.present(UINavigationController(rootViewController: NewGroupVC(client: self.client, forClient: self.clientsTab, fixed: true)), animated: true)
       }, menu: nil)
     }
   }

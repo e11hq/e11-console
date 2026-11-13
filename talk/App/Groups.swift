@@ -18,7 +18,9 @@ final class NewGroupVC: UITableViewController, UITextFieldDelegate, UISearchBarD
   private var q = ""
   private let find = UISearchBar()
   private let forClient: Bool
-  init(client: String?, forClient: Bool = false) { self.client = client; self.forClient = forClient; super.init(style: .insetGrouped) }
+  // (fixed: made from a client's page — a group of that client only, its Client row set and not changed — Haris 2026-11-13)
+  private let fixed: Bool
+  init(client: String?, forClient: Bool = false, fixed: Bool = false) { self.client = client; self.forClient = forClient; self.fixed = fixed && client != nil; super.init(style: .insetGrouped) }
   required init?(coder: NSCoder) { fatalError() }
 
   override func viewDidLoad() {
@@ -136,7 +138,7 @@ final class NewGroupVC: UITableViewController, UITextFieldDelegate, UISearchBarD
     case "client":
       var cfg = UIListContentConfiguration.valueCell(); cfg.text = "Client"
       cfg.secondaryText = client.flatMap { Talk.shared.clients[$0]?.name } ?? "Pick a client"
-      c.contentConfiguration = cfg; c.accessoryType = .disclosureIndicator
+      c.contentConfiguration = cfg; c.accessoryType = fixed ? .none : .disclosureIndicator; c.selectionStyle = fixed ? .none : .default
     case "find":
       // (Apple's search bar on the page, as drawn — no box behind it)
       c.selectionStyle = .none; var bg = UIBackgroundConfiguration.clear(); bg.backgroundColor = .clear; c.backgroundConfiguration = bg
@@ -147,7 +149,7 @@ final class NewGroupVC: UITableViewController, UITextFieldDelegate, UISearchBarD
     }
   }
   override func tableView(_ tv: UITableView, willSelectRowAt ip: IndexPath) -> IndexPath? {
-    let id = data.itemIdentifier(for: ip); return id == "pic" || id == "find" || id == "none" ? nil : ip
+    let id = data.itemIdentifier(for: ip); return id == "pic" || id == "find" || id == "none" || (id == "client" && fixed) ? nil : ip
   }
   override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) {
     guard let id = data.itemIdentifier(for: ip) else { return }
