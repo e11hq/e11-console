@@ -398,18 +398,27 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   //  ever an estimate, each row still takes its own height. Each open guessed 60 for every row before, and lining up its end
   //  laid the rows near it out again and again until it stayed put — most of a chat's opening, measured on Haris's phone
   //  2026-11-13: 63–154 ms)
-  private static var heights: [String: [String: CGFloat]] = [:]
+  // (each with what the bubble showed then — its fingerprint: while it shows the same, the list is given its height and
+  //  doesn't measure it again; a reaction, an edit or a tick changes the fingerprint, and it's measured afresh. Measuring
+  //  the bubbles on screen was most of a chat's opening once they were quick to make: 58 ms for 9, Haris's phone 2026-11-13.
+  //  Kept per text size too.)
+  private static var heights: [String: [String: (sig: Int, h: CGFloat)]] = [:]
+  private var hKey: String { group + "|" + traitCollection.preferredContentSizeCategory.rawValue }
+  func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat {
+    guard case .msg(let key)? = data.itemIdentifier(for: ip), let e = ChatVC.heights[hKey]?[key], let s = sigs[key], e.sig == s else { return UITableView.automaticDimension }
+    return e.h
+  }
   func tableView(_ tv: UITableView, willDisplay cell: UITableViewCell, forRowAt ip: IndexPath) {
-    if case .msg(let id)? = data.itemIdentifier(for: ip) { ChatVC.heights[group, default: [:]][id] = cell.bounds.height }
+    if case .msg(let key)? = data.itemIdentifier(for: ip) { ChatVC.heights[hKey, default: [:]][key] = (sigs[key] ?? 0, cell.bounds.height) }
     // (taps as the keyboard is now — a row made while it was up, out of sight then, kept them off: the first of two photos
     //  sent together wouldn't open, Haris 2026-11-12)
     cell.contentView.isUserInteractionEnabled = !keyUp
   }
   func tableView(_ tv: UITableView, estimatedHeightForRowAt ip: IndexPath) -> CGFloat {
     guard case .msg(let id)? = data.itemIdentifier(for: ip) else { return 60 }
-    if let h = ChatVC.heights[group]?[id] { return h }
+    if let e = ChatVC.heights[hKey]?[id] { return e.h }
     // (not seen yet: a fair guess from what it is — a photo's own height, words by their length)
-    guard let m = msgs[id] else { return 60 }
+    guard let m = msgs[mid(id)] else { return 60 }
     if m.kind == "sys" { return 44 }
     if let n = albums[id]?.count, n >= 4 { return 300 }
     if (m.kind == "photo" || m.kind == "video"), let f = m.file {
