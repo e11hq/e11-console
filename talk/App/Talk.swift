@@ -650,6 +650,8 @@ final class Avatar: UIView {
     else if c?.logo != nil { set(name: c?.name ?? g.name, color: Look.hex(c?.color) ?? Look.accent, picture: c?.logo, logo: true) }
     else { lbl.text = String(g.name.prefix(1)).uppercased(); backgroundColor = Look.hex(c?.color) ?? Look.accent; img.isHidden = true; lbl.isHidden = false; want = nil }
   }
+  // a client contact's picture for every group (board 14): "E11." on black
+  func setE11() { lbl.text = "E11."; backgroundColor = .black; lbl.textColor = .white; img.isHidden = true; lbl.isHidden = false; want = nil }
   func set(client c: Client) { set(name: c.name, color: Look.hex(c.color) ?? Look.accent, picture: c.logo, logo: true) }
   func set(person p: Person?) { set(name: p?.name ?? "?", color: p.map { Look.person($0.id) } ?? Look.accent, picture: p?.picture, logo: p?.contact == true) }
 }

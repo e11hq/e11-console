@@ -95,6 +95,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
     table.sectionHeaderTopPadding = 6
     view.addSubview(table)
     table.register(AgencyCell.self, forCellReuseIdentifier: AgencyCell.id)
+    table.register(GroupCell.self, forCellReuseIdentifier: GroupCell.id)
     data = UITableViewDiffableDataSource<String, Row>(tableView: table) { [weak self] tv, ip, row in
       guard let self = self else { return UITableViewCell() }
       return self.cell(tv, ip, row)
@@ -182,6 +183,16 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
       let c = tv.dequeueReusableCell(withIdentifier: AgencyCell.id, for: ip) as! AgencyCell
       c.show(clientRow(id)); return c
     }
+    // (a page drawing its groups as Apple's own cells — a client's page, a client contact's — 2b, 2d)
+    switch row {
+    case .group(let id), .ghit(let id):
+      if let m = groupModel(id) {
+        let c = tv.dequeueReusableCell(withIdentifier: GroupCell.id, for: ip) as! GroupCell
+        UIView.performWithoutAnimation { c.show(m); c.layoutIfNeeded() }
+        return c
+      }
+    default: break
+    }
     let c = tv.dequeueReusableCell(withIdentifier: ChatRowCell.id, for: ip) as! ChatRowCell
     fill(c, row); return c
   }
@@ -190,13 +201,47 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
   var hitsG: [String: Msg] = [:]            // (searching a client's page: a group's message found, by group)
   func groupModel(_ id: String) -> GroupCell.Model? { nil }   // (a page drawing its groups as GroupCell — 2b)
   func groupRow(_ id: String) -> GroupCell.Model { groupModel(id) ?? GroupCell.Model.blank(id) }
+  // what a group's row shows (board 2): its picture, name, the newest message (two lines), the time, ✓✓ on yours, unread,
+  // muted, pinned — "With Client" on the Clients tab (board 20)
+  func makeGroupModel(_ id: String) -> GroupCell.Model? {
+    let T = Talk.shared
+    guard let g = T.groups[id] else { return nil }
+    let l = T.log(id), me = T.me?.id
+    let hit = query.isEmpty ? nil : hitsG[id]
+    let m = hit ?? l.msgs.last
+    let typing = hit == nil ? T.typingLine(id) : nil
+    var line = "No messages yet", ticks = 0
+    if let t = typing { line = t }
+    else if let m = m {
+      if m.kind == "sys" || m.by == me { line = Talk.preview(m) }
+      else {
+        let p = T.people[m.by], first = String(T.name(m.by).split(separator: " ").first ?? "")
+        let who = p?.contact == true ? "\(first) (\(p?.client.flatMap { T.clients[$0]?.name } ?? "Client"))" : first
+        line = "\(who): " + Talk.preview(m)
+      }
+      if m.by == me, m.kind != "sys", !m.deleted, hit == nil {
+        let others = g.members.filter { $0 != me }
+        let idx = l.msgs.firstIndex { $0.id == m.id } ?? 0
+        let seen = !T.isContact && !others.isEmpty && others.allSatisfy { p in l.readBy[p].flatMap { r in l.msgs.firstIndex { $0.id == r } }.map { $0 >= idx } ?? false }
+        let got = !others.isEmpty && others.allSatisfy { p in l.read(p, m.id) || l.time(l.gotAt, p, m.id) != nil }
+        ticks = m.pending ? 0 : seen ? 3 : got ? 2 : 1
+      }
+    }
+    let pinned = (g.withClient ? T.pinnedClientGroups : T.pinnedGroups).contains(id)
+    return GroupCell.Model(id: id, group: g, name: g.name, line: line, typing: typing != nil, ticks: ticks,
+                           time: Look.time(hit?.at ?? T.activity(g)), unread: T.unread(id), pinned: pinned, muted: g.muted,
+                           chip: clientsTab && g.withClient && !T.isContact, find: hit != nil || g.name.lowercased().contains(query) ? query : "")
+  }
+
   func clientRow(_ id: String) -> AgencyCell.Model {
     let T = Talk.shared
     let gs = T.groups(of: id, withClient: clientsTab)
     var line = "\(gs.count) group\(gs.count == 1 ? "" : "s")"
     var blue = false
     func said(_ g: Group, _ m: Msg) -> String {
-      let who = m.kind == "sys" ? "" : (m.by == T.me?.id ? "You" : String(T.name(m.by).split(separator: " ").first ?? "")) + ": "
+      // (a client contact's words: "Rania (Client)" — board 19)
+      let first = String(T.name(m.by).split(separator: " ").first ?? "")
+      let who = m.kind == "sys" ? "" : (m.by == T.me?.id ? "You" : T.people[m.by]?.contact == true ? "\(first) (Client)" : first) + ": "
       return "\(g.name) · \(who)\(Talk.preview(m))"
     }
     if let (gid, m) = hits[id], let g = T.groups[gid] { line = said(g, m) }
@@ -205,7 +250,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
     let un = T.clientUnread(id, withClient: clientsTab)
     return AgencyCell.Model(id: id, client: T.clients[id], name: T.clients[id]?.name ?? "", line: line, typing: blue,
                             time: Look.time(T.clientActivity(id, withClient: clientsTab)), unread: un,
-                            pinned: !clientsTab && T.pinnedClients.contains(id), find: query, twoLines: hits[id] != nil)
+                            pinned: T.pinnedClients.contains(id), find: query, twoLines: hits[id] != nil)
   }
   // (typing: only that group's row and its client's row drawn again)
   @objc func typingChanged(_ n: Notification) {
@@ -278,6 +323,13 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
       let line = typing ?? newest.map { (_, m) in (m.kind == "sys" ? "" : "\(T.name(m.by)): ") + Talk.preview(m) } ?? "\(gs.count) group\(gs.count == 1 ? "" : "s")"
       c.show(title: cl.name, sub: typing == nil && clientsTab && newest == nil ? "\(gs.count) group\(gs.count == 1 ? "" : "s") with the client" : line, time: Look.time(T.clientActivity(id, withClient: clientsTab)),
              unread: T.clientUnread(id, withClient: clientsTab), pinned: !clientsTab && T.pinnedClients.contains(id), muted: false, typing: typing != nil)
+    }
+  }
+  // (a group drawn as Apple's own cell takes its own height — two lines of its message; the rest keep the list's)
+  func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat {
+    switch data.itemIdentifier(for: ip) {
+    case .group(let id)?, .ghit(let id)?: return groupModel(id) != nil ? UITableView.automaticDimension : tv.rowHeight
+    default: return tv.rowHeight
     }
   }
   func tableView(_ tv: UITableView, heightForHeaderInSection s: Int) -> CGFloat {
@@ -403,15 +455,16 @@ final class GroupsVC: ListVC {
     setMe()
     NotificationCenter.default.addObserver(self, selector: #selector(setMe), name: .talkChanged, object: nil)
   }
+  override func groupModel(_ id: String) -> GroupCell.Model? { Talk.shared.isContact ? makeGroupModel(id) : nil }
   override func pillsUnread() -> Int {
-    let T = Talk.shared; return T.myClients(withClient: clientsTab).reduce(0) { $0 + T.clientUnread($1, withClient: clientsTab) }
+    let T = Talk.shared
+    if T.isContact { return T.groups.keys.reduce(0) { $0 + T.unread($1) } }
+    return T.myClients(withClient: clientsTab).reduce(0) { $0 + T.clientUnread($1, withClient: clientsTab) }
   }
   @objc private func setMe() {
     let T = Talk.shared
-    // (a client contact: a plain list of their groups — no filters; their page is step 2d)
-    title = T.isContact ? "Chats" : clientsTab ? "Clients" : "E11 Agency"
-    table.tableHeaderView?.isHidden = T.isContact
-    if T.isContact, table.tableHeaderView?.frame.height != 0 { table.tableHeaderView?.frame.size.height = 0; table.tableHeaderView = table.tableHeaderView }
+    // (a client contact: "E11 Agency" — their groups straight away, with All · Unread · Mentions: board 14, step 2d)
+    title = clientsTab ? "Clients" : "E11 Agency"
     // + top right (Haris 2026-11-13 — E11 Agency gets one too: a group for any client you can see in E11 Console, the
     // client showing in the list once its first group is made; the Clients tab's for Super / Office Admins, as before)
     if T.canMake, !T.isContact, !clientsTab || T.boss {
@@ -443,9 +496,16 @@ final class GroupsVC: ListVC {
   // the line under the title: "8 clients · 5 unread" (board 1), crossfading when it changes
   private func setLine() {
     let T = Talk.shared
-    guard !T.isContact else { return }
-    let cs = T.myClients(withClient: clientsTab), un = cs.reduce(0) { $0 + T.clientUnread($1, withClient: clientsTab) }
-    let line = "\(cs.count) client\(cs.count == 1 ? "" : "s")" + (un > 0 ? " · \(un) unread" : "")
+    var line: String
+    if T.isContact {
+      // ("3 groups · 2 unread" — board 14)
+      let n = T.groups.count, un = T.groups.keys.reduce(0) { $0 + T.unread($1) }
+      line = n == 0 ? "No groups yet" : "\(n) group\(n == 1 ? "" : "s")" + (un > 0 ? " · \(un) unread" : "")
+    } else {
+      let cs = T.myClients(withClient: clientsTab), un = cs.reduce(0) { $0 + T.clientUnread($1, withClient: clientsTab) }
+      // ("No groups yet" with none — board 56)
+      line = cs.isEmpty ? "No groups yet" : "\(cs.count) client\(cs.count == 1 ? "" : "s")" + (un > 0 ? " · \(un) unread" : "")
+    }
     if #available(iOS 26.0, *), navigationItem.subtitle != line {
       if view.window != nil, let bar = navigationController?.navigationBar { UIView.transition(with: bar, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction], animations: nil) }
       navigationItem.subtitle = line
@@ -458,10 +518,18 @@ final class GroupsVC: ListVC {
   override func build() -> [(String, String, [Row])] {
     let T = Talk.shared
     hits = [:]
-    // a client contact: their groups, newest first (step 2d)
+    // a client contact: their groups — pinned first, then newest; the filters; search by name or a message, its own rows
+    // with the words marked (step 2d, as a client's page)
     if T.isContact {
-      let gs = T.groups.values.filter { query.isEmpty || $0.name.lowercased().contains(query) }.sorted { T.activity($0) > T.activity($1) }
-      return [("found", "", gs.map { .group($0.id) })]
+      hitsG = [:]
+      let gs = T.groups.values.sorted { T.activity($0) > T.activity($1) }
+      if !query.isEmpty {
+        for (gid, m) in T.search(query) where hitsG[gid] == nil { hitsG[gid] = m }
+        return [("found", "", gs.filter { $0.name.lowercased().contains(query) || hitsG[$0.id] != nil }.map { .ghit($0.id) })]
+      }
+      let shown = gs.filter { [filter] g in filter == 0 || (filter == 1 && T.unread(g.id) > 0) || (filter == 2 && T.mentionsMe(g.id)) }
+      let pins = T.pinnedGroups
+      return [("groups", "", (shown.filter { pins.contains($0.id) } + shown.filter { !pins.contains($0.id) }).map { .group($0.id) })]
     }
     let mine = T.myClients(withClient: clientsTab)
     if !query.isEmpty {
@@ -477,7 +545,8 @@ final class GroupsVC: ListVC {
     let keep: (String) -> Bool = { [filter, clientsTab] c in
       filter == 0 || (filter == 1 && T.clientUnread(c, withClient: clientsTab) > 0) || (filter == 2 && T.groups(of: c, withClient: clientsTab).contains { T.mentionsMe($0.id) })
     }
-    let pinnedC = clientsTab ? [] : T.pinnedClients.filter { mine.contains($0) && keep($0) }
+    // (pinned clients on both tabs — board 19)
+    let pinnedC = T.pinnedClients.filter { mine.contains($0) && keep($0) }
     let rest = mine.filter { !pinnedC.contains($0) && keep($0) }
     return [("pins", "PINNED", pinnedC.map { .client($0) }), ("clients", pinnedC.isEmpty ? "" : "CLIENTS", rest.map { .client($0) })]
   }
@@ -493,7 +562,7 @@ final class GroupsVC: ListVC {
         e.image = UIImage(systemName: filter == 2 ? "at" : "bubble.left.and.bubble.right")
         (e.text, e.secondaryText) = filter == 1 ? ("No Unread Messages", "Clients with something new show here.")
           : filter == 2 ? ("No Mentions", "Clients where someone @mentions you show here.")
-          : T.isContact ? ("No Chats Yet", "You’ll see one here when E11 adds you to it.")
+          : T.isContact ? ("No Groups Yet", "You’ll see one here when E11 adds you to it.")
           : clientsTab ? ("No Client Groups Yet", "Groups with a client contact in them show here.")
           : ("No Groups Yet", "When someone adds you to a group, its client shows here.")
       }
@@ -607,7 +676,6 @@ final class ClientGroupsVC: ListVC {
     table.separatorColor = Look.dyn(0x2A2B2E, 0xDCDCE0)
     table.keyboardDismissMode = .interactive   // (the keyboard rule)
     table.rowHeight = UITableView.automaticDimension; table.estimatedRowHeight = 86
-    table.register(GroupCell.self, forCellReuseIdentifier: GroupCell.id)
     navigationItem.largeTitleDisplayMode = .never   // (board 2: the name and its line in the middle of the bar)
     navigationItem.backButtonDisplayMode = .minimal
     navigationItem.hidesSearchBarWhenScrolling = true   // (as E11 Agency: out only as the list is pulled down)
@@ -668,46 +736,7 @@ final class ClientGroupsVC: ListVC {
     let ordered = shown.filter { pins.contains($0.id) } + shown.filter { !pins.contains($0.id) }
     return [("groups", "", ordered.map { .group($0.id) })]
   }
-  override func cell(_ tv: UITableView, _ ip: IndexPath, _ row: Row) -> UITableViewCell {
-    switch row {
-    case .group(let id), .ghit(let id):
-      let c = tv.dequeueReusableCell(withIdentifier: GroupCell.id, for: ip) as! GroupCell
-      UIView.performWithoutAnimation { c.show(groupRow(id)); c.layoutIfNeeded() }
-      return c
-    default: return super.cell(tv, ip, row)
-    }
-  }
-  // what a group's row shows (board 2): its picture, name, the newest message (two lines), the time, ✓✓ on yours, unread,
-  // muted, pinned — "With Client" on the Clients tab (board 20)
-  override func groupModel(_ id: String) -> GroupCell.Model? {
-    let T = Talk.shared
-    guard let g = T.groups[id] else { return nil }
-    let l = T.log(id), me = T.me?.id
-    let hit = query.isEmpty ? nil : hitsG[id]
-    let m = hit ?? l.msgs.last
-    let typing = hit == nil ? T.typingLine(id) : nil
-    var line = "No messages yet", ticks = 0
-    if let t = typing { line = t }
-    else if let m = m {
-      if m.kind == "sys" || m.by == me { line = Talk.preview(m) }
-      else {
-        let p = T.people[m.by], first = String(T.name(m.by).split(separator: " ").first ?? "")
-        let who = p?.contact == true ? "\(first) (\(p?.client.flatMap { T.clients[$0]?.name } ?? "Client"))" : first
-        line = "\(who): " + Talk.preview(m)
-      }
-      if m.by == me, m.kind != "sys", !m.deleted, hit == nil {
-        let others = g.members.filter { $0 != me }
-        let idx = l.msgs.firstIndex { $0.id == m.id } ?? 0
-        let seen = !T.isContact && !others.isEmpty && others.allSatisfy { p in l.readBy[p].flatMap { r in l.msgs.firstIndex { $0.id == r } }.map { $0 >= idx } ?? false }
-        let got = !others.isEmpty && others.allSatisfy { p in l.read(p, m.id) || l.time(l.gotAt, p, m.id) != nil }
-        ticks = m.pending ? 0 : seen ? 3 : got ? 2 : 1
-      }
-    }
-    let pinned = (g.withClient ? T.pinnedClientGroups : T.pinnedGroups).contains(id)
-    return GroupCell.Model(id: id, group: g, name: g.name, line: line, typing: typing != nil, ticks: ticks,
-                           time: Look.time(hit?.at ?? T.activity(g)), unread: T.unread(id), pinned: pinned, muted: g.muted,
-                           chip: clientsTab && g.withClient && !T.isContact, find: hit != nil || g.name.lowercased().contains(query) ? query : "")
-  }
+  override func groupModel(_ id: String) -> GroupCell.Model? { makeGroupModel(id) }
   // nothing to show: Apple's own empty views, faded in and out (as E11 Agency's)
   override func emptyNote() {
     let none = data.snapshot().numberOfItems == 0 && !mine.isEmpty
@@ -842,7 +871,7 @@ final class GroupCell: UITableViewCell {
     cfg.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16 + rightW + 8)
     contentConfiguration = cfg
     [pic, time, marks].forEach { contentView.bringSubviewToFront($0) }
-    if let g = m.group { pic.set(group: g) }
+    if Talk.shared.isContact { pic.setE11() } else if let g = m.group { pic.set(group: g) }
     accessibilityLabel = [m.name, m.chip ? "With Client" : nil, m.line, m.time, m.unread > 0 ? "\(m.unread) unread" : nil, m.muted ? "Muted" : nil, m.pinned ? "Pinned" : nil].compactMap { $0 }.joined(separator: ", ")
     setNeedsLayout()
   }
