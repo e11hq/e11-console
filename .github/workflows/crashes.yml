@@ -8,6 +8,9 @@ on:
       count:
         description: How many of the latest crash reports
         default: "3"
+      bundle:
+        description: Which app (ae.e11.console.ios, or ae.e11.talk.ios for E11 Talk)
+        default: ae.e11.console.ios
 permissions:
   contents: write
 jobs:
@@ -21,6 +24,7 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
           COUNT: ${{ inputs.count }}
+          BUNDLE: ${{ inputs.bundle }}
           GH_TOKEN: ${{ github.token }}
         run: |
           pip install -q pyjwt cryptography requests
@@ -35,7 +39,7 @@ jobs:
               r = requests.get(API + path, headers=H, params=params, timeout=60)
               if r.status_code != 200: out.append(f'{path}: HTTP {r.status_code} {r.text[:300]}'); return None
               return r.json()
-          app = get('/v1/apps', **{'filter[bundleId]': 'ae.e11.console.ios'})
+          app = get('/v1/apps', **{'filter[bundleId]': os.environ.get('BUNDLE') or 'ae.e11.console.ios'})
           if app and app.get('data'):
               aid = app['data'][0]['id']
               subs = get(f'/v1/apps/{aid}/betaFeedbackCrashSubmissions', sort='-createdDate', limit=os.environ.get('COUNT') or '3')
