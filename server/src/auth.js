@@ -38,7 +38,9 @@ export function createAuth({ team, aud, dev = false, fetchImpl = fetch, now = ()
     if (payload.nbf && payload.nbf > t + 30) throw new Error('Token not yet valid');
     if (payload.iss !== issuer) throw new Error('Wrong issuer');
     const auds = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-    if (!aud || !auds.includes(aud)) throw new Error('Wrong application');
+    // (one application, or several — E11 Talk's test address has its own since 2026-11-13, the old one still counting)
+    const want = Array.isArray(aud) ? aud : [aud];
+    if (!aud || !auds.some((x) => want.includes(x))) throw new Error('Wrong application');
     if (!payload.email) throw new Error('No email in token');
     return { email: String(payload.email).toLowerCase(), sub: payload.sub || null, iat: Number(payload.iat) || 0 };
   }

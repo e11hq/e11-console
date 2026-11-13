@@ -59,7 +59,10 @@ export function createServer(cfg) {
   // E11 Talk's own Cloudflare sign-in (the "E11 Talk" Access application: talk.e11hq.com and talk-test.e11hq.com — Haris
   // 2026-11-06). Its audience tag is public (it's in every sign-in token), so it lives here. Only /api/talk/ on those hosts.
   const TALK_AUD = 'f254001f22f0f8099b13ef7e8d68f3fd465d498cbdbf3e21d316cbab644f2e7b';
-  const talkAuth = cfg.talkAuth || createAuth({ team: cfg.cfTeam, aud: TALK_AUD, dev: !!cfg.dev });
+  // (E11 Talk's test address has its own Access app since 2026-11-13 — "E11 Talk Test", our own sign-in; its sign-ins and
+  //  those made before under the shared "E11 Talk" app both count, until the old month-long ones run out)
+  const TALK_TEST_AUD = '3b15d6abf5004bb97e3366fa4c08db65731165302af2e0cf1b92b10f2e70a49d';
+  const talkAuth = cfg.talkAuth || createAuth({ team: cfg.cfTeam, aud: [TALK_AUD, TALK_TEST_AUD], dev: !!cfg.dev });
   const talkHost = (req) => /^talk(-test)?\./.test(String(req.headers.host || ''));
   const access = createAccess(store, { ownerEmail: cfg.adminEmail, plans: true, now: cfg.now });   // (content plans: on everywhere since 2026-10-28)
   const files = createFiles(dataDir);
