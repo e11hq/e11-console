@@ -584,7 +584,29 @@ export function createServer(cfg) {
     json(res, 403, { ok: false, error: 'No E11 Talk account for ' + id.email });
     return null;
   }
+  // ---------- TEMPORARY (Haris 2026-11-13): how often each of your apps asks the server — GET /api/me/requests, signed in
+  //  (the browser shows it) — to see whether an app asks over and over, as E11 Talk did. Kept in memory, the last 10 minutes.
+  //  Taken out once checked. ----------
+  const reqLog = new Map();   // uid -> [[at, app, path]]
+  function reqNote(u, req, p) {
+    if (!u || !u.id) return;
+    const ua = String(req.headers['user-agent'] || ''), app = /^E11%20Talk|^E11 ?Talk/i.test(ua) ? 'E11 Talk' : /^E11Console|^E11%20Console|^E11 Console/i.test(ua) ? 'E11 Console app' : /Mozilla/.test(ua) ? 'Website' : (ua.split('/')[0] || 'other');
+    const t = Date.now(), a = reqLog.get(u.id) || [];
+    a.push([t, app, p.replace(/\/[A-Za-z0-9_-]{12,}/g, '/…')]);
+    while (a.length && a[0][0] < t - 600000) a.shift();
+    if (a.length > 20000) a.splice(0, a.length - 20000);
+    reqLog.set(u.id, a);
+  }
+  function reqSummary(u) {
+    const t = Date.now(), a = reqLog.get(u.id) || [], out = {};
+    for (const [at, app, p] of a) {
+      const o = out[app] || (out[app] = { lastMinute: 0, last10Minutes: 0, paths: {} });
+      o.last10Minutes++; if (at > t - 60000) { o.lastMinute++; o.paths[p] = (o.paths[p] || 0) + 1; }
+    }
+    return { ok: true, note: 'Requests from your apps to this server (the last minute per path).', apps: out };
+  }
   async function talkRoute(req, res, p, url, u) {
+    reqNote(u, req, p);
     const t = talkNow();
     const out = (r) => json(res, r.status || (r.ok === false ? 400 : 200), r);
     try {
@@ -837,6 +859,8 @@ export function createServer(cfg) {
 
     const u = await who(req, res);
     if (!u) return;
+    if (p.startsWith('/api/')) reqNote(req.realUser || u, req, p);
+    if (p === '/api/me/requests' && req.method === 'GET') return json(res, 200, reqSummary(req.realUser || u));
     // (the iPhone app's sign-in comes back here: reaching it means signed in — a tiny page, not the whole website, which the
     //  app no longer shows)
     if (p === '/app/in') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end('<!doctype html><meta name="viewport" content="width=device-width"><title>E11 Console</title>'); }
