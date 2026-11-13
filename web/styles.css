@@ -1725,6 +1725,8 @@ button.pv-empty:hover { background: var(--hover); color: var(--text-2); }
 .ap-item:hover, .ap-item.hl { background: var(--active); }
 .ap-name { font-size: 15.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ap-item small { color: var(--text-3); font-size: 11.5px; }
+.ap-item small { text-align: right; }
+.ap-away { display: block; font-style: normal; font-weight: 600; color: #FF9F0A; }   /* Out of Office (Haris 2026-11-13) */
 .ap-av { position: relative; display: inline-flex; border-radius: 50%; }
 .ap-item.on .ap-av .av { box-shadow: 0 0 0 2px var(--sidebar), 0 0 0 4px #8f7ff5; }
 .ap-x { position: absolute; right: -5px; bottom: -4px; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--sidebar); background: #e5484d; color: #fff; display: none; align-items: center; justify-content: center; padding: 0; }
@@ -2537,6 +2539,8 @@ html:not(.mac-chrome) #app:not(.sb-collapsed) #sidebar .brand { margin-right: -7
 /* phone: text boxes stay at 16px so iPhone doesn't zoom in while typing, so the description reads at 16px too */
 :root.phone .desc-view, :root.phone .desc-sec .composer.desc .d-notes { font-size: 16px; }
 .pf-opt-btns { display: flex; align-items: center; gap: 10px; flex: none; }
+.pf-away { height: 30px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--line, rgba(127,127,127,.3)); background: transparent; color: inherit; font: inherit; font-size: 13px; }
+.pf-away.pf-away-off { width: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }   /* (opened by the switch) */
 .tr-only { font-size: 12px; color: var(--text-3); white-space: nowrap; }
 
 /* a status that waits for the CD's approval (CD review on, files not approved yet) */

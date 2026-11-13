@@ -2938,6 +2938,11 @@ function setSaveState(state, detail) {
   label.parentElement.title = dataDir ? 'Data folder: ' + dataDir + '\nClick to show in Finder' : '';
 }
 
+// Out of Office (Haris 2026-11-13): your own day back (u.away 'YYYY-MM-DD'); every notification paused until 9:00 AM
+// Dubai that day (the server's away.js) — shown under the name where people are picked
+function awayDay(u) { const d = u && u.away; return d && /^\d{4}-\d\d-\d\d$/.test(d) && Date.now() < Date.parse(d + 'T05:00:00Z') ? d : null; }
+function awayLabel(d) { return new Date(d + 'T12:00:00Z').toLocaleDateString('en-GB', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }).replace(',', ''); }
+function dubaiDay(ms) { return new Date(ms + 4 * 3600000).toISOString().slice(0, 10); }
 function persist(delay = 250) {
   if (readOnly) return;
   clearTimeout(saveTimer);
@@ -6040,7 +6045,7 @@ function assignMenu(anchor) {
     const item = (x, i) => `<div class="ap-item ${x.on ? 'on' : ''} ${i === hl ? 'hl' : ''}" data-ap="${x.u.id}" data-i="${i}">
       <span class="ap-av">${avatarHTML(x.u.id, 30)}${x.on ? `<button class="ap-x" data-ap-x="${x.u.id}" title="Remove assignee">${icon('x')}</button>` : ''}</span>
       <span class="ap-name">${x.u.id === currentUserId ? 'Me' : esc(fullName(x.u))}${x.u.name ? '' : ''}</span>
-      <small>${esc(roleOf(x.u))}</small></div>`;
+      <small>${esc(roleOf(x.u))}${awayDay(x.u) ? `<em class="ap-away">Out of office until ${awayLabel(awayDay(x.u))}</em>` : ''}</small></div>`;
     let i = 0;
     list.innerHTML = (assigned.length ? `<div class="ap-label">Assignees</div>${assigned.map(() => item(rows[i], i++)).join('')}` : '')
       + (people.length ? `<div class="ap-label">People</div>${people.map(() => item(rows[i], i++)).join('')}` : '')
@@ -6555,6 +6560,13 @@ document.addEventListener('click', async (e) => {
       case 'remove-photo': { const u = me(); if (u.avatar) Host.call('trashPath', { path: u.avatar }).catch(() => {}); u.avatar = null; persist(); render(); return; }
       case 'save-profile': saveProfile(); return;
       case 'change-password': changePasswordFlow(); return;
+      case 'toggle-away': {
+        const u = me();
+        if (awayDay(u)) { delete u.away; persist(); renderContent(); toast('Out of Office off'); return; }
+        const inp = document.getElementById('pf-away');
+        if (inp) { try { inp.showPicker(); } catch { inp.focus(); } }
+        return;
+      }
       case 'toggle-season': { const u = me(); u.prefs = u.prefs || {}; u.prefs.seasonOff = !u.prefs.seasonOff; persist(); renderSidebar(); renderContent(); toast(u.prefs.seasonOff ? 'Seasonal decorations off' : 'Seasonal decorations on'); return; }
       case 'toggle-digest': { const u = me(); u.prefs = u.prefs || {}; u.prefs.digestOff = !u.prefs.digestOff; persist(); renderContent(); toast(u.prefs.digestOff ? 'Morning summary off' : 'Morning summary on — 10:30 am, Monday to Friday'); return; }
       case 'digest-test': Digest.test(); return;
@@ -6827,6 +6839,12 @@ document.addEventListener('input', (e) => {
   }
 });
 
+document.addEventListener('change', (e) => {
+  if (!db || !currentUserId || !e.target || e.target.id !== 'pf-away') return;
+  const v = e.target.value, u = me();
+  if (!v || v <= dubaiDay(Date.now()) || v === u.away) return;
+  u.away = v; persist(); renderContent(); toast('Out of office until ' + awayLabel(v));
+});
 document.addEventListener('change', (e) => {
   if (!db || !currentUserId) return;
   const t = ui.taskId && task(ui.taskId);
@@ -9122,6 +9140,7 @@ function viewProfile() {
     </div>` : ''}
     <div class="pf-card">
       <h3>${icon('bell')}Notifications</h3>
+      ${Host.isServer ? `<div class="pf-opt pf-away-row"><div><b>Out of Office</b><span>${awayDay(u) ? `Until ${awayLabel(awayDay(u))}, 9:00 AM — every notification from E11 Console and E11 Talk is paused. The Inbox and your chats still collect everything.` : 'Going away? Pause every notification from E11 Console and E11 Talk until the day you’re back.'}</span></div><div class="pf-opt-btns"><input type="date" id="pf-away" class="pf-away ${awayDay(u) ? '' : 'pf-away-off'}" aria-label="The day you’re back" min="${dubaiDay(Date.now() + 86400000)}" max="${dubaiDay(Date.now() + 365 * 86400000)}" value="${awayDay(u) || ''}"><button class="switch ${awayDay(u) ? 'on' : ''}" data-action="toggle-away" aria-label="Out of Office"><i></i></button></div></div>` : ''}
       ${typeof Push !== 'undefined' && !(typeof Phone !== 'undefined' && Phone.on) ? Push.profileRow() : ''}
       <div class="pf-opt"><div><b>Sound</b><span>Play a sound with new notifications</span></div><button class="switch ${sound ? 'on' : ''}" data-action="toggle-sound"><i></i></button></div>
       ${Host.isServer && !Host.isMacApp && 'Notification' in window ? `<div class="pf-opt"><div><b>Desktop notifications</b><span>${Notification.permission === 'granted' ? 'On — you’ll see alerts even when this window is in the background' : Notification.permission === 'denied' ? 'Blocked in your browser settings for this site' : 'Show alerts when this window is in the background'}</span></div>${Notification.permission === 'default' ? '<button class="btn sm primary" data-action="allow-notifs">Turn on</button>' : ''}</div>` : ''}
