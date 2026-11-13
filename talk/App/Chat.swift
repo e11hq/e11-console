@@ -2058,7 +2058,7 @@ final class BubbleCell: UITableViewCell {
     if isVoice, let f = m.file { voice.set(id: m.id, file: f, by: m.by, mine: mine) }
     // a document: the card, 4 from the bubble's edge
     cardWrap.isHidden = !isDoc
-    cardWrap.reach(nameL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
+    cardWrap.reach(nameL.isHidden && fwdL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
     if isDoc, let f = m.file {
       let ext = (f.name as NSString).pathExtension.lowercased()
       cardIcon.image = BubbleCell.docIcon(ext.isEmpty ? "file" : ext)
@@ -2111,7 +2111,7 @@ final class BubbleCell: UITableViewCell {
     //  title and the address squeezed into it: Haris 2026-11-13)
     tight.isActive = !isPhoto && !isVoice && !isDoc
     if link != nil && !m.deleted && !m.pending { fwdB.isHidden = false }
-    linkWrap.reach(nameL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
+    linkWrap.reach(nameL.isHidden && fwdL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
     wideCard = false
     if let u = link {
       let pv = m.link
@@ -2147,12 +2147,12 @@ final class BubbleCell: UITableViewCell {
     // (an E11 file or folder link: its live card, as a task's — the link's own box not shown)
     if let l = m.link.map({ Talk.shared.liveLink($0) }), l.e11 != nil, !m.deleted, !Talk.shared.isContact {
       linkWrap.isHidden = true; e11Wrap.isHidden = false; if !m.pending { fwdB.isHidden = false }
-      e11Wrap.reach(nameL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
+      e11Wrap.reach(nameL.isHidden && fwdL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
       e11Card.set(l, mine: mine, ink: ink, msg: m.id, find: find) { [weak self] in self?.msg?.id }; wideCard = true
     } else { e11Wrap.isHidden = true }
     taskWrap.isHidden = m.task == nil || m.deleted
     if let t = m.task, !m.deleted {
-      taskWrap.reach(nameL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
+      taskWrap.reach(nameL.isHidden && fwdL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
       taskCard.set(Talk.shared.liveTask(t), mine: mine, ink: ink, find: find); wideCard = true
     }
     let words = a.length > 0
@@ -2188,6 +2188,10 @@ final class BubbleCell: UITableViewCell {
     reacts.isHidden = counts.isEmpty || m.deleted
     reacts.text = counts.map { $0.0 }.joined() + (m.reactions.count > 1 ? " \(m.reactions.count)" : "")
     reactsLead.isActive = !mine; reactsTrail.isActive = mine
+    // ("Forwarded" over a card, a quote or a photo: as much room under it as above it — the card had come up to touch it,
+    //  Haris 2026-11-13; over words, the usual line's room)
+    let boxed = [quoteWrap, cardWrap, linkWrap, e11Wrap, taskWrap, photoWrap].contains { !$0.isHidden }
+    stack.setCustomSpacing(boxed ? 8 : 4, after: fwdL)
     // (a message of words: the bubble as wide as what's in it, worked out here — the words' own widest line with the time's
     //  room, the name, "Forwarded", a quote — never wider than the design's widest; the label's own size grew to that widest)
     if tight.isActive && wideCard { tight.constant = UIScreen.main.bounds.width * (mine ? 281 : 250) / 393 }   // (a preview's picture: the widest)
