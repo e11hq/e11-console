@@ -1108,7 +1108,21 @@ extension UITableViewDiffableDataSource {
       UIView.performWithoutAnimation { apply(snap, animatingDifferences: false); tv.layoutIfNeeded() }
       Crossfade.run(shots, new: ids.compactMap { indexPath(for: $0).flatMap { tv.cellForRow(at: $0)?.contentView } })
       done?()
-    } else { apply(snap, animatingDifferences: true, completion: done) }
+    } else {
+      // (rows coming, going or moving glide — but a row both moving and changed isn't reloaded in that glide: Apple
+      //  reloads a moving row by fading it out and in, a flash on a row that never went (ALAIN as a client above it was
+      //  pinned — Haris 2026-11-13). The rows glide as they are, then the changed ones crossfade in place.)
+      let changed = snap.reconfiguredItemIdentifiers
+      var plain = NSDiffableDataSourceSnapshot<SectionIdentifierType, ItemIdentifierType>()
+      plain.appendSections(snap.sectionIdentifiers)
+      for sec in snap.sectionIdentifiers { plain.appendItems(snap.itemIdentifiers(inSection: sec), toSection: sec) }
+      apply(plain, animatingDifferences: true) { [weak self, weak tv] in
+        guard let self = self, let tv = tv, !changed.isEmpty else { done?(); return }
+        var again = self.snapshot(); let here = changed.filter { again.indexOfItem($0) != nil }
+        guard !here.isEmpty else { done?(); return }
+        again.reconfigureItems(here); self.applySteady(again, in: tv, animated: true, done: done)
+      }
+    }
   }
 }
 extension UICollectionViewDiffableDataSource {
@@ -1120,6 +1134,20 @@ extension UICollectionViewDiffableDataSource {
       UIView.performWithoutAnimation { apply(snap, animatingDifferences: false); cv.layoutIfNeeded() }
       Crossfade.run(shots, new: ids.compactMap { indexPath(for: $0).flatMap { cv.cellForItem(at: $0)?.contentView } })
       done?()
-    } else { apply(snap, animatingDifferences: true, completion: done) }
+    } else {
+      // (rows coming, going or moving glide — but a row both moving and changed isn't reloaded in that glide: Apple
+      //  reloads a moving row by fading it out and in, a flash on a row that never went (ALAIN as a client above it was
+      //  pinned — Haris 2026-11-13). The rows glide as they are, then the changed ones crossfade in place.)
+      let changed = snap.reconfiguredItemIdentifiers
+      var plain = NSDiffableDataSourceSnapshot<SectionIdentifierType, ItemIdentifierType>()
+      plain.appendSections(snap.sectionIdentifiers)
+      for sec in snap.sectionIdentifiers { plain.appendItems(snap.itemIdentifiers(inSection: sec), toSection: sec) }
+      apply(plain, animatingDifferences: true) { [weak self, weak cv] in
+        guard let self = self, let cv = cv, !changed.isEmpty else { done?(); return }
+        var again = self.snapshot(); let here = changed.filter { again.indexOfItem($0) != nil }
+        guard !here.isEmpty else { done?(); return }
+        again.reconfigureItems(here); self.applySteady(again, in: cv, animated: true, done: done)
+      }
+    }
   }
 }
