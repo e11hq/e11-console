@@ -22,7 +22,9 @@ others slide only when something really came, went or changed height). Every new
 redraw i also mean … whenever you update anything the whole thing slides or the heights of other things re adjust"):** an
 update to one thing never makes the page slide, never moves what's around it, and never changes another row's height. A row
 that changes in place is set at once, laid out without animation, and only its own look changes; nothing else on the page
-moves. Rows slide only when a row really came or went. Talk's bubbles are the first done this way (the rule under E11 Talk).
+moves. Rows slide only when a row really came or went — or grew or shrank (a reaction's pill under a bubble): then the rows
+below slide smoothly to make room, never jumping (Haris 2026-11-13), the changed row's own content still. Talk's bubbles are
+the first done this way (the rule under E11 Talk).
 **Never skipped, and checked (Haris, 2026-11-08: "This rule should not be ignored and checked"):** every change to a
 native screen is checked against it before it's built — nothing drawn again that didn't change, nothing taken off a screen
 that stays (the task page's grey bands vanished on a redraw). The self-test checks it on every build: with a task open the
