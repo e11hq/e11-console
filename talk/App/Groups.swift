@@ -1090,13 +1090,13 @@ enum Crossfade {
       s.frame = c.frame; s.isUserInteractionEnabled = false; host.addSubview(s); return s
     }
   }
-  // the new look fading in under the old picture fading out
+  // the old picture fading away over the new look, already there under it — the new one isn't faded in too: both half
+  // see-through at once let the page show through, a flash (Haris 2026-11-13)
   static func run(_ shots: [UIView], new cells: [UIView]) {
     guard !shots.isEmpty else { return }
-    cells.forEach { $0.alpha = 0 }
     UIView.animate(withDuration: time, delay: 0, options: [.allowUserInteraction, .curveEaseInOut]) {
-      shots.forEach { $0.alpha = 0 }; cells.forEach { $0.alpha = 1 }
-    } completion: { _ in shots.forEach { $0.removeFromSuperview() }; cells.forEach { $0.alpha = 1 } }
+      shots.forEach { $0.alpha = 0 }
+    } completion: { _ in shots.forEach { $0.removeFromSuperview() } }
   }
 }
 extension UITableViewDiffableDataSource {

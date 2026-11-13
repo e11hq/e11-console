@@ -1779,6 +1779,7 @@ final class BubbleCell: UITableViewCell {
   private var media = false, caption = false, tailOn = false, isMine = false, framed = false, overPhoto = false, shownFile: String?
   // held: the bubble with its tail, in the row's own space (shifted so `origin` is 0,0)
   private var linkShown: String?
+  private var reactsFor: String?, reactsShown = false
   // the forward button and the reactions — beside the bubble, not lifted with it
   func besides(_ a: CGFloat) { fwdB.alpha = a; reacts.alpha = a }
   var heldRect: CGRect { let f = bubble.frame; return CGRect(x: f.minX - (tailOn && !isMine ? 10 : 0), y: f.minY, width: f.width + (tailOn ? 10 : 0), height: f.height) }
@@ -1922,6 +1923,9 @@ final class BubbleCell: UITableViewCell {
     // (below the words' own hold on their size (750): while the row's height glides — a reaction added — the bubble keeps
     //  its size and nothing inside it moves; it was squeezed, its card sliding inside it: Haris 2026-11-13)
     bubbleBottom = bubble.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -3); bubbleBottom.priority = .init(700)
+    // (and the bubble holds to its own content's height a little more firmly than to the row's bottom: a row taller for a
+    //  moment — a reaction taken away, the row gliding shorter — no longer stretches it, its card sliding inside)
+    let hug = bubble.heightAnchor.constraint(equalToConstant: 0); hug.priority = .init(701); hug.isActive = true
     reactsBottom = reacts.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -3); reactsBottom.priority = .init(700)
     NSLayoutConstraint.activate([
       top,
@@ -2296,6 +2300,14 @@ final class BubbleCell: UITableViewCell {
       tight.constant = min(widest, w + 24)
     }
     if reacts.isHidden { bubbleBottom.isActive = true } else { reactsBottom.isActive = true }
+    // (a reaction's pill newly there on the same message fades in — the no-snap rule; the old look's picture fading away
+    //  covers one going)
+    let showsReacts = !reacts.isHidden
+    if m.id == reactsFor, showsReacts, !reactsShown, window != nil {
+      reacts.alpha = 0
+      DispatchQueue.main.async { [weak self] in UIView.animate(withDuration: Crossfade.time) { self?.reacts.alpha = 1 } }
+    }
+    reactsFor = m.id; reactsShown = showsReacts
     setNeedsLayout()
   }
   // the time inside — "Edited" before it, ✓✓ after it on yours; over a photo with no words: white, on its shadow
