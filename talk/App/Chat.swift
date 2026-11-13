@@ -1838,7 +1838,14 @@ final class BubbleCell: UITableViewCell {
   private let card = UIView(), cardIcon = UIImageView(), cardName = UILabel(), cardSize = UILabel(), cardDown = UIImageView()
   // (Auto-download: ↓ and its size over a photo or video not on the phone, the ring while it comes, No longer available;
   //  a file's ↓ becomes a ring — mock-up "Talk — Auto-download", Haris 2026-11-13)
-  private let dlBadge = DownloadBadge(), cardRing = DownloadRing()
+  // (the ↓ badge made only for a bubble that needs it — two blurs and a dozen views in every bubble slowed a chat's opening)
+  private var dlBadgeV: DownloadBadge?
+  private var dlBadge: DownloadBadge {
+    if let b = dlBadgeV { return b }
+    let b = DownloadBadge(); b.frame = photo.bounds; b.autoresizingMask = [.flexibleWidth, .flexibleHeight]; b.isHidden = true
+    photo.insertSubview(b, at: 0); dlBadgeV = b; return b
+  }
+  private let cardRing = DownloadRing()
   private var thumbFor: String?
   private lazy var cardWrap = Bleed(card)
   // a link: its preview box — the site, the address, a line, 🔗 the site
@@ -1937,8 +1944,6 @@ final class BubbleCell: UITableViewCell {
                                  tri.centerXAnchor.constraint(equalTo: playDisc.centerXAnchor, constant: 2), tri.centerYAnchor.constraint(equalTo: playDisc.centerYAnchor),
                                  vlen.leadingAnchor.constraint(equalTo: photo.leadingAnchor, constant: 10), vlen.bottomAnchor.constraint(equalTo: photo.bottomAnchor, constant: -7)])
     photoH = photo.heightAnchor.constraint(equalToConstant: 180); photoH.priority = .init(999); photoH.isActive = true
-    dlBadge.frame = photo.bounds; dlBadge.autoresizingMask = [.flexibleWidth, .flexibleHeight]; dlBadge.isHidden = true
-    photo.insertSubview(dlBadge, at: 0)
     NotificationCenter.default.addObserver(self, selector: #selector(fileChanged(_:)), name: .talkFile, object: nil)
     // the card
     card.backgroundColor = UIColor.black.withAlphaComponent(0.22); card.layer.cornerRadius = 14; card.layer.cornerCurve = .continuous
@@ -2535,10 +2540,12 @@ final class BubbleCell: UITableViewCell {
     return a == b
   }
   private func showDownload(animated: Bool) {
-    guard let m = msg, let f = m.file, !m.deleted else { dlBadge.isHidden = true; cardRing.isHidden = true; return }
+    guard let m = msg, let f = m.file, !m.deleted else { dlBadgeV?.isHidden = true; cardRing.isHidden = true; return }
     let st = Auto.state(m)
     if (m.kind == "photo" || m.kind == "video") && album.count < 4 {
-      let was = dlBadge.state
+      let was = dlBadgeV?.state ?? .here
+      // (on the phone, or downloading by itself: no badge — none made)
+      if dlBadgeV == nil && (st == .here || st == .auto) { playDisc.isHidden = m.kind != "video"; return showCard(m, f, st, animated) }
       let put = {
         self.dlBadge.why = Date().timeIntervalSince1970 * 1000 - m.at > Auto.keep ? "It wasn’t downloaded within 30 days" : "It’s no longer on the server"
         self.dlBadge.set(st, size: f.size)
@@ -2547,7 +2554,10 @@ final class BubbleCell: UITableViewCell {
       if animated && window != nil && !BubbleCell.same(was, st) {
         UIView.transition(with: photo, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction], animations: put)
       } else { put() }
-    } else { dlBadge.isHidden = true }
+    } else { dlBadgeV?.isHidden = true }
+    showCard(m, f, st, animated)
+  }
+  private func showCard(_ m: Msg, _ f: Msg.FileRef, _ st: Auto.State, _ animated: Bool) {
     if !cardWrap.isHidden {
       let ext = (f.name as NSString).pathExtension.lowercased()
       let put = {

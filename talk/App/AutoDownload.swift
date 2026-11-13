@@ -124,6 +124,7 @@ enum Thumb {
     return d.base64EncodedString()
   }
   private static let made = NSCache<NSString, UIImage>()
+  private static let ctx = CIContext()   // (one, kept — making one for each picture is slow)
   // (blurred once, kept)
   static func image(_ f: Msg.FileRef) -> UIImage? {
     if let i = made.object(forKey: f.id as NSString) { return i }
@@ -131,7 +132,7 @@ enum Thumb {
     let k: CGFloat = 8, ext = ci.extent
     let up = ci.transformed(by: CGAffineTransform(scaleX: k, y: k)).clampedToExtent()
     guard let blur = CIFilter(name: "CIGaussianBlur", parameters: [kCIInputImageKey: up, kCIInputRadiusKey: 14])?.outputImage,
-          let cg = CIContext().createCGImage(blur, from: CGRect(x: 0, y: 0, width: ext.width * k, height: ext.height * k)) else { return nil }
+          let cg = Thumb.ctx.createCGImage(blur, from: CGRect(x: 0, y: 0, width: ext.width * k, height: ext.height * k)) else { return nil }
     let i = UIImage(cgImage: cg); made.setObject(i, forKey: f.id as NSString); return i
   }
 }
