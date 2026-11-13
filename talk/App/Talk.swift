@@ -268,7 +268,9 @@ final class Talk {
         guard let self = self else { return }
         self.syncing = false
         if ok, last > self.lastSeq { self.lastSeq = last; Net.shared.post("/api/talk/ack", ["upto": last]) }
-        if ok && ((j["more"] as? Bool) == true || self.again) { self.again = false; self.sync(done) } else { self.again = false; done?() }
+        // (more only when this one brought some — a server that said "more" with nothing kept the phone asking again at once,
+        //  over and over, found 2026-11-13)
+        if ok && (((j["more"] as? Bool) == true && !evs.isEmpty) || self.again) { self.again = false; self.sync(done) } else { self.again = false; done?() }
       }
     }
   }
