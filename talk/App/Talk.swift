@@ -517,7 +517,7 @@ final class Talk {
     try? FileManager.default.removeItem(at: dir); try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     try? FileManager.default.removeItem(at: Net.filesDir)
     UserDefaults.standard.removeObject(forKey: "talk_seq_" + Server.host)
-    VoiceHeard.clear(); starred = []
+    VoiceHeard.clear(); starred = []; Talk.cards = Cards()
   }
 }
 
@@ -727,7 +727,19 @@ extension Talk {
 
 // ---------- E11 link cards as their files and folders are now (Haris 2026-11-13): asked for with the task cards ----------
 extension Talk {
-  private static var liveLinks: [String: Msg.LinkPrev] = [:]
+  // (kept on the phone, so a chat opens with its cards as they were last — drawn at their full size at once; only kept in
+  //  memory, the cards opened bare after a fresh start and grew when the server's answer came, moving the chat: Haris
+  //  2026-11-13. Gone with the rest of the phone's copy on sign-out.)
+  struct Cards: Codable { var links: [String: Msg.LinkPrev] = [:]; var tasks: [String: Msg.TaskCard] = [:] }
+  private static var cardsFile: URL {
+    FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("talk", isDirectory: true).appendingPathComponent("cards-\(Server.host).json")
+  }
+  static var cards: Cards = (try? Data(contentsOf: cardsFile)).flatMap { try? JSONDecoder().decode(Cards.self, from: $0) } ?? Cards()
+  static func saveCards() {
+    let c = cards
+    DispatchQueue.global(qos: .utility).async { if let d = try? JSONEncoder().encode(c) { try? d.write(to: cardsFile, options: .atomic) } }
+  }
+  private static var liveLinks: [String: Msg.LinkPrev] { get { cards.links } set { cards.links = newValue } }
   func liveLink(_ l: Msg.LinkPrev) -> Msg.LinkPrev { l.e11 == nil ? l : Talk.liveLinks[l.url] ?? l }
   static func linkCard(_ k: [String: Any]) -> Msg.LinkPrev? {
     guard let u = k["url"] as? String else { return nil }
@@ -744,7 +756,7 @@ extension Talk {
       DispatchQueue.main.async {
         var changed = false
         for c in cards where Talk.liveLinks[c.url] != c { Talk.liveLinks[c.url] = c; changed = true }
-        if changed { NotificationCenter.default.post(name: .talkGroup, object: g) }
+        if changed { Talk.saveCards(); NotificationCenter.default.post(name: .talkGroup, object: g) }
       }
     }
   }
@@ -752,7 +764,7 @@ extension Talk {
 
 // ---------- task cards as their tasks are now (Haris 2026-11-12): asked for as a chat opens and when the app comes back ----------
 extension Talk {
-  private static var live: [String: Msg.TaskCard] = [:]
+  private static var live: [String: Msg.TaskCard] { get { cards.tasks } set { cards.tasks = newValue } }
   func liveTask(_ t: Msg.TaskCard) -> Msg.TaskCard { Talk.live[t.id] ?? t }
   func refreshTasks(_ g: String) {
     let ids = Array(Set(log(g).msgs.compactMap { $0.deleted ? nil : $0.task?.id }))
@@ -762,7 +774,7 @@ extension Talk {
       DispatchQueue.main.async {
         var changed = false
         for c in cards where Talk.live[c.id] != c { Talk.live[c.id] = c; changed = true }
-        if changed { NotificationCenter.default.post(name: .talkGroup, object: g) }
+        if changed { Talk.saveCards(); NotificationCenter.default.post(name: .talkGroup, object: g) }
       }
     }
   }
