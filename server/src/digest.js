@@ -44,7 +44,10 @@ export function digestFor(store, user, day) {
   return { title: first ? `Good morning, ${first}` : 'Good morning', body, tag: 'digest-' + day };
 }
 
-export function createDigest({ store, webPush, now = () => Date.now(), log = console }) {
+// skip(u): someone who gets the day's overview instead (a Super Admin or an AM — amdaily.js), so nobody gets both at
+// 10:30 (Haris 2026-11-13: "getting morning roundup and todays overview too")
+export function createDigest({ store, webPush, now = () => Date.now(), log = console, skip = () => false }) {
+  const wanted = (u) => digestWanted(u) && !skip(u);
   const load = () => { try { return JSON.parse(store.kv.get('digest-sent') || '{}'); } catch { return {}; } };
   // Phones: one push per person per day, from 10:30 (or as soon as the server is up after that)
   async function tick() {
@@ -52,7 +55,7 @@ export function createDigest({ store, webPush, now = () => Date.now(), log = con
     if (!digestTime(t)) return 0;
     let sent = load();
     if (sent.day !== t.day) sent = { day: t.day, ids: [] };
-    const todo = store.list('users').filter((u) => digestWanted(u) && !sent.ids.includes(u.id));
+    const todo = store.list('users').filter((u) => wanted(u) && !sent.ids.includes(u.id));
     let n = 0;
     for (const u of todo) {
       sent.ids.push(u.id);
@@ -70,7 +73,7 @@ export function createDigest({ store, webPush, now = () => Date.now(), log = con
     // For the person's own open app: today's summary, if it's time and they want it
     forUser(user) {
       const t = dubaiNow(now());
-      if (!digestTime(t) || !digestWanted(user)) return { due: false, day: t.day };
+      if (!digestTime(t) || !wanted(user)) return { due: false, day: t.day };
       return { due: true, day: t.day, ...digestFor(store, user, t.day) };
     },
     preview(user) { const t = dubaiNow(now()); return digestFor(store, user, t.day); },

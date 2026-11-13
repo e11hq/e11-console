@@ -25,7 +25,7 @@ import { createHomeView } from './homeview.js';
 import { createOccasionReminders } from './occremind.js';
 import { createBirthdays } from './birthdays.js';
 import { createScheduled } from './scheduled.js';
-import { createDaily } from './amdaily.js';
+import { createDaily, dailyRole } from './amdaily.js';
 import { createLinks } from './links.js';
 import { createViewCopies } from './viewcopy.js';
 import { createOffice } from './office.js';
@@ -96,7 +96,7 @@ export function createServer(cfg) {
       const [a, b] = await Promise.all([webSend(userId, msg, opts), claim ? Promise.resolve({ sent: 0 }) : apns.sendTo(userId, phoneMsg, opts).catch((e) => { console.error('APNs:', e.message); return { sent: 0 }; })]);
       return { sent: (a.sent || 0) + (b.sent || 0), removed: (a.removed || 0) + (b.removed || 0), apns: b.results || [], apnsWhy: b.why || '' };
     }; }
-  const digest = createDigest({ store, webPush, now: cfg.now || (() => Date.now()) });
+  const digest = createDigest({ store, webPush, now: cfg.now || (() => Date.now()), skip: (u) => dailyRole(u, access.isSuper) });
   if (cfg.digest !== false) digest.start();
   // Inbox clean-up: read updates go after 60 days, any update after 180 days, so opening the app stays quick as
   // the months go by (each person's whole Inbox comes with every start). Runs a minute after start and twice a day.
