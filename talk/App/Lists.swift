@@ -98,25 +98,10 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
     NotificationCenter.default.addObserver(self, selector: #selector(changed), name: .talkChanged, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(typingChanged(_:)), name: .talkTyping, object: nil)
   }
-  // (the page out of sight — another page opened, another tab — a search left open closes, and the search bar is put
-  //  away again: back here it's hidden, out only as the list is pulled down — Haris 2026-11-13)
+  // (the page out of sight — another page opened, another tab — a search left open closes — Haris 2026-11-13)
   override func viewDidDisappear(_ animated: Bool) {
     super.viewDidDisappear(animated)
     UIView.performWithoutAnimation { if search.isActive { search.searchBar.text = ""; search.isActive = false } }
-    foldSearch(animated: false)
-  }
-  // the search bar put away: the list taken up by the search bar's own room, as a finger scrolling it would — Apple then
-  // folds the bar away itself (handing Apple the search again left a bar pulled out still out — Haris 2026-11-13)
-  private var foldedTop: CGFloat?   // (the room above the list with the search bar put away — as the page first came)
-  override func viewDidAppear(_ a: Bool) {
-    super.viewDidAppear(a)
-    if foldedTop == nil, navigationItem.hidesSearchBarWhenScrolling { foldedTop = table.adjustedContentInset.top }
-  }
-  func foldSearch(animated: Bool) {
-    guard navigationItem.hidesSearchBarWhenScrolling, !search.isActive, let folded = foldedTop else { return }
-    let top = table.adjustedContentInset.top, extra = top - folded
-    guard extra > 1, table.contentOffset.y < -folded else { return }   // (the bar out, and the list still showing it)
-    table.setContentOffset(CGPoint(x: table.contentOffset.x, y: -folded), animated: animated)
   }
   // a row's cell: the group rows as before (a client's groups — step 2b); a client's row Apple's own cell (2a)
   func cell(_ tv: UITableView, _ ip: IndexPath, _ row: Row) -> UITableViewCell {
@@ -500,11 +485,6 @@ final class GroupsVC: ListVC {
 extension GroupsVC: UISearchControllerDelegate {
   func willPresentSearchController(_ s: UISearchController) { pillsShown(false, s) }
   func willDismissSearchController(_ s: UISearchController) { pillsShown(true, s) }
-  // (a search closed: the search bar folds away again — out only as the list is pulled down; Haris 2026-11-13)
-  func didDismissSearchController(_ s: UISearchController) {
-    guard view.window != nil else { return }
-    DispatchQueue.main.async { [weak self] in self?.foldSearch(animated: true) }
-  }
 }
 
 // A client's row on E11 Agency (board 1): Apple's own list cell — the logo (a rounded square), the name, the newest
