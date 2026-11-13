@@ -546,7 +546,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     navigationItem.titleView = nil
     navigationItem.hidesBackButton = false
   }
-  func startFind() {
+  func startFind(focus: Bool = true) {
     guard !finding else { return }
     findBar.placeholder = "Search in this chat"; findBar.delegate = self; findBar.text = ""
     bar.box.resignFirstResponder(); bar.isHidden = true; findAcc.isHidden = false
@@ -558,8 +558,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let close = UIBarButtonItem(title: nil, image: UIImage(systemName: "xmark"), primaryAction: UIAction { [weak self] _ in self?.endFind() }, menu: nil)
     close.accessibilityLabel = "Close the search"
     navigationItem.rightBarButtonItems = [close]
-    findBar.searchTextField.becomeFirstResponder()
+    if focus { findBar.searchTextField.becomeFirstResponder() }
   }
+  func focusFind() { if finding { findBar.searchTextField.becomeFirstResponder() } }
   private func endFind(leaving: Bool = false) {
     guard finding else { return }
     finding = false

@@ -481,8 +481,11 @@ final class GroupInfoVC: UITableViewController {
   // Search: back to the chat, its own search open
   private func search() {
     guard let nav = navigationController, let chat = nav.viewControllers.last(where: { ($0 as? ChatVC)?.group == group }) as? ChatVC else { return }
+    // (the chat is already searching as it slides back in — Apple's bar brings the search field in with the slide, and the
+    //  keyboard comes up once it's there; set after the slide, the title went and the field popped in: Haris 2026-11-13)
+    chat.startFind(focus: false)
     nav.popToViewController(chat, animated: true)
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { chat.startFind() }
+    if let tc = nav.transitionCoordinator { tc.animate(alongsideTransition: nil) { c in if !c.isCancelled { chat.focusFind() } } } else { chat.focusFind() }
   }
   // Edit (for now the picture and the name — its own sheet is step 1e)
   // (step 1e: Edit Group as its own sheet — the design's board 40)
