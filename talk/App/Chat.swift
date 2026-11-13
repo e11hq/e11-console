@@ -12,7 +12,8 @@ import ImageIO
    keyboard opens); swipe your own left for Message info; hold it: Apple's lift, the reactions as Apple's palette (seven
    and + for any emoji), then Reply · Copy · Star · (yours: Edit for 15 minutes, Info) · Delete (for everyone about 2 days,
    for me). The message bar: + (Photos, Camera, Files), the box, camera and mic; while typing, the send button. */
-enum ChatItem: Hashable { case msg(String) }
+// (.intro — a group's own card at the very start of its chat, the design's board 4)
+enum ChatItem: Hashable { case msg(String); case intro }
 
 final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDataSource, QLPreviewControllerDelegate, UIGestureRecognizerDelegate {
   let group: String
@@ -106,7 +107,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     navigationItem.largeTitleDisplayMode = .never
     table.backgroundColor = .clear; table.separatorStyle = .none; table.keyboardDismissMode = .interactive
     table.delegate = self; table.estimatedRowHeight = 60; table.rowHeight = UITableView.automaticDimension
-    table.register(BubbleCell.self, forCellReuseIdentifier: "b"); table.register(DayHeader.self, forHeaderFooterViewReuseIdentifier: "d")
+    table.register(BubbleCell.self, forCellReuseIdentifier: "b"); table.register(DayHeader.self, forHeaderFooterViewReuseIdentifier: "d"); table.register(IntroCell.self, forCellReuseIdentifier: "i")
     table.sectionHeaderTopPadding = 0
     table.frame = view.bounds; table.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     // (the room above and below the messages is ours to set: the bar at the top, the message bar at the bottom — fitBottom)
@@ -139,6 +140,12 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         c.onFileTap = { [weak self, weak c] m in self?.openFrom = (m.kind == "photo" || m.kind == "video") ? c?.photo : nil; self?.open(m) }
         c.onRetry = { [weak self] m in guard let self = self else { return }; Talk.shared.retry(self.group, m) }
         c.onForward = { [weak self] m in self?.forward(m) }
+        return c
+      case .intro:
+        let c = tv.dequeueReusableCell(withIdentifier: "i", for: ip) as! IntroCell
+        if let g = Talk.shared.groups[self.group] { c.set(g) }
+        c.onPic = { [weak self] in self?.editGroup() }
+        c.onAdd = { [weak self] in self?.addMembers() }
         return c
       }
     }
@@ -604,6 +611,19 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     }
   }
   @objc private func info() { navigationController?.pushViewController(GroupInfoVC(group: group), animated: true) }
+  // (the intro card's camera badge and + Add Members — the same sheets as Group Info's: boards 40 and 41)
+  private func editGroup() {
+    guard !peek, let g = Talk.shared.groups[group], Talk.shared.canManage(g) else { return }
+    let n = UINavigationController(rootViewController: EditGroupVC(group: group))
+    if let s = n.sheetPresentationController { s.detents = [.large()]; s.prefersGrabberVisible = true }
+    present(n, animated: true)
+  }
+  private func addMembers() {
+    guard !peek, let g = Talk.shared.groups[group], Talk.shared.canManage(g) else { return }
+    let n = UINavigationController(rootViewController: AddPeopleVC(group: group))
+    if let s = n.sheetPresentationController { s.detents = [.large()]; s.prefersGrabberVisible = true }
+    present(n, animated: true)
+  }
   @objc private func gone(_ n: Notification) {
     guard (n.object as? String) == group else { return }
     toast("This group was deleted")
@@ -655,8 +675,17 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (a photo with its own words stands apart, as its own bubble — WhatsApp's way, Haris 2026-11-12)
     for m in all where m.album != nil && m.file != nil && !m.deleted && m.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { byAlbum[m.album!, default: []].append(m) }
     var newAlbums: [String: [Msg]] = [:]
+    // (the group's own card at the very start — under the day it was made, once the chat is lined up from its start;
+    //  it says what the first note said, so that note isn't shown again: the design's board 4)
+    let grp = Talk.shared.groups[group]
+    if start == 0, let g = grp {
+      let d = Look.day(g.createdAt)
+      lastDay = d; section = d; newDayOf[d] = d
+      snap.appendSections([d]); snap.appendItems([.intro], toSection: d); items.append(.intro)
+    }
     for i in start..<all.count {
       let m = all[i]
+      if i == 0, start == 0, let g = grp, m.kind == "sys", m.by == g.creator, m.text.contains("made the group") { continue }
       if let a = m.album, let members = byAlbum[a], members.count >= 4 {
         if members.first?.id != m.id { continue }
         newAlbums[m.id] = members
@@ -686,7 +715,11 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     runs = newRuns; dayOf = newDayOf; albums = newAlbums
     let old = data.snapshot()
     keyOf = newKeyOf; idOf = newIdOf
-    snap.reconfigureItems(items.filter { if case .msg(let key) = $0 { return old.indexOfItem($0) != nil && sigs[key] != newSigs[key] }; return false })
+    if let g = grp, items.contains(.intro) { newSigs["#intro"] = IntroCell.sig(g) }
+    snap.reconfigureItems(items.filter {
+      if case .msg(let key) = $0 { return old.indexOfItem($0) != nil && sigs[key] != newSigs[key] }
+      return old.indexOfItem($0) != nil && sigs["#intro"] != newSigs["#intro"]
+    })
     sigs = newSigs
     data.apply(snap, animatingDifferences: animated && old.numberOfItems > 0)
   }
@@ -1314,6 +1347,74 @@ final class DayHeader: UITableViewHeaderFooterView {
     let a: CGFloat = on ? 1 : 0
     guard chip.alpha != a else { return }
     if animated { UIView.animate(withDuration: on ? 0.15 : 0.25, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { self.chip.alpha = a } } else { chip.alpha = a }
+  }
+}
+
+/* A group's own card at the start of its chat (the design's board 4): its picture — with a camera badge for its admins,
+   opening Edit Group — who made it, when, and + Add Members for its admins. Ours, said plainly: the card itself (Apple has
+   no part for it, as the day chips); the button is Apple's own (a grey capsule button), the sheets Apple's. */
+final class IntroCell: UITableViewCell {
+  private let card = UIView(), pic = Avatar(frame: CGRect(x: 0, y: 0, width: 48, height: 48)), badge = UIButton(type: .system)
+  private let title = UILabel(), sub = UILabel(), add = UIButton(type: .system), stack = UIStackView()
+  var onPic: (() -> Void)?, onAdd: (() -> Void)?
+  static let cardBg = Look.dyn(0x262628, 0xFFFFFF), btnBg = Look.dyn(0x3A3A3E, 0xEFEFF4)
+  // (what the card shows — it's set again only when one of these changed)
+  static func sig(_ g: Group) -> Int {
+    var h = Hasher(); h.combine(g.name); h.combine(g.pic); h.combine(g.creator); h.combine(g.createdAt)
+    h.combine(Talk.shared.canManage(g)); h.combine(Talk.shared.people[g.creator]?.name); h.combine(Talk.shared.clients[g.client]?.logo); h.combine(Talk.shared.me?.id)
+    return h.finalize()
+  }
+  override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+    super.init(style: style, reuseIdentifier: reuseIdentifier)
+    backgroundConfiguration = .clear(); selectionStyle = .none
+    insetsLayoutMarginsFromSafeArea = false; contentView.insetsLayoutMarginsFromSafeArea = false
+    card.backgroundColor = IntroCell.cardBg; card.layer.cornerRadius = 26; card.layer.cornerCurve = .continuous
+    pic.translatesAutoresizingMaskIntoConstraints = false
+    let picBox = UIView(); picBox.translatesAutoresizingMaskIntoConstraints = false; picBox.addSubview(pic)
+    // the camera badge: Apple's symbol on a small round button
+    badge.setImage(UIImage(systemName: "camera", withConfiguration: UIImage.SymbolConfiguration(pointSize: 9, weight: .bold)), for: .normal)
+    badge.tintColor = .black; badge.backgroundColor = Look.dyn(0xF5F5F7, 0xE5E5EA); badge.layer.cornerRadius = 9
+    badge.accessibilityLabel = "Change the picture"
+    badge.addAction(UIAction { [weak self] _ in self?.onPic?() }, for: .touchUpInside)
+    badge.translatesAutoresizingMaskIntoConstraints = false; picBox.addSubview(badge)
+    title.font = .systemFont(ofSize: 17, weight: .bold); title.textAlignment = .center; title.numberOfLines = 0
+    sub.font = .systemFont(ofSize: 14); sub.textColor = .secondaryLabel; sub.textAlignment = .center; sub.numberOfLines = 0
+    var b = UIButton.Configuration.gray()
+    b.cornerStyle = .capsule; b.baseBackgroundColor = IntroCell.btnBg; b.baseForegroundColor = .label
+    b.image = UIImage(systemName: "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .semibold)); b.imagePadding = 6
+    b.attributedTitle = AttributedString("Add Members", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 16, weight: .semibold)]))
+    add.configuration = b
+    add.addAction(UIAction { [weak self] _ in self?.onAdd?() }, for: .touchUpInside)
+    stack.axis = .vertical; stack.alignment = .center
+    [picBox, title, sub, add].forEach { stack.addArrangedSubview($0) }
+    stack.setCustomSpacing(16, after: picBox); stack.setCustomSpacing(4, after: title); stack.setCustomSpacing(14, after: sub)
+    card.addSubview(stack); contentView.addSubview(card)
+    [card, stack, add].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+    NSLayoutConstraint.activate([
+      picBox.widthAnchor.constraint(equalToConstant: 48), picBox.heightAnchor.constraint(equalToConstant: 48),
+      pic.topAnchor.constraint(equalTo: picBox.topAnchor), pic.leadingAnchor.constraint(equalTo: picBox.leadingAnchor),
+      pic.widthAnchor.constraint(equalToConstant: 48), pic.heightAnchor.constraint(equalToConstant: 48),
+      badge.widthAnchor.constraint(equalToConstant: 18), badge.heightAnchor.constraint(equalToConstant: 18),
+      badge.trailingAnchor.constraint(equalTo: picBox.trailingAnchor, constant: 4), badge.bottomAnchor.constraint(equalTo: picBox.bottomAnchor, constant: 3),
+      card.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 6), card.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -8),
+      card.centerXAnchor.constraint(equalTo: contentView.centerXAnchor), card.widthAnchor.constraint(equalToConstant: 268),
+      stack.topAnchor.constraint(equalTo: card.topAnchor, constant: 22), stack.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -12),
+      stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 12), stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12),
+      title.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor), sub.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor),
+      add.widthAnchor.constraint(equalTo: stack.widthAnchor), { let h = add.heightAnchor.constraint(equalToConstant: 40); h.priority = .init(999); return h }()])
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  func set(_ g: Group) {
+    let T = Talk.shared, can = T.canManage(g), mine = g.creator == T.me?.id
+    let who = T.people[g.creator]?.name ?? "Someone"
+    pic.set(group: g)
+    badge.isHidden = !can
+    title.text = mine ? "You created this group" : "\(who) added you"
+    let f = DateFormatter(); f.setLocalizedDateFormatFromTemplate("ddMMyyyy")
+    sub.text = "Group created \(f.string(from: Date(timeIntervalSince1970: g.createdAt / 1000))) by \(mine ? "you" : who)"
+    // (only its admins can add people — for everyone else the card ends at the line above)
+    add.isHidden = !can
+    stack.setCustomSpacing(can ? 14 : 0, after: sub)
   }
 }
 
