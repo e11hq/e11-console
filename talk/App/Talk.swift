@@ -652,7 +652,7 @@ func toast(_ text: String, in v: UIView? = nil) {
   // (just above whatever is at the bottom of the screen on show — the tab bar, a chat's message bar, or the bottom edge; a
   //  fixed height left it floating high on pages with neither, as Group Info — Haris 2026-11-13)
   let room: CGFloat = {
-    guard v == nil, let top = topScreen(host.rootViewController) else { return 16 }
+    guard v == nil, let top = topScreen((host as? UIWindow)?.rootViewController ?? host.window?.rootViewController) else { return 16 }
     if top is ChatVC { return 76 }
     if let tb = top.tabBarController, !tb.tabBar.isHidden, tb.tabBar.alpha > 0, !(top.navigationController?.viewControllers.contains { $0.hidesBottomBarWhenPushed } ?? false) {
       return max(16, tb.tabBar.frame.height - host.safeAreaInsets.bottom + 12)
