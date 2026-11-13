@@ -6,6 +6,8 @@ import WebKit
    Before the App Store it becomes shared with E11 Console (signed in to one, signed in to both). */
 final class SignInVC: UIViewController, WKNavigationDelegate {
   var onDone: (() -> Void)?
+  var passed = Set<String>()   // (our sign-in page let through as it is — Face ID cancelled, or a key that no longer counts)
+  var cover: UIView?           // (board 53 over the page)
   private var web: WKWebView!
   private let top = UIView(), logo = UIImageView(), titleL = UILabel(), sub = UILabel(), spin = UIActivityIndicatorView(style: .medium)
 
@@ -61,6 +63,11 @@ final class SignInVC: UIViewController, WKNavigationDelegate {
   private var turnedBack = 0
   func webView(_ w: WKWebView, decidePolicyFor a: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
     guard a.targetFrame?.isMainFrame != false, let u = a.request.url, let host = u.host else { decisionHandler(.allow); return }
+    // (our own sign-in page — the shared sign-in: board 53 or Face ID first, else the page itself)
+    if SignInKeys.isSigninHost(host) {
+      if takeOver(u, web: w) { decisionHandler(.cancel) } else { decisionHandler(.allow) }
+      return
+    }
     let cloudflare = host.hasSuffix("cloudflareaccess.com") || u.path.hasPrefix("/cdn-cgi/")
     let ours = host == Server.host && u.path.hasPrefix("/api/talk/")
     if cloudflare || ours || turnedBack >= 3 { decisionHandler(.allow); return }

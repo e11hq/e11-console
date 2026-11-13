@@ -825,7 +825,16 @@ final class ContactsVC: UITableViewController {
       })
       self?.present(al, animated: true)
     }
-    return UISwipeActionsConfiguration(actions: [a])
+    // (forgot their password: a new code — Super Admins and Office Admins, as the Client Contacts page itself)
+    let code = UIContextualAction(style: .normal, title: "New Code") { [weak self] _, _, done in
+      done(true)
+      Net.shared.act(["act": "contactCode", "id": k.id]) { j in
+        guard let self = self else { return }
+        if let si = j?["signin"] as? [String: Any] { SigninCodeVC.present(si, from: self) } else { toast(j?["error"] as? String ?? "Couldn’t make a code — try again") }
+      }
+    }
+    code.backgroundColor = .systemBlue
+    return UISwipeActionsConfiguration(actions: [a, code])
   }
 }
 
@@ -857,7 +866,7 @@ final class NewContactVC: UITableViewController, UITextFieldDelegate {
   override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { s == 0 ? 2 : 1 }
   override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
     // (the board's words wait for the shared sign-in — today a contact signs in with a code sent to their email)
-    s == 1 ? "They sign in to E11 Talk only, with a one-time code sent to this email. They’re in no group until someone adds them to one." : nil
+    s == 1 ? "Adding them shows a 4-digit sign-in code for their email (24 hours, one use) — pass it on yourself. They sign in to E11 Talk only, set a password the first time, then Face ID. They’re in no group until someone adds them to one." : nil
   }
   private let clientCell = UITableViewCell(style: .value1, reuseIdentifier: nil)
   private func setClientRow() {
@@ -895,7 +904,11 @@ final class NewContactVC: UITableViewController, UITextFieldDelegate {
       if (j?["ok"] as? Bool) == true {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         Talk.shared.refresh()
-        self?.dismiss(animated: true) { toast("\(n) added — put them in a group to start") }
+        // (their first sign-in code, to pass on — board 51; the sheet in place of this one)
+        let host = self?.presentingViewController
+        self?.dismiss(animated: true) {
+          if let si = j?["signin"] as? [String: Any], let h = host { SigninCodeVC.present(si, from: h) } else { toast("\(n) added — put them in a group to start") }
+        }
       } else { toast(j?["error"] as? String ?? "Couldn’t add them — try again"); self?.check() }
     }
   }

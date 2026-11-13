@@ -197,6 +197,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
   }
   func signOutNow() {
     if let t = UserDefaults.standard.string(forKey: "talk_push_token") { Net.shared.post("/api/talk/push", ["token": t, "off": true]) }
+    SignInKeys.dropOwn()   // (a client contact's own key for Face ID let go)
+    UserDefaults.standard.removeObject(forKey: "talk_via_console")
     Talk.shared.signOut()
     showSignIn()
   }
@@ -215,7 +217,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
   func sceneDidBecomeActive(_ s: UIScene) {
     guard Net.shared.signedIn, tabs != nil else { return }
     Net.shared.listen()
-    Talk.shared.refresh { Talk.shared.prune() }; Talk.shared.sync()
+    // (signed in through E11 Console, and Console signed out since — its key gone: Talk signs out too, the plan)
+    if UserDefaults.standard.bool(forKey: "talk_via_console"), SignInKeys.consoleKey == nil, !Talk.shared.isContact { signOutNow(); return }
+    Talk.shared.refresh { Talk.shared.prune(); SignInKeys.refreshOwn() }; Talk.shared.sync()
     // (Auto-download: the network watched; what waited for Wi-Fi comes if it's here now)
     Auto.startOnce(); Talk.shared.catchUp()
   }
