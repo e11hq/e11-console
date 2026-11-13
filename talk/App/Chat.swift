@@ -1213,13 +1213,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   func tableView(_ tv: UITableView, contextMenuConfigurationForRowAt ip: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
     guard case .msg(let key)? = data.itemIdentifier(for: ip), let m = msgs[mid(key)], m.kind != "sys" else { return nil }
     // (only a hold on the bubble itself — not on the empty space beside it in its row, Haris 2026-11-12)
-    // (TEMPORARY CHECK, trial build — Haris 2026-11-14: a held bubble with reactions doesn't lift; a line says why. Taken out after.)
-    if let c = tv.cellForRow(at: ip) as? BubbleCell {
-      let pt = c.contentView.convert(point, from: tv), path = c.heldPath(origin: .zero), inside = path.contains(pt)
-      let b = path.bounds, hf = c.held.frame
-      toast("in \(inside ? "yes" : "NO") f\(Int(pt.x)),\(Int(pt.y)) b\(Int(b.minX)),\(Int(b.minY)),\(Int(b.width))x\(Int(b.height)) v\(Int(hf.minX)),\(Int(hf.minY)),\(Int(hf.width))x\(Int(hf.height))")
-      if !inside { return nil }
-    }
+    if let c = tv.cellForRow(at: ip) as? BubbleCell, !c.holds(c.contentView.convert(point, from: tv)) { return nil }
     // (the trial of Haris 2026-11-12: a preview of the bubble — iPhone places it where it fits with the menu, shrinking a
     //  tall one — iMessage's way; build 39 kept the bubble itself, slid up WhatsApp's way)
     // (the bubble with its tail — the picture taken a little wider on the tail's side; the tail was cut off as it lifted and
@@ -1921,6 +1915,16 @@ final class BubbleCell: UITableViewCell {
   // (the bubble's frame in the row — it sits inside `held` now)
   private var bubbleInRow: CGRect { bubble.frame.offsetBy(dx: held.frame.minX, dy: held.frame.minY) }
   var heldRect: CGRect { let f = bubbleInRow; return CGRect(x: f.minX - (tailOn && !isMine ? 10 : 0), y: f.minY, width: f.width + (tailOn ? 10 : 0), height: f.height) }
+  // the finger on the bubble (its own shape, tail and all) or on its reaction pill — each tested by itself: one path holding
+  // both said "no" over the card's lower half of a bubble with reactions (Haris's build-112 check, 2026-11-14)
+  func holds(_ pt: CGPoint) -> Bool {
+    let f = bubbleInRow
+    let b = BubbleShape.path(f.size, mine: isMine, tail: tailOn)
+    if b.isEmpty { b.append(UIBezierPath(roundedRect: CGRect(origin: .zero, size: f.size), cornerRadius: 19)) }
+    b.apply(CGAffineTransform(translationX: f.minX, y: f.minY))
+    if b.contains(pt) { return true }
+    return !reacts.isHidden && reacts.alpha > 0 && reacts.frame.offsetBy(dx: held.frame.minX, dy: held.frame.minY).contains(pt)
+  }
   func heldPath(origin o: CGPoint) -> UIBezierPath {
     let f = bubbleInRow
     let p = BubbleShape.path(f.size, mine: isMine, tail: tailOn)
