@@ -1194,7 +1194,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (the picture's box on the screen's own pixels — at a part-pixel place the picture drew a pixel off the bubble, and the
     //  lift and the settling back each showed a one-pixel shift: Haris 2026-11-13)
     let k = cell.traitCollection.displayScale > 0 ? cell.traitCollection.displayScale : UIScreen.main.scale
-    let h = cell.heldRect
+    // (and the box is the bubble's own shape's box, tail and all — not a set width beside it: Apple lands the picture by its
+    //  shape's middle, and a tail narrower than the room left for it put the picture a point to the left as it settled,
+    //  snapping right when the real bubble came back — Haris's recording, measured frame by frame, 2026-11-13)
+    let h = cell.heldPath(origin: .zero).bounds
     let x0 = floor(h.minX * k) / k, y0 = floor(h.minY * k) / k, x1 = ceil(h.maxX * k) / k, y1 = ceil(h.maxY * k) / k
     let r = CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0)
     let shape = cell.heldPath(origin: r.origin)
