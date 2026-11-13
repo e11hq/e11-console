@@ -769,6 +769,14 @@ final class ContactsVC: UITableViewController {
     snap.reconfigureItems(new.keys.filter { old.indexOfItem($0) != nil && sigs[$0] != new[$0] })
     sigs = new
     data.applySteady(snap, in: tableView, animated: animated)
+    // (none: Apple's own empty view, as every page — not a line of ours)
+    if #available(iOS 17.0, *) {
+      if groups.isEmpty {
+        var e = UIContentUnavailableConfiguration.empty()
+        e.image = UIImage(systemName: "person.crop.rectangle.stack"); e.text = "No Client Contacts"; e.secondaryText = "Tap + to add someone from a client."
+        contentUnavailableConfiguration = e
+      } else { contentUnavailableConfiguration = nil }
+    }
   }
   private func contact(_ id: String) -> Contact? { Talk.shared.contacts.first { $0.id == id } }
   private func fill(_ c: UITableViewCell, _ id: String) {
@@ -799,7 +807,7 @@ final class ContactsVC: UITableViewController {
     override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
       let ids = snapshot().sectionIdentifiers
       guard s == ids.count - 1 else { return nil }
-      return (ids == ["none"] ? "No client contacts yet. Tap + to add one. " : "") + "Client contacts only see the groups they’re added to. Super Admins and Office Admins add and remove them."
+      return "Client contacts only see the groups they’re added to. Super Admins and Office Admins add and remove them."
     }
   }
   override func tableView(_ tv: UITableView, trailingSwipeActionsConfigurationForRowAt ip: IndexPath) -> UISwipeActionsConfiguration? {
