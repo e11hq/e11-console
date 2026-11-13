@@ -535,6 +535,14 @@ open saying why on the screen on show. Quick build, no simulator self-test. Noth
 `stable/ios-1696` and `locked/ios-app-1696` (never moved or deleted; 1695's and earlier stay as history). 1696 = 1695 + a
 folder link from any tab going to the Clients tab (its key is "projects" — the link looked for "clients", and from Home the
 folder opened out of sight). Quick build. Nothing changes without telling Haris first and his yes.
+**THE iPHONE APP — LOCKED at build 1699 (Haris, 2026-11-13 10:44: "build and then lock 1698" — the build came out as 1699,
+the number taken by a cancelled compile check):** commit 5677572, branches `stable/ios-1699` and `locked/ios-app-1699` (never
+moved or deleted; 1696's and earlier stay as history). 1699 = 1696 + a Client Assets photo link opening every time (tried
+again until its folder's files are in — de000ad) + the phone's notification address only on the server the app is on now (moved
+live ↔ test, the server before is told to forget it — live's morning summary reached a phone on test). Quick build. Nothing
+changes without telling Haris first and his yes.
+**Compile checks: `-f checks=compile -f walk=no`** — without `walk=no` the walk-through for every role runs too (~20 min),
+holding the Mac (2026-11-13).
 **The App Store release waits for E11 Talk (Haris, 2026-11-11 20:16: "3"):** the Talk button (E11 Day, Clients) does nothing
 yet — App Review would reject a button that does nothing (2.1) — so E11 Console and E11 Talk are sent for review together,
 Talk's button opening the real app; it stays as it is until then (not hidden, not changed). The screenshots keep it.
