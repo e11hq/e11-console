@@ -167,8 +167,10 @@ final class Talk {
   }
   private var saveJob: DispatchWorkItem?
   func flush() {
+    let pt = CACurrentMediaTime()   // (TEMPORARY: OpenProbe)
     for g in dirty { if let l = logs[g], let d = try? JSONEncoder().encode(l) { try? d.write(to: logFile(g), options: .atomic) } }
     dirty.removeAll()
+    if OpenProbe.on { OpenProbe.marks.append(("save\(Int((CACurrentMediaTime() - pt) * 1000))ms", (CACurrentMediaTime() - OpenProbe.t0) * 1000)) }
   }
 
   func refresh(_ done: (() -> Void)? = nil) {

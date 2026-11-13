@@ -15,6 +15,18 @@ import ImageIO
 // (.intro — a group's own card at the very start of its chat, the design's board 4)
 enum ChatItem: Hashable { case msg(String); case intro }
 
+// TEMPORARY (Haris 2026-11-13: "dig it properly"): times each step of a chat opening, shown as a line once it's open —
+// taken out again once the slow step is found and fixed (Don't 2)
+enum OpenProbe {
+  static var t0 = CACurrentMediaTime(), marks: [(String, Double)] = [], cells = 0, cellMs = 0.0, pics = 0, picMs = 0.0, on = false
+  static func start() { t0 = CACurrentMediaTime(); marks = []; cells = 0; cellMs = 0; pics = 0; picMs = 0; on = true }
+  static func mark(_ k: String) { if on { marks.append((k, (CACurrentMediaTime() - t0) * 1000)) } }
+  static func line() -> String {
+    on = false
+    return marks.map { "\($0.0) \(Int($0.1))" }.joined(separator: " · ") + " | cells \(cells) in \(Int(cellMs))ms · photos \(pics) in \(Int(picMs))ms"
+  }
+}
+
 final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDataSource, QLPreviewControllerDelegate, UIGestureRecognizerDelegate {
   let group: String
   private let table = UITableView(frame: .zero, style: .plain)
@@ -50,7 +62,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   // (a peek — the chat as the preview of a group held in a list, the design's board 27: read there, nothing is marked read,
   //  no message box)
   var peek = false
-  init(group: String, focus: String? = nil) { self.group = group; self.focus = focus; super.init(nibName: nil, bundle: nil)
+  init(group: String, focus: String? = nil) { OpenProbe.start(); self.group = group; self.focus = focus; super.init(nibName: nil, bundle: nil)
     // (Apple's own: the tab bar slides away with the list as the chat comes in, and back with the finger on the back swipe —
     //  Haris 2026-11-12, option A; it was hidden with Apple's call after arriving and faded, iOS 26 leaving it drawn)
     hidesBottomBarWhenPushed = true
@@ -103,6 +115,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
 
   override func viewDidLoad() {
     super.viewDidLoad()
+    OpenProbe.mark("load")
     view.backgroundColor = Look.chatBg
     navigationItem.largeTitleDisplayMode = .never
     table.backgroundColor = .clear; table.separatorStyle = .none; table.keyboardDismissMode = .interactive
@@ -141,7 +154,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         //  the words and pictures inside are already where they belong; laid out inside the list's animation, the whole
         //  bubble's content slid in again: Haris 2026-11-13, the redraw rule)
         if let m = self.msgs[id], let g = Talk.shared.groups[self.group] {
+          let pt = CACurrentMediaTime()
           UIView.performWithoutAnimation { c.set(m, group: g, log: Talk.shared.log(self.group), run: self.runs[id] ?? Run()); c.contentView.layoutIfNeeded() }
+          if OpenProbe.on { OpenProbe.cells += 1; OpenProbe.cellMs += (CACurrentMediaTime() - pt) * 1000 }
         }
         c.onReplyTap = { [weak self] rid in self?.jump(to: rid) }
         c.onFileTap = { [weak self, weak c] m in self?.openFrom = (m.kind == "photo" || m.kind == "video") ? c?.photo : nil; self?.open(m) }
@@ -267,12 +282,17 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     downBottom = downB.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -100)
     NSLayoutConstraint.activate([downB.widthAnchor.constraint(equalToConstant: 31), downB.heightAnchor.constraint(equalToConstant: 31),
                                  downB.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -9), downBottom])
+    OpenProbe.mark("built")
     head()
+    OpenProbe.mark("head")
     reload(animated: false)
+    OpenProbe.mark("listed")
     lastSeenId = Talk.shared.log(group).msgs.last?.id
   }
   override func viewDidAppear(_ a: Bool) {
     super.viewDidAppear(a)
+    OpenProbe.mark("arrived")
+    if OpenProbe.on { DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { OpenProbe.mark("+1.2s"); let t = OpenProbe.line(); UIPasteboard.general.string = t; toast(t) } }
     // (the back swipe from the edge goes first; a reply swipe starts away from the edge)
     if let pop = navigationController?.interactivePopGestureRecognizer, !swipeWaits { swipeWaits = true; swipe.require(toFail: pop) }
     homeLimits.forEach { $0.constant = -home }
@@ -297,6 +317,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
+    OpenProbe.mark("willShow")
     if peek { bar.isHidden = true; return }
     if isMovingToParent { coverTitle() }
   }
@@ -358,7 +379,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     super.viewDidLayoutSubviews()
     fitBottom()
     if !scrolledOnce, data.snapshot().numberOfItems > 0 {
+      OpenProbe.mark("laid")
       scrolledOnce = true; toBottom(false)
+      OpenProbe.mark("atEnd")
+      DispatchQueue.main.async { OpenProbe.mark("slideStarts") }
       if let f = focus { focus = nil; DispatchQueue.main.async { self.jump(to: f) } }
     }
   }
@@ -2487,6 +2511,7 @@ final class BubbleCell: UITableViewCell {
   static func cached(_ id: String) -> UIImage? { pictures.object(forKey: id as NSString) ?? frames.object(forKey: id as NSString) }
   static func picture(_ url: URL, _ id: String) -> UIImage? {
     if let i = pictures.object(forKey: id as NSString) { return i }
+    let pt = CACurrentMediaTime(); defer { if Thread.isMainThread && OpenProbe.on { OpenProbe.pics += 1; OpenProbe.picMs += (CACurrentMediaTime() - pt) * 1000 } }
     guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
           let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 800] as CFDictionary) else { return UIImage(contentsOfFile: url.path) }
     let i = UIImage(cgImage: cg); pictures.setObject(i, forKey: id as NSString); return i
