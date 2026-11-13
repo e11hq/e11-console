@@ -20,7 +20,8 @@ final class ReactionsVC: UIViewController, UITableViewDelegate {
   private var reactions: [String: String] { Talk.shared.log(group).msgs.first(where: { $0.id == msgId })?.reactions ?? [:] }
   override func viewDidLoad() {
     super.viewDidLoad()
-    view.backgroundColor = .systemGroupedBackground
+    // (solid, as the mock-up — iPhone's half-height sheet is see-through glass, and the chat showed through it, Haris 2026-11-13)
+    view.backgroundColor = Look.dyn(0x1C1C1E, 0xF2F2F7)
     pillsRow.axis = .horizontal; pillsRow.spacing = 8; pillsRow.alignment = .center
     pillsRow.translatesAutoresizingMaskIntoConstraints = false
     table.translatesAutoresizingMaskIntoConstraints = false; table.backgroundColor = .clear
@@ -74,6 +75,7 @@ final class ReactionsVC: UIViewController, UITableViewDelegate {
         self.pills.forEach { $0.removeFromSuperview() }; self.pills = []
         for (k, _) in tabs {
           let b = UIButton(type: .system)
+          b.heightAnchor.constraint(equalToConstant: 32).isActive = true   // (the Inbox's height — they came out thin)
           b.addAction(UIAction { [weak self] _ in self?.pick(k) }, for: .touchUpInside)
           self.pills.append(b); self.pillsRow.addArrangedSubview(b)
         }
@@ -101,6 +103,7 @@ final class ReactionsVC: UIViewController, UITableViewDelegate {
     let T = Talk.shared, me = id == T.me?.id
     guard let p = me ? T.me : T.people[id] else { return }
     PickRows.person(c, p, size: 40)
+    var bg = UIBackgroundConfiguration.listGroupedCell(); bg.backgroundColor = Look.dyn(0x2C2C2E, 0xFFFFFF); c.backgroundConfiguration = bg
     if var cfg = c.contentConfiguration as? UIListContentConfiguration {
       if me { cfg.text = "You"; cfg.secondaryText = "Tap to remove"; cfg.secondaryTextProperties.color = .secondaryLabel; cfg.secondaryTextProperties.font = .systemFont(ofSize: 13) }
       else if p.contact { cfg.secondaryText = "Client" + (p.client.flatMap { T.clients[$0]?.name }.map { " · \($0)" } ?? ""); cfg.secondaryTextProperties.color = Look.clientInk }
