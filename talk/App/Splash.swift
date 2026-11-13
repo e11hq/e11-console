@@ -70,7 +70,7 @@ final class SplashView: UIView {
     bar.frame = CGRect(x: (W - w) / 2, y: y, width: w, height: 3)
     let rs = setupRow.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
     setupRow.frame = CGRect(x: 20, y: y - 6, width: W - 40, height: rs.height)
-    fill.frame = CGRect(x: 0, y: 0, width: w * frac, height: 3)
+    fill.frame = CGRect(x: 0, y: 0, width: w * shown, height: 3)
     hint.frame = CGRect(x: 20, y: H - 22 - safeAreaInsets.bottom - 15, width: W - 40, height: 15)
   }
 
@@ -95,9 +95,22 @@ final class SplashView: UIView {
       [self?.greet, self?.date].forEach { $0?.alpha = 1; $0?.transform = .identity }
     }
   }
+  // (the bar fills from its start: what's shown follows how far it's come, always moving — set before the screen was
+  //  on show, it appeared already past half, Haris 2026-11-13)
+  private var shown: CGFloat = 0
+  override func didMoveToWindow() {
+    super.didMoveToWindow()
+    guard window != nil else { return }
+    DispatchQueue.main.async { [weak self] in self?.fillTo(0.6) }
+  }
+  private func fillTo(_ dur: Double) {
+    guard window != nil, bar.bounds.width > 0, shown < frac else { return }
+    shown = frac
+    UIView.animate(withDuration: dur, delay: 0, options: [.curveEaseOut, .beginFromCurrentState]) { self.fill.frame.size.width = self.bar.bounds.width * self.shown }
+  }
   func progress(_ f: CGFloat) {
     frac = max(frac, min(1, f))
-    UIView.animate(withDuration: 0.35) { self.fill.frame.size.width = self.bar.bounds.width * self.frac }
+    fillTo(0.35)
   }
   func setName(_ name: String?) { greet.attributedText = NSAttributedString(string: SplashView.greeting(name), attributes: [.font: UIFont.systemFont(ofSize: 26, weight: .semibold), .kern: -0.39, .foregroundColor: UIColor.label]); greet.textAlignment = .center }
   // a first start: the spinner and its words take the bar's place once the icon has put itself together
