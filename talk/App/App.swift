@@ -225,10 +225,12 @@ final class SettingsVC: UITableViewController {
     NotificationCenter.default.addObserver(tableView!, selector: #selector(UITableView.reloadData), name: .talkChanged, object: nil)
     NotificationCenter.default.addObserver(tableView!, selector: #selector(UITableView.reloadData), name: .talkBackup, object: nil)
   }
+  private var shownOnce = false
   // (back from Starred Messages: only its count set again)
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
-    if let r = rows1.firstIndex(of: .starred) { UIView.performWithoutAnimation { tableView.reloadRows(at: [IndexPath(row: r, section: 1)], with: .none) } }
+    defer { shownOnce = true }
+    if shownOnce, let r = rows1.firstIndex(of: .starred) { UIView.performWithoutAnimation { tableView.reloadRows(at: [IndexPath(row: r, section: 1)], with: .none) } }
   }
   override func numberOfSections(in tv: UITableView) -> Int { 3 }
   // (Super Admins and Office Admins also get "Client contacts")
