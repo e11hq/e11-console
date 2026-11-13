@@ -582,6 +582,16 @@ and `locked/ios-app-1700` (never moved or deleted; 1699's and earlier stay as hi
 four boxes each its own view with its own colour (dark grey / white digit in dark, light grey / black digit in light — on the
 glass sheet the label's own background came out reversed and the code couldn't be read). Quick build. Nothing changes without
 telling Haris first and his yes.
+**THE iPHONE APP — LOCKED at build 1710 (Haris, 2026-11-13 22:05: "build both and lock after testflight"):** commit 5387955,
+branches `stable/ios-1710` and `locked/ios-app-1710` (never moved or deleted; 1700's and earlier stay as history). 1710 = 1700 +
+Out of Office (Me's switch, Apple's calendar sheet sized to it, the card's and the people sheet's orange line, shown at once) +
+the Talk button (your Talk unread count as Apple's badge, live from the server; a tap opens E11 Talk) + Me's footers crossfading
+when their words change + shorter sheet notes. Quick build. Nothing changes without telling Haris first and his yes.
+**E11 TALK — LOCKED at build 109 (Haris, 2026-11-13 22:05):** commit 13abaa4 on talk-chat-1, branches `stable/talk-109` and
+`locked/talk-109` (never moved or deleted). Holds every page as built today: Settings and its pages, Auto-download, who reacted,
+shared sign-in, client contacts and their codes, Mark as Unread, a chat opening without waiting (row heights kept, photos made in
+the background, no repeated server asks), the first start's "Setting up your account", a tab tapped again going to the list's start.
+Nothing changes in its look, behaviour or code without telling Haris first and his yes.
 **Compile checks: `-f checks=compile -f walk=no`** — without `walk=no` the walk-through for every role runs too (~20 min),
 holding the Mac (2026-11-13).
 **The App Store release waits for E11 Talk (Haris, 2026-11-11 20:16: "3"):** the Talk button (E11 Day, Clients) does nothing
