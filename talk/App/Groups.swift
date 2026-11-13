@@ -179,7 +179,7 @@ final class GroupInfoVC: UITableViewController, PHPickerViewControllerDelegate {
     super.viewDidLoad()
     navigationItem.title = "Group Info"; navigationItem.largeTitleDisplayMode = .never
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "c")
-    tableView.sectionHeaderTopPadding = 8
+    tableView.sectionHeaderTopPadding = 0
     data = UITableViewDiffableDataSource(tableView: tableView) { [weak self] tv, ip, row in
       let c = tv.dequeueReusableCell(withIdentifier: "c", for: ip); self?.fill(c, row); return c
     }
@@ -361,6 +361,9 @@ final class GroupInfoVC: UITableViewController, PHPickerViewControllerDelegate {
     c.contentView.subviews.filter { $0.tag == 77 && $0.bounds.width != 40 }.forEach { c.contentView.bringSubviewToFront($0) }
     c.contentView.subviews.filter { $0 is Avatar && $0.tag == 77 }.forEach { c.contentView.bringSubviewToFront($0) }
   }
+  // (the gap between boxes 24, as under the three cards — Apple's were wider: Haris 2026-11-13)
+  override func tableView(_ tv: UITableView, heightForHeaderInSection s: Int) -> CGFloat { 0.01 }
+  override func tableView(_ tv: UITableView, heightForFooterInSection s: Int) -> CGFloat { 24 }
   override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? {
     guard data.snapshot().sectionIdentifiers.indices.contains(s) else { return nil }
     return data.snapshot().sectionIdentifiers[s] == 1 ? "\(g?.members.count ?? 0) Members" : nil
