@@ -613,21 +613,32 @@ enum Look {
     let next = all.dropFirst().first { $0.lowercased() != "al" } ?? all.dropFirst().first
     return (String(first.prefix(1)) + (next.map { String($0.prefix(1)) } ?? "")).uppercased()
   }
-  static func time(_ ms: Double, short: Bool = true) -> String {
-    let d = Date(timeIntervalSince1970: ms / 1000), cal = Calendar.current, f = DateFormatter()
-    if cal.isDateInToday(d) { f.timeStyle = .short; f.dateStyle = .none }
-    else if cal.isDateInYesterday(d) { return "Yesterday" }
-    else if let days = cal.dateComponents([.day], from: d, to: Date()).day, days < 7 { f.dateFormat = "EEE" }
-    else { f.dateFormat = short ? "MMM d" : "MMM d, yyyy" }
-    return f.string(from: d)
+  // (the date and time words: one formatter of each kind, made once and kept — a new one for every message and every
+  //  bubble's time was a good part of a long chat's opening, Haris 2026-11-13; made again if the phone's language or
+  //  time zone changes)
+  private static var fmts: [String: DateFormatter] = [:]
+  private static var fmtFor = ""
+  private static func fmt(_ k: String) -> DateFormatter {
+    let now = Locale.current.identifier + "|" + TimeZone.current.identifier
+    if now != fmtFor { fmts = [:]; fmtFor = now }
+    if let f = fmts[k] { return f }
+    let f = DateFormatter()
+    if k == "clock" { f.timeStyle = .short; f.dateStyle = .none } else { f.dateFormat = k }
+    fmts[k] = f; return f
   }
-  static func clock(_ ms: Double) -> String { let f = DateFormatter(); f.timeStyle = .short; f.dateStyle = .none; return f.string(from: Date(timeIntervalSince1970: ms / 1000)) }
+  static func time(_ ms: Double, short: Bool = true) -> String {
+    let d = Date(timeIntervalSince1970: ms / 1000), cal = Calendar.current
+    if cal.isDateInToday(d) { return fmt("clock").string(from: d) }
+    if cal.isDateInYesterday(d) { return "Yesterday" }
+    if let days = cal.dateComponents([.day], from: d, to: Date()).day, days < 7 { return fmt("EEE").string(from: d) }
+    return fmt(short ? "MMM d" : "MMM d, yyyy").string(from: d)
+  }
+  static func clock(_ ms: Double) -> String { fmt("clock").string(from: Date(timeIntervalSince1970: ms / 1000)) }
   static func day(_ ms: Double) -> String {
     let d = Date(timeIntervalSince1970: ms / 1000), cal = Calendar.current
     if cal.isDateInToday(d) { return "Today" }
     if cal.isDateInYesterday(d) { return "Yesterday" }
-    let f = DateFormatter(); f.dateFormat = cal.isDate(d, equalTo: Date(), toGranularity: .year) ? "EEEE, MMM d" : "MMM d, yyyy"
-    return f.string(from: d)
+    return fmt(cal.isDate(d, equalTo: Date(), toGranularity: .year) ? "EEEE, MMM d" : "MMM d, yyyy").string(from: d)
   }
 }
 

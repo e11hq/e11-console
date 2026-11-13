@@ -2230,7 +2230,7 @@ final class BubbleCell: UITableViewCell {
         Net.shared.file(f.id) { [weak self] url in
           guard let self = self, self.msg?.id == m.id, let url = url else { return }
           if o.kind == "video" { BubbleCell.frame(url, f.id) { [weak self] i in if self?.msg?.id == m.id { self?.quoteThumb.land(i) } } }
-          else { self.quoteThumb.land(UIImage(contentsOfFile: url.path)) }
+          else { DispatchQueue.global(qos: .userInitiated).async { let i = BubbleCell.picture(url, f.id); DispatchQueue.main.async { if self.msg?.id == m.id { self.quoteThumb.land(i) } } } }
         }
       }
     }
@@ -2522,7 +2522,11 @@ final class BubbleCell: UITableViewCell {
     }
     Net.shared.file(f.id) { url in
       guard let url = url else { return }
-      if video { BubbleCell.frame(url, f.id) { img in DispatchQueue.main.async { put(img) } } } else { put(BubbleCell.picture(url, f.id)) }
+      if video { BubbleCell.frame(url, f.id) { img in DispatchQueue.main.async { put(img) } } }
+      // (a picture already made: at once; else made off the main thread — a long chat's photos each made from the full
+      //  file as it opened held the opening, Haris 2026-11-13 — and faded in where it belongs)
+      else if let k = BubbleCell.pictures.object(forKey: f.id as NSString) { put(k) }
+      else { DispatchQueue.global(qos: .userInitiated).async { let i = BubbleCell.picture(url, f.id); DispatchQueue.main.async { put(i) } } }
     }
   }
   // a file downloading, here, gone — or a switch changed: only this bubble's ↓, ring or picture set again, in place
@@ -2607,7 +2611,7 @@ final class BubbleCell: UITableViewCell {
       Net.shared.file(f.id) { url in DispatchQueue.main.async {
         guard let url = url else { g.leave(); return }
         if a.kind == "video" { BubbleCell.frame(url, f.id) { img in DispatchQueue.main.async { pics[i] = img; g.leave() } } }
-        else { pics[i] = BubbleCell.picture(url, f.id) ?? UIImage(contentsOfFile: url.path); g.leave() }
+        else { DispatchQueue.global(qos: .userInitiated).async { let p = BubbleCell.picture(url, f.id) ?? UIImage(contentsOfFile: url.path); DispatchQueue.main.async { pics[i] = p; g.leave() } } }
       } }
     }
     let more = album.count - 4
