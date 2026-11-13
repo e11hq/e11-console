@@ -135,6 +135,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         c.contentView.isUserInteractionEnabled = !self.keyUp
         c.find = self.findSet.contains(id) ? (self.findQ, id == self.findCur) : nil
         c.album = self.albums[id] ?? []
+        c.moreNotes = (self.notes[id]?.count ?? 0) > 1
+        c.onNotes = { [weak self] in self?.showNotes(id) }
         // (set and laid out with no animation: a reaction or a new tick changes the row, and only the row's height may move —
         //  the words and pictures inside are already where they belong; laid out inside the list's animation, the whole
         //  bubble's content slid in again: Haris 2026-11-13, the redraw rule)
@@ -373,6 +375,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   static let page = 100
   private var shownFrom: String?, hasOlder = false, addingOlder = false
   private var albums: [String: [Msg]] = [:]
+  private var notes: [String: [Msg]] = [:]   // (a run of notes, by its newest — the one shown)
   // the next 100 older ones above — the place on screen kept where it is
   private func older() {
     guard hasOlder, !addingOlder else { return }
@@ -741,6 +744,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (a photo with its own words stands apart, as its own bubble — WhatsApp's way, Haris 2026-11-12)
     for m in all where m.album != nil && m.file != nil && !m.deleted && m.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { byAlbum[m.album!, default: []].append(m) }
     var newAlbums: [String: [Msg]] = [:]
+    var newNotes: [String: [Msg]] = [:], noteRun: [Msg] = []
     // (the group's own card at the very start — under the day it was made, once the chat is lined up from its start;
     //  it says what the first note said, so that note isn't shown again: the design's board 4)
     let grp = Talk.shared.groups[group]
@@ -756,6 +760,14 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         if members.first?.id != m.id { continue }
         newAlbums[m.id] = members
       }
+      // (the group's notes one after another on the same day: only the newest shows, with a blue + opening them all —
+      //  "Change Notes", Haris 2026-11-13)
+      if m.kind == "sys" {
+        noteRun.append(m)
+        if i + 1 < all.count, all[i + 1].kind == "sys", Look.day(all[i + 1].at) == Look.day(m.at) { continue }
+        if noteRun.count > 1 { newNotes[m.id] = noteRun }
+        noteRun = []
+      }
       let d = Look.day(m.at)
       let prev = i > 0 ? all[i - 1] : nil, next = i + 1 < all.count ? all[i + 1] : nil
       let same = { (o: Msg?) -> Bool in guard let o = o else { return false }; return o.by == m.by && o.kind != "sys" && m.kind != "sys" && Look.day(o.at) == d }
@@ -767,7 +779,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       }
       msgs[m.id] = m
       var h = Hasher(); h.combine(m.text); h.combine(m.edited); h.combine(m.deleted); h.combine(m.pending); h.combine(m.failed); h.combine(m.reactions); h.combine(m.file?.id); h.combine(m.link.map { Talk.shared.liveLink($0) }); h.combine(m.task.map { Talk.shared.liveTask($0) }); h.combine(newAlbums[m.id]?.map { $0.id + ($0.file?.id ?? "") })
-      h.combine(newRuns[m.id]); h.combine(Talk.shared.people[m.by]?.color); h.combine(Talk.shared.people[m.by]?.role)
+      h.combine(newRuns[m.id]); h.combine(Talk.shared.people[m.by]?.color); h.combine(Talk.shared.people[m.by]?.role); h.combine(newNotes[m.id]?.count)
       if m.by == meId { h.combine(i <= readTo); h.combine(i <= gotTo) }
       let key: String = {
         if let k = keyOf[m.id] { return k }
@@ -778,7 +790,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       newSigs[key] = h.finalize()
       items.append(.msg(key)); snap.appendItems([.msg(key)], toSection: section)
     }
-    runs = newRuns; dayOf = newDayOf; albums = newAlbums
+    runs = newRuns; dayOf = newDayOf; albums = newAlbums; notes = newNotes
     let old = data.snapshot()
     keyOf = newKeyOf; idOf = newIdOf
     if let g = grp, items.contains(.intro) { newSigs["#intro"] = IntroCell.sig(g) }
@@ -1127,6 +1139,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let light = tile(UIColor(red: 60 / 255, green: 60 / 255, blue: 67 / 255, alpha: 1), 0.07), dark = tile(.white, 0.045)
     return UIColor { $0.userInterfaceStyle == .dark ? dark : light }
   }()
+  // "Change Notes": every note of that run, oldest first, on Apple's sheet (Haris 2026-11-13)
+  private func showNotes(_ id: String) {
+    guard let run = notes[id], run.count > 1 else { return }
+    let n = UINavigationController(rootViewController: ChangeNotesVC(run))
+    if let sh = n.sheetPresentationController { sh.detents = [.medium(), .large()]; sh.prefersGrabberVisible = true }
+    present(n, animated: true)
+  }
   private func openInfo(_ m: Msg) { navigationController?.pushViewController(MessageInfoVC(group: group, id: m.id), animated: true) }
   func startReply(_ m: Msg) { editingMsg = nil; bar.setTask(nil); replying = m; UIImpactFeedbackGenerator(style: .light).impactOccurred(); bar.box.becomeFirstResponder() }
 
@@ -1795,6 +1814,7 @@ final class BubbleCell: UITableViewCell {
   // the round forward button beside a photo, video, file or link (anyone's) — on the other side from the bubble
   let fwdB = UIButton(type: .custom)
   var onForward: ((Msg) -> Void)?
+  var moreNotes = false, onNotes: (() -> Void)?
   private var fwdMine: NSLayoutConstraint!, fwdTheirs: NSLayoutConstraint!
   var onReplyTap: ((String) -> Void)?
   var onFileTap: ((Msg) -> Void)?
@@ -1899,6 +1919,7 @@ final class BubbleCell: UITableViewCell {
     sysL.font = .systemFont(ofSize: 12); sysL.textColor = Look.dyn(0xE5E5EA, 0x000000); sysL.backgroundColor = Look.dyn(0x181818, 0xFFFFFF); sysL.numberOfLines = 0; sysL.textAlignment = .center
     sysL.layer.cornerRadius = 8; sysL.layer.cornerCurve = .continuous; sysL.layer.masksToBounds = true
     contentView.addSubview(sysL)
+    sysL.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(notesTap)))
     retryB.setImage(UIImage(systemName: "exclamationmark.circle.fill"), for: .normal); retryB.tintColor = .systemRed
     retryB.addAction(UIAction { [weak self] _ in if let m = self?.msg { self?.onRetry?(m) } }, for: .touchUpInside)
     contentView.addSubview(retryB)
@@ -2025,6 +2046,7 @@ final class BubbleCell: UITableViewCell {
   }
   private var group: Group?, log: GroupLog?
 
+  @objc private func notesTap() { if moreNotes { onNotes?() } }
   func set(_ m: Msg, group g: Group, log l: GroupLog, run: Run) {
     msg = m; group = g; log = l
     let T = Talk.shared, mine = m.by == T.me?.id
@@ -2035,7 +2057,13 @@ final class BubbleCell: UITableViewCell {
     if sys {
       // (the group's notes as WhatsApp's, measured from Haris's screenshot: 12 on an 18 line, a small white pill — 2026-11-12)
       let ps = NSMutableParagraphStyle(); ps.minimumLineHeight = 18; ps.maximumLineHeight = 18; ps.alignment = .center
-      sysL.attributedText = NSAttributedString(string: BubbleCell.firstNames(m.text), attributes: [.font: UIFont.systemFont(ofSize: 12), .paragraphStyle: ps, .baselineOffset: (18 - UIFont.systemFont(ofSize: 12).lineHeight) / 4])
+      let a = NSMutableAttributedString(string: BubbleCell.firstNames(m.text), attributes: [.font: UIFont.systemFont(ofSize: 12), .paragraphStyle: ps, .baselineOffset: (18 - UIFont.systemFont(ofSize: 12).lineHeight) / 4])
+      // (more notes before it in the run: a blue + — a tap on the note opens them all, Haris 2026-11-13)
+      if moreNotes { a.append(NSAttributedString(string: "  +", attributes: [.font: UIFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: Look.dyn(0x5AA9FF, 0x2F7BFF), .paragraphStyle: ps, .baselineOffset: 0])) }
+      sysL.attributedText = a
+      sysL.isUserInteractionEnabled = moreNotes
+      sysL.accessibilityTraits = moreNotes ? .button : .staticText
+      sysL.accessibilityHint = moreNotes ? "Shows every change note" : nil
       media = false; return
     }
     top.constant = run.first ? 10 : 2
@@ -3279,4 +3307,26 @@ final class E11CardView: UIView {
 final class PadLabel: UILabel {
   override var intrinsicContentSize: CGSize { let s = super.intrinsicContentSize; return CGSize(width: s.width + 12, height: s.height + 4) }
   override func drawText(in r: CGRect) { super.drawText(in: r.insetBy(dx: 6, dy: 2)) }
+}
+
+// "Change Notes" (Haris 2026-11-13): a run of the group's notes as a list of words — Apple's own sheet, list and cells
+final class ChangeNotesVC: UITableViewController {
+  private let run: [Msg]
+  init(_ run: [Msg]) { self.run = run; super.init(style: .insetGrouped) }
+  required init?(coder: NSCoder) { fatalError() }
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    title = "Change Notes"
+    navigationItem.rightBarButtonItem = UIBarButtonItem(systemItem: .close, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
+    tableView.register(UITableViewCell.self, forCellReuseIdentifier: "n"); tableView.allowsSelection = false
+  }
+  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { run.count }
+  override func tableView(_ tv: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
+    let c = tv.dequeueReusableCell(withIdentifier: "n", for: ip), m = run[ip.row]
+    var cfg = UIListContentConfiguration.subtitleCell()
+    cfg.text = BubbleCell.firstNames(m.text); cfg.textProperties.numberOfLines = 0
+    cfg.secondaryText = Look.clock(m.at); cfg.secondaryTextProperties.color = .secondaryLabel
+    c.contentConfiguration = cfg
+    return c
+  }
 }
