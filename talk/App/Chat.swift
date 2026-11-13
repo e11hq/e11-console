@@ -1194,13 +1194,19 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let x0 = floor(h.minX * k) / k, y0 = floor(h.minY * k) / k, x1 = ceil(h.maxX * k) / k, y1 = ceil(h.maxY * k) / k
     let r = CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0)
     let shape = cell.heldPath(origin: r.origin)
-    // (drawn without the reaction pill over the bubble's foot — it showed cut off in the lifted picture, Haris 2026-11-13; the
-    //  pill itself fades away as the bubble lifts and back after)
-    let img = cell.withoutBesides {
-      UIGraphicsImageRenderer(bounds: CGRect(origin: .zero, size: r.size)).image { ctx in
-        shape.addClip()
-        ctx.cgContext.translateBy(x: -r.minX, y: -r.minY)
-        cell.contentView.layer.render(in: ctx.cgContext)
+    // (drawn as the screen shows it — Apple's own drawing of the row: a layer's own drawing set text a pixel off and rounded
+    //  the corners inside, Haris 2026-11-13 — then the bubble alone drawn again over the strip the reaction pill covers, so
+    //  the lifted picture has no cut piece of it; the pill itself fades away as the bubble lifts and back after)
+    let img = UIGraphicsImageRenderer(bounds: CGRect(origin: .zero, size: r.size)).image { ctx in
+      shape.addClip()
+      ctx.cgContext.translateBy(x: -r.minX, y: -r.minY)
+      cell.contentView.drawHierarchy(in: cell.contentView.bounds, afterScreenUpdates: false)
+      if let pill = cell.pillRect {
+        ctx.cgContext.saveGState()
+        UIBezierPath(rect: pill.insetBy(dx: -1, dy: -1)).addClip()
+        let b = cell.bubbleView
+        b.drawHierarchy(in: b.frame, afterScreenUpdates: false)
+        ctx.cgContext.restoreGState()
       }
     }
     let iv = UIImageView(image: img); iv.frame = CGRect(origin: .zero, size: r.size); iv.backgroundColor = .clear
@@ -1826,13 +1832,9 @@ final class BubbleCell: UITableViewCell {
   private var reactsFor: String?, reactsShown = false
   // the forward button and the reactions — beside the bubble, not lifted with it
   func besides(_ a: CGFloat) { fwdB.alpha = a; reacts.alpha = a }
-  // (a picture of the bubble taken with what's beside it out of the way)
-  func withoutBesides<T>(_ f: () -> T) -> T {
-    let r = reacts.isHidden, w = fwdB.isHidden
-    reacts.isHidden = true; fwdB.isHidden = true
-    defer { reacts.isHidden = r; fwdB.isHidden = w }
-    return f()
-  }
+  // (where the reaction pill sits over the bubble, if it shows one — and the bubble itself, to draw that strip again)
+  var pillRect: CGRect? { reacts.isHidden ? nil : reacts.frame }
+  var bubbleView: UIView { bubble }
   var heldRect: CGRect { let f = bubble.frame; return CGRect(x: f.minX - (tailOn && !isMine ? 10 : 0), y: f.minY, width: f.width + (tailOn ? 10 : 0), height: f.height) }
   func heldPath(origin o: CGPoint) -> UIBezierPath {
     let f = bubble.frame
