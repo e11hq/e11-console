@@ -1022,7 +1022,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     //  tall one — iMessage's way; build 39 kept the bubble itself, slid up WhatsApp's way)
     // (the bubble with its tail — the picture taken a little wider on the tail's side; the tail was cut off as it lifted and
     //  came back after, Haris 2026-11-12)
-    let shot = (tv.cellForRow(at: ip) as? BubbleCell).flatMap { c -> UIView? in
+    // (only a tall bubble needs the picture, to be shrunk to fit beside the menu; any other lifts itself with Apple's own
+    //  preview, its shape and no shadow — the picture's own box cast one: Haris 2026-11-13)
+    let tall = (tv.cellForRow(at: ip) as? BubbleCell).map { $0.heldRect.height > tv.bounds.height * 0.5 } ?? false
+    let shot = !tall ? nil : (tv.cellForRow(at: ip) as? BubbleCell).flatMap { c -> UIView? in
       let v = c.contentView.resizableSnapshotView(from: c.heldRect, afterScreenUpdates: false, withCapInsets: .zero)
       if let v = v { let m = CAShapeLayer(); m.path = c.heldPath(origin: c.heldRect.origin).cgPath; v.layer.mask = m }
       return v
@@ -1037,6 +1040,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (the bubble's own shape, tail and all, lifting from the row — not a rounded box that cut the tail away)
     let p = UIPreviewParameters(); p.backgroundColor = .clear
     p.visiblePath = cell.heldPath(origin: cell.bubble.frame.origin)
+    // (no shadow under the lifted bubble — Apple's own setting for it, an empty shadow path: Haris 2026-11-13)
+    p.shadowPath = UIBezierPath()
     // (the bubble alone — the whole row lifted its forward button too, a faint box behind the preview, Haris 2026-11-12)
     return UITargetedPreview(view: cell.bubble, parameters: p)
   }
