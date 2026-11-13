@@ -250,7 +250,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
     let un = T.clientUnread(id, withClient: clientsTab)
     return AgencyCell.Model(id: id, client: T.clients[id], name: T.clients[id]?.name ?? "", line: line, typing: blue,
                             time: Look.time(T.clientActivity(id, withClient: clientsTab)), unread: un,
-                            pinned: T.pinnedClients.contains(id), find: query, twoLines: hits[id] != nil)
+                            pinned: T.pinned(clientsTab: clientsTab).contains(id), find: query, twoLines: hits[id] != nil)
   }
   // (typing: only that group's row and its client's row drawn again)
   @objc func typingChanged(_ n: Notification) {
@@ -326,7 +326,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
       let typing = gs.lazy.compactMap { T.typingLine($0.id) }.first
       let line = typing ?? newest.map { (_, m) in (m.kind == "sys" ? "" : "\(T.name(m.by)): ") + Talk.preview(m) } ?? "\(gs.count) group\(gs.count == 1 ? "" : "s")"
       c.show(title: cl.name, sub: typing == nil && clientsTab && newest == nil ? "\(gs.count) group\(gs.count == 1 ? "" : "s") with the client" : line, time: Look.time(T.clientActivity(id, withClient: clientsTab)),
-             unread: T.clientUnread(id, withClient: clientsTab), pinned: !clientsTab && T.pinnedClients.contains(id), muted: false, typing: typing != nil)
+             unread: T.clientUnread(id, withClient: clientsTab), pinned: T.pinned(clientsTab: clientsTab).contains(id), muted: false, typing: typing != nil)
     }
   }
   // (a group drawn as Apple's own cell takes its own height — two lines of its message; the rest keep the list's)
@@ -373,7 +373,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
       switch row {
       case .group(let id), .ghit(let id), .found(let id, _): return self.groupMenu(id)
       case .client(let id), .hit(let id):
-        let on = Talk.shared.pinnedClients.contains(id)
+        let on = Talk.shared.pinned(clientsTab: self.clientsTab).contains(id)
         return UIMenu(children: [UIAction(title: on ? "Unpin" : "Pin", image: UIImage(systemName: on ? "pin.slash" : "pin")) { _ in self.pin(client: id, !on) }])
       }
     }
@@ -414,7 +414,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
   }
   // up to 5: a 6th asks which one to unpin (Haris 2026-11-05)
   func pin(group id: String, _ on: Bool) { pinThing("pin", id, on, name: Talk.shared.groups[id]?.name ?? "", tab: Talk.shared.groups[id]?.withClient == true ? "clients" : "groups") }
-  func pin(client id: String, _ on: Bool) { pinThing("pinClient", id, on, name: Talk.shared.clients[id]?.name ?? "") }
+  func pin(client id: String, _ on: Bool) { pinThing("pinClient", id, on, name: Talk.shared.clients[id]?.name ?? "", tab: clientsTab ? "clients" : "groups") }
   private func pinThing(_ act: String, _ id: String, _ on: Bool, name: String, tab: String = "groups") {
     Net.shared.act(["act": act, "id": id, "on": on, "tab": tab]) { [weak self] j in
       if (j?["full"] as? Bool) == true, let pins = j?["pins"] as? [String] {
@@ -581,8 +581,8 @@ final class GroupsVC: ListVC {
     let keep: (String) -> Bool = { [filter, clientsTab] c in
       filter == 0 || (filter == 1 && T.clientUnread(c, withClient: clientsTab) > 0) || (filter == 2 && T.groups(of: c, withClient: clientsTab).contains { T.mentionsMe($0.id) })
     }
-    // (pinned clients on both tabs — board 19)
-    let pinnedC = T.pinnedClients.filter { mine.contains($0) && keep($0) }
+    // (pinned clients on both tabs — board 19 — each tab its own: Haris 2026-11-13)
+    let pinnedC = T.pinned(clientsTab: clientsTab).filter { mine.contains($0) && keep($0) }
     let rest = mine.filter { !pinnedC.contains($0) && keep($0) }
     return [("pins", "PINNED", pinnedC.map { .client($0) }), ("clients", pinnedC.isEmpty ? "" : "CLIENTS", rest.map { .client($0) })]
   }

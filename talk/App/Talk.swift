@@ -105,7 +105,9 @@ final class Talk {
   private(set) var clientOrder: [String] = []
   private(set) var groups: [String: Group] = [:]
   private(set) var people: [String: Person] = [:]
-  private(set) var pinnedGroups: [String] = [], pinnedClients: [String] = []
+  private(set) var pinnedGroups: [String] = [], pinnedClients: [String] = [], pinnedClientsTab: [String] = []
+  // (each tab its own pinned clients — Haris 2026-11-13)
+  func pinned(clientsTab: Bool) -> [String] { clientsTab ? pinnedClientsTab : pinnedClients }
   private var logs: [String: GroupLog] = [:]
   private var lastSeq: Int { get { UserDefaults.standard.integer(forKey: "talk_seq_" + Server.host) } set { UserDefaults.standard.set(newValue, forKey: "talk_seq_" + Server.host) } }
 
@@ -197,7 +199,7 @@ final class Talk {
                      pin: (g["pin"] as? [String: Any]).flatMap { p in (p["id"] as? String).map { Group.Pin(id: $0, by: p["by"] as? String ?? "", text: p["text"] as? String ?? "", kind: p["kind"] as? String ?? "text", pinnedBy: p["pinnedBy"] as? String ?? "") } }, about: g["about"] as? String)
     }
     groups = gs
-    if let p = j["pins"] as? [String: Any] { pinnedGroups = p["groups"] as? [String] ?? []; pinnedClients = p["clients"] as? [String] ?? []; pinnedClientGroups = p["clientGroups"] as? [String] ?? [] }
+    if let p = j["pins"] as? [String: Any] { pinnedGroups = p["groups"] as? [String] ?? []; pinnedClients = p["clients"] as? [String] ?? []; pinnedClientGroups = p["clientGroups"] as? [String] ?? []; pinnedClientsTab = p["clientsTab"] as? [String] ?? [] }
     if save, let d = try? JSONSerialization.data(withJSONObject: j) { try? d.write(to: stateFile, options: .atomic) }
     NotificationCenter.default.post(name: .talkChanged, object: nil)
   }
