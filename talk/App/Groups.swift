@@ -6,11 +6,15 @@ import PhotosUI
    Group info: its picture and name, its people (admins marked), Mute, Pin; for its admins Add people, Rename, Change
    picture, Remove someone, and — the creator — pick one second admin; Super Admins and Office Admins "Make me admin"
    and can take anyone's admin away (the creator's too). Leave group; Delete group (admins). (Haris 2026-11-05 / 06) */
-final class NewGroupVC: UITableViewController, UITextFieldDelegate, UISearchBarDelegate {
+// ---------- New Group (step 1g — the design's board 25): Apple's sheet; ✕ · New Group · Create; the picture (the client's
+// logo until another is chosen — Take Photo · Choose Photo, Apple's menu) beside "Group name"; Client ›; Apple's search;
+// the team as "N People Added" and the client's contacts, Apple's round selection marks; the footers as drawn ----------
+final class NewGroupVC: UITableViewController, UITextFieldDelegate, UISearchBarDelegate, PHPickerViewControllerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
   private var client: String?
   private var picked = Set<String>()
   private let name = UITextField()
-  private let pic = Avatar(frame: CGRect(x: 0, y: 0, width: 56, height: 56))
+  private let pic = Avatar(frame: CGRect(x: 0, y: 0, width: 60, height: 60))
+  private var chosen: UIImage?        // (a picture picked here: set on the group once it's made)
   private var q = ""
   private let find = UISearchBar()
   private let forClient: Bool
@@ -19,85 +23,158 @@ final class NewGroupVC: UITableViewController, UITextFieldDelegate, UISearchBarD
 
   override func viewDidLoad() {
     super.viewDidLoad()
-    title = "New group"
-    navigationItem.leftBarButtonItem = UIBarButtonItem(systemItem: .cancel, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
-    navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Create", primaryAction: UIAction { [weak self] _ in self?.create() })
-    navigationItem.rightBarButtonItem?.style = .done
-    name.placeholder = "Group name — a campaign, a shoot, an event…"; name.font = .systemFont(ofSize: 17); name.clearButtonMode = .whileEditing
+    navigationItem.title = "New Group"
+    navigationItem.leftBarButtonItem = UIBarButtonItem(systemItem: .close, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
+    let make = UIBarButtonItem(title: "Create", primaryAction: UIAction { [weak self] _ in self?.create() })
+    if #available(iOS 26.0, *) { make.style = .prominent } else { make.style = .done }
+    navigationItem.rightBarButtonItem = make
+    name.placeholder = "A campaign, a shoot, an event…"; name.font = .systemFont(ofSize: 19); name.clearButtonMode = .whileEditing
     name.delegate = self; name.returnKeyType = .done
     name.addAction(UIAction { [weak self] _ in self?.check() }, for: .editingChanged)
-    find.placeholder = "Search the team"; find.searchBarStyle = .minimal; find.delegate = self
+    find.placeholder = "Search people"; find.searchBarStyle = .minimal; find.delegate = self
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "c")
     tableView.keyboardDismissMode = .onDrag
+    // (Apple's round selection marks — the list's own multiple selection)
+    tableView.allowsMultipleSelectionDuringEditing = true; tableView.isEditing = true
     if client == nil, Talk.shared.clientOrder.count == 1 { client = Talk.shared.clientOrder.first }
     check()
   }
-  override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); name.becomeFirstResponder() }
+  override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); if (name.text ?? "").isEmpty { name.becomeFirstResponder() } }
   private func check() { navigationItem.rightBarButtonItem?.isEnabled = client != nil && !(name.text ?? "").trimmingCharacters(in: .whitespaces).isEmpty }
   func textFieldShouldReturn(_ t: UITextField) -> Bool { t.resignFirstResponder(); return true }
-  func searchBar(_ s: UISearchBar, textDidChange t: String) { q = t.lowercased(); tableView.reloadSections([2], with: .none) }
+  func searchBar(_ s: UISearchBar, textDidChange t: String) { q = t.lowercased(); tableView.reloadData(); reselect() }
 
-  // the team, and — for Super / Office Admins — the picked client's contacts first (adding one makes it a client group)
-  private var people: [Person] {
+  private func match(_ n: String, _ r: String) -> Bool { q.isEmpty || n.lowercased().contains(q) || r.lowercased().contains(q) }
+  private var team: [Person] {
     let T = Talk.shared, me = T.me?.id
-    let match: (String, String) -> Bool = { [q] n, r in q.isEmpty || n.lowercased().contains(q) || r.lowercased().contains(q) }
-    let team = T.people.values.filter { $0.id != me && !$0.gone && !$0.contact && match($0.name, $0.role) }.sorted { $0.name < $1.name }
-    guard T.boss, let c = client else { return team }
+    return T.people.values.filter { $0.id != me && !$0.gone && !$0.contact && match($0.name, $0.role) }.sorted { $0.name < $1.name }
+  }
+  private var contacts: [Person] {
+    let T = Talk.shared
+    guard T.boss, let c = client else { return [] }
     let cname = T.clients[c]?.name ?? "Client"
-    let ks = T.contacts.filter { $0.client == c && match($0.name, cname) }.map { Person(id: $0.id, name: $0.name, role: "\(cname) · client", photo: nil, color: nil, gone: false, contact: true, client: c) }
-    return ks + team
+    return T.contacts.filter { $0.client == c && match($0.name, cname) }.map { Person(id: $0.id, name: $0.name, role: "Client · \(cname)", photo: nil, color: nil, gone: false, contact: true, client: c) }
   }
-  override func numberOfSections(in tv: UITableView) -> Int { 3 }
-  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { s == 0 ? 1 : s == 1 ? 1 : people.count + 1 }
-  override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? { s == 1 ? "Client" : s == 2 ? "People · \(picked.count)" : nil }
+  // sections: 0 the picture and name · 1 Client · 2 search · 3 the team · 4 the client's contacts (when there are any)
+  private func list(_ s: Int) -> [Person] { s == 3 ? team : s == 4 ? contacts : [] }
+  private func reselect() {
+    for s in [3, 4] where s < numberOfSections(in: tableView) { for (r, p) in list(s).enumerated() where picked.contains(p.id) { tableView.selectRow(at: IndexPath(row: r, section: s), animated: false, scrollPosition: .none) } }
+  }
+  override func numberOfSections(in tv: UITableView) -> Int { contacts.isEmpty ? 4 : 5 }
+  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { s < 3 ? 1 : list(s).count }
+  override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? {
+    s == 3 ? (picked.isEmpty ? "Team" : "\(picked.count) \(picked.count == 1 ? "Person" : "People") Added") : s == 4 ? "Client Contacts" : nil
+  }
   override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
-    s == 0 ? "The picture is the client’s logo from Client Assets — you can change it later."
-      : s == 2 ? (Talk.shared.boss ? "Adding a client contact makes it a client group — the client can see it. Only Super Admins and Office Admins can." : "Only the group’s admins add people. Nobody joins by themselves; anyone can leave.") : nil
+    if s == 1 { return "The picture is the client’s logo from Client Assets until you choose another." }
+    if s == numberOfSections(in: tv) - 1, Talk.shared.boss { return "Add a client contact and the group moves to the Clients tab, marked “Client can see this group”." }
+    return nil
   }
-  override func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat { ip.section == 0 ? 76 : ip.section == 2 && ip.row > 0 ? 58 : 50 }
+  override func tableView(_ tv: UITableView, canEditRowAt ip: IndexPath) -> Bool { ip.section >= 3 }
   override func tableView(_ tv: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
-    let c = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
+    let c = tv.dequeueReusableCell(withIdentifier: "c", for: ip)
+    // (Apple's content view first, ours into it — Group Info's lesson)
+    if c.contentConfiguration == nil { c.contentConfiguration = UIListContentConfiguration.cell() }
+    c.contentView.subviews.filter { $0.tag == 77 }.forEach { $0.removeFromSuperview() }
+    c.accessoryType = .none; c.selectionStyle = .default; c.backgroundConfiguration = nil
     switch ip.section {
     case 0:
+      // the picture with its camera badge (Apple's menu), and "Group name" over the field
       c.selectionStyle = .none
-      if let cl = client.flatMap({ Talk.shared.clients[$0] }) { pic.set(client: cl) } else { pic.set(name: "?", color: .systemGray3, picture: nil) }
-      pic.frame = CGRect(x: 16, y: 10, width: 56, height: 56); c.contentView.addSubview(pic)
-      name.frame = CGRect(x: 84, y: 18, width: tv.bounds.width - 84 - 48, height: 40); c.contentView.addSubview(name)
-    case 1:
-      var cfg = c.defaultContentConfiguration()
-      if let cl = client.flatMap({ Talk.shared.clients[$0] }) { cfg.text = cl.name } else { cfg.text = "Pick a client"; cfg.textProperties.color = .secondaryLabel }
-      c.contentConfiguration = cfg; c.accessoryType = .disclosureIndicator
-    default:
-      if ip.row == 0 { c.selectionStyle = .none; find.frame = c.contentView.bounds.insetBy(dx: 4, dy: 0); find.autoresizingMask = [.flexibleWidth, .flexibleHeight]; c.contentView.addSubview(find); return c }
-      let p = people[ip.row - 1]
-      var cfg = c.defaultContentConfiguration()
-      cfg.text = p.name; cfg.secondaryText = p.role; cfg.secondaryTextProperties.color = .secondaryLabel
-      cfg.image = UIImage(systemName: "circle.fill"); cfg.imageProperties.tintColor = .clear; cfg.imageProperties.reservedLayoutSize = CGSize(width: 40, height: 40)
+      var cfg = UIListContentConfiguration.cell(); cfg.text = " "; cfg.directionalLayoutMargins.top = 14; cfg.directionalLayoutMargins.bottom = 14
+      cfg.image = UIImage(systemName: "circle.fill"); cfg.imageProperties.tintColor = .clear; cfg.imageProperties.reservedLayoutSize = CGSize(width: 60, height: 60)
       c.contentConfiguration = cfg
-      let a = Avatar(frame: CGRect(x: 16, y: 9, width: 40, height: 40)); a.set(person: p); c.contentView.addSubview(a)
-      let on = picked.contains(p.id)
-      let tick = UIImageView(image: UIImage(systemName: on ? "checkmark.circle.fill" : "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22)))
-      tick.tintColor = on ? Look.accent : .tertiaryLabel; c.accessoryView = tick
+      if let i = chosen { pic.show(i) } else if let cl = client.flatMap({ Talk.shared.clients[$0] }) { pic.set(client: cl) } else { pic.set(name: "?", color: .systemGray3, picture: nil) }
+      let pb = UIButton(type: .custom); pb.tag = 77; pb.frame = CGRect(x: 16, y: 14, width: 60, height: 60)
+      pic.frame = pb.bounds; pic.isUserInteractionEnabled = false; pb.addSubview(pic)
+      let badge = UIImageView(image: UIImage(systemName: "camera.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22)))
+      badge.tintColor = .label; badge.backgroundColor = .systemBackground; badge.layer.cornerRadius = 11; badge.clipsToBounds = true
+      badge.frame = CGRect(x: 41, y: 41, width: 22, height: 22); pb.addSubview(badge)
+      pb.menu = UIMenu(children: picMenu()); pb.showsMenuAsPrimaryAction = true; pb.accessibilityLabel = "Change the picture"
+      c.contentView.addSubview(pb)
+      let cap = UILabel(); cap.tag = 77; cap.text = "Group name"; cap.font = .systemFont(ofSize: 13); cap.textColor = .secondaryLabel
+      cap.frame = CGRect(x: 90, y: 18, width: 200, height: 18); c.contentView.addSubview(cap)
+      name.tag = 77; name.frame = CGRect(x: 90, y: 38, width: max(120, tv.bounds.width - 90 - 52), height: 30); c.contentView.addSubview(name)
+    case 1:
+      var cfg = UIListContentConfiguration.valueCell(); cfg.text = "Client"
+      cfg.secondaryText = client.flatMap { Talk.shared.clients[$0]?.name } ?? "Pick a client"
+      c.contentConfiguration = cfg; c.accessoryType = .disclosureIndicator
+    case 2:
+      // (Apple's search bar on the page, as drawn — no box behind it)
+      c.selectionStyle = .none; var bg = UIBackgroundConfiguration.clear(); bg.backgroundColor = .clear; c.backgroundConfiguration = bg
+      c.contentConfiguration = UIListContentConfiguration.cell()
+      find.tag = 77; find.frame = c.contentView.bounds; find.autoresizingMask = [.flexibleWidth, .flexibleHeight]; c.contentView.addSubview(find)
+    default:
+      let p = list(ip.section)[ip.row]
+      var cfg = UIListContentConfiguration.subtitleCell()
+      cfg.text = p.name; cfg.secondaryText = p.role
+      cfg.secondaryTextProperties.color = p.contact ? .systemOrange : .secondaryLabel
+      cfg.secondaryTextProperties.font = p.contact ? .systemFont(ofSize: 13, weight: .semibold) : .systemFont(ofSize: 13)
+      cfg.image = UIImage(systemName: "circle.fill"); cfg.imageProperties.tintColor = .clear
+      cfg.imageProperties.reservedLayoutSize = CGSize(width: 36, height: 36); cfg.imageProperties.maximumSize = CGSize(width: 36, height: 36)
+      cfg.directionalLayoutMargins.top = 10; cfg.directionalLayoutMargins.bottom = 10
+      c.contentConfiguration = cfg
+      let a = Avatar(frame: CGRect(x: 16, y: 10, width: 36, height: 36)); a.tag = 77; a.isUserInteractionEnabled = false; a.set(person: p)
+      c.contentView.addSubview(a)
     }
     return c
   }
+  override func tableView(_ tv: UITableView, willSelectRowAt ip: IndexPath) -> IndexPath? { ip.section == 0 || ip.section == 2 ? nil : ip }
   override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) {
-    tv.deselectRow(at: ip, animated: true)
     if ip.section == 1 {
+      tv.deselectRow(at: ip, animated: true)
       let pick = ClientPickVC(selected: client) { [weak self] id in
         guard let self = self else { return }
         self.client = id
         self.picked = self.picked.filter { pid in !pid.hasPrefix("k-") || Talk.shared.contacts.first(where: { $0.id == pid })?.client == id }   // (another client's contacts leave the list)
-        self.check(); self.tableView.reloadData()
+        self.check(); self.tableView.reloadData(); self.reselect()
       }
       navigationController?.pushViewController(pick, animated: true)
-    } else if ip.section == 2, ip.row > 0 {
-      let p = people[ip.row - 1]
-      if picked.contains(p.id) { picked.remove(p.id) } else { picked.insert(p.id) }
-      UISelectionFeedbackGenerator().selectionChanged()
-      tv.reloadRows(at: [ip], with: .none)
-      tv.headerView(forSection: 2)?.textLabel?.text = "PEOPLE · \(picked.count)"
+    } else if ip.section >= 3 {
+      picked.insert(list(ip.section)[ip.row].id); UISelectionFeedbackGenerator().selectionChanged(); counted()
     }
+  }
+  override func tableView(_ tv: UITableView, didDeselectRowAt ip: IndexPath) {
+    guard ip.section >= 3 else { return }
+    picked.remove(list(ip.section)[ip.row].id); UISelectionFeedbackGenerator().selectionChanged(); counted()
+  }
+  // ("N People Added" over the team, crossfading to its new words)
+  private func counted() {
+    guard let h = tableView.headerView(forSection: 3) else { return }
+    var cfg = UIListContentConfiguration.groupedHeader(); cfg.text = tableView(tableView, titleForHeaderInSection: 3)
+    UIView.transition(with: h, duration: 0.15, options: .transitionCrossDissolve) { h.contentConfiguration = cfg }
+  }
+  // ---------- the picture ----------
+  private func picMenu() -> [UIMenuElement] {
+    var xs: [UIMenuElement] = []
+    if UIImagePickerController.isSourceTypeAvailable(.camera) {
+      xs.append(UIAction(title: "Take Photo", image: UIImage(systemName: "camera")) { [weak self] _ in
+        let p = UIImagePickerController(); p.sourceType = .camera; p.delegate = self; self?.present(p, animated: true)
+      })
+    }
+    xs.append(UIAction(title: "Choose Photo", image: UIImage(systemName: "photo.on.rectangle")) { [weak self] _ in
+      var c = PHPickerConfiguration(); c.filter = .images; c.selectionLimit = 1
+      let p = PHPickerViewController(configuration: c); p.delegate = self; self?.present(p, animated: true)
+    })
+    if chosen != nil { xs.append(UIAction(title: "Use Client Logo", image: UIImage(systemName: "building.2")) { [weak self] _ in self?.chosen = nil; self?.tableView.reloadSections([0], with: .none) }) }
+    return xs
+  }
+  func picker(_ p: PHPickerViewController, didFinishPicking r: [PHPickerResult]) {
+    p.dismiss(animated: true)
+    guard let ip = r.first?.itemProvider, ip.canLoadObject(ofClass: UIImage.self) else { return }
+    ip.loadObject(ofClass: UIImage.self) { [weak self] obj, _ in
+      guard let img = obj as? UIImage else { return }
+      DispatchQueue.main.async { self?.chosen = NewGroupVC.square(img); self?.tableView.reloadSections([0], with: .none) }
+    }
+  }
+  func imagePickerController(_ p: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+    p.dismiss(animated: true)
+    if let img = info[.originalImage] as? UIImage { chosen = NewGroupVC.square(img); tableView.reloadSections([0], with: .none) }
+  }
+  func imagePickerControllerDidCancel(_ p: UIImagePickerController) { p.dismiss(animated: true) }
+  static func square(_ img: UIImage) -> UIImage {
+    let side: CGFloat = 640, s = side / min(img.size.width, img.size.height)
+    return UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in img.draw(in: CGRect(x: (side - img.size.width * s) / 2, y: (side - img.size.height * s) / 2, width: img.size.width * s, height: img.size.height * s)) }
   }
   private func create() {
     guard let c = client else { return }
@@ -109,6 +186,14 @@ final class NewGroupVC: UITableViewController, UITextFieldDelegate, UISearchBarD
         toast(j?["error"] as? String ?? "Couldn’t make the group — try again"); self.check(); return
       }
       UINotificationFeedbackGenerator().notificationOccurred(.success)
+      // (a picture chosen here goes on the group now it's made)
+      if let i = self.chosen, let d = i.jpegData(compressionQuality: 0.85) {
+        Net.shared.upload(d, name: "group.jpg", progress: { _ in }) { fid in
+          guard let fid = fid else { toast("The picture didn’t upload — change it in Group Info"); return }
+          try? d.write(to: Net.local(fid))
+          Net.shared.act(["act": "setPic", "group": g, "file": fid]) { _ in Talk.shared.refresh(); Talk.shared.sync() }
+        }
+      }
       let host = self.presentingViewController
       Talk.shared.refresh {
         Talk.shared.sync()
