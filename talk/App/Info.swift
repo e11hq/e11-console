@@ -124,7 +124,8 @@ final class MessageInfoVC: UIViewController {
   }
   private func redraw(_ key: String) {
     var s = data.snapshot(); guard s.indexOfItem(key) != nil else { return }
-    s.reconfigureItems([key]); data.apply(s, animatingDifferences: false)
+    // (a picture arriving: the row crossfades to it in its place — the rule every page carries, Haris 2026-11-13)
+    s.reconfigureItems([key]); data.applySteady(s, in: cv, animated: view.window != nil)
   }
   // who has read it (staff only) — then whose phone has it; each person once, the earliest first
   private func reload(animated: Bool) {
@@ -150,7 +151,8 @@ final class MessageInfoVC: UIViewController {
     let old = data.snapshot()
     s.reconfigureItems(s.itemIdentifiers.filter { k in k != "msg" && old.indexOfItem(k) != nil && sigs[k] != newSigs[k] })
     sigs = newSigs
-    data.apply(s, animatingDifferences: animated && old.numberOfItems > 0)
+    // (rows coming or moving glide first, a changed one crossfading after — as every page)
+    data.applySteady(s, in: cv, animated: animated && old.numberOfItems > 0 && view.window != nil)
   }
 
   // "11/11/2026  9:45 PM" — the date grey, the time as the name

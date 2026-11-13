@@ -54,6 +54,14 @@ final class ForwardVC: UIViewController, UICollectionViewDelegate, UISearchResul
         let a = NSTextAttachment(image: ForwardVC.chip); a.bounds = CGRect(x: 0, y: -3, width: ForwardVC.chip.size.width, height: ForwardVC.chip.size.height)
         name.append(NSAttributedString(string: "  ")); name.append(NSAttributedString(attachment: a))
       }
+      // (searching: the words found marked — dark the board's brown, light a soft yellow, as every list)
+      let q = self.query.trimmingCharacters(in: .whitespaces)
+      if key.hasPrefix("f:"), !q.isEmpty {
+        var from = g.name.startIndex
+        while let r = g.name.range(of: q, options: [.caseInsensitive, .diacriticInsensitive], range: from..<g.name.endIndex) {
+          name.addAttributes([.backgroundColor: AgencyCell.findBg, .foregroundColor: AgencyCell.findInk], range: NSRange(r, in: g.name)); from = r.upperBound
+        }
+      }
       cf.attributedText = name
       cf.secondaryText = T.clients[g.client]?.name ?? ""
       cf.secondaryTextProperties.font = .systemFont(ofSize: 13); cf.secondaryTextProperties.color = .secondaryLabel
@@ -105,19 +113,28 @@ final class ForwardVC: UIViewController, UICollectionViewDelegate, UISearchResul
     if !q.isEmpty {
       let hits = all.filter { $0.name.lowercased().contains(q) || (T.clients[$0.client]?.name.lowercased().contains(q) ?? false) }
         .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-      s.appendSections(["all"]); s.appendItems(hits.map { "a:" + $0.id }, toSection: "all")
+      // (found groups their own rows — never the list's, which kept the marked words after: the rule every page carries)
+      s.appendSections(["all"]); s.appendItems(hits.map { "f:" + $0.id }, toSection: "all")
     } else {
       let recent = all.sorted { T.activity($0) > T.activity($1) }.prefix(5)
       s.appendSections(["recent", "all"])
       s.appendItems(recent.map { "r:" + $0.id }, toSection: "recent")
       s.appendItems(all.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }.map { "a:" + $0.id }, toSection: "all")
     }
-    data.apply(s, animatingDifferences: false)
+    if !q.isEmpty { s.reconfigureItems(s.itemIdentifiers.filter { data.snapshot().indexOfItem($0) != nil }) }   // (the marks follow the words typed)
+    data.applySteady(s, in: cv, animated: view.window != nil)
     for k in s.itemIdentifiers where picked.contains(String(k.dropFirst(2))) { cv.selectItem(at: data.indexPath(for: k), animated: false, scrollPosition: []) }
+    // (nothing found: Apple's own "No Results", faded in and out)
+    if #available(iOS 17.0, *) {
+      let none = !q.isEmpty && s.numberOfItems == 0
+      let v = (cv.backgroundView as? UIContentUnavailableView) ?? { let v = UIContentUnavailableView(configuration: .search()); v.alpha = 0; cv.backgroundView = v; return v }()
+      let a: CGFloat = none ? 1 : 0
+      if v.alpha != a { UIView.animate(withDuration: Crossfade.time) { v.alpha = a } }
+    }
   }
   private func redraw(_ key: String) {
     var s = data.snapshot(); guard s.indexOfItem(key) != nil else { return }
-    s.reconfigureItems([key]); data.apply(s, animatingDifferences: false)
+    s.reconfigureItems([key]); data.applySteady(s, in: cv, animated: view.window != nil)
   }
   func updateSearchResults(for c: UISearchController) {
     let q = c.searchBar.text ?? ""

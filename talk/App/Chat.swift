@@ -1772,13 +1772,17 @@ final class BubbleCell: UITableViewCell {
     return UIColor(red: CGFloat(px[0]) / 255, green: CGFloat(px[1]) / 255, blue: CGFloat(px[2]) / 255, alpha: 1)
   }
   var find: (String, Bool)?   // (searching: the words, and whether this is the match shown)
-  static let findAll = Look.rgb(0x7A5626), findNow = Look.rgb(0xD9952F)
+  // (the words found: dark as the board — brown, the one shown amber; light a soft yellow, the one shown a stronger yellow,
+  //  as iPhone marks words found — the rule every page carries, Haris 2026-11-13)
+  static let findAll = UIColor { $0.userInterfaceStyle == .dark ? Look.rgb(0x7A5626) : UIColor.systemYellow.withAlphaComponent(0.32) }
+  static let findNow = UIColor { $0.userInterfaceStyle == .dark ? Look.rgb(0xD9952F) : UIColor.systemYellow.withAlphaComponent(0.75) }
+  static let findInk = UIColor { $0.userInterfaceStyle == .dark ? .white : .label }
   // a card's name with the search's matches marked (the E11 link card's, the task card's)
   static func marked(_ t: String, font: UIFont, ink: UIColor, find f: (String, Bool)) -> NSAttributedString {
     let a = NSMutableAttributedString(string: t, attributes: [.font: font, .foregroundColor: ink])
     var from = t.startIndex
     while let r = t.range(of: f.0, options: [.caseInsensitive, .diacriticInsensitive], range: from..<t.endIndex) {
-      a.addAttributes([.backgroundColor: f.1 ? findNow : findAll, .foregroundColor: UIColor.white], range: NSRange(r, in: t))
+      a.addAttributes([.backgroundColor: f.1 ? findNow : findAll, .foregroundColor: findInk], range: NSRange(r, in: t))
       from = r.upperBound
     }
     return a
@@ -2254,7 +2258,7 @@ final class BubbleCell: UITableViewCell {
         let q = f.0, cur = f.1
         var from = txt.startIndex
         while let r = txt.range(of: q, options: [.caseInsensitive, .diacriticInsensitive], range: from..<txt.endIndex) {
-          a.addAttributes([.backgroundColor: cur ? BubbleCell.findNow : BubbleCell.findAll, .foregroundColor: UIColor.white], range: NSRange(r, in: txt))
+          a.addAttributes([.backgroundColor: cur ? BubbleCell.findNow : BubbleCell.findAll, .foregroundColor: BubbleCell.findInk], range: NSRange(r, in: txt))
           from = r.upperBound
         }
       }
