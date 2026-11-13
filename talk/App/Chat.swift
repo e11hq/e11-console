@@ -1453,7 +1453,32 @@ final class BubbleCell: UITableViewCell {
     let k = min(W * 0.6 / max(i.size.width, 1), H * 0.45 / max(i.size.height, 1))
     let w = i.size.width * k, h = i.size.height * k
     let f = UIGraphicsImageRendererFormat(); f.opaque = false; f.scale = i.scale
-    return UIGraphicsImageRenderer(size: CGSize(width: W, height: H), format: f).image { _ in i.draw(in: CGRect(x: (W - w) / 2, y: (H - h) / 2, width: w, height: h)) }
+    // (the room around it in the logo's own background colour, so card and logo read as one picture — Haris
+    //  2026-11-13; a logo with a clear background keeps the card's own colour behind it)
+    let bg = BubbleCell.edgeColour(i)
+    return UIGraphicsImageRenderer(size: CGSize(width: W, height: H), format: f).image { _ in
+      if let c = bg { c.setFill(); UIRectFill(CGRect(x: 0, y: 0, width: W, height: H)) }
+      i.draw(in: CGRect(x: (W - w) / 2, y: (H - h) / 2, width: w, height: h))
+    }
+  }
+  // the colour at a logo's edge — the middle of its left and top sides, a little in (a rounded corner is clear) — when
+  // both are the same solid colour; nil for a clear or mixed edge
+  static func edgeColour(_ i: UIImage) -> UIColor? {
+    guard let cg = i.cgImage, cg.width > 8, cg.height > 8 else { return nil }
+    var px = [UInt8](repeating: 0, count: 4 * 2)
+    guard let ctx = CGContext(data: &px, width: 2, height: 1, bitsPerComponent: 8, bytesPerRow: 8, space: CGColorSpaceCreateDeviceRGB(),
+                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+    let W = CGFloat(cg.width), H = CGFloat(cg.height), inX = max(2, W * 0.02), inY = max(2, H * 0.02)
+    // left-middle into pixel 0, top-middle into pixel 1 (each drawn so that one source point lands on it)
+    ctx.interpolationQuality = .none
+    ctx.draw(cg, in: CGRect(x: -inX, y: -(H / 2) + 0.5, width: W, height: H))
+    ctx.saveGState(); ctx.clip(to: CGRect(x: 1, y: 0, width: 1, height: 1))
+    ctx.draw(cg, in: CGRect(x: 1 - W / 2, y: -(H - inY) + 1, width: W, height: H)); ctx.restoreGState()
+    let a0 = px[3], a1 = px[7]
+    guard a0 > 240, a1 > 240 else { return nil }
+    let close = abs(Int(px[0]) - Int(px[4])) + abs(Int(px[1]) - Int(px[5])) + abs(Int(px[2]) - Int(px[6])) < 24
+    guard close else { return nil }
+    return UIColor(red: CGFloat(px[0]) / 255, green: CGFloat(px[1]) / 255, blue: CGFloat(px[2]) / 255, alpha: 1)
   }
   var find: (String, Bool)?   // (searching: the words, and whether this is the match shown)
   static let findAll = Look.rgb(0x7A5626), findNow = Look.rgb(0xD9952F)

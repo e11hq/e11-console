@@ -616,7 +616,12 @@ final class Avatar: UIView {
     let s = i.size; guard s.width > 0, s.height > 0 else { return i }
     let k = side * 0.8 / (s.width * s.width + s.height * s.height).squareRoot()
     let w = s.width * k, h = s.height * k
-    return UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in i.draw(in: CGRect(x: (side - w) / 2, y: (side - h) / 2, width: w, height: h)) }
+    // (the circle around it in the logo's own background colour too, as its link card — Haris 2026-11-13)
+    let bg = BubbleCell.edgeColour(i)
+    return UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in
+      if let c = bg { c.setFill(); UIRectFill(CGRect(x: 0, y: 0, width: side, height: side)) }
+      i.draw(in: CGRect(x: (side - w) / 2, y: (side - h) / 2, width: w, height: h))
+    }
   }
   // a group: its own picture, else its client's logo, else a letter on the client's colour
   func set(group g: Group) {

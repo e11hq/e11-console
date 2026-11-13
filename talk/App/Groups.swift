@@ -202,9 +202,12 @@ final class GroupInfoVC: UITableViewController, PHPickerViewControllerDelegate {
     let col = UIStackView(arrangedSubviews: [pic, nameL, subL, acts]); col.axis = .vertical; col.alignment = .center; col.spacing = 4
     col.setCustomSpacing(12, after: pic); col.setCustomSpacing(16, after: subL)
     col.translatesAutoresizingMaskIntoConstraints = false; head.addSubview(col)
+    // (the cards' edges on the list's own margins, where Apple's inset boxes below start and end; room under them as
+    //  between the boxes — they sat on the Photos box: Haris 2026-11-13)
+    head.preservesSuperviewLayoutMargins = true
     NSLayoutConstraint.activate([pic.widthAnchor.constraint(equalToConstant: 116), pic.heightAnchor.constraint(equalToConstant: 116),
-      col.topAnchor.constraint(equalTo: head.topAnchor, constant: 4), col.leadingAnchor.constraint(equalTo: head.leadingAnchor, constant: 20),
-      col.trailingAnchor.constraint(equalTo: head.trailingAnchor, constant: -20), col.bottomAnchor.constraint(equalTo: head.bottomAnchor, constant: -4),
+      col.topAnchor.constraint(equalTo: head.topAnchor, constant: 4), col.leadingAnchor.constraint(equalTo: head.layoutMarginsGuide.leadingAnchor),
+      col.trailingAnchor.constraint(equalTo: head.layoutMarginsGuide.trailingAnchor), col.bottomAnchor.constraint(equalTo: head.bottomAnchor, constant: -24),
       acts.widthAnchor.constraint(equalTo: col.widthAnchor), acts.heightAnchor.constraint(equalToConstant: 62)])
     tableView.tableHeaderView = head
   }
@@ -292,9 +295,13 @@ final class GroupInfoVC: UITableViewController, PHPickerViewControllerDelegate {
     var cfg = UIListContentConfiguration.valueCell()
     switch row {
     case .media:
-      cfg = UIListContentConfiguration.valueCell(); cfg.text = "Photos, Files and Links"; cfg.secondaryText = "\(mediaCount())"
+      cfg = UIListContentConfiguration.valueCell(); cfg.text = "Photos, Files and Links"
+      // (the count and Apple's chevron together on the title line — the › stood beside the photos: Haris 2026-11-13)
+      let n = NSMutableAttributedString(string: "\(mediaCount())  ", attributes: [.foregroundColor: UIColor.secondaryLabel, .font: UIFont.preferredFont(forTextStyle: .body)])
+      let chev = UIImage(systemName: "chevron.forward", withConfiguration: UIImage.SymbolConfiguration(font: .systemFont(ofSize: 14, weight: .semibold)))!.withTintColor(.tertiaryLabel, renderingMode: .alwaysOriginal)
+      n.append(NSAttributedString(attachment: NSTextAttachment(image: chev)))
+      cfg.secondaryAttributedText = n
       cfg.directionalLayoutMargins.bottom = 96
-      c.accessoryType = .disclosureIndicator
       let strip = UIStackView(); strip.tag = 77; strip.axis = .horizontal; strip.spacing = 8; strip.distribution = .fillEqually
       for m in latestPics() {
         let iv = UIImageView(); iv.contentMode = .scaleAspectFill; iv.clipsToBounds = true; iv.layer.cornerRadius = 8; iv.layer.cornerCurve = .continuous
@@ -304,7 +311,7 @@ final class GroupInfoVC: UITableViewController, PHPickerViewControllerDelegate {
       }
       while strip.arrangedSubviews.count < 4 { let v = UIView(); strip.addArrangedSubview(v) }
       strip.translatesAutoresizingMaskIntoConstraints = false; c.contentView.addSubview(strip)
-      NSLayoutConstraint.activate([strip.leadingAnchor.constraint(equalTo: c.contentView.leadingAnchor, constant: 16), strip.trailingAnchor.constraint(equalTo: c.contentView.trailingAnchor, constant: -16),
+      NSLayoutConstraint.activate([strip.leadingAnchor.constraint(equalTo: c.contentView.layoutMarginsGuide.leadingAnchor), strip.trailingAnchor.constraint(equalTo: c.contentView.layoutMarginsGuide.trailingAnchor),
                                    strip.bottomAnchor.constraint(equalTo: c.contentView.bottomAnchor, constant: -12), strip.heightAnchor.constraint(equalToConstant: 76)])
       strip.isHidden = latestPics().isEmpty
       if latestPics().isEmpty { cfg.directionalLayoutMargins.bottom = 11 }
