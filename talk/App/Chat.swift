@@ -155,7 +155,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         //  bubble's content slid in again: Haris 2026-11-13, the redraw rule)
         if let m = self.msgs[id], let g = Talk.shared.groups[self.group] {
           let pt = CACurrentMediaTime()
-          UIView.performWithoutAnimation { c.set(m, group: g, log: Talk.shared.log(self.group), run: self.runs[id] ?? Run()); c.contentView.layoutIfNeeded() }
+          // (laid out here only when it's on the screen being set again — a new bubble is laid out once, by the list, as it
+          //  takes its height; laying it out here too doubled each bubble's making as a chat opened: 24 bubbles, 100 ms,
+          //  measured on Haris's phone 2026-11-13)
+          UIView.performWithoutAnimation { c.set(m, group: g, log: Talk.shared.log(self.group), run: self.runs[id] ?? Run()); if c.window != nil { c.contentView.layoutIfNeeded() } }
           if OpenProbe.on { OpenProbe.cells += 1; OpenProbe.cellMs += (CACurrentMediaTime() - pt) * 1000 }
         }
         c.onReplyTap = { [weak self] rid in self?.jump(to: rid) }
