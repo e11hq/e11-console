@@ -461,8 +461,15 @@ final class GroupsVC: ListVC {
     guard bigTop > 0 else { return }
     let small = top < bigTop - 20 && table.contentOffset.y <= -top + 1 && !search.isActive && !table.isTracking
     if small && !smallAtTop {
-      let app = UIApplication.shared.applicationState == .background ? "in the background" : UIApplication.shared.applicationState == .inactive ? "leaving or coming back" : "open"
-      DiagTitle.add("\(clientsTab ? "Clients" : "E11 Agency") went small at the top — app \(app), page \(view.window == nil ? "off screen" : "on screen"), room \(Int(top)) of \(Int(bigTop)), last: \(lastEvent)")
+      // (only if it's still small a moment later — a tab coming back passes through the small bar's room for an instant
+      //  before Apple puts the big title back, and that alone isn't the fault)
+      let was = lastEvent
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+        guard let self = self, self.view.window != nil, !self.search.isActive, !self.table.isTracking else { return }
+        let t2 = self.table.adjustedContentInset.top
+        guard t2 < self.bigTop - 20, self.table.contentOffset.y <= -t2 + 1 else { return }
+        DiagTitle.add("\(self.clientsTab ? "Clients" : "E11 Agency") STAYED small at the top (0.8 s on) — room \(Int(t2)) of \(Int(self.bigTop)), last: \(was)")
+      }
     }
     smallAtTop = small
   }
@@ -955,6 +962,6 @@ enum GroupActions {
 // the TEMPORARY check's notes (the big title going small at the top) — the newest 12, kept on the phone, shown in Settings
 enum DiagTitle {
   static func clock() -> String { let f = DateFormatter(); f.dateFormat = "HH:mm:ss"; return f.string(from: Date()) }
-  static var notes: [String] { UserDefaults.standard.stringArray(forKey: "diag-title") ?? [] }
-  static func add(_ s: String) { UserDefaults.standard.set(Array(([clock() + " " + s] + notes).prefix(12)), forKey: "diag-title") }
+  static var notes: [String] { UserDefaults.standard.stringArray(forKey: "diag-title-2") ?? [] }
+  static func add(_ s: String) { UserDefaults.standard.set(Array(([clock() + " " + s] + notes).prefix(12)), forKey: "diag-title-2") }
 }
