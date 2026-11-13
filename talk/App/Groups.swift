@@ -332,8 +332,10 @@ final class GroupInfoVC: UITableViewController, PHPickerViewControllerDelegate {
       let a = Avatar(frame: CGRect(x: 16, y: 9, width: 40, height: 40)); a.tag = 77; a.isUserInteractionEnabled = false; a.set(person: p); c.contentView.addSubview(a)
       if g.admins.contains(id) {
         let chip = ChipLabel(); chip.text = "Admin"; chip.font = .systemFont(ofSize: 13, weight: .semibold); chip.textColor = .systemGreen
-        chip.backgroundColor = UIColor.systemGreen.withAlphaComponent(0.16); chip.layer.cornerRadius = 7; chip.layer.masksToBounds = true
-        chip.sizeToFit(); c.accessoryView = chip
+        // (room round the word, a capsule — sizeToFit gave it none, the chip hugged the word: Haris 2026-11-13)
+        chip.backgroundColor = UIColor.systemGreen.withAlphaComponent(0.16); chip.textAlignment = .center; chip.layer.masksToBounds = true
+        let tw = ceil(("Admin" as NSString).size(withAttributes: [.font: chip.font!]).width)
+        chip.frame = CGRect(x: 0, y: 0, width: tw + 20, height: 24); chip.layer.cornerRadius = 12; c.accessoryView = chip
       }
       c.selectionStyle = id == me ? .none : .default
     case .addMembers:
