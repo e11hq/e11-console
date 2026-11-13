@@ -12,7 +12,7 @@ final class MediaVC: UIViewController, UICollectionViewDelegate, QLPreviewContro
   required init?(coder: NSCoder) { fatalError() }
 
   private enum Tab: Int { case media, files, links }
-  private var tab: Tab = .media
+  private var shown: Tab = .media
   private let seg = UISegmentedControl(items: ["Media", "Files", "Links"])
   private var cv: UICollectionView!
   private var data: UICollectionViewDiffableDataSource<String, String>!
@@ -26,7 +26,7 @@ final class MediaVC: UIViewController, UICollectionViewDelegate, QLPreviewContro
     navigationItem.title = "Photos, Files and Links"; navigationItem.largeTitleDisplayMode = .never
     view.backgroundColor = .systemGroupedBackground
     seg.selectedSegmentIndex = 0
-    seg.addAction(UIAction { [weak self] _ in guard let self = self else { return }; self.tab = Tab(rawValue: self.seg.selectedSegmentIndex) ?? .media; self.reload(animated: false, layout: true) }, for: .valueChanged)
+    seg.addAction(UIAction { [weak self] _ in guard let self = self else { return }; self.shown = Tab(rawValue: self.seg.selectedSegmentIndex) ?? .media; self.reload(animated: false, layout: true) }, for: .valueChanged)
     cv = UICollectionView(frame: view.bounds, collectionViewLayout: layout())
     cv.autoresizingMask = [.flexibleWidth, .flexibleHeight]; cv.backgroundColor = .clear; cv.delegate = self
     view.addSubview(cv)
@@ -41,15 +41,22 @@ final class MediaVC: UIViewController, UICollectionViewDelegate, QLPreviewContro
     let row = UICollectionView.CellRegistration<UICollectionViewListCell, String> { [weak self] c, _, id in if let m = self?.byId[id] { self?.fillRow(c, m) } }
     let empty = UICollectionView.CellRegistration<UICollectionViewCell, String> { [weak self] c, _, _ in
       guard let self = self else { return }
-      var e = UIContentUnavailableConfiguration.empty()
-      e.image = UIImage(systemName: self.tab == .media ? "photo.on.rectangle" : self.tab == .files ? "doc" : "link")
-      e.text = self.tab == .media ? "No Media" : self.tab == .files ? "No Files" : "No Links"
-      e.secondaryText = self.tab == .media ? "Photos and videos sent in this group show here." : self.tab == .files ? "Files sent in this group show here." : "Links sent in this group show here."
-      c.contentConfiguration = e
+      let what = self.shown == .media ? "Photos and videos" : self.shown == .files ? "Files" : "Links"
+      let title = self.shown == .media ? "No Media" : self.shown == .files ? "No Files" : "No Links"
+      if #available(iOS 17.0, *) {
+        var e = UIContentUnavailableConfiguration.empty()
+        e.image = UIImage(systemName: self.shown == .media ? "photo.on.rectangle" : self.shown == .files ? "doc" : "link")
+        e.text = title; e.secondaryText = "\(what) sent in this group show here."
+        c.contentConfiguration = e
+      } else {
+        // (iOS 16: the line alone, as every Apple page's empty state there)
+        var e = UIListContentConfiguration.cell(); e.text = title; e.textProperties.alignment = .center; e.textProperties.color = .secondaryLabel
+        c.contentConfiguration = e
+      }
     }
     data = UICollectionViewDiffableDataSource(collectionView: cv) { [weak self] cv, ip, id in
       if id == "empty" { return cv.dequeueConfiguredReusableCell(using: empty, for: ip, item: id) }
-      return self?.tab == .media ? cv.dequeueConfiguredReusableCell(using: grid, for: ip, item: id) : cv.dequeueConfiguredReusableCell(using: row, for: ip, item: id)
+      return self?.shown == .media ? cv.dequeueConfiguredReusableCell(using: grid, for: ip, item: id) : cv.dequeueConfiguredReusableCell(using: row, for: ip, item: id)
     }
     let head = UICollectionView.SupplementaryRegistration<UICollectionViewListCell>(elementKind: UICollectionView.elementKindSectionHeader) { [weak self] h, _, ip in
       guard let self = self, let s = self.data.sectionIdentifier(for: ip.section) else { return }
@@ -93,7 +100,7 @@ final class MediaVC: UIViewController, UICollectionViewDelegate, QLPreviewContro
   }
   private func sig(_ m: Msg) -> Int { var h = Hasher(); h.combine(m.file?.id); h.combine(m.link); h.combine(m.text); return h.finalize() }
   private func reload(animated: Bool, layout: Bool) {
-    let list = items(tab)
+    let list = items(shown)
     byId = Dictionary(list.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
     var snap = NSDiffableDataSourceSnapshot<String, String>()
     if list.isEmpty { snap.appendSections(["empty"]); snap.appendItems(["empty"], toSection: "empty") }
@@ -119,7 +126,7 @@ final class MediaVC: UIViewController, UICollectionViewDelegate, QLPreviewContro
   private func layout() -> UICollectionViewLayout {
     UICollectionViewCompositionalLayout { [weak self] s, env in
       let empty = self?.data?.sectionIdentifier(for: s) == "empty"
-      if self?.tab == .media && !empty {
+      if self?.shown == .media && !empty {
         let w = NSCollectionLayoutDimension.fractionalWidth(0.25)
         let item = NSCollectionLayoutItem(layoutSize: NSCollectionLayoutSize(widthDimension: w, heightDimension: .fractionalWidth(0.25)))
         item.contentInsets = NSDirectionalEdgeInsets(top: 1, leading: 1, bottom: 1, trailing: 1)
@@ -177,7 +184,7 @@ final class MediaVC: UIViewController, UICollectionViewDelegate, QLPreviewContro
   func collectionView(_ cv: UICollectionView, didSelectItemAt ip: IndexPath) {
     cv.deselectItem(at: ip, animated: true)
     guard let id = data.itemIdentifier(for: ip), let m = byId[id] else { return }
-    switch tab {
+    switch shown {
     case .media: openMedia(m)
     case .files: openFile(m, from: cv.cellForItem(at: ip))
     case .links: if let s = m.link?.url, let u = URL(string: s) { UIApplication.shared.open(u) }
