@@ -339,3 +339,14 @@ test('a group’s description: only its admins set it, everyone sees it, empty c
   const c = await act('am', { act: 'describe', group: D, about: '' });
   assert.equal(c.group.about, null);
 });
+
+test('Settings › Notifications: an @mention in a muted group — on until turned off, kept per person', async () => {
+  assert.equal((await state('des')).me.opts.mutedMentions, true);
+  const r = await act('des', { act: 'setOpt', key: 'mutedMentions', on: false });
+  assert.equal(r.ok, true); assert.equal(r.opts.mutedMentions, false);
+  assert.equal((await state('des')).me.opts.mutedMentions, false);
+  assert.equal((await state('am')).me.opts.mutedMentions, true);
+  assert.equal((await act('des', { act: 'setOpt', key: 'other', on: false })).ok, false);
+  await act('des', { act: 'setOpt', key: 'mutedMentions', on: true });
+  assert.equal((await state('des')).me.opts.mutedMentions, true);
+});

@@ -45,6 +45,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     CREATE TABLE IF NOT EXISTS macs (id TEXT PRIMARY KEY, uid TEXT NOT NULL, name TEXT NOT NULL, linked_at INTEGER NOT NULL, seen_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS link_codes (code TEXT PRIMARY KEY, uid TEXT NOT NULL, name TEXT NOT NULL, at INTEGER NOT NULL, mac TEXT);
     CREATE TABLE IF NOT EXISTS phone_seen (uid TEXT PRIMARY KEY, at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS opts (uid TEXT NOT NULL, key TEXT NOT NULL, val INTEGER NOT NULL, PRIMARY KEY (uid, key));
   `);
   // (a group's pinned message — one, kept until unpinned or replaced; anyone in the group pins, Haris 2026-11-12)
   try { db.exec('ALTER TABLE groups ADD COLUMN pin TEXT'); } catch { /* already there */ }
@@ -64,6 +65,8 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     goneGroup: q('UPDATE groups SET gone = 1 WHERE id = ?'),
     prefs: q('SELECT kind, id, pinned_at, muted_until FROM prefs WHERE uid = ?'),
     pref: q('SELECT pinned_at, muted_until FROM prefs WHERE uid = ? AND kind = ? AND id = ?'),
+    opt: q('SELECT val FROM opts WHERE uid = ? AND key = ?'),
+    setOpt: q('INSERT INTO opts (uid, key, val) VALUES (?, ?, ?) ON CONFLICT(uid, key) DO UPDATE SET val = excluded.val'),
     setPin: q('INSERT INTO prefs (uid, kind, id, pinned_at) VALUES (?, ?, ?, ?) ON CONFLICT(uid, kind, id) DO UPDATE SET pinned_at = excluded.pinned_at'),
     setMute: q('INSERT INTO prefs (uid, kind, id, muted_until) VALUES (?, \'group\', ?, ?) ON CONFLICT(uid, kind, id) DO UPDATE SET muted_until = excluded.muted_until'),
     pinsOf: q('SELECT id FROM prefs WHERE uid = ? AND kind = ? AND pinned_at IS NOT NULL ORDER BY pinned_at'),
@@ -166,14 +169,14 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     if (isContact(u)) {
       const c = clientById(u.client);
       const people = [...ids].map(personOfId).filter(Boolean);
-      return { ok: true, me: { id: u.id, name: u.name, role: c ? c.name : 'Client', photo: null, color: null, contact: true, client: u.client, email: u.email, canMake: false, boss: false },
+      return { ok: true, me: { id: u.id, name: u.name, role: c ? c.name : 'Client', photo: null, color: null, contact: true, client: u.client, email: u.email, canMake: false, boss: false, opts: optsOf(u.id) },
         clients: c ? [{ id: c.id, name: c.name, color: c.color || null, logo: ((c.clientId && store.get('clients', String(c.clientId))) || {}).logo || null }] : [], groups, people, pins, seq: Q.lastSeq.get().s || 0 };
     }
     // people who can be added (staff — freelancers too), and the client contacts in my groups
     const people = store.list('users').filter(active).map(personOf);
     const known = new Set(people.map((p) => p.id));
     for (const id of ids) if (!known.has(id)) { const x = personOfId(id); if (x) people.push(isContactId(id) ? x : { ...x, gone: true }); }
-    const out = { ok: true, me: { ...personOf(u), canMake: !isFree(u), boss: isBoss(u) }, clients: clientsFor(u), groups, people, pins, seq: Q.lastSeq.get().s || 0,
+    const out = { ok: true, me: { ...personOf(u), canMake: !isFree(u), boss: isBoss(u), opts: optsOf(u.id) }, clients: clientsFor(u), groups, people, pins, seq: Q.lastSeq.get().s || 0,
       macs: macsOf(u.id).map((m) => ({ id: m.id, name: m.name, linkedAt: m.linked_at, seenAt: m.seen_at })) };
     // Super Admins and Office Admins: every client contact (to add them, or to a group)
     if (isBoss(u)) {
@@ -328,13 +331,16 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   if (firstSweep.unref) firstSweep.unref();
 
   // ---------- notifications (E11 Talk's own phones) ----------
+  // a person's own notification choices (Settings › Notifications): mutedMentions — an @mention in a muted group still comes (on unless turned off)
+  const optsOf = (uid) => { const r = Q.opt.get(uid, 'mutedMentions'); return { mutedMentions: r ? r.val === 1 : true }; };
   function notify(g, from, text, msgId, mentions = []) {
     if (!apns || !apns.enabled()) return;
     const t = now();
     for (const uid of memberIds(g)) {
       if (uid === from.id) continue;
       const pref = Q.pref.get(uid, 'group', g.id) || {};
-      if (pref.muted_until && pref.muted_until > t && !mentions.includes(uid)) continue;   // (muted — but an @mention still comes)
+      // (muted — but an @mention still comes, unless they turned that off: Settings › Notifications, Haris 2026-11-13)
+      if (pref.muted_until && pref.muted_until > t && !(mentions.includes(uid) && optsOf(uid).mutedMentions)) continue;
       const c = clientById(g.client);
       apns.sendTo(uid, { title: g.name, body: `${from.name || from.email}: ${text}`, tag: g.id, kind: 'talk', groupId: g.id, msgId, clientId: c ? c.id : null, category: 'talk-msg' }).catch(() => {});
     }
@@ -594,6 +600,11 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
           Q.setPin.run(u.id, kind, id, t);
         } else Q.setPin.run(u.id, kind, id, null);
         return { ok: true, pins: Q.pinsOf.all(u.id, kind).map((r) => r.id) };
+      }
+      case 'setOpt': {
+        if (b.key !== 'mutedMentions') return bad('Not a setting');
+        Q.setOpt.run(u.id, b.key, b.on === false ? 0 : 1);
+        return { ok: true, opts: optsOf(u.id) };
       }
       case 'mute': {
         const [g, e] = needGroup(u, b.group); if (e) return e;
