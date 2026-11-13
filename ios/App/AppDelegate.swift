@@ -1852,6 +1852,47 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     // (straight to the server — Part B step 7; not taken: sent again the next time the app comes back)
     let body: [String: Any] = ["token": hex, "env": APNS_ENV, "ack": true, "platform": "ios"]
     serverTask.request("/api/apns/register", body: body) { _ in }
+    forgetOtherServers(hex)
+  }
+  // The phone's notification address is given only to the server the app is on now (Haris 2026-11-13): moved to another
+  // server (live ↔ test, in iPhone's Settings), the one it was on before is told to forget it — else that one kept sending
+  // its own notifications (live's morning summary on a phone on test). Not reached (offline, signed out there): asked
+  // again the next time, until it answers; going back to that server takes it off the list.
+  private func forgetOtherServers(_ token: String) {
+    let now = serverURL(), d = UserDefaults.standard
+    var old = d.stringArray(forKey: "push_forget") ?? []
+    // (a phone from before this was kept, on a server other than live: it may have been on live first)
+    let was = d.string(forKey: "push_server") ?? (now != LIVE_URL ? LIVE_URL : now)
+    if was != now, !old.contains(was) { old.append(was) }
+    old.removeAll { $0 == now }
+    // (tried at most 10 starts each — a server that never answers is let go)
+    var tries = d.dictionary(forKey: "push_forget_tries") as? [String: Int] ?? [:]
+    for b in old { tries[b, default: 0] += 1 }
+    old.removeAll { (tries[$0] ?? 0) > 10 }
+    tries = tries.filter { old.contains($0.key) }
+    d.set(now, forKey: "push_server"); d.set(old, forKey: "push_forget"); d.set(tries, forKey: "push_forget_tries")
+    guard !old.isEmpty else { return }
+    let send = { (base: String, cookie: String) in
+      guard let url = URL(string: base + "/api/apns/unregister") else { return }
+      var r = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+      r.httpMethod = "POST"; r.setValue("application/json", forHTTPHeaderField: "Content-Type"); r.setValue("application/json", forHTTPHeaderField: "Accept")
+      if !cookie.isEmpty { r.setValue(cookie, forHTTPHeaderField: "Cookie") }
+      r.httpBody = try? JSONSerialization.data(withJSONObject: ["token": token])
+      URLSession.shared.dataTask(with: r) { data, resp, _ in
+        let ok = ((resp as? HTTPURLResponse)?.statusCode ?? 0) == 200 && data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }?["ok"] as? Bool == true
+        guard ok else { return }
+        DispatchQueue.main.async { let d = UserDefaults.standard; d.set((d.stringArray(forKey: "push_forget") ?? []).filter { $0 != base }, forKey: "push_forget") }
+      }.resume()
+    }
+    // (signed in there as before: that server's own cookies, from the app's cookie store)
+    guard let store = web?.configuration.websiteDataStore.httpCookieStore else { return }
+    store.getAllCookies { cs in
+      for base in old {
+        let host = URL(string: base)?.host ?? ""
+        let mine = cs.filter { c in let dm = c.domain.hasPrefix(".") ? String(c.domain.dropFirst()) : c.domain; return host == dm || host.hasSuffix("." + dm) }
+        send(base, mine.map { "\($0.name)=\($0.value)" }.joined(separator: "; "))
+      }
+    }
   }
   func openPush(_ userInfo: [AnyHashable: Any]) {
     let d = userInfo["e11"] as? [String: Any] ?? [:]
