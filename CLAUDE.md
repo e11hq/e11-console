@@ -460,6 +460,13 @@ animated, and the server's answer takes its place with no blink (a pending one r
 just there). Apple's own animations wherever Apple has one — ours only where Apple has none, and never fighting Apple's.
 Before any change is called done, check each moment of it for a snap, blink or jump. Every new page too.
 
+**Smoothness means no snap at all — everything, every app (E11 Console, E11 Talk, any new one), now and later (Haris 2026-11-13:
+"on everything smoothness means no snap at all"):** nothing ever appears, disappears or changes in a single frame — not a row,
+a word, a picture, a button, a badge, a reaction, a heading, a bar item, a tab's content, a toast, nor what sits beside
+something held (the forward button, reactions). A change in place crossfades to its new look in its place (`Crossfade`); what
+comes fades in, what goes fades out; something hidden for a moment (while held, while searching) fades out and back. Together
+with "redraw" meaning no slide and no other heights changing: the change fades, and nothing else moves. Before any change is
+called done, check every moment of it — opening, closing, holding, letting go, a change arriving — for a snap.
 **What you do shows at once, every Apple page — now and later (Haris, 2026-11-09 20:11):** anything you remove, add, tick or
 change on a page (a file trashed, a checklist item ticked, a status set…) shows on the page at once — the gone one fades
 out and the rest slide in, Apple's own list animation — never waiting for the server's answer. The server's answer then
