@@ -91,7 +91,7 @@ final class NewGroupVC: UITableViewController, UITextFieldDelegate, UISearchBarD
     let old = data.snapshot()
     snap.reconfigureItems(snap.itemIdentifiers.filter { old.indexOfItem($0) != nil && sigs[$0] != nil && sigs[$0] != newSigs[$0] })
     sigs = newSigs
-    data.apply(snap, animatingDifferences: animated) { [weak self] in self?.reselect(); self?.counted() }
+    data.applySteady(snap, in: tableView, animated: animated) { [weak self] in self?.reselect(); self?.counted() }
   }
   private func reselect() {
     for id in picked { if let ip = data.indexPath(for: id) { tableView.selectRow(at: ip, animated: false, scrollPosition: .none) } }
@@ -280,7 +280,7 @@ final class ClientPickVC: UITableViewController, UISearchResultsUpdating {
     let old = data.snapshot()
     snap.reconfigureItems(snap.itemIdentifiers.filter { old.indexOfItem($0) != nil && sigs[$0] != nil && sigs[$0] != newSigs[$0] })
     sigs = newSigs
-    data.apply(snap, animatingDifferences: animated)
+    data.applySteady(snap, in: tableView, animated: animated)
   }
   override func tableView(_ tv: UITableView, willSelectRowAt ip: IndexPath) -> IndexPath? { data.itemIdentifier(for: ip) == "none" ? nil : ip }
   override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) {
@@ -406,7 +406,7 @@ final class GroupInfoVC: UITableViewController {
     let old = data.snapshot()
     snap.reconfigureItems(snap.itemIdentifiers.filter { old.indexOfItem($0) != nil && sigs[$0] != newSigs[$0] })
     sigs = newSigs
-    data.apply(snap, animatingDifferences: animated)
+    data.applySteady(snap, in: tableView, animated: animated)
     // (someone added or gone: the title over the people says the new count, in place — the rest left as it is)
     if let i = snap.indexOfSection(1), let h = tableView.headerView(forSection: i), let t = headTitle(i), h.textLabel?.text != t {
       UIView.transition(with: h, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction]) { h.textLabel?.text = t; h.setNeedsLayout(); h.layoutIfNeeded() }   // (laid out again for the new words — they were cut to "16 MEMBE…")
@@ -684,7 +684,7 @@ final class AddPeopleVC: UITableViewController, UISearchResultsUpdating {
     let old = data.snapshot()
     snap.reconfigureItems(snap.itemIdentifiers.filter { old.indexOfItem($0) != nil && sigs[$0] != nil && sigs[$0] != newSigs[$0] })
     sigs = newSigs
-    data.apply(snap, animatingDifferences: animated) { [weak self] in self?.reselect() }
+    data.applySteady(snap, in: tableView, animated: animated) { [weak self] in self?.reselect() }
   }
   private func reselect() {
     for id in picked { if let ip = data.indexPath(for: id) { tableView.selectRow(at: ip, animated: false, scrollPosition: .none) } }
@@ -872,12 +872,13 @@ final class EditGroupVC: UITableViewController, PHPickerViewControllerDelegate, 
     pic.translatesAutoresizingMaskIntoConstraints = false; head.addSubview(pic)
     if let g = g { pic.set(group: g) }
     let edit = UIButton(type: .system); edit.setTitle("Edit", for: .normal); edit.titleLabel?.font = .systemFont(ofSize: 17)
-    edit.menu = UIMenu(children: picMenu()); edit.showsMenuAsPrimaryAction = true
+    edit.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in done(self?.picMenu() ?? []) }]); edit.showsMenuAsPrimaryAction = true
     edit.translatesAutoresizingMaskIntoConstraints = false; head.addSubview(edit)
     NSLayoutConstraint.activate([pic.topAnchor.constraint(equalTo: head.topAnchor, constant: 4), pic.centerXAnchor.constraint(equalTo: head.centerXAnchor),
                                  pic.widthAnchor.constraint(equalToConstant: 88), pic.heightAnchor.constraint(equalToConstant: 88),
                                  edit.topAnchor.constraint(equalTo: pic.bottomAnchor, constant: 4), edit.centerXAnchor.constraint(equalTo: head.centerXAnchor)])
     tableView.tableHeaderView = head
+    setUpList()
     NotificationCenter.default.addObserver(self, selector: #selector(changed), name: .talkChanged, object: nil)
   }
   private func picMenu() -> [UIMenuElement] {
@@ -899,7 +900,7 @@ final class EditGroupVC: UITableViewController, PHPickerViewControllerDelegate, 
   @objc private func changed() {
     guard let g = g else { dismiss(animated: true); return }
     if !spin.isAnimating { pic.set(group: g) }
-    tableView.reloadSections(IndexSet(integer: 1), with: .none)
+    reload(animated: view.window != nil)
   }
   private func save() {
     let n = (field.text ?? "").trimmingCharacters(in: .whitespaces)
@@ -913,27 +914,54 @@ final class EditGroupVC: UITableViewController, PHPickerViewControllerDelegate, 
   func textFieldShouldReturn(_ t: UITextField) -> Bool { t.resignFirstResponder(); return true }
 
   // ---------- the list ----------
-  override func numberOfSections(in tv: UITableView) -> Int { 2 }
-  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { s == 0 ? 1 : people.count }
-  override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? { s == 0 ? "Group Name" : "Members" }
-  override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
-    s == 0 ? "Edit the picture: Take Photo · Choose Photo · Use Client Logo."
-      : "The creator, Super Admins and Office Admins can change the picture and name and remove people. The creator stays unless a Super or Office Admin removes them."
+  // (Apple's change-only list — the redraw rule: a member's row is set again only when what it shows changed, at once with
+  //  nothing moving; one removed fades out and the rest slide up — Haris 2026-11-13. It reloaded the whole members part
+  //  on every change.)
+  private var data: TitledSource<Int, String>!
+  private var sigs: [String: Int] = [:]
+  private func setUpList() {
+    data = TitledSource(tableView: tableView) { [weak self] tv, ip, id in
+      let c = tv.dequeueReusableCell(withIdentifier: "c", for: ip); self?.fill(c, id); return c
+    }
+    data.defaultRowAnimation = .fade
+    data.head = { s in s == 0 ? "Group Name" : "Members" }
+    data.foot = { s in
+      s == 0 ? "Edit the picture: Take Photo · Choose Photo · Use Client Logo."
+        : "The creator, Super Admins and Office Admins can change the picture and name and remove people. The creator stays unless a Super or Office Admin removes them."
+    }
+    data.canEdit = { ip in ip.section == 1 }
+    data.onDelete = { [weak self] ip in self?.remove(ip) }
+    reload(animated: false)
   }
-  override func tableView(_ tv: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
-    let c = tv.dequeueReusableCell(withIdentifier: "c", for: ip)
+  private func reload(animated: Bool) {
+    guard let g = g else { return }
+    let T = Talk.shared, ps = people
+    var snap = NSDiffableDataSourceSnapshot<Int, String>()
+    snap.appendSections([0, 1]); snap.appendItems(["field"], toSection: 0); snap.appendItems(ps, toSection: 1)
+    var newSigs: [String: Int] = [:]
+    for id in ps {
+      var h = Hasher(); h.combine(T.name(id)); h.combine(T.people[id]?.role); h.combine(T.people[id]?.picture); h.combine(T.people[id]?.contact)
+      h.combine(g.creator == id); h.combine(g.second == id); h.combine(g.admins.contains(id)); h.combine(canRemove(id))
+      newSigs[id] = h.finalize()
+    }
+    let old = data.snapshot()
+    snap.reconfigureItems(snap.itemIdentifiers.filter { old.indexOfItem($0) != nil && sigs[$0] != nil && sigs[$0] != newSigs[$0] })
+    sigs = newSigs
+    data.applySteady(snap, in: tableView, animated: animated)
+  }
+  private func fill(_ c: UITableViewCell, _ id: String) {
     // (Apple's content view first, ours into it — Group Info's lesson)
     if c.contentConfiguration == nil { c.contentConfiguration = UIListContentConfiguration.cell() }
     c.contentView.subviews.filter { $0.tag == 77 }.forEach { $0.removeFromSuperview() }
     c.selectionStyle = .none
-    if ip.section == 0 {
+    if id == "field" {
       var cfg = UIListContentConfiguration.cell(); cfg.text = " "; c.contentConfiguration = cfg
       field.tag = 77; field.translatesAutoresizingMaskIntoConstraints = false; c.contentView.addSubview(field)
       NSLayoutConstraint.activate([field.leadingAnchor.constraint(equalTo: c.contentView.layoutMarginsGuide.leadingAnchor), field.trailingAnchor.constraint(equalTo: c.contentView.layoutMarginsGuide.trailingAnchor),
                                    field.topAnchor.constraint(equalTo: c.contentView.topAnchor), field.bottomAnchor.constraint(equalTo: c.contentView.bottomAnchor)])
-      return c
+      return
     }
-    let T = Talk.shared, id = people[ip.row], p = T.people[id]
+    let T = Talk.shared, p = T.people[id]
     var cfg = UIListContentConfiguration.subtitleCell()
     cfg.text = id == T.me?.id ? "You" : T.name(id)
     let tag = g?.creator == id ? "Admin" : g?.second == id ? "Second Admin" : g?.admins.contains(id) == true ? "Admin" : nil
@@ -947,27 +975,26 @@ final class EditGroupVC: UITableViewController, PHPickerViewControllerDelegate, 
     c.contentConfiguration = cfg
     let a = Avatar(frame: CGRect(x: 16, y: 10, width: 38, height: 38)); a.tag = 77; a.isUserInteractionEnabled = false; a.set(person: p)
     c.contentView.addSubview(a)
-    return c
   }
   private func canRemove(_ id: String) -> Bool {
     guard let g = g else { return false }
     let T = Talk.shared
     return id != T.me?.id && T.canManage(g) && (id != g.creator || T.boss)
   }
-  override func tableView(_ tv: UITableView, canEditRowAt ip: IndexPath) -> Bool { ip.section == 1 }
   override func tableView(_ tv: UITableView, editingStyleForRowAt ip: IndexPath) -> UITableViewCell.EditingStyle {
-    ip.section == 1 && canRemove(people[ip.row]) ? .delete : .none
+    guard ip.section == 1, let id = data.itemIdentifier(for: ip) else { return .none }
+    return canRemove(id) ? .delete : .none
   }
   override func tableView(_ tv: UITableView, shouldIndentWhileEditingRowAt ip: IndexPath) -> Bool { ip.section == 1 }
   override func tableView(_ tv: UITableView, titleForDeleteConfirmationButtonForRowAt ip: IndexPath) -> String? { "Remove" }
-  override func tableView(_ tv: UITableView, commit s: UITableViewCell.EditingStyle, forRowAt ip: IndexPath) {
-    guard s == .delete, ip.section == 1 else { return }
-    let id = people[ip.row], name = Talk.shared.name(id)
+  private func remove(_ ip: IndexPath) {
+    guard ip.section == 1, let id = data.itemIdentifier(for: ip), id != "field" else { return }
+    let name = Talk.shared.name(id)
     // (gone from the list at once — Apple's own row animation; the server's answer then draws it as it is)
-    gone.insert(id); tv.deleteRows(at: [ip], with: .automatic)
+    gone.insert(id); reload(animated: true)
     Net.shared.act(["act": "removePerson", "group": group, "id": id]) { [weak self] j in
       if (j?["ok"] as? Bool) == true { toast("\(name) removed"); Talk.shared.refresh(); Talk.shared.sync() }
-      else { toast(j?["error"] as? String ?? "Couldn’t do that — try again"); self?.gone.remove(id); self?.tableView.reloadSections(IndexSet(integer: 1), with: .automatic) }
+      else { toast(j?["error"] as? String ?? "Couldn’t do that — try again"); self?.gone.remove(id); self?.reload(animated: true) }
     }
   }
 
@@ -1010,9 +1037,10 @@ final class EditGroupVC: UITableViewController, PHPickerViewControllerDelegate, 
 // A diffable list with section titles: Apple asks the data source for them (the page's own title methods are never asked
 // once a diffable data source is set)
 final class TitledSource<S: Hashable, I: Hashable>: UITableViewDiffableDataSource<S, I> {
-  var head: ((Int) -> String?)?, foot: ((Int) -> String?)?, canEdit: ((IndexPath) -> Bool)?
+  var head: ((Int) -> String?)?, foot: ((Int) -> String?)?, canEdit: ((IndexPath) -> Bool)?, onDelete: ((IndexPath) -> Void)?
   override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? { head?(s) }
   override func tableView(_ tv: UITableView, canEditRowAt ip: IndexPath) -> Bool { canEdit?(ip) ?? false }
+  override func tableView(_ tv: UITableView, commit s: UITableViewCell.EditingStyle, forRowAt ip: IndexPath) { if s == .delete { onDelete?(ip) } }
   override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? { foot?(s) }
 }
 
@@ -1043,5 +1071,26 @@ enum PickRows {
     var bg = UIBackgroundConfiguration.clear(); bg.backgroundColor = .clear; c.backgroundConfiguration = bg
     if #available(iOS 17.0, *) { c.contentConfiguration = UIContentUnavailableConfiguration.search() }
     else { var e = UIListContentConfiguration.cell(); e.text = "No Results"; e.textProperties.alignment = .center; e.textProperties.color = .secondaryLabel; c.contentConfiguration = e }
+  }
+}
+
+// The redraw rule (Haris 2026-11-13: "nothing slides while anything changes"): rows that only change in place are set at
+// once, laid out without animation, nothing on the page moving; rows coming or going fade, the rest sliding to make room.
+extension UITableViewDiffableDataSource {
+  func applySteady(_ snap: NSDiffableDataSourceSnapshot<SectionIdentifierType, ItemIdentifierType>, in tv: UITableView, animated: Bool, done: (() -> Void)? = nil) {
+    let old = snapshot()
+    if !animated || (old.sectionIdentifiers == snap.sectionIdentifiers && old.itemIdentifiers == snap.itemIdentifiers) {
+      UIView.performWithoutAnimation { apply(snap, animatingDifferences: false); tv.layoutIfNeeded() }
+      done?()
+    } else { apply(snap, animatingDifferences: true, completion: done) }
+  }
+}
+extension UICollectionViewDiffableDataSource {
+  func applySteady(_ snap: NSDiffableDataSourceSnapshot<SectionIdentifierType, ItemIdentifierType>, in cv: UICollectionView, animated: Bool, done: (() -> Void)? = nil) {
+    let old = snapshot()
+    if !animated || (old.sectionIdentifiers == snap.sectionIdentifiers && old.itemIdentifiers == snap.itemIdentifiers) {
+      UIView.performWithoutAnimation { apply(snap, animatingDifferences: false); cv.layoutIfNeeded() }
+      done?()
+    } else { apply(snap, animatingDifferences: true, completion: done) }
   }
 }

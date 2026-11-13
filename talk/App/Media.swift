@@ -113,7 +113,7 @@ final class MediaVC: UIViewController, UICollectionViewDelegate, QLPreviewContro
         data.applySnapshotUsingReloadData(snap)
       }
       cv.setContentOffset(CGPoint(x: 0, y: -cv.adjustedContentInset.top), animated: false)
-    } else { data.apply(snap, animatingDifferences: animated) }
+    } else { data.applySteady(snap, in: cv, animated: animated) }
   }
   private func layout() -> UICollectionViewLayout {
     UICollectionViewCompositionalLayout { [weak self] s, env in
@@ -171,7 +171,7 @@ final class MediaVC: UIViewController, UICollectionViewDelegate, QLPreviewContro
       //  drawn — setting the list again from there stopped the app on the Links tab, Haris 2026-11-13)
       DispatchQueue.main.async { [weak self] in
         guard let self = self else { return }
-        var s = self.data.snapshot(); if s.indexOfItem(m.id) != nil { s.reconfigureItems([m.id]); self.data.apply(s, animatingDifferences: false) }
+        var s = self.data.snapshot(); if s.indexOfItem(m.id) != nil { s.reconfigureItems([m.id]); self.data.applySteady(s, in: self.cv, animated: false) }
       }
     }
     return nil
