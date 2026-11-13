@@ -76,6 +76,16 @@ final class MediaVC: UIViewController, UICollectionViewDelegate, QLPreviewContro
                                  holder.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor), holder.heightAnchor.constraint(equalToConstant: 44)])
     cv.contentInset.top = 44; cv.verticalScrollIndicatorInsets.top = 44
     holder.backgroundColor = .clear
+    // (the pictures scrolled up under the control showed through it — Haris 2026-11-13: the control is one of the bar's
+    //  own, so Apple's top frost reaches down behind it, as under a search bar; before iOS 26, Apple's bar material)
+    if #available(iOS 26.0, *) {
+      let i = UIScrollEdgeElementContainerInteraction(); i.scrollView = cv; i.edge = .top
+      holder.addInteraction(i)
+    } else {
+      let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
+      blur.frame = holder.bounds; blur.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+      holder.insertSubview(blur, at: 0)
+    }
   }
   @objc private func changed() { reload(animated: view.window != nil, layout: false) }
   @objc private func gone(_ n: Notification) { if (n.object as? String) == group { navigationController?.popToRootViewController(animated: true) } }
