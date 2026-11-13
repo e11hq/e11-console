@@ -62,3 +62,7 @@ targets:
         TalkServerURL: https://talk-test.e11hq.com
         SharedKeychainGroup: $(AppIdentifierPrefix)ae.e11.console.shared
         NSFaceIDUsageDescription: Face ID signs you back in to E11 Talk.
+        # (E11 Console's Talk button opens E11 Talk — Haris 2026-11-13)
+        CFBundleURLTypes:
+          - CFBundleURLName: ae.e11.talk
+            CFBundleURLSchemes: [e11talk]

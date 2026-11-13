@@ -516,7 +516,21 @@ final class Talk {
   func myClients(withClient: Bool? = nil) -> [String] { Set(groups.values.filter { withClient == nil || $0.withClient == withClient! }.map { $0.client }).filter { clients[$0] != nil }.sorted { clientActivity($0, withClient: withClient) > clientActivity($1, withClient: withClient) } }
   var myClients: [String] { myClients() }
   var totalUnread: Int { groups.keys.reduce(0) { $0 + unread($1) } }
-  func badge() { UIApplication.shared.applicationIconBadgeNumber = totalUnread }
+  func badge() { UIApplication.shared.applicationIconBadgeNumber = totalUnread; tellUnread() }
+  // (your count to the server, for E11 Console's Talk button — only when it changed, a moment after; staff only, as client
+  //  contacts have no E11 Console — Haris 2026-11-13)
+  private var toldUnread: (Int, Int)?, tellSoon = false
+  private func tellUnread() {
+    guard !isContact, me != nil, !tellSoon else { return }
+    tellSoon = true
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+      guard let self = self else { return }
+      self.tellSoon = false
+      let now = (self.totalUnread, self.lastSeq)
+      if let t = self.toldUnread, t == now { return }
+      Net.shared.act(["act": "unread", "n": now.0, "seq": now.1]) { [weak self] j in if (j?["ok"] as? Bool) == true { DispatchQueue.main.async { self?.toldUnread = now } } }
+    }
+  }
   func name(_ id: String) -> String { id == me?.id ? "You" : people[id]?.name ?? "Someone" }
   func isAdmin(_ g: Group) -> Bool { g.admins.contains(me?.id ?? "") }
   func canManage(_ g: Group) -> Bool { isAdmin(g) || boss }
