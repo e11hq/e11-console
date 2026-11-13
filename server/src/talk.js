@@ -25,7 +25,7 @@ const PHONE_MS = 30 * 86400000;         // a linked Mac goes when its phone hasn
 const rid = (p) => p + '-' + crypto.randomBytes(8).toString('hex');
 const clip = (s, n) => String(s == null ? '' : s).slice(0, n);
 
-export function createTalk({ dataDir, store, access, apns = null, now = () => Date.now(), dbFile, links = () => null, signinCode = null, onUnread = null }) {
+export function createTalk({ dataDir, store, access, apns = null, now = () => Date.now(), dbFile, links = () => null, signinCode = null, onUnread = null, keepFor = null }) {
   const file = dbFile || path.join(dataDir, 'db', 'talk.sqlite');
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
   const relay = path.join(dataDir, 'talk-relay');
@@ -303,6 +303,8 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   }
   // the phone has everything up to here: those wait no more; an event nobody waits for is gone, with its files
   function ack(u, upto) {
+    // (the App Review account keeps everything waiting: each new phone of the reviewer's gets the whole demo — reset nightly)
+    if (keepFor && u && u.id === keepFor) return { ok: true };
     // (a person's phone has these messages: each group's other people get "got" up to the newest — Message info's
     // Delivered to, Haris 2026-11-12; clients see it too. A linked Mac's copy doesn't count as the person's phone.)
     if (!isMacId(u.id)) {
@@ -376,6 +378,113 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       const c = clientById(g.client);
       apns.sendTo(uid, { title: g.name, body: `${from.name || from.email}: ${text}`, tag: g.id, kind: 'talk', groupId: g.id, msgId, clientId: c ? c.id : null, category: 'talk-msg' }).catch(() => {});
     }
+  }
+
+  // ---------- the App Review copy: made-up chats (review.js; Haris 2026-11-13: "Both ways") ----------
+  // Every night with the demo (demo.js): Talk emptied, then groups under the demo's clients with made-up people — a
+  // client's own group with their contact, photos sent as an album, a task card, a file, replies, mentions and reactions.
+  // Everything waits for the reviewer's phones (ack keeps it, keepFor), so any phone they sign in on gets it all.
+  function jpegSize(buf) {
+    for (let i = 2; i < buf.length - 9;) {
+      if (buf[i] !== 0xFF) return null;
+      const m = buf[i + 1], len = buf.readUInt16BE(i + 2);
+      if (m >= 0xC0 && m <= 0xC3) return { h: buf.readUInt16BE(i + 5), w: buf.readUInt16BE(i + 7) };
+      i += 2 + len;
+    }
+    return null;
+  }
+  function reviewDemo(me, demoDir) {
+    for (const tb of ['groups', 'members', 'prefs', 'events', 'waiting', 'sent', 'files', 'contacts', 'macs', 'link_codes', 'phone_seen', 'needs', 'opts', 'unread']) db.exec(`DELETE FROM ${tb}`);
+    try { for (const f of fs.readdirSync(relay)) fs.rmSync(path.join(relay, f), { force: true }); } catch { /* fine */ }
+    const u = userOf(me);
+    if (!u) return { ok: false };
+    const team = store.list('users').filter((x) => active(x) && x.id !== me && !isFree(x));
+    const cl = clientsFor(u);
+    if (!cl.length || team.length < 3) return { ok: false };
+    const P = (i) => team[i % team.length];
+    let t = now() - 26 * 3600_000;
+    const at = (gap = 4) => (t += gap * 60_000 + Math.floor(Math.random() * 3 * 60_000));
+    const file = (by, name, kind) => {
+      const src = path.join(demoDir, name);
+      if (!fs.existsSync(src)) return null;
+      const id = rid('f'), buf = fs.readFileSync(src);
+      fs.writeFileSync(path.join(relay, id), buf);
+      Q.newFile.run(id, by.id, name.replace(/^dm\d+/, 'IMG_' + (2400 + Math.floor(Math.random() * 600))), t);
+      Q.growFile.run(buf.length, 1, id);
+      const d = kind === 'photo' ? jpegSize(buf) || {} : {};
+      return { id, name: Q.getFile.get(id).name, size: buf.length, kind, w: d.w || null, h: d.h || null, secs: null, wave: null };
+    };
+    const tasks = store.list('tasks').filter((x) => !x.done && !x.deleted && !x.parentId);
+    const made = [];
+    const group = (c, name, people, creator, lines, { contact = null } = {}) => {
+      const id = rid('g'), t0 = at(1);
+      Q.newGroup.run(id, c.id, name, creator.id, t0, t0);
+      for (const x of [u, ...people]) Q.addMember.run(id, x.id, t0, creator.id);
+      if (contact) Q.addMember.run(id, contact, t0, creator.id);
+      const g = Q.group.get(id);
+      changed(g, creator.id);
+      emit(g, 'msg', { id: rid('m'), kind: 'sys', text: `${String(creator.name || '').split(' ')[0]} made the group “${name}”` }, creator.id);
+      const ids = [];
+      for (const ln of lines) {
+        if (ln.gap) { at(ln.gap); continue; }
+        const mid = rid('m'); ids.push(mid);
+        const tt = at(ln.wait || 3), by = ln.by;
+        const to = ln.reply != null ? lines.filter((x) => !x.gap)[ln.reply] : null;
+        const reply = to ? { id: ids[ln.reply], by: to.by.id, text: String(to.text || (to.file ? '📷 Photo' : '')).slice(0, 200), kind: to.file ? to.file.kind : 'text' } : null;
+        const data = { id: mid, kind: ln.file ? ln.file.kind : 'text', text: ln.text || '', file: ln.file || null, reply, mentions: ln.mentions || [], ...(ln.task ? { task: ln.task } : {}), ...(ln.album ? { album: ln.album } : {}) };
+        Q.putSent.run(mid, id, by.id, tt, JSON.stringify(ln.file ? [ln.file.id] : []));
+        const r = Q.addEvent.run(id, 'msg', JSON.stringify(data), tt, by.id);
+        for (const m of devicesFor(memberIds(g), by.id)) waitFor(Number(r.lastInsertRowid), m);
+        if (ln.file) for (const m of memberIds(g)) if (m !== by.id) Q.addNeed.run(ln.file.id, m, id, tt);
+        for (const [rw, e] of ln.react || []) emit(g, 'react', { id: mid, emoji: e }, rw.id);
+      }
+      for (const x of people) emit(g, 'read', { upto: ids[Math.max(0, ids.length - 2)] }, x.id, memberIds(g).filter((m) => m !== x.id));
+      Q.touch.run(t, id);
+      made.push(name);
+      return g;
+    };
+    const a = P(0), b = P(1), c = P(2), d = P(3), e = P(4);
+    const first = (x) => String(x.name || '').split(' ')[0];
+    // 1 · a client's own group, with their contact (made-up)
+    const kid = 'k-' + crypto.randomBytes(5).toString('hex');
+    db.prepare('INSERT INTO contacts (id, email, name, client, by, at) VALUES (?, ?, ?, ?, ?, ?)').run(kid, 'rania@example.com', 'Rania Malik', cl[0].id, u.id, t);
+    const rania = { id: kid, name: 'Rania Malik' };
+    group(cl[0], `${cl[0].name} · Launch campaign`, [a, b], a, [
+      { by: rania, text: 'Good morning! Can we see the hero banner today?' },
+      { by: u, text: `Morning Rania — ${first(a)} is finishing round 2 now.` },
+      { by: a, text: 'Round 2 is up: warmer light, bigger product shot ☕', wait: 40 },
+      { by: a, file: file(a, 'dm01.jpg', 'photo') },
+      { by: rania, text: 'This is it. Approved from our side 🙌', react: [[u, '👏'], [a, '❤️']] },
+      { by: b, text: 'Amazing — final files coming by noon.' },
+    ], { contact: kid });
+    // 2 · the team's own group: an album, a task, a file
+    const tk = tasks.find((x) => x.projectId === cl[0].id) || tasks[0];
+    const album = 'alb' + crypto.randomBytes(4).toString('hex');
+    group(cl[0], `${cl[0].name} · Shoot day`, [a, c, d], c, [
+      { by: c, text: 'Call time is 8:30 — bring the 35mm and the reflector.' },
+      { by: d, text: 'On it 👍' },
+      { gap: 180 },
+      ...['dm02.jpg', 'dm03.jpg', 'dm04.jpg', 'dm05.jpg', 'dm06.jpg'].map((f) => ({ by: c, file: file(c, f, 'photo'), album, wait: 0.2 })),
+      { by: u, text: 'These look great. Which one is the hero?', reply: 2 },
+      { by: c, text: 'The second one — best light.', mentions: [u.id] },
+      ...(tk ? [{ by: a, text: 'Here’s the task for the edit', task: taskCard(tk) }] : []),
+      { by: d, file: file(d, 'creative-brief.pdf', 'file'), text: '' },
+    ]);
+    // 3 · another client
+    const c2 = cl[1] || cl[0];
+    group(c2, `${c2.name} · Social`, [b, e], b, [
+      { by: b, text: 'December plan is ready for review.' },
+      { by: e, text: `@${first(u)} can you check the captions before Thursday?`, mentions: [u.id] },
+      { by: u, text: 'Yes — I’ll go through them this afternoon.', reply: 1 },
+      { by: b, text: 'Thank you! 🙏', react: [[e, '👍']] },
+    ]);
+    // 4 · a quiet one
+    const c3 = cl[2] || cl[0];
+    group(c3, `${c3.name} · Website`, [d, e], e, [
+      { by: e, text: 'Homepage copy is in the doc.' },
+      { by: d, text: 'Thanks, I’ll start on the layout tomorrow.' },
+    ]);
+    return { ok: true, made };
   }
 
   // ---------- what people do ----------
@@ -917,6 +1026,6 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   const isAdminOf = (u, gid) => { const g = Q.group.get(gid); return !!g && isAdmin(u, g); };
   // (whose E11 Console key — board 53's card: name, role, colour)
   function personByEmail(e) { const u = access.userByEmail(e); if (u) return personOf(u); const k = contactByEmail(e); return k ? { id: k.id, name: k.name, role: 'Client', photo: null, color: null } : null; }
-  return { state, act, sync, ack, unreadFor, sample, upload, tasksChanged, contactByEmail, personByEmail, fileFor, filePath, fetched, listen, sweep, isAdminOf,
+  return { state, act, sync, ack, unreadFor, reviewDemo, sample, upload, tasksChanged, contactByEmail, personByEmail, fileFor, filePath, fetched, listen, sweep, isAdminOf,
     linkCode, linkStatus, macFor, unlinkMac, history, hasFiles, resend, close: () => { clearInterval(sweepTimer); for (const set of listeners.values()) for (const r of set) try { r.end(); } catch { /* fine */ } db.close(); } };
 }

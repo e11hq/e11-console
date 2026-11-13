@@ -3,6 +3,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { openStore } from './store.js';
@@ -89,7 +90,7 @@ export function createServer(cfg) {
   // E11 Talk (talk.js): its own database, its own phones for notifications (the same Apple key, its own app)
   const talkApns = createApns({ store, keyFile: cfg.apnsKeyFile, keyId: cfg.apnsKeyId, teamId: cfg.apnsTeamId, topic: cfg.talkTopic || 'ae.e11.talk.ios', kvPrefix: 'talk-apns', hosts: cfg.apnsHosts, connectOpts: cfg.apnsConnectOpts });
   let talk = null;
-  const talkNow = () => talk || (talk = createTalk({ dataDir, store, access, apns: talkApns, dbFile: cfg.talkDbFile, now: cfg.now || (() => Date.now()), links: () => fileLinks, signinCode: talkSigninCode, onUnread: talkUnreadTell }));
+  const talkNow = () => talk || (talk = createTalk({ dataDir, store, access, apns: talkApns, dbFile: cfg.talkDbFile, now: cfg.now || (() => Date.now()), links: () => fileLinks, signinCode: talkSigninCode, onUnread: talkUnreadTell, keepFor: review ? REVIEW_USER_ID : null }));
   // (E11 Talk's unread count on E11 Console's Talk button: to that person's open apps, as it changes)
   function talkUnreadTell(uids) { if (!talk) return; const set = new Set(uids.map(String)); for (const s of streams) if (set.has(s.userId)) { try { send(s, 'talkUnread', { n: talk.unreadFor(s.userId) }); } catch { /* fine */ } } }
   function talkContact(e) { try { return talkNow().contactByEmail(e); } catch { return null; } }
@@ -767,6 +768,13 @@ export function createServer(cfg) {
         if (!r.ok) { res.writeHead(r.wait ? 429 : 401, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(review.page({ error: r.error, email: f.get('email') || '' })); }
         res.writeHead(303, { Location: '/', 'Set-Cookie': review.cookie(req, r.token), 'Cache-Control': 'no-store' });
         return res.end();
+      }
+      // (the same sign-in for E11 Talk's "App Review sign-in": JSON in, the review token out — Haris 2026-11-13 "Both ways")
+      if (p === '/review/api/sign-in' && req.method === 'POST') {
+        let b = {}; try { b = JSON.parse((await readRaw(req, 8192)).toString('utf8') || '{}'); } catch { /* bad JSON */ }
+        const r = review.signIn(netInfo(req).ip, b.email, b.password);
+        if (!r.ok) return json(res, r.wait ? 429 : 401, { ok: false, error: r.error });
+        return json(res, 200, { ok: true, token: r.token, cookie: 'e11_rv' });
       }
       if (p === '/review/sign-in') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(review.page()); }
       if (p === '/review/sign-out') {
@@ -1597,6 +1605,8 @@ export function createServer(cfg) {
     store.apply([{ kind: 'users', id: REVIEW_USER_ID, data: { ...DEMO_REVIEWER, email: review.user, createdAt: new Date(Date.now() - 400 * 86400000).toISOString() } }], 'demo-reset');
     const data = demoData(store, REVIEW_USER_ID, filesRoot);
     const { rev } = store.importAll(data, REVIEW_USER_ID);
+    // (E11 Talk on the App Review copy: made-up chats for the reviewer, fresh with the demo — Haris 2026-11-13)
+    try { const r = talkNow().reviewDemo(REVIEW_USER_ID, fileURLToPath(new URL('./demo/', import.meta.url))); if (!r.ok) console.error('App Review Talk demo: not made'); } catch (e) { console.error('App Review Talk demo failed:', e); }
     store.kv.set('demo-loaded', JSON.stringify({ day, at: new Date().toISOString() }));
     for (const st of streams) send(st, 'resync', { rev });
     console.log(`App Review demo data loaded: ${data.tasks.length} tasks, ${data.users.length} people`);

@@ -123,3 +123,30 @@ test('the privacy policy and support page open without signing in', async () => 
     assert.match(await r.text(), p === '/privacy' ? /Privacy policy/ : /Support/);
   }
 });
+
+test('E11 Talk on the App Review copy: its own JSON sign-in, made-up chats that stay for every phone of the reviewer', async () => {
+  const bad = await fetch(base + '/review/api/sign-in', { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '7.7.7.7' }, body: JSON.stringify({ email: 'review@e11hq.com', password: 'nope' }) });
+  assert.equal(bad.status, 401);
+  const r = await fetch(base + '/review/api/sign-in', { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '7.7.7.8' }, body: JSON.stringify({ email: 'review@e11hq.com', password: PW }) }).then((x) => x.json());
+  assert.equal(r.ok, true); assert.ok(r.token);
+  const H = { Cookie: `e11_rv=${r.token}` };
+  const st = await fetch(base + '/api/talk/state', { headers: H }).then((x) => x.json());
+  assert.ok(st.groups.length >= 4, `${st.groups.length} groups`);
+  const sync = () => fetch(base + '/api/talk/sync?after=0', { headers: H }).then((x) => x.json());
+  const s1 = await sync();
+  const msgs = s1.events.filter((e) => e.type === 'msg' && e.kind !== 'sys');
+  assert.ok(msgs.length >= 20, `${msgs.length} messages`);
+  assert.ok(msgs.some((e) => e.album), 'an album');
+  assert.ok(msgs.some((e) => e.task), 'a task card');
+  assert.ok(msgs.some((e) => e.kind === 'file'), 'a file');
+  assert.ok(msgs.some((e) => e.reply), 'a reply');
+  assert.ok(s1.events.some((e) => e.type === 'react'), 'reactions');
+  const ph = msgs.find((e) => e.kind === 'photo');
+  assert.ok(ph.file.w > 0 && ph.file.h > 0);
+  const f = await fetch(base + '/api/talk/file/' + ph.file.id, { headers: H });
+  assert.equal(f.status, 200); assert.ok((await f.arrayBuffer()).byteLength === ph.file.size);
+  // picked up by one phone — still there for the next one
+  await fetch(base + '/api/talk/ack', { method: 'POST', headers: { ...H, 'Content-Type': 'application/json' }, body: JSON.stringify({ upto: s1.last }) });
+  assert.equal((await sync()).events.length, s1.events.length);
+  assert.deepEqual(realIn(JSON.stringify(s1.events) + JSON.stringify(st)), []);
+});
