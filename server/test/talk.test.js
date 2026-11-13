@@ -390,3 +390,9 @@ test('your unread count for E11 Console\'s Talk button: what Talk said, plus wha
   assert.ok(await until(/data: \{"n":0\}/), 'read in Talk: back to 0');
   ctl.abort();
 });
+test('a sync with nothing waiting says there is no more (the address gives no limit) — the phone asked again and again (2026-11-13)', async () => {
+  const s = await sync('sm', 0); await ack('sm', s.last);
+  const again = await (await fetch(base + '/api/talk/sync?after=' + s.last, { headers: H('sm') })).json();
+  assert.equal(again.events.length, 0);
+  assert.equal(again.more, false);
+});

@@ -293,10 +293,13 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     return upload(u, id, name, offset, bytes, last);
   }
   const evOut = (e) => ({ seq: e.seq, group: e.grp, type: e.type, at: e.at, by: e.by, ...JSON.parse(e.data) });
-  function sync(u, after, limit = 500) {
+  function sync(u, after, limit) {
     phoneSeen(u);
-    const rows = Q.pending.all(u.id, Number(after) || 0, Math.min(1000, Number(limit) || 500));
-    return { ok: true, events: rows.map(evOut), more: rows.length >= limit, last: rows.length ? rows[rows.length - 1].seq : Number(after) || 0 };
+    // (no limit asked: 500 — "more" compared against that same number; with none given (null from the address) it said
+    //  "more" every time, and the phone asked again at once, over and over — found 2026-11-13 by the chat-opening timer)
+    const lim = Math.min(1000, Number(limit) > 0 ? Number(limit) : 500);
+    const rows = Q.pending.all(u.id, Number(after) || 0, lim);
+    return { ok: true, events: rows.map(evOut), more: rows.length >= lim, last: rows.length ? rows[rows.length - 1].seq : Number(after) || 0 };
   }
   // the phone has everything up to here: those wait no more; an event nobody waits for is gone, with its files
   function ack(u, upto) {
