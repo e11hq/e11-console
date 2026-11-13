@@ -60,7 +60,7 @@ struct Msg: Codable, Equatable {
     }
   }
   struct LinkPrev: Codable, Equatable, Hashable { var url: String; var title: String?; var site: String?; var video: Bool; var img: String?; var icon: String?; var e11: String? = nil; var pic: String? = nil; var client: String? = nil; var sub: String? = nil; var state: String? = nil }   // (client / sub / state: an E11 link's live card — "ok", "off", "gone")   // (pic: an E11 link's picture, its page's own — a web address)   // (e11: one of our own links — "file" / "folder", its card from the server)
-  struct FileRef: Codable, Equatable { var id: String; var name: String; var size: Int; var kind: String; var w: Double?; var h: Double?; var secs: Double?; var wave: String? = nil }
+  struct FileRef: Codable, Equatable { var id: String; var name: String; var size: Int; var kind: String; var w: Double?; var h: Double?; var secs: Double?; var wave: String? = nil; var thumb: String? = nil }
   struct Reply: Codable, Equatable { var id: String; var by: String; var text: String; var kind: String }
 }
 
@@ -245,8 +245,10 @@ final class Talk {
       let files = evs.flatMap { e -> [String] in
         guard (e["type"] as? String) == "msg" else { return [] }
         let k = e["link"] as? [String: Any]
-        // (a link's preview picture and site icon too)
-        return [(e["file"] as? [String: Any])?["id"] as? String, (k?["img"] as? [String: Any])?["id"] as? String, (k?["icon"] as? [String: Any])?["id"] as? String]
+        // (a link's preview picture and site icon too; a photo, video or file only when Auto-download takes it now — the
+        //  rest stay on the server for this phone, downloaded with a tap or once Wi-Fi is back)
+        let fileId = Auto.now(e["kind"] as? String ?? "file") ? (e["file"] as? [String: Any])?["id"] as? String : nil
+        return [fileId, (k?["img"] as? [String: Any])?["id"] as? String, (k?["icon"] as? [String: Any])?["id"] as? String]
           .compactMap { $0 }.filter { !$0.hasPrefix("local-") && !FileManager.default.fileExists(atPath: Net.local($0).path) }
       }
       self.syncing = true
@@ -257,6 +259,35 @@ final class Talk {
         if ok && ((j["more"] as? Bool) == true || self.again) { self.again = false; self.sync(done) } else { self.again = false; done?() }
       }
     }
+  }
+  // Auto-download: what a switch or the network kept back, now that it may come (the last 30 days; three at a time)
+  private var catching = false
+  func catchUp() {
+    guard !catching, me != nil else { return }
+    let since = Date().timeIntervalSince1970 * 1000 - Auto.keep
+    var want: [(id: String, size: Int, kind: String)] = []
+    for g in groups.keys {
+      for m in log(g).msgs.reversed() {
+        guard m.at > since else { break }
+        guard let f = m.file, !m.deleted, !m.pending, Auto.now(m.kind), !Auto.here(f), !Downloads.shared.isGone(f.id), !Downloads.shared.running(f.id) else { continue }
+        want.append((f.id, f.size, m.kind))
+      }
+    }
+    guard !want.isEmpty else { return }
+    catching = true
+    var running = 0
+    func next() {
+      if want.isEmpty && running == 0 { catching = false; return }
+      // (Wi-Fi gone again, or a switch turned off: the rest wait)
+      while running < 3, let w = want.first {
+        want.removeFirst()
+        guard Auto.now(w.kind) else { continue }
+        running += 1
+        Downloads.shared.start(w.id, size: w.size) { _ in running -= 1; next() }
+      }
+      if running == 0 { catching = false }
+    }
+    next()
   }
   private func apply(_ e: [String: Any], _ groupChanged: inout Bool) -> String? {
     guard let g = e["group"] as? String, let type = e["type"] as? String else { return nil }
@@ -269,7 +300,7 @@ final class Talk {
     case "msg":
       let f = (e["file"] as? [String: Any]).flatMap { f -> Msg.FileRef? in
         guard let fid = f["id"] as? String else { return nil }
-        return Msg.FileRef(id: fid, name: f["name"] as? String ?? "File", size: f["size"] as? Int ?? 0, kind: f["kind"] as? String ?? "file", w: f["w"] as? Double, h: f["h"] as? Double, secs: f["secs"] as? Double, wave: f["wave"] as? String)
+        return Msg.FileRef(id: fid, name: f["name"] as? String ?? "File", size: f["size"] as? Int ?? 0, kind: f["kind"] as? String ?? "file", w: f["w"] as? Double, h: f["h"] as? Double, secs: f["secs"] as? Double, wave: f["wave"] as? String, thumb: f["thumb"] as? String)
       }
       let r = (e["reply"] as? [String: Any]).flatMap { r -> Msg.Reply? in
         guard let rid = r["id"] as? String, !rid.isEmpty else { return nil }
@@ -326,6 +357,8 @@ final class Talk {
                 reply: reply.map { Msg.Reply(id: $0.id, by: $0.by, text: Talk.preview($0), kind: $0.kind) }, mentions: mentions, pending: true, fwd: fwd ? true : nil)
     m.album = album; m.task = task
     if let lf = localFile, let f = file { try? FileManager.default.copyItem(at: lf, to: Net.local(f.id)) }
+    // (a photo's or video's tiny picture goes with it — shown blurred on phones that haven't downloaded it yet)
+    let thumb = file?.thumb ?? (file.flatMap { f in localFile.flatMap { Thumb.make($0, kind: f.kind) } })
     l.msgs.append(m); logs[g] = l; saveSoon(g)
     NotificationCenter.default.post(name: .talkGroup, object: g); NotificationCenter.default.post(name: .talkChanged, object: nil)
     var linkBody: [String: Any]? = nil
@@ -336,7 +369,7 @@ final class Talk {
       if let t = task { b["task"] = ["id": t.id] }
       if fwd { b["fwd"] = true }
       if let r = m.reply { b["reply"] = ["id": r.id, "by": r.by, "text": r.text, "kind": r.kind] }
-      if let f = file, let fid = fileId { var fd: [String: Any] = ["id": fid, "kind": f.kind]; fd["w"] = f.w; fd["h"] = f.h; fd["secs"] = f.secs; fd["wave"] = f.wave; b["file"] = fd }
+      if let f = file, let fid = fileId { var fd: [String: Any] = ["id": fid, "kind": f.kind]; fd["w"] = f.w; fd["h"] = f.h; fd["secs"] = f.secs; fd["wave"] = f.wave; fd["thumb"] = thumb; b["file"] = fd }
       Net.shared.act(b) { [weak self] j in
         guard let self = self else { return }
         // (the send sound once the server has it — not while the clock shows it on its way; every kind, Haris 2026-11-12)

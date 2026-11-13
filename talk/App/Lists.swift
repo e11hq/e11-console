@@ -342,6 +342,9 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
   func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat {
     switch data.itemIdentifier(for: ip) {
     case .group(let id)?, .ghit(let id)?: return groupModel(id) != nil ? UITableView.automaticDimension : tv.rowHeight
+    // (a client found by a message: two lines of it, as the board's search — its own height; the fixed one pushed its
+    //  name up as a search's letters were typed, Haris 2026-11-13)
+    case .hit(let id)?: return hits[id] != nil ? UITableView.automaticDimension : tv.rowHeight
     default: return tv.rowHeight
     }
   }

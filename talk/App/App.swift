@@ -216,6 +216,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     guard Net.shared.signedIn, tabs != nil else { return }
     Net.shared.listen()
     Talk.shared.refresh { Talk.shared.prune() }; Talk.shared.sync()
+    // (Auto-download: the network watched; what waited for Wi-Fi comes if it's here now)
+    Auto.startOnce(); Talk.shared.catchUp()
   }
   func sceneDidEnterBackground(_ s: UIScene) { Net.shared.stopListening(); Talk.shared.flush(); Talk.shared.badge(); Backup.shared.backUpIfDue() }
 }

@@ -975,6 +975,15 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   // ---------- reading ----------
   private func open(_ m: Msg) {
     guard let f = m.file else { return }
+    // (Auto-download: no longer on the server — said; downloading — a tap on the ring stops it; a file not here — a tap
+    //  downloads it (opened with the next tap, as WhatsApp); a photo or video not here — downloaded first, then opened)
+    if Auto.gone(m) { toast("No longer available"); return }
+    if Downloads.shared.running(f.id) { Downloads.shared.cancel(f.id); return }
+    if !Auto.here(f) && m.kind != "voice" {
+      if m.kind == "photo" || m.kind == "video" { Downloads.shared.start(f.id, size: f.size) { [weak self] ok in if ok { self?.open(m) } } }
+      else { Downloads.shared.start(f.id, size: f.size) }
+      return
+    }
     // (a photo or video: the photo viewer — the design's "A photo opened" — through the chat's photos and videos)
     if m.kind == "photo" || m.kind == "video" {
       let all = Talk.shared.log(group).msgs.filter { ($0.kind == "photo" || $0.kind == "video") && !$0.deleted && $0.file != nil && !$0.pending }
@@ -1813,6 +1822,10 @@ final class BubbleCell: UITableViewCell {
   private let playDisc = UIView(), vlen = UILabel()
   // a document (any file): one card — its kind, name, size · kind; a download circle on one not on this phone yet
   private let card = UIView(), cardIcon = UIImageView(), cardName = UILabel(), cardSize = UILabel(), cardDown = UIImageView()
+  // (Auto-download: ↓ and its size over a photo or video not on the phone, the ring while it comes, No longer available;
+  //  a file's ↓ becomes a ring — mock-up "Talk — Auto-download", Haris 2026-11-13)
+  private let dlBadge = DownloadBadge(), cardRing = DownloadRing()
+  private var thumbFor: String?
   private lazy var cardWrap = Bleed(card)
   // a link: its preview box — the site, the address, a line, 🔗 the site
   private let linkBox = UIView(), linkSite = UILabel(), linkURL = UILabel(), linkLine = UIView(), linkFoot = UILabel()
@@ -1909,6 +1922,9 @@ final class BubbleCell: UITableViewCell {
                                  tri.centerXAnchor.constraint(equalTo: playDisc.centerXAnchor, constant: 2), tri.centerYAnchor.constraint(equalTo: playDisc.centerYAnchor),
                                  vlen.leadingAnchor.constraint(equalTo: photo.leadingAnchor, constant: 10), vlen.bottomAnchor.constraint(equalTo: photo.bottomAnchor, constant: -7)])
     photoH = photo.heightAnchor.constraint(equalToConstant: 180); photoH.priority = .init(999); photoH.isActive = true
+    dlBadge.frame = photo.bounds; dlBadge.autoresizingMask = [.flexibleWidth, .flexibleHeight]; dlBadge.isHidden = true
+    photo.insertSubview(dlBadge, at: 0)
+    NotificationCenter.default.addObserver(self, selector: #selector(fileChanged(_:)), name: .talkFile, object: nil)
     // the card
     card.backgroundColor = UIColor.black.withAlphaComponent(0.22); card.layer.cornerRadius = 14; card.layer.cornerCurve = .continuous
     cardName.font = .systemFont(ofSize: 16); cardName.lineBreakMode = .byTruncatingMiddle; cardSize.font = .systemFont(ofSize: 13)
@@ -1923,6 +1939,9 @@ final class BubbleCell: UITableViewCell {
                                  cs.trailingAnchor.constraint(lessThanOrEqualTo: cardDown.leadingAnchor, constant: -10),
                                  cardDown.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12), cardDown.centerYAnchor.constraint(equalTo: card.centerYAnchor)])
     card.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(fileTap(_:))))
+    cardRing.translatesAutoresizingMaskIntoConstraints = false; cardRing.isHidden = true; card.addSubview(cardRing)
+    NSLayoutConstraint.activate([cardRing.centerXAnchor.constraint(equalTo: cardDown.centerXAnchor), cardRing.centerYAnchor.constraint(equalTo: cardDown.centerYAnchor),
+                                 cardRing.widthAnchor.constraint(equalToConstant: 26), cardRing.heightAnchor.constraint(equalToConstant: 26)])
     // the link's box
     linkBox.backgroundColor = UIColor.black.withAlphaComponent(0.22); linkBox.layer.cornerRadius = 15; linkBox.layer.cornerCurve = .continuous
     linkSite.font = .systemFont(ofSize: 15, weight: .semibold); linkURL.font = .systemFont(ofSize: 14); linkURL.numberOfLines = 2; linkURL.lineBreakMode = .byCharWrapping
@@ -2180,7 +2199,9 @@ final class BubbleCell: UITableViewCell {
       qt.addAttribute(.foregroundColor, value: mine ? UIColor.white.withAlphaComponent(0.8) : UIColor.secondaryLabel, range: NSRange(location: 0, length: qt.length))
       quoteText.attributedText = qt
       quoteThumb.image = nil; quoteThumbW.constant = 0
-      if cam, let o = l.msgs.first(where: { $0.id == r.id }), let f = o.file {
+      if cam, let o = l.msgs.first(where: { $0.id == r.id }), let f = o.file, !Auto.here(f) && !Auto.now(o.kind) {
+        quoteThumbW.constant = 54; quoteThumb.image = Thumb.image(f)
+      } else if cam, let o = l.msgs.first(where: { $0.id == r.id }), let f = o.file {
         quoteThumbW.constant = 54
         Net.shared.file(f.id) { [weak self] url in
           guard let self = self, self.msg?.id == m.id, let url = url else { return }
@@ -2210,12 +2231,11 @@ final class BubbleCell: UITableViewCell {
       // (one of yours, just through: the server's id for the same picture — kept as it is, not blanked and drawn again)
       else if shownFile?.hasPrefix("local-") == true, let i = photo.image, !isVideo { BubbleCell.pictures.setObject(i, forKey: f.id as NSString); shownFile = f.id }
       else if let k = known { photo.image = k; shownFile = f.id } else { photo.image = nil; shownFile = f.id }
-      if album.count < 4, photo.image == nil, !isVideo || f.size <= 60 * 1024 * 1024 || FileManager.default.fileExists(atPath: Net.local(f.id).path) {
-        Net.shared.file(f.id) { [weak self] url in
-          guard let self = self, self.msg?.id == m.id, let url = url else { return }
-          if isVideo { BubbleCell.frame(url, f.id) { [weak self] img in if self?.msg?.id == m.id { self?.photo.land(img) } } }
-          else { self.photo.land(BubbleCell.picture(url, f.id)) }
-        }
+      // (on the phone, or Auto-download takes it now: the picture; else its little blurred picture, ↓ and its size)
+      if album.count < 4 {
+        let st = Auto.state(m)
+        if photo.image == nil || thumbFor == f.id, st == .here || (st == .auto && (!isVideo || f.size <= 60 * 1024 * 1024)) { loadPicture(m, f, video: isVideo) }
+        else if photo.image == nil, let t = Thumb.image(f) { photo.image = t; thumbFor = f.id }
       }
     }
     shapePhoto()
@@ -2230,8 +2250,9 @@ final class BubbleCell: UITableViewCell {
       cardIcon.image = BubbleCell.docIcon(ext.isEmpty ? "file" : ext)
       cardName.text = f.name; cardName.textColor = ink
       cardSize.text = ByteCountFormatter.string(fromByteCount: Int64(f.size), countStyle: .file) + " · " + (ext.isEmpty ? "file" : ext); cardSize.textColor = dim
-      cardDown.isHidden = mine || FileManager.default.fileExists(atPath: Net.local(f.id).path); cardDown.tintColor = ink
+      cardDown.tintColor = ink; cardRing.ink = ink
     }
+    showDownload(animated: false)
     // the words — the time sits on their last line when it fits (room kept for it at the end, as WhatsApp); a link: its box, and blue
     let a = NSMutableAttributedString()
     link = nil
@@ -2466,6 +2487,68 @@ final class BubbleCell: UITableViewCell {
     }
   }
   @objc private func quoteTap() { if let r = msg?.reply { onReplyTap?(r.id) } }
+  private func loadPicture(_ m: Msg, _ f: Msg.FileRef, video: Bool) {
+    // (the real picture over the blurred one: a crossfade in place)
+    let put = { [weak self] (i: UIImage?) in
+      guard let self = self, self.msg?.id == m.id, let i = i else { return }
+      if self.thumbFor == f.id, self.window != nil {
+        self.thumbFor = nil
+        UIView.transition(with: self.photo, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction]) { self.photo.image = i }
+      } else { self.thumbFor = nil; self.photo.land(i) }
+    }
+    Net.shared.file(f.id) { url in
+      guard let url = url else { return }
+      if video { BubbleCell.frame(url, f.id) { img in DispatchQueue.main.async { put(img) } } } else { put(BubbleCell.picture(url, f.id)) }
+    }
+  }
+  // a file downloading, here, gone — or a switch changed: only this bubble's ↓, ring or picture set again, in place
+  @objc private func fileChanged(_ n: Notification) {
+    guard let m = msg, let f = m.file else { return }
+    if let id = n.object as? String, id != f.id { return }
+    if (m.kind == "photo" || m.kind == "video") && album.count < 4 {
+      let st = Auto.state(m)
+      if photo.image == nil || thumbFor == f.id, st == .here || (st == .auto && (m.kind == "photo" || f.size <= 60 * 1024 * 1024)) { loadPicture(m, f, video: m.kind == "video") }
+    }
+    showDownload(animated: true)
+  }
+  private static func same(_ a: Auto.State, _ b: Auto.State) -> Bool {
+    if case .loading = a, case .loading = b { return true }
+    return a == b
+  }
+  private func showDownload(animated: Bool) {
+    guard let m = msg, let f = m.file, !m.deleted else { dlBadge.isHidden = true; cardRing.isHidden = true; return }
+    let st = Auto.state(m)
+    if (m.kind == "photo" || m.kind == "video") && album.count < 4 {
+      let was = dlBadge.state
+      let put = {
+        self.dlBadge.set(st, size: f.size)
+        self.playDisc.isHidden = m.kind != "video" || !(st == .here || st == .auto)
+      }
+      if animated && window != nil && !BubbleCell.same(was, st) {
+        UIView.transition(with: photo, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction], animations: put)
+      } else { put() }
+    } else { dlBadge.isHidden = true }
+    if !cardWrap.isHidden {
+      let ext = (f.name as NSString).pathExtension.lowercased()
+      let put = {
+        switch st {
+        case .loading(let w, let e):
+          self.cardDown.isHidden = true; self.cardRing.isHidden = false; self.cardRing.set(Double(w) / Double(max(e, 1)))
+          self.cardSize.text = Auto.size(w) + " of " + Auto.size(max(e, 1))
+        case .gone:
+          self.cardDown.isHidden = true; self.cardRing.isHidden = true; self.cardSize.text = "No longer available"
+        default:
+          self.cardDown.isHidden = st == .here; self.cardRing.isHidden = true
+          self.cardSize.text = Auto.size(Int64(f.size)) + " · " + (ext.isEmpty ? "file" : ext)
+        }
+      }
+      if case .loading = st, case .loading = cardState { put() }
+      else if animated && window != nil && !BubbleCell.same(cardState, st) { UIView.transition(with: card, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction], animations: put) }
+      else { put() }
+      cardState = st
+    }
+  }
+  private var cardState: Auto.State = .here
   @objc private func fileTap(_ g: UITapGestureRecognizer) {
     guard let m = msg else { return }
     // (in an album: the one under the finger — the fourth for the rest)
@@ -2487,6 +2570,8 @@ final class BubbleCell: UITableViewCell {
     let g = DispatchGroup()
     for (i, a) in four.enumerated() {
       guard let f = a.file else { continue }
+      // (Auto-download off for it: its little blurred picture in its square)
+      if !Auto.here(f) && !Auto.now(a.kind) { pics[i] = Thumb.image(f); continue }
       g.enter()
       Net.shared.file(f.id) { url in DispatchQueue.main.async {
         guard let url = url else { g.leave(); return }

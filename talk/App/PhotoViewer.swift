@@ -383,6 +383,8 @@ final class ZoomPage: UIScrollView, UIScrollViewDelegate {
     let i = UIImage(cgImage: cg); smalls.setObject(i, forKey: f.id as NSString); return i
   }
   static func thumb(_ m: Msg, _ f: Msg.FileRef, _ done: @escaping (UIImage?) -> Void) {
+    // (Auto-download off for it: its little blurred picture — the grid never downloads by itself)
+    if !Auto.here(f) && !Auto.now(m.kind) { done(Thumb.image(f)); return }
     Net.shared.file(f.id) { url in
       guard let url = url else { DispatchQueue.main.async { done(nil) }; return }
       if m.kind == "video" { BubbleCell.frame(url, f.id) { i in DispatchQueue.main.async { done(i) } }; return }

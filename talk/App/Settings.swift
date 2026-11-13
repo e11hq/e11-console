@@ -183,6 +183,11 @@ enum TalkPrefs {
   private static func get(_ k: String) -> Bool { UserDefaults.standard.object(forKey: k) as? Bool ?? true }
   static var inAppSounds: Bool { get { get("talk_inapp_sounds") } set { UserDefaults.standard.set(newValue, forKey: "talk_inapp_sounds") } }
   static var inAppBanners: Bool { get { get("talk_inapp_banners") } set { UserDefaults.standard.set(newValue, forKey: "talk_inapp_banners") } }
+  // Storage and Data › Auto-download (Haris 2026-11-13: Photos and Videos on, Files off, Use Mobile Data on at the start)
+  static var autoPhotos: Bool { get { get("talk_auto_photos") } set { UserDefaults.standard.set(newValue, forKey: "talk_auto_photos") } }
+  static var autoVideos: Bool { get { get("talk_auto_videos") } set { UserDefaults.standard.set(newValue, forKey: "talk_auto_videos") } }
+  static var autoFiles: Bool { get { UserDefaults.standard.object(forKey: "talk_auto_files") as? Bool ?? false } set { UserDefaults.standard.set(newValue, forKey: "talk_auto_files") } }
+  static var useMobile: Bool { get { get("talk_auto_mobile") } set { UserDefaults.standard.set(newValue, forKey: "talk_auto_mobile") } }
 }
 
 /* Notifications (the board "Notifications"): MESSAGES — Show Notifications, Sound, Show Message Preview: iPhone's own for
@@ -293,7 +298,8 @@ enum Storage {
 
 /* Storage and Data (the board "Storage and Data"): E11 Talk and how much it keeps, a bar by kind (Videos · Photos · Files
    · Voice) — ours inside Apple's cell; BY GROUP — Apple's value cells, the most first, each opening that group's media;
-   under it what's deleted by itself. */
+   under it what's deleted by itself; AUTO-DOWNLOAD — Apple's switches, one per kind, and Use Mobile Data for all of them
+   (mock-up "Talk — Auto-download", Haris 2026-11-13). */
 final class StorageVC: UITableViewController {
   init() { super.init(style: .insetGrouped) }
   required init?(coder: NSCoder) { fatalError() }
@@ -320,14 +326,43 @@ final class StorageVC: UITableViewController {
       UIView.performWithoutAnimation { self.tableView.reloadData() }
     }
   }
-  override func numberOfSections(in tv: UITableView) -> Int { rep.groups.isEmpty ? 1 : 2 }
-  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { s == 0 ? 1 : rep.groups.count }
-  override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? { s == 1 ? "By Group" : nil }
+  // (the board: the bar; By Group; Auto-download — a switch for each kind; Use Mobile Data, for all of them)
+  private enum Part { case bar, groups, auto, mobile }
+  private var parts: [Part] { [.bar] + (rep.groups.isEmpty ? [] : [.groups]) + [.auto, .mobile] }
+  override func numberOfSections(in tv: UITableView) -> Int { parts.count }
+  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int {
+    switch parts[s] { case .bar, .mobile: return 1; case .groups: return rep.groups.count; case .auto: return 3 }
+  }
+  override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? {
+    switch parts[s] { case .groups: return "By Group"; case .auto: return "Auto-Download"; default: return nil }
+  }
   override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
-    s == numberOfSections(in: tv) - 1 ? "A group with no new messages for 90 days deletes itself, with its files, on every device." : nil
+    switch parts[s] {
+    case .groups: return "A group with no new messages for 90 days deletes itself, with its files, on every device."
+    case .auto: return "Off: a tap downloads it. Voice messages always download. Anything not downloaded stays on the server for 30 days."
+    case .mobile: return "For everything above. Off: they download on Wi-Fi only — on mobile data, a tap still downloads one."
+    case .bar: return nil
+    }
   }
   override func tableView(_ tv: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
-    if ip.section == 0 { let c = tv.dequeueReusableCell(withIdentifier: "bar", for: ip) as! StorageBarCell; c.set(rep); return c }
+    let part = parts[ip.section]
+    if part == .bar { let c = tv.dequeueReusableCell(withIdentifier: "bar", for: ip) as! StorageBarCell; c.set(rep); return c }
+    if part == .auto || part == .mobile {
+      let c = UITableViewCell(style: .default, reuseIdentifier: nil); c.selectionStyle = .none
+      var cfg = UIListContentConfiguration.cell()
+      let row = part == .mobile ? 3 : ip.row
+      cfg.text = ["Photos", "Videos", "Files", "Use Mobile Data"][row]
+      let sw = UISwitch(); sw.isOn = [TalkPrefs.autoPhotos, TalkPrefs.autoVideos, TalkPrefs.autoFiles, TalkPrefs.useMobile][row]
+      sw.addAction(UIAction { [weak sw] _ in
+        guard let on = sw?.isOn else { return }
+        switch row { case 0: TalkPrefs.autoPhotos = on; case 1: TalkPrefs.autoVideos = on; case 2: TalkPrefs.autoFiles = on; default: TalkPrefs.useMobile = on }
+        // (turned on: what's waiting comes now; every chat shows its ↓ or its picture, each in its own place)
+        if on { Talk.shared.catchUp() }
+        NotificationCenter.default.post(name: .talkFile, object: nil)
+      }, for: .valueChanged)
+      c.contentConfiguration = cfg; c.accessoryView = sw
+      return c
+    }
     let (g, n) = rep.groups[ip.row], T = Talk.shared
     let c = UITableViewCell(style: .value1, reuseIdentifier: nil); c.accessoryType = .disclosureIndicator
     var cfg = UIListContentConfiguration.valueCell()
@@ -338,10 +373,10 @@ final class StorageVC: UITableViewController {
     c.contentConfiguration = cfg
     return c
   }
-  override func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat { ip.section == 0 ? 100 : UITableView.automaticDimension }
+  override func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat { parts[ip.section] == .bar ? 100 : UITableView.automaticDimension }
   override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) {
     tv.deselectRow(at: ip, animated: true)
-    guard ip.section == 1 else { return }
+    guard parts[ip.section] == .groups else { return }
     navigationController?.pushViewController(MediaVC(group: rep.groups[ip.row].0), animated: true)
   }
 }
