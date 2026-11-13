@@ -98,6 +98,12 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
     NotificationCenter.default.addObserver(self, selector: #selector(changed), name: .talkChanged, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(typingChanged(_:)), name: .talkTyping, object: nil)
   }
+  // (a search left open closes once the page is out of sight — a client opened from it, another tab: back here, the page
+  //  is itself again, its search bar in its place under the title — Haris 2026-11-13)
+  override func viewDidDisappear(_ animated: Bool) {
+    super.viewDidDisappear(animated)
+    if search.isActive { UIView.performWithoutAnimation { search.searchBar.text = ""; search.isActive = false } }
+  }
   // a row's cell: the group rows as before (a client's groups — step 2b); a client's row Apple's own cell (2a)
   func cell(_ tv: UITableView, _ ip: IndexPath, _ row: Row) -> UITableViewCell {
     if case .client(let id) = row {
@@ -317,8 +323,7 @@ final class GroupsVC: ListVC {
     title = clientsTab ? "Clients" : "E11 Agency"
     navigationItem.largeTitleDisplayMode = .always
     search.searchBar.placeholder = clientsTab ? "Search clients" : "Search clients"
-    // (search hidden until the list is pulled down — board 1; Apple's own)
-    navigationItem.hidesSearchBarWhenScrolling = true
+    // (the search bar always under the big title, as Console's Home — Haris 2026-11-13; was hidden until pulled down)
     search.delegate = self
     // All · Unread · Mentions — Apple's own buttons set to the board's look (ours, said plainly: there's no Apple part for
     // this row; Haris 2026-11-13: B, as Console's Inbox)
@@ -577,13 +582,19 @@ final class ClientGroupsVC: ListVC {
     let gs = T.groups(of: client, withClient: clientsTab), un = gs.filter { T.unread($0.id) > 0 }.count
     title = T.clients[client]?.name
     navigationItem.backButtonDisplayMode = .minimal
-    // (under the name: "7 groups · 3 unread")
+    // (under the name: "7 groups · 3 unread" — Apple's subtitle under the big title, as board 2 and E11 Agency's: the same
+    //  bar on both pages, so the big title no longer jumps as a swipe back starts — Haris 2026-11-13)
     let sub = "\(gs.count) group\(gs.count == 1 ? "" : "s")" + (un > 0 ? " · \(un) unread" : "")
-    if table.tableHeaderView == nil {
+    if #available(iOS 26.0, *) {
+      if navigationItem.subtitle != sub {
+        if view.window != nil, let bar = navigationController?.navigationBar { UIView.transition(with: bar, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction], animations: nil) }
+        navigationItem.subtitle = sub
+      }
+    } else if table.tableHeaderView == nil {
       let v = UIView(frame: CGRect(x: 0, y: 0, width: view.bounds.width, height: 28)), l = UILabel(frame: CGRect(x: 20, y: 2, width: view.bounds.width - 40, height: 20))
       l.font = .systemFont(ofSize: 14); l.textColor = .secondaryLabel; l.tag = 5; l.autoresizingMask = [.flexibleWidth]; v.addSubview(l); table.tableHeaderView = v
     }
-    (table.tableHeaderView?.viewWithTag(5) as? UILabel)?.text = sub
+    if #unavailable(iOS 26.0) { (table.tableHeaderView?.viewWithTag(5) as? UILabel)?.text = sub }
     super.reload(animated: animated)
     // (the client gone, or no groups of it left for me: back to the list)
     if gs.isEmpty, view.window != nil, navigationController?.topViewController === self { navigationController?.popViewController(animated: true) }
