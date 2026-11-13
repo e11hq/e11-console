@@ -781,6 +781,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       }
       msgs[m.id] = m
       var h = Hasher(); h.combine(m.text); h.combine(m.edited); h.combine(m.deleted); h.combine(m.pending); h.combine(m.failed); h.combine(m.reactions); h.combine(m.file?.id); h.combine(m.link.map { Talk.shared.liveLink($0) }); h.combine(m.task.map { Talk.shared.liveTask($0) }); h.combine(newAlbums[m.id]?.map { $0.id + ($0.file?.id ?? "") })
+      h.combine(Talk.shared.isStarred(group, m.id))
       h.combine(newRuns[m.id]); h.combine(Talk.shared.people[m.by]?.color); h.combine(Talk.shared.people[m.by]?.role); h.combine(newNotes[m.id]?.count)
       if m.by == meId { h.combine(i <= readTo); h.combine(i <= gotTo) }
       let key: String = {
@@ -2355,7 +2356,13 @@ final class BubbleCell: UITableViewCell {
     let T = Talk.shared, mine = m.by == T.me?.id
     let over = overPhoto
     let dim: UIColor = over ? .white : mine ? Look.mineTime : Look.roleInk
-    let f = NSMutableAttributedString(string: (m.edited && !m.deleted ? "Edited " : "") + Look.clock(m.at), attributes: [.foregroundColor: dim, .font: UIFont.systemFont(ofSize: 12)])
+    let f = NSMutableAttributedString()
+    // (a message you starred: a small ★ before the time, in the time's colour — WhatsApp's way, Haris 2026-11-13)
+    if !m.deleted, T.isStarred(g.id, m.id), let star = UIImage(systemName: "star.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 9, weight: .semibold)) {
+      f.append(NSAttributedString(attachment: NSTextAttachment(image: star.withTintColor(dim.resolvedColor(with: traitCollection), renderingMode: .alwaysOriginal))))
+      f.append(NSAttributedString(string: " "))
+    }
+    f.append(NSAttributedString(string: (m.edited && !m.deleted ? "Edited " : "") + Look.clock(m.at), attributes: [.foregroundColor: dim, .font: UIFont.systemFont(ofSize: 12)]))
     if mine && !m.deleted {
       let others = g.members.filter { $0 != m.by }
       let idx = l.msgs.firstIndex { $0.id == m.id } ?? 0
@@ -3340,4 +3347,92 @@ final class ChangeNotesVC: UITableViewController {
     c.contentConfiguration = cfg
     return c
   }
+}
+
+// Starred Messages (the design's board "Starred Messages", Haris 2026-11-13): the messages you starred, newest first —
+// Apple's own list and cells: the words, then the group · who · the day; a tap opens the chat at it; swipe or Edit unstars;
+// nothing starred: Apple's empty view. Only what changed is set again (Apple's change-only list).
+final class StarredVC: UITableViewController {
+  private var data: UITableViewDiffableDataSource<Int, String>!
+  private var sigs: [String: Int] = [:]
+  init() { super.init(style: .insetGrouped) }
+  required init?(coder: NSCoder) { fatalError() }
+  private func key(_ s: Talk.Starred) -> String { s.group + "|" + s.id }
+  private var byKey: [String: Talk.Starred] { Dictionary(Talk.shared.starred.map { (key($0), $0) }, uniquingKeysWith: { a, _ in a }) }
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    title = "Starred Messages"
+    navigationItem.largeTitleDisplayMode = .never
+    navigationItem.rightBarButtonItem = editButtonItem
+    tableView.register(UITableViewCell.self, forCellReuseIdentifier: "s")
+    data = StarSource(tableView: tableView) { [weak self] tv, ip, k in
+      let c = tv.dequeueReusableCell(withIdentifier: "s", for: ip)
+      if let s = self?.byKey[k] { StarredVC.fill(c, s) }
+      return c
+    }
+    (data as? StarSource)?.onDelete = { [weak self] ip in self?.unstar(ip) }
+    data.defaultRowAnimation = .fade
+    NotificationCenter.default.addObserver(self, selector: #selector(changed), name: .talkGroup, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(changed), name: .talkChanged, object: nil)
+    reload(animated: false)
+  }
+  @objc private func changed() { reload(animated: view.window != nil) }
+  static func fill(_ c: UITableViewCell, _ s: Talk.Starred) {
+    let T = Talk.shared
+    var cfg = UIListContentConfiguration.subtitleCell()
+    cfg.text = s.text; cfg.textProperties.numberOfLines = 3
+    cfg.secondaryText = [T.groups[s.group]?.name ?? "A group you left", T.name(s.by), Look.time(s.at)].joined(separator: " · ")
+    cfg.secondaryTextProperties.color = .secondaryLabel
+    cfg.textToSecondaryTextVerticalPadding = 4
+    c.contentConfiguration = cfg
+    c.accessoryType = T.groups[s.group] == nil ? .none : .disclosureIndicator
+  }
+  private func reload(animated: Bool) {
+    let list = Talk.shared.starred
+    var snap = NSDiffableDataSourceSnapshot<Int, String>()
+    snap.appendSections([0]); snap.appendItems(list.map { key($0) }, toSection: 0)
+    var newSigs: [String: Int] = [:]
+    for s in list { var h = Hasher(); h.combine(s.text); h.combine(Talk.shared.groups[s.group]?.name); h.combine(Talk.shared.name(s.by)); h.combine(Look.time(s.at)); newSigs[key(s)] = h.finalize() }
+    let old = data.snapshot()
+    snap.reconfigureItems(snap.itemIdentifiers.filter { old.indexOfItem($0) != nil && sigs[$0] != newSigs[$0] })
+    sigs = newSigs
+    data.applySteady(snap, in: tableView, animated: animated)
+    empty(list.isEmpty)
+    if list.isEmpty, isEditing { setEditing(false, animated: true) }
+    navigationItem.rightBarButtonItem?.isEnabled = !list.isEmpty
+  }
+  private func empty(_ none: Bool) {
+    if #available(iOS 17.0, *) {
+      let v = (tableView.backgroundView as? UIContentUnavailableView) ?? {
+        var e = UIContentUnavailableConfiguration.empty()
+        e.image = UIImage(systemName: "star"); e.text = "No Starred Messages"; e.secondaryText = "Hold a message › Star to add one."
+        let v = UIContentUnavailableView(configuration: e); v.alpha = 0; tableView.backgroundView = v; return v
+      }()
+      let a: CGFloat = none ? 1 : 0
+      if v.alpha != a { UIView.animate(withDuration: Crossfade.time) { v.alpha = a } }
+    }
+  }
+  override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
+    Talk.shared.starred.isEmpty ? nil : "Tap one to jump to it in its chat. Hold a message › Star to add one."
+  }
+  override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) {
+    tv.deselectRow(at: ip, animated: true)
+    guard let k = data.itemIdentifier(for: ip), let s = byKey[k], Talk.shared.groups[s.group] != nil else { return }
+    navigationController?.pushViewController(ChatVC(group: s.group, focus: s.id), animated: true)
+  }
+  override func tableView(_ tv: UITableView, trailingSwipeActionsConfigurationForRowAt ip: IndexPath) -> UISwipeActionsConfiguration? {
+    let a = UIContextualAction(style: .destructive, title: "Unstar") { [weak self] _, _, done in self?.unstar(ip); done(true) }
+    a.image = UIImage(systemName: "star.slash")
+    return UISwipeActionsConfiguration(actions: [a])
+  }
+  private func unstar(_ ip: IndexPath) {
+    guard let k = data.itemIdentifier(for: ip), let s = byKey[k] else { return }
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    Talk.shared.unstar(s.group, s.id)
+  }
+}
+private final class StarSource: UITableViewDiffableDataSource<Int, String> {
+  var onDelete: ((IndexPath) -> Void)?
+  override func tableView(_ tv: UITableView, canEditRowAt ip: IndexPath) -> Bool { true }
+  override func tableView(_ tv: UITableView, commit s: UITableViewCell.EditingStyle, forRowAt ip: IndexPath) { if s == .delete { onDelete?(ip) } }
 }

@@ -225,11 +225,16 @@ final class SettingsVC: UITableViewController {
     NotificationCenter.default.addObserver(tableView!, selector: #selector(UITableView.reloadData), name: .talkChanged, object: nil)
     NotificationCenter.default.addObserver(tableView!, selector: #selector(UITableView.reloadData), name: .talkBackup, object: nil)
   }
+  // (back from Starred Messages: only its count set again)
+  override func viewWillAppear(_ a: Bool) {
+    super.viewWillAppear(a)
+    if let r = rows1.firstIndex(of: .starred) { UIView.performWithoutAnimation { tableView.reloadRows(at: [IndexPath(row: r, section: 1)], with: .none) } }
+  }
   override func numberOfSections(in tv: UITableView) -> Int { 3 }
   // (Super Admins and Office Admins also get "Client contacts")
   private var boss: Bool { Talk.shared.boss }
-  private enum R1 { case notif, backup, linked, storage, contacts }
-  private var rows1: [R1] { [.notif, .backup] + (Talk.shared.isContact ? [] : [.linked]) + [.storage] + (boss ? [.contacts] : []) }
+  private enum R1 { case starred, notif, backup, linked, storage, contacts }
+  private var rows1: [R1] { [.starred, .notif, .backup] + (Talk.shared.isContact ? [] : [.linked]) + [.storage] + (boss ? [.contacts] : []) }
   override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { [1, rows1.count, 1][s] }
   override func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat { ip.section == 0 ? 76 : 48 }
   override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
@@ -253,6 +258,11 @@ final class SettingsVC: UITableViewController {
       let n = Talk.shared.macs.count
       cfg.text = "Linked devices"; cfg.secondaryText = n == 0 ? "Link a Mac" : "\(n) Mac\(n == 1 ? "" : "s")"
       cfg.secondaryTextProperties.color = .secondaryLabel; cfg.image = UIImage(systemName: "laptopcomputer.and.iphone"); c.accessoryType = .disclosureIndicator
+    // (Starred Messages first, as the design's Settings — Haris 2026-11-13)
+    case (1, let r) where rows1[r] == .starred:
+      let n = Talk.shared.starred.count
+      cfg.text = "Starred Messages"; cfg.secondaryText = n == 0 ? nil : "\(n)"; cfg.secondaryTextProperties.color = .secondaryLabel
+      cfg.image = UIImage(systemName: "star"); c.accessoryType = .disclosureIndicator
     case (1, let r) where rows1[r] == .notif: cfg.text = "Notifications"; cfg.image = UIImage(systemName: "bell.badge"); c.accessoryType = .disclosureIndicator
     case (1, let r) where rows1[r] == .backup:
       let B = Backup.shared, f = RelativeDateTimeFormatter(); f.unitsStyle = .short
@@ -274,6 +284,7 @@ final class SettingsVC: UITableViewController {
     tv.deselectRow(at: ip, animated: true)
     if ip.section == 1 {
       switch rows1[ip.row] {
+      case .starred: navigationController?.pushViewController(StarredVC(), animated: true); return
       case .backup: navigationController?.pushViewController(BackupVC(), animated: true); return
       case .linked: navigationController?.pushViewController(LinkedDevicesVC(), animated: true); return
       case .contacts: navigationController?.pushViewController(ContactsVC(), animated: true); return

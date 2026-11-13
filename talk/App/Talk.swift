@@ -126,6 +126,12 @@ final class Talk {
     if let d = try? JSONEncoder().encode(starred) { try? d.write(to: starFile, options: .atomic) }
     NotificationCenter.default.post(name: .talkGroup, object: g)
   }
+  // (unstarred from Starred Messages — the chat's ★ and the list both brought up to date)
+  func unstar(_ g: String, _ id: String) {
+    starred.removeAll { $0.group == g && $0.id == id }
+    if let d = try? JSONEncoder().encode(starred) { try? d.write(to: starFile, options: .atomic) }
+    NotificationCenter.default.post(name: .talkGroup, object: g)
+  }
   private func logFile(_ g: String) -> URL { dir.appendingPathComponent("g-\(g).json") }
 
   // ---------- from the phone first (at once), then the server ----------
