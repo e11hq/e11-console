@@ -391,16 +391,31 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   // the scroll-down button: shown once the end of the chat is out of view
   // ---------- sections of a long chat ----------
   // (each row's height kept once it's been seen, so lining up and scrolling back over it never guesses again — no jumps)
-  private var rowH: [String: CGFloat] = [:]
+  // (kept for the app's life, by group — opening a chat again lines it up with every row's real height at once; only
+  //  ever an estimate, each row still takes its own height. Each open guessed 60 for every row before, and lining up its end
+  //  laid the rows near it out again and again until it stayed put — most of a chat's opening, measured on Haris's phone
+  //  2026-11-13: 63–154 ms)
+  private static var heights: [String: [String: CGFloat]] = [:]
   func tableView(_ tv: UITableView, willDisplay cell: UITableViewCell, forRowAt ip: IndexPath) {
-    if case .msg(let id)? = data.itemIdentifier(for: ip) { rowH[id] = cell.bounds.height }
+    if case .msg(let id)? = data.itemIdentifier(for: ip) { ChatVC.heights[group, default: [:]][id] = cell.bounds.height }
     // (taps as the keyboard is now — a row made while it was up, out of sight then, kept them off: the first of two photos
     //  sent together wouldn't open, Haris 2026-11-12)
     cell.contentView.isUserInteractionEnabled = !keyUp
   }
   func tableView(_ tv: UITableView, estimatedHeightForRowAt ip: IndexPath) -> CGFloat {
-    if case .msg(let id)? = data.itemIdentifier(for: ip), let h = rowH[id] { return h }
-    return 60
+    guard case .msg(let id)? = data.itemIdentifier(for: ip) else { return 60 }
+    if let h = ChatVC.heights[group]?[id] { return h }
+    // (not seen yet: a fair guess from what it is — a photo's own height, words by their length)
+    guard let m = msgs[id] else { return 60 }
+    if m.kind == "sys" { return 44 }
+    if let n = albums[id]?.count, n >= 4 { return 300 }
+    if (m.kind == "photo" || m.kind == "video"), let f = m.file {
+      let w: CGFloat = 250, ratio = CGFloat((f.h ?? 3) / max(1, f.w ?? 4))
+      return min(330, max(120, w * ratio)) + (m.text.isEmpty ? 14 : 48)
+    }
+    if m.link != nil || m.task != nil { return 230 }
+    if m.file != nil { return 90 }
+    return 40 + 22 * CGFloat(max(1, Int(ceil(Double(m.text.count) / 30))))
   }
   static let page = 100
   private var shownFrom: String?, hasOlder = false, addingOlder = false
