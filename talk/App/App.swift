@@ -230,8 +230,6 @@ final class SettingsVC: UITableViewController {
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
     defer { shownOnce = true }
-    // (the temporary check's notes: shown afresh each time Settings comes up)
-    if shownOnce { UIView.performWithoutAnimation { tableView.reloadSections([2], with: .none) } }
     if shownOnce, let r = rows1.firstIndex(of: .starred) { UIView.performWithoutAnimation { tableView.reloadRows(at: [IndexPath(row: r, section: 1)], with: .none) } }
   }
   override func numberOfSections(in tv: UITableView) -> Int { 3 }
@@ -242,7 +240,7 @@ final class SettingsVC: UITableViewController {
   override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { [1, rows1.count, 1][s] }
   override func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat { ip.section == 0 ? 76 : 48 }
   override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
-    s == 1 ? "Chats live on this phone. The server only passes each message on and lets it go once everyone has it." : s == 2 ? "E11 Talk \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "")) · \(Server.host)" + (DiagTitle.notes.isEmpty ? "" : "\n\nCheck (temporary) — the title going small:\n" + DiagTitle.notes.joined(separator: "\n")) : nil
+    s == 1 ? "Chats live on this phone. The server only passes each message on and lets it go once everyone has it." : s == 2 ? "E11 Talk \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "")) · \(Server.host)" : nil
   }
   override func tableView(_ tv: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
     let c = UITableViewCell(style: .subtitle, reuseIdentifier: nil)

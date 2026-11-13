@@ -452,51 +452,8 @@ final class GroupsVC: ListVC {
   init(clientsTab: Bool = false) { super.init(nibName: nil, bundle: nil); self.clientsTab = clientsTab }
   required init?(coder: NSCoder) { fatalError() }
   static let pageBg = Look.dyn(0x0C0D0F, 0xFFFFFF)
-  // ---------- a TEMPORARY check (Haris 2026-11-13: "1") — what makes the big title small while the list is at its top.
-  // Nothing on the page changes: each moment it goes small at the top is noted with what was happening, and Settings
-  // shows the notes under the version. Taken out once the cause is found. ----------
-  // (measured by the room above the list — the bar's own height doesn't change on iOS 26 — and looked at on every
-  //  layout, scroll, coming back to the page and the app coming back)
-  private var bigTop: CGFloat = 0, smallAtTop = false, lastEvent = "—"
-  private func note(_ e: String) { lastEvent = e + " " + DiagTitle.clock() }
-  override func viewDidLayoutSubviews() { super.viewDidLayoutSubviews(); look() }
-  override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); look() }
-  func scrollViewDidScroll(_ s: UIScrollView) { look() }
-  private func look() {
-    guard !Talk.shared.isContact, navigationController != nil else { return }
-    let top = table.adjustedContentInset.top
-    // (as the page first shows: big title, search bar away — a search bar pulled out later isn't counted)
-    if bigTop == 0, view.window != nil, !search.isActive, table.contentOffset.y <= -top + 1 { bigTop = top }
-    guard bigTop > 0 else { return }
-    let small = top < bigTop - 20 && table.contentOffset.y <= -top + 1 && !search.isActive && !table.isTracking
-    if small && !smallAtTop {
-      // (only if it's still small a moment later — a tab coming back passes through the small bar's room for an instant
-      //  before Apple puts the big title back, and that alone isn't the fault)
-      let was = lastEvent
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-        guard let self = self, self.view.window != nil, !self.search.isActive, !self.table.isTracking else { return }
-        let t2 = self.table.adjustedContentInset.top
-        guard t2 < self.bigTop - 20, self.table.contentOffset.y <= -t2 + 1 else { return }
-        DiagTitle.add("\(self.clientsTab ? "Clients" : "E11 Agency") STAYED small at the top (0.8 s on) — room \(Int(t2)) of \(Int(self.bigTop)), last: \(was)")
-      }
-    }
-    smallAtTop = small
-  }
-  override func traitCollectionDidChange(_ p: UITraitCollection?) {
-    super.traitCollectionDidChange(p)
-    if UIApplication.shared.applicationState == .background { note("look redrawn in the background (app switcher picture)") }
-  }
-  override func viewDidDisappear(_ a: Bool) { if search.isActive { note("search closed while away") } else { note("page left") }; super.viewDidDisappear(a) }
-  override func viewWillAppear(_ a: Bool) {
-    let from = transitionCoordinator?.viewController(forKey: .from)
-    note("page coming back from " + (from is ClientGroupsVC ? "a client's page" : from is ChatVC ? "a chat" : from == nil ? "a tab or the app" : String(describing: type(of: from!))))
-    super.viewWillAppear(a)
-  }
   override func viewDidLoad() {
     super.viewDidLoad()
-    NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in self?.note("app to the background") }
-    NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in self?.note("app coming back") }
-    NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in self?.look() }
     view.backgroundColor = GroupsVC.pageBg; table.backgroundColor = GroupsVC.pageBg
     table.separatorInset = UIEdgeInsets(top: 0, left: 80, bottom: 0, right: 0)
     table.separatorColor = Look.dyn(0x2A2B2E, 0xDCDCE0)
@@ -568,11 +525,9 @@ final class GroupsVC: ListVC {
       if view.window != nil, transitionCoordinator == nil, navigationController?.transitionCoordinator == nil, UIApplication.shared.applicationState == .active,
          let bar = navigationController?.navigationBar { UIView.transition(with: bar, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction], animations: nil) }
       navigationItem.subtitle = line
-      note("line changed")
     }
   }
   override func reload(animated: Bool) {
-    note("list set again")
     super.reload(animated: animated)
     setLine()
   }
@@ -980,9 +935,4 @@ enum GroupActions {
   }
 }
 
-// the TEMPORARY check's notes (the big title going small at the top) — the newest 12, kept on the phone, shown in Settings
-enum DiagTitle {
-  static func clock() -> String { let f = DateFormatter(); f.dateFormat = "HH:mm:ss"; return f.string(from: Date()) }
-  static var notes: [String] { UserDefaults.standard.stringArray(forKey: "diag-title-2") ?? [] }
-  static func add(_ s: String) { UserDefaults.standard.set(Array(([clock() + " " + s] + notes).prefix(12)), forKey: "diag-title-2") }
 }
