@@ -98,11 +98,19 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
     NotificationCenter.default.addObserver(self, selector: #selector(changed), name: .talkChanged, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(typingChanged(_:)), name: .talkTyping, object: nil)
   }
-  // (a search left open closes once the page is out of sight — a client opened from it, another tab: back here, the page
-  //  is itself again, its search bar in its place under the title — Haris 2026-11-13)
+  // (the page out of sight — another page opened, another tab — a search left open closes, and the search bar is put
+  //  away again: back here it's hidden, out only as the list is pulled down — Haris 2026-11-13)
   override func viewDidDisappear(_ animated: Bool) {
     super.viewDidDisappear(animated)
-    if search.isActive { UIView.performWithoutAnimation { search.searchBar.text = ""; search.isActive = false } }
+    UIView.performWithoutAnimation {
+      if search.isActive { search.searchBar.text = ""; search.isActive = false }
+      foldSearch()
+    }
+  }
+  // the search bar put away as Apple has it when the page first comes: handed to the bar again, hidden until pulled down
+  func foldSearch() {
+    guard navigationItem.hidesSearchBarWhenScrolling else { return }
+    navigationItem.searchController = nil; navigationItem.searchController = search
   }
   // a row's cell: the group rows as before (a client's groups — step 2b); a client's row Apple's own cell (2a)
   func cell(_ tv: UITableView, _ ip: IndexPath, _ row: Row) -> UITableViewCell {
@@ -323,7 +331,8 @@ final class GroupsVC: ListVC {
     title = clientsTab ? "Clients" : "E11 Agency"
     navigationItem.largeTitleDisplayMode = .always
     search.searchBar.placeholder = clientsTab ? "Search clients" : "Search clients"
-    // (the search bar always under the big title, as Console's Home — Haris 2026-11-13; was hidden until pulled down)
+    // (search hidden until the list is pulled down — board 1; Apple's own)
+    navigationItem.hidesSearchBarWhenScrolling = true
     search.delegate = self
     // All · Unread · Mentions — Apple's own buttons set to the board's look (ours, said plainly: there's no Apple part for
     // this row; Haris 2026-11-13: B, as Console's Inbox)
@@ -485,6 +494,13 @@ final class GroupsVC: ListVC {
 extension GroupsVC: UISearchControllerDelegate {
   func willPresentSearchController(_ s: UISearchController) { pillsShown(false, s) }
   func willDismissSearchController(_ s: UISearchController) { pillsShown(true, s) }
+  // (a search closed: the search bar folds away again — out only as the list is pulled down; Haris 2026-11-13)
+  func didDismissSearchController(_ s: UISearchController) {
+    guard view.window != nil else { return }
+    UIView.animate(withDuration: 0.3, delay: 0, options: [.allowUserInteraction, .curveEaseInOut]) {
+      self.foldSearch(); self.navigationController?.navigationBar.layoutIfNeeded(); self.view.layoutIfNeeded()
+    }
+  }
 }
 
 // A client's row on E11 Agency (board 1): Apple's own list cell — the logo (a rounded square), the name, the newest
