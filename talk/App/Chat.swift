@@ -1271,7 +1271,15 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
 
   // ---------- holding a message: the chat behind a little blurred (Haris 2026-11-12); the reactions are the menu's own
   // top row — Apple's palette (mock-up "Talk reactions palette", Haris 2026-11-12: "This palette is much better") ----------
+  // (the held message's own row lifts, shown only within the bubble: what's beside it — the round forward button, the
+  //  reactions under it — stays behind, so they fade out as it lifts and fade back in once it has settled, never popping
+  //  back: Haris 2026-11-13)
+  private func heldCell(_ c: UIContextMenuConfiguration) -> BubbleCell? {
+    guard let id = c.identifier as? String, let ip = data.indexPath(for: item(id)) else { return nil }
+    return table.cellForRow(at: ip) as? BubbleCell
+  }
   func tableView(_ tv: UITableView, willDisplayContextMenu c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
+    if let cell = heldCell(c) { animator?.addAnimations { cell.besides(0) } ?? cell.besides(0) }
     holding = true
     guard let host = navigationController?.view else { return }
     let veil = UIVisualEffectView(effect: nil); veil.frame = host.bounds; veil.isUserInteractionEnabled = false
@@ -1285,7 +1293,11 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private var holdVeil: UIVisualEffectView?, holdBlur: UIViewPropertyAnimator?
   private var holding = false, afterHold: (() -> Void)?
   func tableView(_ tv: UITableView, willEndContextMenuInteraction c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
-    let finish = { [weak self] in guard let self = self else { return }; self.holding = false; let f = self.afterHold; self.afterHold = nil; f?() }
+    let cell = heldCell(c)
+    let finish = { [weak self] in
+      guard let self = self else { return }; self.holding = false; let f = self.afterHold; self.afterHold = nil; f?()
+      if let cell = cell { UIView.animate(withDuration: Crossfade.time, delay: 0, options: [.allowUserInteraction]) { cell.besides(1) } }
+    }
     if let a = animator { a.addCompletion(finish) } else { DispatchQueue.main.async(execute: finish) }
     if let veil = holdVeil {
       holdVeil = nil; let a = holdBlur; holdBlur = nil
@@ -1733,6 +1745,8 @@ final class BubbleCell: UITableViewCell {
   private var msg: Msg?
   private var media = false, caption = false, tailOn = false, isMine = false, framed = false, overPhoto = false, shownFile: String?
   // held: the bubble with its tail, in the row's own space (shifted so `origin` is 0,0)
+  // the forward button and the reactions — beside the bubble, not lifted with it
+  func besides(_ a: CGFloat) { fwdB.alpha = a; reacts.alpha = a }
   var heldRect: CGRect { let f = bubble.frame; return CGRect(x: f.minX - (tailOn && !isMine ? 10 : 0), y: f.minY, width: f.width + (tailOn ? 10 : 0), height: f.height) }
   func heldPath(origin o: CGPoint) -> UIBezierPath {
     let f = bubble.frame
@@ -2004,7 +2018,7 @@ final class BubbleCell: UITableViewCell {
       fwdL.attributedText = a
     }
     fwdB.isHidden = m.deleted || m.pending || !(isPhoto || isDoc)   // (a link: below, once it's found)
-    fwdB.alpha = 1
+    fwdB.alpha = 1; reacts.alpha = 1
     fwdMine.isActive = mine; fwdTheirs.isActive = !mine
     lead.isActive = !mine; trail.isActive = mine
     mediaW.constant = isVoice ? 292 : mine ? 236 : 262; mediaW.isActive = isPhoto || isVoice
