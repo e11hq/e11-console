@@ -45,6 +45,33 @@ enum BarImage {
   }
 }
 
+// E11 Talk's button (E11 Day, Clients, Client Assets): Apple's own badge with your Talk unread count, kept live from the
+// server (iOS 26), and a tap opens E11 Talk — or says it isn't on this iPhone yet (its App Store page once it's out).
+// Haris 2026-11-08 plan "talk-unread-on-console", 2026-11-13 "go ahead".
+enum TalkLink {
+  private static let items = NSHashTable<UIBarButtonItem>.weakObjects()
+  static var count = 0 { didSet { if count != oldValue { items.allObjects.forEach(paint) } } }
+  static func item(_ tc: UITraitCollection) -> UIBarButtonItem {
+    let i = UIBarButtonItem(image: BarImage.talk(tc), primaryAction: UIAction { _ in open() })
+    i.tintColor = .label; i.accessibilityLabel = "E11 Talk"
+    items.add(i); paint(i)
+    return i
+  }
+  private static func paint(_ i: UIBarButtonItem) {
+    if #available(iOS 26.0, *) { i.badge = count > 0 ? .count(count) : nil }
+    i.accessibilityValue = count > 0 ? "\(count) unread" : nil
+  }
+  static func open() {
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    guard let u = URL(string: "e11talk://"), UIApplication.shared.canOpenURL(u) else {
+      let a = UIAlertController(title: "E11 Talk isn’t on this iPhone yet", message: "It’ll be on the App Store soon.", preferredStyle: .alert)
+      a.addAction(UIAlertAction(title: "OK", style: .default))
+      Main.shared.topMost().present(a, animated: true); return
+    }
+    UIApplication.shared.open(u)
+  }
+}
+
 final class AppleHomeBits {
   static let shared = AppleHomeBits()
   var meItem: UIBarButtonItem?
@@ -93,13 +120,10 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
     // (Apple's search box under the big title, as E11 Talk's lists — nothing set for where it goes: tapped, Apple folds the
     //  big title away and the results start right under the box. Apple's 🔍 bar button kept the big title's room above
     //  the results — measured on Apple's own screens, Haris 2026-11-07)
-    // E11 Talk's button, an Apple bar button beside your photo (Haris 2026-11-07): it will open E11 Talk, or its App
-    // Store page when it isn't installed — the link comes later, with Talk's release; for now it does nothing. The bubble
-    // and "Talk" in the bar's own ink, white in dark and black in light (Haris 2026-11-08)
-    let talk = UIBarButtonItem(image: BarImage.talk(traitCollection), primaryAction: UIAction { _ in })
-    talk.tintColor = .label
+    // E11 Talk's button, an Apple bar button beside your photo (Haris 2026-11-07): your Talk unread count as Apple's badge,
+    // a tap opens E11 Talk (TalkLink). The bubble and "Talk" in the bar's own ink, white in dark and black in light (Haris 2026-11-08)
+    let talk = TalkLink.item(traitCollection)
     AppleHomeBits.shared.talkItem = talk
-    talk.accessibilityLabel = "E11 Talk"
     navigationItem.rightBarButtonItems = [meItem, .fixedSpace(0), talk]
     if let h = Main.shared.homeIfMade { adopt(h) }
   }

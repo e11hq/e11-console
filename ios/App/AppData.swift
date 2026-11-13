@@ -220,6 +220,11 @@ final class AppData: NSObject, URLSessionDataDelegate {
       if let a = j["access"] as? String { if accessMark == nil || accessMark == a { accessMark = a } else { newMark = a } }
       // (the server's history is behind this copy — a restore: start again from a fresh download)
       if let srv = j["rev"] as? Int, let mine = (call("E11AppView.rev", []) as? NSNumber)?.intValue, srv < mine { download() }
+      if let n = j["talkUnread"] as? Int { DispatchQueue.main.async { TalkLink.count = n } }
+    case "talkUnread":
+      // (E11 Talk's unread count for its button — as it changes)
+      guard let d = body.data(using: .utf8), let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any], let n = j["n"] as? Int else { break }
+      DispatchQueue.main.async { TalkLink.count = n }
     default: break
     }
   }

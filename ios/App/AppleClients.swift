@@ -45,9 +45,7 @@ final class ClientsVC: UIViewController, TabRoot, UISearchResultsUpdating, UISea
     me.accessibilityLabel = "Me"
     BarImage.bare(me)
     meItem = me
-    let talk = UIBarButtonItem(image: BarImage.talk(traitCollection), primaryAction: UIAction { _ in })
-    talk.tintColor = .label
-    talk.accessibilityLabel = "E11 Talk"
+    let talk = TalkLink.item(traitCollection)
     talkItem = talk
     navigationItem.rightBarButtonItems = [me, .fixedSpace(0), talk]
     if #available(iOS 17.0, *) { registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (vc: ClientsVC, _: UITraitCollection) in vc.paintBar() } }
@@ -321,8 +319,7 @@ final class AssetsTabVC: UIViewController, TabRoot, UISearchResultsUpdating, UIS
     me.accessibilityLabel = "Me"
     BarImage.bare(me)
     meItem = me
-    let talk = UIBarButtonItem(image: BarImage.talk(traitCollection), primaryAction: UIAction { _ in })
-    talk.tintColor = .label; talk.accessibilityLabel = "E11 Talk"
+    let talk = TalkLink.item(traitCollection)
     talkItem = talk
     navigationItem.rightBarButtonItems = [me, .fixedSpace(0), talk]
     if #available(iOS 17.0, *) { registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (vc: AssetsTabVC, _: UITraitCollection) in vc.paintBar() } }

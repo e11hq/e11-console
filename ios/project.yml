@@ -44,6 +44,8 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: E11 Console
+        # (the Talk button: is E11 Talk on this iPhone — Haris 2026-11-13)
+        LSApplicationQueriesSchemes: [e11talk]
         CFBundleName: E11 Console
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
