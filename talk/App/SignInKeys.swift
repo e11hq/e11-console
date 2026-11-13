@@ -206,7 +206,7 @@ final class SigninCodeVC: UIViewController {
       self?.present(a, animated: true)
     }, for: .primaryActionTriggered)
     let foot = UILabel(); foot.numberOfLines = 0; foot.textAlignment = .center; foot.font = .preferredFont(forTextStyle: .footnote); foot.textColor = .secondaryLabel
-    foot.text = "The message has \(first)’s email, the code, when it stops working and your name — ready for WhatsApp. They sign in to E11 Talk only."
+    foot.text = "Ready to send on WhatsApp. They sign in to E11 Talk only."   // (short, so it fits the half-height sheet — Haris 2026-11-13)
     let stack = UIStackView(arrangedSubviews: [person, digits, note, copy, share, foot])
     stack.axis = .vertical; stack.alignment = .center; stack.spacing = 18; stack.setCustomSpacing(10, after: copy)
     stack.translatesAutoresizingMaskIntoConstraints = false
