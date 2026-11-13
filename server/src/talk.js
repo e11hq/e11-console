@@ -166,7 +166,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     if (isContact(u)) {
       const c = clientById(u.client);
       const people = [...ids].map(personOfId).filter(Boolean);
-      return { ok: true, me: { id: u.id, name: u.name, role: c ? c.name : 'Client', photo: null, color: null, contact: true, client: u.client, canMake: false, boss: false },
+      return { ok: true, me: { id: u.id, name: u.name, role: c ? c.name : 'Client', photo: null, color: null, contact: true, client: u.client, email: u.email, canMake: false, boss: false },
         clients: c ? [{ id: c.id, name: c.name, color: c.color || null, logo: ((c.clientId && store.get('clients', String(c.clientId))) || {}).logo || null }] : [], groups, people, pins, seq: Q.lastSeq.get().s || 0 };
     }
     // people who can be added (staff — freelancers too), and the client contacts in my groups
