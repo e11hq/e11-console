@@ -1232,38 +1232,14 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   func tableView(_ tv: UITableView, previewForHighlightingContextMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? { holdPreview(tv, c) }
   private func holdPreview(_ tv: UITableView, _ c: UIContextMenuConfiguration) -> UITargetedPreview? {
     guard let id = c.identifier as? String, let ip = data.indexPath(for: item(id)), let cell = tv.cellForRow(at: ip) as? BubbleCell else { return nil }
-    // (what lifts is a picture of the bubble drawn inside its own shape only — tail and all — with nothing round it:
-    //  E11 Console's lesson for its folder tiles (Haris 2026-11-11): iPhone kept lifting the row's whole square, white or
-    //  black round the bubble, whatever shape it was told — Haris 2026-11-13. The shadow in the same shape, as Messages.)
-    // (the picture's box on the screen's own pixels — at a part-pixel place the picture drew a pixel off the bubble, and the
-    //  lift and the settling back each showed a one-pixel shift: Haris 2026-11-13)
-    let k = cell.traitCollection.displayScale > 0 ? cell.traitCollection.displayScale : UIScreen.main.scale
-    // (and the box is the bubble's own shape's box, tail and all — not a set width beside it: Apple lands the picture by its
-    //  shape's middle, and a tail narrower than the room left for it put the picture a point to the left as it settled,
-    //  snapping right when the real bubble came back — Haris's recording, measured frame by frame, 2026-11-13)
-    let h = cell.heldPath(origin: .zero).bounds
-    let x0 = floor(h.minX * k) / k, y0 = floor(h.minY * k) / k, x1 = ceil(h.maxX * k) / k, y1 = ceil(h.maxY * k) / k
-    let r = CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0)
-    let shape = cell.heldPath(origin: r.origin)
-    // (drawn as the screen shows it — Apple's own drawing of the row: a layer's own drawing set text a pixel off and rounded
-    //  the corners inside, Haris 2026-11-13 — then the bubble alone drawn again over the strip the reaction pill covers, so
-    //  the lifted picture has no cut piece of it; the pill itself fades away as the bubble lifts and back after)
-    let img = UIGraphicsImageRenderer(bounds: CGRect(origin: .zero, size: r.size)).image { ctx in
-      shape.addClip()
-      ctx.cgContext.translateBy(x: -r.minX, y: -r.minY)
-      cell.contentView.drawHierarchy(in: cell.contentView.bounds, afterScreenUpdates: false)
-      if let pill = cell.pillRect {
-        ctx.cgContext.saveGState()
-        UIBezierPath(rect: pill.insetBy(dx: -1, dy: -1)).addClip()
-        let b = cell.bubbleView
-        b.drawHierarchy(in: b.frame, afterScreenUpdates: false)
-        ctx.cgContext.restoreGState()
-      }
-    }
-    let iv = UIImageView(image: img); iv.frame = CGRect(origin: .zero, size: r.size); iv.backgroundColor = .clear
+    // (Messages' way, Haris 2026-11-14: the bubble itself lifts — its view holds the tail, so nothing of it is cut — inside
+    //  its own shape only, with the shadow in that shape; iPhone takes it from its place and puts it back after. The
+    //  reaction pill and the forward button are beside it, not in it: they fade as it lifts and back after.)
+    let v = cell.held
+    let shape = cell.heldPath(origin: v.frame.origin)
     let p = UIPreviewParameters(); p.backgroundColor = .clear
     p.visiblePath = shape; p.shadowPath = shape
-    return UITargetedPreview(view: iv, parameters: p, target: UIPreviewTarget(container: cell.contentView, center: CGPoint(x: r.midX, y: r.midY)))
+    return UITargetedPreview(view: v, parameters: p)
   }
   // the design (board 33): the reactions on top, then Reply · Forward · Copy · Star · (line) · Delete — Forward comes with
   // the forward sheet (stage 5); yours also keep Edit (15 minutes) and Info, files Save / Share, as the app has them today
@@ -1851,6 +1827,10 @@ final class BubbleCell: UITableViewCell {
     return a
   }
   let bubble = BubbleShape()
+  // the bubble and its tail as one view — Messages' way (Haris 2026-11-14): its room reaches over the tail, so held, iPhone
+  // lifts this view itself, tail and all, and leaves its place in the chat empty until it's let go
+  let held = UIView()
+  private var heldLead: NSLayoutConstraint!, heldTrail: NSLayoutConstraint!
   private let stack = UIStackView()
   private let nameL = UILabel(), roleL = UILabel(), textL = UILabel(), footL = UILabel(), stamp = UILabel()
   // a reply's quote (the design: a tinted box 4 from the bubble's edge, a bar in their colour, a photo's picture at the right)
@@ -1900,12 +1880,11 @@ final class BubbleCell: UITableViewCell {
   private var reactsFor: String?, reactsShown = false
   // the forward button and the reactions — beside the bubble, not lifted with it
   func besides(_ a: CGFloat) { fwdB.alpha = a; reacts.alpha = a }
-  // (where the reaction pill sits over the bubble, if it shows one — and the bubble itself, to draw that strip again)
-  var pillRect: CGRect? { reacts.isHidden ? nil : reacts.frame }
-  var bubbleView: UIView { bubble }
-  var heldRect: CGRect { let f = bubble.frame; return CGRect(x: f.minX - (tailOn && !isMine ? 10 : 0), y: f.minY, width: f.width + (tailOn ? 10 : 0), height: f.height) }
+  // (the bubble's frame in the row — it sits inside `held` now)
+  private var bubbleInRow: CGRect { bubble.frame.offsetBy(dx: held.frame.minX, dy: held.frame.minY) }
+  var heldRect: CGRect { let f = bubbleInRow; return CGRect(x: f.minX - (tailOn && !isMine ? 10 : 0), y: f.minY, width: f.width + (tailOn ? 10 : 0), height: f.height) }
   func heldPath(origin o: CGPoint) -> UIBezierPath {
-    let f = bubble.frame
+    let f = bubbleInRow
     let p = BubbleShape.path(f.size, mine: isMine, tail: tailOn)
     if p.isEmpty { p.append(UIBezierPath(roundedRect: CGRect(origin: .zero, size: f.size), cornerRadius: 19)) }
     p.apply(CGAffineTransform(translationX: f.minX - o.x, y: f.minY - o.y))
@@ -2018,7 +1997,10 @@ final class BubbleCell: UITableViewCell {
     stack.setCustomSpacing(4, after: fwdL)
     stack.setCustomSpacing(2, after: roleL); stack.setCustomSpacing(6, after: photoWrap); stack.setCustomSpacing(7, after: quoteWrap)
     stack.setCustomSpacing(7, after: cardWrap); stack.setCustomSpacing(7, after: linkWrap); stack.setCustomSpacing(2, after: nameL)
-    bubble.addSubview(stack); bubble.addSubview(stamp); contentView.addSubview(bubble)
+    bubble.addSubview(stack); bubble.addSubview(stamp); held.addSubview(bubble); contentView.addSubview(held)
+    held.backgroundColor = .clear; held.translatesAutoresizingMaskIntoConstraints = false
+    heldLead = held.leadingAnchor.constraint(equalTo: bubble.leadingAnchor); heldTrail = held.trailingAnchor.constraint(equalTo: bubble.trailingAnchor)
+    NSLayoutConstraint.activate([held.topAnchor.constraint(equalTo: bubble.topAnchor), held.bottomAnchor.constraint(equalTo: bubble.bottomAnchor), heldLead, heldTrail])
     face.isUserInteractionEnabled = false; contentView.addSubview(face)
     reacts.font = .systemFont(ofSize: 14); reacts.backgroundColor = Look.theirs; reacts.layer.cornerRadius = 13; reacts.layer.masksToBounds = true
     reacts.layer.borderWidth = 2; reacts.layer.borderColor = Look.chatBg.resolvedColor(with: traitCollection).cgColor
@@ -2211,6 +2193,7 @@ final class BubbleCell: UITableViewCell {
     //  Haris 2026-11-13)
     tailOn = run.last && (!(isPhoto || isDoc) || caption)
     bubble.tail = (mine, tailOn)
+    heldLead.constant = tailOn && !mine ? -10 : 0; heldTrail.constant = tailOn && mine ? 10 : 0
     let ink: UIColor = mine ? .white : .label, dim: UIColor = mine ? Look.mineTime : Look.roleInk
     // the name: over a photo for one, else at the top (others', first of a run)
     let showName = !mine && run.first
