@@ -1213,7 +1213,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   func tableView(_ tv: UITableView, contextMenuConfigurationForRowAt ip: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
     guard case .msg(let key)? = data.itemIdentifier(for: ip), let m = msgs[mid(key)], m.kind != "sys" else { return nil }
     // (only a hold on the bubble itself — not on the empty space beside it in its row, Haris 2026-11-12)
-    if let c = tv.cellForRow(at: ip) as? BubbleCell, !c.heldPath(origin: .zero).contains(c.contentView.convert(point, from: tv)) { return nil }
+    // (TEMPORARY CHECK, trial build — Haris 2026-11-14: a held bubble with reactions doesn't lift; a line says why. Taken out after.)
+    if let c = tv.cellForRow(at: ip) as? BubbleCell {
+      let pt = c.contentView.convert(point, from: tv), path = c.heldPath(origin: .zero), inside = path.contains(pt)
+      let b = path.bounds, hf = c.held.frame
+      toast("in \(inside ? "yes" : "NO") f\(Int(pt.x)),\(Int(pt.y)) b\(Int(b.minX)),\(Int(b.minY)),\(Int(b.width))x\(Int(b.height)) v\(Int(hf.minX)),\(Int(hf.minY)),\(Int(hf.width))x\(Int(hf.height))")
+      if !inside { return nil }
+    }
     // (the trial of Haris 2026-11-12: a preview of the bubble — iPhone places it where it fits with the menu, shrinking a
     //  tall one — iMessage's way; build 39 kept the bubble itself, slid up WhatsApp's way)
     // (the bubble with its tail — the picture taken a little wider on the tail's side; the tail was cut off as it lifted and
