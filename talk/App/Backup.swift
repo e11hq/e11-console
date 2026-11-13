@@ -286,8 +286,8 @@ final class BackupVC: UITableViewController {
       cfg.text = "Automatic Backup"
       let b = UIButton(configuration: .plain()); b.showsMenuAsPrimaryAction = true; b.changesSelectionAsPrimaryAction = true
       b.menu = UIMenu(children: Backup.Every.allCases.map { e in UIAction(title: e.title, state: e == B.every ? .on : .off) { [weak self] _ in self?.B.every = e } })
-      b.configuration?.title = B.every.title; b.configuration?.image = UIImage(systemName: "chevron.up.chevron.down", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold))
-      b.configuration?.imagePlacement = .trailing; b.configuration?.imagePadding = 4; b.configuration?.baseForegroundColor = .secondaryLabel
+      // (Apple's pop-up button draws its own ⌃⌄ — ours beside it made two, Haris 2026-11-13)
+      b.configuration?.title = B.every.title; b.configuration?.baseForegroundColor = .secondaryLabel
       b.sizeToFit(); c.accessoryView = b
     case (1, 1):
       cfg.text = "Include Videos"
