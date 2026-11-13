@@ -48,7 +48,7 @@ enum BarImage {
 // E11 Talk's button (E11 Day, Clients, Client Assets): Apple's own badge with your Talk unread count, kept live from the
 // server (iOS 26), and a tap opens E11 Talk — or says it isn't on this iPhone yet (its App Store page once it's out).
 // Haris 2026-11-08 plan "talk-unread-on-console", 2026-11-13 "go ahead".
-enum TalkLink {
+@MainActor enum TalkLink {
   private static let items = NSHashTable<UIBarButtonItem>.weakObjects()
   static var count = 0 { didSet { if count != oldValue { items.allObjects.forEach(paint) } } }
   static func item(_ tc: UITraitCollection) -> UIBarButtonItem {
