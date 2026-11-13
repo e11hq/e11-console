@@ -271,9 +271,11 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
     //  coming back, room 116 of 189 — Haris 2026-11-13, seen on his phone. E11 Console's My Tasks and Inbox had the same,
     //  2026-11-09: Apple's setContentScrollView.)
     setContentScrollView(table, for: .top)
-    // (no setting the list again here — it's kept up to date while away; set again as the page came back, the list
-    //  moved under Apple's bar before it had put its big title back — the check's notes, Haris 2026-11-13)
+    // (the page's first showing sets its list — a client's page had nothing until then: Haris 2026-11-13, "the groups are
+    //  coming empty"; after that it's kept up to date while away and not set again as it comes back)
+    if !shownOnce { shownOnce = true; reload(animated: false) }
   }
+  private var shownOnce = false
 
   @objc func changed() { reload(animated: view.window != nil) }
   func updateSearchResults(for s: UISearchController) { reload(animated: false) }
@@ -485,7 +487,11 @@ final class GroupsVC: ListVC {
     if UIApplication.shared.applicationState == .background { note("look redrawn in the background (app switcher picture)") }
   }
   override func viewDidDisappear(_ a: Bool) { if search.isActive { note("search closed while away") } else { note("page left") }; super.viewDidDisappear(a) }
-  override func viewWillAppear(_ a: Bool) { note("page coming back"); super.viewWillAppear(a) }
+  override func viewWillAppear(_ a: Bool) {
+    let from = transitionCoordinator?.viewController(forKey: .from)
+    note("page coming back from " + (from is ClientGroupsVC ? "a client's page" : from is ChatVC ? "a chat" : from == nil ? "a tab or the app" : String(describing: type(of: from!))))
+    super.viewWillAppear(a)
+  }
   override func viewDidLoad() {
     super.viewDidLoad()
     NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in self?.note("app to the background") }
