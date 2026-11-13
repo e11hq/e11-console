@@ -175,7 +175,12 @@ final class MediaVC: UIViewController, UICollectionViewDelegate, QLPreviewContro
     Net.shared.picture(p, max: p.hasSuffix("/view") ? 300 : 160) { [weak self] i in
       guard let self = self, let i = i, self.linkPics[p] == nil else { return }
       self.linkPics[p] = i
-      var s = self.data.snapshot(); if s.indexOfItem(m.id) != nil { s.reconfigureItems([m.id]); self.data.apply(s, animatingDifferences: false) }
+      // (the next turn, never inside the list's own update: a picture already kept answers at once, while the row is being
+      //  drawn — setting the list again from there stopped the app on the Links tab, Haris 2026-11-13)
+      DispatchQueue.main.async { [weak self] in
+        guard let self = self else { return }
+        var s = self.data.snapshot(); if s.indexOfItem(m.id) != nil { s.reconfigureItems([m.id]); self.data.apply(s, animatingDifferences: false) }
+      }
     }
     return nil
   }
