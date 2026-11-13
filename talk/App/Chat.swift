@@ -1,4 +1,5 @@
 import UIKit
+import UIKit.UIGestureRecognizerSubclass
 import PhotosUI
 import QuickLook
 import UniformTypeIdentifiers
@@ -1755,6 +1756,17 @@ enum Ticks {
   }
 }
 
+// a tap on something in a bubble (a card, a photo, a link): only a quick one — a finger held on it is the bubble being held,
+// never an open (Haris 2026-11-14: held on a card's name, the card opened instead of the bubble lifting)
+final class QuickTap: UITapGestureRecognizer {
+  private var downAt: TimeInterval = 0
+  override func touchesBegan(_ t: Set<UITouch>, with e: UIEvent) { downAt = e.timestamp; super.touchesBegan(t, with: e) }
+  override func touchesEnded(_ t: Set<UITouch>, with e: UIEvent) {
+    if e.timestamp - downAt > 0.35 { state = .failed; return }
+    super.touchesEnded(t, with: e)
+  }
+}
+
 final class Bleed: UIView {
   let inner: UIView
   private var l: NSLayoutConstraint!, r: NSLayoutConstraint!, t: NSLayoutConstraint!, b: NSLayoutConstraint!
@@ -1935,7 +1947,7 @@ final class BubbleCell: UITableViewCell {
     nameL.font = .systemFont(ofSize: 15, weight: .semibold)
     roleL.font = .systemFont(ofSize: 12); roleL.textColor = Look.roleInk
     textL.font = .systemFont(ofSize: 17); textL.numberOfLines = 0
-    textL.isUserInteractionEnabled = true; textL.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(linkTap)))
+    textL.isUserInteractionEnabled = true; textL.addGestureRecognizer(QuickTap(target: self, action: #selector(linkTap)))
     footL.font = .systemFont(ofSize: 12); footL.textAlignment = .right
     stamp.font = .systemFont(ofSize: 12); stamp.textAlignment = .right
     // the quote
@@ -1951,10 +1963,10 @@ final class BubbleCell: UITableViewCell {
                                  qs.leadingAnchor.constraint(equalTo: quoteBar.trailingAnchor, constant: 10), qs.trailingAnchor.constraint(equalTo: quoteThumb.leadingAnchor, constant: -10), qs.topAnchor.constraint(equalTo: quote.topAnchor, constant: 6), qs.bottomAnchor.constraint(equalTo: quote.bottomAnchor, constant: -8),
                                  quoteThumb.trailingAnchor.constraint(equalTo: quote.trailingAnchor), quoteThumb.topAnchor.constraint(equalTo: quote.topAnchor), quoteThumb.bottomAnchor.constraint(equalTo: quote.bottomAnchor)])
     quoteThumbW = quoteThumb.widthAnchor.constraint(equalToConstant: 0); quoteThumbW.isActive = true
-    quote.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(quoteTap)))
+    quote.addGestureRecognizer(QuickTap(target: self, action: #selector(quoteTap)))
     // the photo
     photo.contentMode = .scaleAspectFill; photo.clipsToBounds = true; photo.backgroundColor = .tertiarySystemFill; photo.isUserInteractionEnabled = true
-    photo.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(fileTap(_:))))
+    photo.addGestureRecognizer(QuickTap(target: self, action: #selector(fileTap(_:))))
     diag.colors = [UIColor.black.withAlphaComponent(0.62).cgColor, UIColor.black.withAlphaComponent(0.28).cgColor, UIColor.clear.cgColor]
     diag.locations = [0, 0.26, 0.46]; diag.startPoint = CGPoint(x: 0, y: 0); diag.endPoint = CGPoint(x: 0.75, y: 1)
     foot.colors = [UIColor.clear.cgColor, UIColor.black.withAlphaComponent(0.45).cgColor]
@@ -1989,7 +2001,7 @@ final class BubbleCell: UITableViewCell {
                                  cs.leadingAnchor.constraint(equalTo: cardIcon.trailingAnchor, constant: 10), cs.centerYAnchor.constraint(equalTo: card.centerYAnchor),
                                  cs.trailingAnchor.constraint(lessThanOrEqualTo: cardDown.leadingAnchor, constant: -10),
                                  cardDown.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12), cardDown.centerYAnchor.constraint(equalTo: card.centerYAnchor)])
-    card.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(fileTap(_:))))
+    card.addGestureRecognizer(QuickTap(target: self, action: #selector(fileTap(_:))))
     cardRing.translatesAutoresizingMaskIntoConstraints = false; cardRing.isHidden = true; card.addSubview(cardRing)
     NSLayoutConstraint.activate([cardRing.centerXAnchor.constraint(equalTo: cardDown.centerXAnchor), cardRing.centerYAnchor.constraint(equalTo: cardDown.centerYAnchor),
                                  cardRing.widthAnchor.constraint(equalToConstant: 26), cardRing.heightAnchor.constraint(equalToConstant: 26)])
@@ -2016,7 +2028,7 @@ final class BubbleCell: UITableViewCell {
                                  linkLine.topAnchor.constraint(equalTo: linkURL.bottomAnchor, constant: 9), linkLine.leadingAnchor.constraint(equalTo: linkSite.leadingAnchor), linkLine.trailingAnchor.constraint(equalTo: linkSite.trailingAnchor), linkLine.heightAnchor.constraint(equalToConstant: 0.5),
                                  linkFoot.topAnchor.constraint(equalTo: linkLine.bottomAnchor, constant: 8), linkFoot.leadingAnchor.constraint(equalTo: linkSite.leadingAnchor), linkFoot.trailingAnchor.constraint(equalTo: linkSite.trailingAnchor),
                                  linkFoot.bottomAnchor.constraint(equalTo: linkBox.bottomAnchor, constant: -9)])
-    linkBox.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(linkTap)))
+    linkBox.addGestureRecognizer(QuickTap(target: self, action: #selector(linkTap)))
     [nameL, roleL, fwdL, photoWrap, quoteWrap, cardWrap, voice, linkWrap, e11Wrap, taskWrap, textL, footL].forEach { stack.addArrangedSubview($0) }
     stack.setCustomSpacing(7, after: taskWrap); stack.setCustomSpacing(7, after: e11Wrap)
     stack.setCustomSpacing(4, after: fwdL)
@@ -3414,7 +3426,7 @@ final class TaskCardView: UIView {
     NSLayoutConstraint.activate([col.topAnchor.constraint(equalTo: topAnchor, constant: 10), col.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
                                  col.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12), col.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
                                  line.heightAnchor.constraint(equalToConstant: 0.5)])
-    addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tap)))
+    addGestureRecognizer(QuickTap(target: self, action: #selector(tap)))
     isAccessibilityElement = true; accessibilityTraits = .link
   }
   required init?(coder: NSCoder) { fatalError() }
@@ -3477,7 +3489,7 @@ final class E11CardView: UIView {
       col.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10), line.heightAnchor.constraint(equalToConstant: 0.5),
       quiet.topAnchor.constraint(equalTo: topAnchor, constant: 10), quiet.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12), quiet.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
       qIcon.widthAnchor.constraint(equalToConstant: 22), qIcon.heightAnchor.constraint(equalToConstant: 22)])
-    addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tap)))
+    addGestureRecognizer(QuickTap(target: self, action: #selector(tap)))
     isAccessibilityElement = true; accessibilityTraits = .link
   }
   required init?(coder: NSCoder) { fatalError() }
