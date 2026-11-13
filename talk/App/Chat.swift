@@ -1830,7 +1830,7 @@ final class BubbleCell: UITableViewCell {
   // the bubble and its tail as one view — Messages' way (Haris 2026-11-14): its room reaches over the tail, so held, iPhone
   // lifts this view itself, tail and all, and leaves its place in the chat empty until it's let go
   let held = UIView()
-  private var heldLead: NSLayoutConstraint!, heldTrail: NSLayoutConstraint!
+  private var heldLead: NSLayoutConstraint!, heldTrail: NSLayoutConstraint!, heldToBubble: NSLayoutConstraint!, heldToPill: NSLayoutConstraint!
   private let stack = UIStackView()
   private let nameL = UILabel(), roleL = UILabel(), textL = UILabel(), footL = UILabel(), stamp = UILabel()
   // a reply's quote (the design: a tinted box 4 from the bubble's edge, a bar in their colour, a photo's picture at the right)
@@ -1879,7 +1879,7 @@ final class BubbleCell: UITableViewCell {
   private var linkShown: String?
   private var reactsFor: String?, reactsShown = false
   // the forward button and the reactions — beside the bubble, not lifted with it
-  func besides(_ a: CGFloat) { fwdB.alpha = a; reacts.alpha = a }
+  func besides(_ a: CGFloat) { fwdB.alpha = a }   // (the reaction pill lifts with the bubble now: only the forward button steps aside)
   // (the bubble's frame in the row — it sits inside `held` now)
   private var bubbleInRow: CGRect { bubble.frame.offsetBy(dx: held.frame.minX, dy: held.frame.minY) }
   var heldRect: CGRect { let f = bubbleInRow; return CGRect(x: f.minX - (tailOn && !isMine ? 10 : 0), y: f.minY, width: f.width + (tailOn ? 10 : 0), height: f.height) }
@@ -1888,6 +1888,11 @@ final class BubbleCell: UITableViewCell {
     let p = BubbleShape.path(f.size, mine: isMine, tail: tailOn)
     if p.isEmpty { p.append(UIBezierPath(roundedRect: CGRect(origin: .zero, size: f.size), cornerRadius: 19)) }
     p.apply(CGAffineTransform(translationX: f.minX - o.x, y: f.minY - o.y))
+    // (and its reaction pill, ring and all)
+    if !reacts.isHidden, reacts.alpha > 0 {
+      let r = reacts.frame.offsetBy(dx: held.frame.minX - o.x, dy: held.frame.minY - o.y)
+      p.append(UIBezierPath(roundedRect: r, cornerRadius: r.height / 2))
+    }
     return p
   }
   // "Forwarded" over a forwarded message (the design, board 32: italic, its arrow, in the time's colour)
@@ -2000,13 +2005,20 @@ final class BubbleCell: UITableViewCell {
     bubble.addSubview(stack); bubble.addSubview(stamp); held.addSubview(bubble); contentView.addSubview(held)
     held.backgroundColor = .clear; held.translatesAutoresizingMaskIntoConstraints = false
     heldLead = held.leadingAnchor.constraint(equalTo: bubble.leadingAnchor); heldTrail = held.trailingAnchor.constraint(equalTo: bubble.trailingAnchor)
-    NSLayoutConstraint.activate([held.topAnchor.constraint(equalTo: bubble.topAnchor), held.bottomAnchor.constraint(equalTo: bubble.bottomAnchor), heldLead, heldTrail])
+    heldLead.priority = .init(750); heldTrail.priority = .init(750)
+    // (the reaction pill is part of it too — it lifts with the bubble, Messages' way, Haris 2026-11-14 trial: its room reaches
+    //  down over the pill while there is one, and wide enough for a pill wider than a short bubble)
+    heldToBubble = held.bottomAnchor.constraint(equalTo: bubble.bottomAnchor)
+    NSLayoutConstraint.activate([held.topAnchor.constraint(equalTo: bubble.topAnchor), heldToBubble, heldLead, heldTrail,
+      held.leadingAnchor.constraint(lessThanOrEqualTo: bubble.leadingAnchor), held.trailingAnchor.constraint(greaterThanOrEqualTo: bubble.trailingAnchor)])
     face.isUserInteractionEnabled = false; contentView.addSubview(face)
     reacts.font = .systemFont(ofSize: 14); reacts.backgroundColor = Look.theirs; reacts.layer.cornerRadius = 13; reacts.layer.masksToBounds = true
     reacts.layer.borderWidth = 2; reacts.layer.borderColor = Look.chatBg.resolvedColor(with: traitCollection).cgColor
     reacts.isUserInteractionEnabled = true
     reacts.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(reactsTap)))
-    contentView.addSubview(reacts)
+    held.addSubview(reacts)
+    heldToPill = held.bottomAnchor.constraint(equalTo: reacts.bottomAnchor)
+    NSLayoutConstraint.activate([held.leadingAnchor.constraint(lessThanOrEqualTo: reacts.leadingAnchor), held.trailingAnchor.constraint(greaterThanOrEqualTo: reacts.trailingAnchor)])
     sysL.font = .systemFont(ofSize: 12); sysL.textColor = Look.dyn(0xE5E5EA, 0x000000); sysL.backgroundColor = Look.dyn(0x181818, 0xFFFFFF); sysL.numberOfLines = 0; sysL.textAlignment = .center
     sysL.layer.cornerRadius = 8; sysL.layer.cornerCurve = .continuous; sysL.layer.masksToBounds = true
     contentView.addSubview(sysL)
@@ -2432,6 +2444,8 @@ final class BubbleCell: UITableViewCell {
       tight.constant = min(widest, w + 24)
     }
     if reacts.isHidden { bubbleBottom.isActive = true } else { reactsBottom.isActive = true }
+    heldToPill.isActive = false; heldToBubble.isActive = false
+    if reacts.isHidden { heldToBubble.isActive = true } else { heldToPill.isActive = true }
     // (a reaction's pill newly there on the same message fades in — the no-snap rule; the old look's picture fading away
     //  covers one going)
     let showsReacts = !reacts.isHidden
