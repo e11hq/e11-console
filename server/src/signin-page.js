@@ -41,6 +41,9 @@ button.go:disabled{opacity:.5}
 button.link{align-self:center;border:0;background:none;color:var(--blue);font:inherit;font-size:15px;font-weight:500;padding:8px}
 .digits{display:flex;gap:12px;justify-content:center}
 .digits input{width:60px;height:68px;border-radius:14px;text-align:center;font-size:30px;font-weight:600;padding:0}
+[hidden]{display:none!important}  /* the hidden email for the password keeper: input{display:block} showed it as an empty box */
+.pw{position:relative}.pw input{padding-right:52px}.box .pw+.pw{border-top:.5px solid var(--line)}
+.eye{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:44px;height:44px;border:0;padding:0;background:none;color:var(--sub);display:flex;align-items:center;justify-content:center}
 .err{min-height:20px;margin:-4px 0 0;font-size:14px;color:var(--bad);text-align:center}  /* under the button, its room kept: nothing moves when it shows (Haris 2026-11-14) */
 .foot{margin-top:auto;padding-top:24px;font-size:13px;color:var(--sub);text-align:center;line-height:18px}
 .fade{animation:up .45s ease-out both}
@@ -67,9 +70,21 @@ function api(path, body){
   return fetch('/oidc/api/' + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ req: req }, body)) })
     .then(function(r){ return r.json(); }).catch(function(){ return { ok: false, error: 'No connection — try again.' }; });
 }
+// the eye on every password box: shows the password, the slashed eye hides it again (Haris 2026-11-14)
+var EYE = '<svg width="22" height="16" viewBox="0 0 22 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 8S5 1.5 11 1.5 20.5 8 20.5 8 17 14.5 11 14.5 1.5 8 1.5 8z"/><circle cx="11" cy="8" r="3"/></svg>';
+var EYE_OFF = '<svg width="22" height="18" viewBox="0 0 22 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 9S5 2.5 11 2.5 20.5 9 20.5 9 17 15.5 11 15.5 1.5 9 1.5 9z"/><circle cx="11" cy="9" r="3"/><path d="M3 1l16 16"/></svg>';
+function eyes(){
+  step.querySelectorAll('input[type=password]').forEach(function(i){
+    var w = document.createElement('div'); w.className = 'pw';
+    i.parentNode.insertBefore(w, i); w.appendChild(i);
+    var b = document.createElement('button'); b.type = 'button'; b.className = 'eye'; b.setAttribute('aria-label', 'Show password'); b.innerHTML = EYE;
+    b.onclick = function(){ var on = i.type === 'password'; i.type = on ? 'text' : 'password'; b.innerHTML = on ? EYE_OFF : EYE; b.setAttribute('aria-label', on ? 'Hide password' : 'Show password'); i.focus(); };
+    w.appendChild(b);
+  });
+}
 function show(html, onBack){
   step.className = ''; void step.offsetWidth; step.className = 'fade';
-  step.innerHTML = html; back.style.display = onBack ? 'flex' : 'none'; back.onclick = onBack || null;
+  step.innerHTML = html; eyes(); back.style.display = onBack ? 'flex' : 'none'; back.onclick = onBack || null;
   var f = step.querySelector('input'); if (f) setTimeout(function(){ f.focus(); }, 50);
 }
 function busy(form, on){ var b = form.querySelector('button.go'); if (b) b.disabled = on; }
