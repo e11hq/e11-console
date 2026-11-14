@@ -182,6 +182,9 @@ extension Main {
     AppData.shared.forgetCopies(except: nil)   // (signing out: nothing of theirs left on the phone)
     quickBooted = false
     tabBar.isHidden = true; tabsHidden = true; view.setNeedsLayout()
+    // (Apple's tabs told too: set aside for the sign-in page, as when the app starts signed out — left as they were, the
+    //  signed-out person's screens came back on returning to the app: Haris 2026-11-14)
+    AppleTabs.shared?.mirrorShown()
     var q = (defaults.data(forKey: "e11_quick").flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }) ?? [:]
     q["me"] = nil
     if let d = try? JSONSerialization.data(withJSONObject: q) { defaults.set(d, forKey: "e11_quick") }
