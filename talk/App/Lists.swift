@@ -319,8 +319,15 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
     snap.reconfigureItems(snap.itemIdentifiers.filter { old.indexOfItem($0) != nil && sigs[$0] != newSigs[$0] })
     sigs = newSigs
     data.applySteady(snap, in: table, animated: animated)
+    for ip in table.indexPathsForVisibleRows ?? [] { if let c = table.cellForRow(at: ip) { lineUnder(c, ip) } }
     emptyNote()
   }
+  // (no line under the list's last row — only between rows: Haris 2026-11-14 "Remove the divider after the last list")
+  func lineUnder(_ c: UITableViewCell, _ ip: IndexPath) {
+    let last = ip.row == table.numberOfRows(inSection: ip.section) - 1
+    var i = c.separatorInset; i.right = last ? max(table.bounds.width, 1000) : 0; c.separatorInset = i
+  }
+  func tableView(_ tv: UITableView, willDisplay cell: UITableViewCell, forRowAt ip: IndexPath) { lineUnder(cell, ip) }
   func emptyNote() {}
   func fill(_ c: ChatRowCell, _ row: Row) {
     let T = Talk.shared
