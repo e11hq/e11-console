@@ -30,6 +30,9 @@ final class TalkShotsTests: XCTestCase {
     try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
     app = XCUIApplication()
     app.launchEnvironment = ["E11_TALK_SERVER": env["E11_SERVER"] ?? "", "E11_TALK_DEV_EMAIL": env["E11_EMAIL"] ?? ""]
+    // Chat Backup as on a phone that's been backing up (the simulator has no iCloud): last night, 3:00
+    let three = Calendar.current.startOfDay(for: Date()).addingTimeInterval(3 * 3600).timeIntervalSince1970
+    app.launchArguments = ["-talk_backup_at", String(three), "-talk_backup_size", "195035136"]
     app.launch()
     _ = app.tabBars.firstMatch.waitForExistence(timeout: 90)
     Thread.sleep(forTimeInterval: 8)
@@ -62,6 +65,23 @@ final class TalkShotsTests: XCTestCase {
     if sf.waitForExistence(timeout: 3) {
       sf.tap(); sf.typeText(env["E11_SEARCH"] ?? "captions"); Thread.sleep(forTimeInterval: 2.5); shot("search")
       for l in ["Cancel", "Close"] { let b = app.buttons[l]; if b.exists { b.tap(); break } }; Thread.sleep(forTimeInterval: 1)
+    }
+    // the voice note in the Social group, then who reacted to it
+    tab(0)
+    let k = rows.containing(NSPredicate(format: "label CONTAINS %@", "Kestrel")).firstMatch
+    if k.waitForExistence(timeout: 3) {
+      k.tap(); Thread.sleep(forTimeInterval: 2.5)
+      let s = rows.containing(NSPredicate(format: "label CONTAINS %@", "Social")).firstMatch
+      if s.waitForExistence(timeout: 3) {
+        s.tap(); Thread.sleep(forTimeInterval: 3.5); shot("voice")
+        let pill = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "🔥")).firstMatch
+        let pill2 = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "🔥")).firstMatch
+        if pill.waitForExistence(timeout: 2) { pill.tap() } else if pill2.exists { pill2.tap() }
+        Thread.sleep(forTimeInterval: 2); shot("reactions")
+        app.swipeDown(velocity: .fast); Thread.sleep(forTimeInterval: 1.2)
+        back()
+      }
+      back()
     }
     // Settings, Chat Backup, Linked Devices
     tab(2); shot("settings")
