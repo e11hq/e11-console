@@ -9,7 +9,9 @@ final class SignInVC: UIViewController, WKNavigationDelegate {
   var passed = Set<String>()   // (our sign-in page let through as it is — Face ID cancelled, or a key that no longer counts)
   var cover: UIView?           // (board 53 over the page)
   private var web: WKWebView!
-  private let top = UIView(), logo = UIImageView(), titleL = UILabel(), sub = UILabel(), spin = UIActivityIndicatorView(style: .medium)
+  // (no header of Talk's own over the page: the page is the whole screen, as in E11 Console — mock-up "Talk — Sign-in, in
+  //  Talk's colours", Haris 2026-11-14; it said "Sign in" twice)
+  private let spin = UIActivityIndicatorView(style: .medium)
   private let reviewB = UIButton(configuration: .plain())   // ("App Review sign-in", as E11 Console has under its page)
 
   override func viewDidLoad() {
@@ -20,12 +22,7 @@ final class SignInVC: UIViewController, WKNavigationDelegate {
     web = WKWebView(frame: .zero, configuration: cfg)
     web.navigationDelegate = self
     web.isOpaque = false; web.backgroundColor = .systemBackground; web.scrollView.backgroundColor = .systemBackground
-    logo.image = UIImage(named: "TalkMark"); logo.contentMode = .scaleAspectFit
-    titleL.text = "Sign in to E11 Talk"; titleL.font = .systemFont(ofSize: 22, weight: .bold); titleL.textAlignment = .center
-    // (the team and client contacts alike — Haris 2026-11-14; no one-time code since our own sign-in)
-    sub.text = "With the email E11 set up for you."; sub.font = .systemFont(ofSize: 15); sub.textColor = .secondaryLabel; sub.textAlignment = .center; sub.numberOfLines = 2
-    [logo, titleL, sub].forEach { top.addSubview($0) }
-    view.addSubview(top); view.addSubview(web); view.addSubview(spin)
+    view.addSubview(web); view.addSubview(spin)
     var rc = UIButton.Configuration.plain()
     rc.attributedTitle = AttributedString("App Review sign-in", attributes: AttributeContainer([.font: UIFont.preferredFont(forTextStyle: .footnote)]))
     rc.baseForegroundColor = .secondaryLabel
@@ -33,7 +30,7 @@ final class SignInVC: UIViewController, WKNavigationDelegate {
     reviewB.addAction(UIAction { [weak self] _ in self?.reviewSignIn() }, for: .primaryActionTriggered)
     view.addSubview(reviewB)
     // (on the App Review copy there's no page of ours to show: its own sign-in, at once)
-    if Server.review { sub.text = "The App Review copy — made-up people and chats."; web.isHidden = true }
+    if Server.review { web.isHidden = true }
     else { spin.startAnimating(); web.load(URLRequest(url: URL(string: Server.url + "/api/talk/state")!)) }
   }
   override func viewDidAppear(_ animated: Bool) {
@@ -80,14 +77,10 @@ final class SignInVC: UIViewController, WKNavigationDelegate {
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
     let s = view.safeAreaInsets, W = view.bounds.width
-    top.frame = CGRect(x: 0, y: s.top + 20, width: W, height: 170)
-    logo.frame = CGRect(x: (W - 72) / 2, y: 0, width: 72, height: 72)
-    titleL.frame = CGRect(x: 20, y: 86, width: W - 40, height: 30)
-    sub.frame = CGRect(x: 32, y: 120, width: W - 64, height: 44)
     let rs = reviewB.sizeThatFits(CGSize(width: W - 40, height: 44))
     reviewB.frame = CGRect(x: (W - rs.width) / 2, y: view.bounds.height - s.bottom - rs.height - 4, width: rs.width, height: rs.height)
-    web.frame = CGRect(x: 0, y: top.frame.maxY + 6, width: W, height: reviewB.frame.minY - top.frame.maxY - 10)
-    spin.center = CGPoint(x: W / 2, y: web.frame.minY + 60)
+    web.frame = CGRect(x: 0, y: s.top, width: W, height: reviewB.frame.minY - s.top - 4)
+    spin.center = CGPoint(x: W / 2, y: web.frame.midY)
   }
   func webView(_ w: WKWebView, didFinish n: WKNavigation!) {
     spin.stopAnimating()
