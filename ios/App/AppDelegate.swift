@@ -249,6 +249,21 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     let icon: Double = UIAccessibility.isReduceMotionEnabled ? 0.3 : 2.15
     let age = CACurrentMediaTime() - s.t0
     DispatchQueue.main.asyncAfter(deadline: .now() + max(0, icon - age)) { [weak self] in if self?.splash === s { self?.splashGone() } }
+    // (once the startup screen has gone: the clients' logos made into their tiles away from the screen — the speed trial,
+    //  Haris 2026-11-14)
+    DispatchQueue.main.asyncAfter(deadline: .now() + max(0, icon - age) + 1) { Main.warmLogos() }
+  }
+  static func warmLogos() {
+    DispatchQueue.global(qos: .utility).async {
+      guard AppData.shared.ready, let m = AppData.shared.screen("clients", ServerHome.clientsJSON("view=list")).model else { return }
+      var paths: [String] = []
+      func walk(_ v: Any) {
+        if let d = v as? [String: Any] { for (k, x) in d { if k == "logo", let p = x as? String, !p.isEmpty { paths.append(p) } else { walk(x) } } }
+        else if let a = v as? [Any] { a.forEach(walk) }
+      }
+      walk(m)
+      LogoLook.warm(paths)
+    }
   }
   // the phone's light / dark, as the app last heard it (Apple's trait change — followPhoneLook): nothing is forced with
   // it; only what Apple can't switch by itself reads it (the tab bar's drawn icons, the task page's pictures)

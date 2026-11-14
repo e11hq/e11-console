@@ -1945,7 +1945,7 @@ final class HomeCard: UIView, AppleRow {
     for a in list {
       let id = a["id"] as? String ?? ""
       let p = people[id]
-      avs.addSubview(ringed(roundPic(NativeSheetVC.photo(p), initials: p?["initials"] as? String, color: NativeSheetVC.color(p?["color"]), size: 22), done: (a["done"] as? Bool) == true))
+      avs.addSubview(ringed(HomeCard.face(p, id: id, size: 22), done: (a["done"] as? Bool) == true))
       x += 16
     }
     if let n = c["more"] as? Int, n > 0 {
@@ -1979,7 +1979,24 @@ final class HomeCard: UIView, AppleRow {
   }
   // the CD chip (app.css .cd-chip): 10.5 bold in the CD colour on a 16% wash, 4 round, a tick before "CD Approved" —
   // the tick and the words on one centre line
+  // (each row's pictures — the CD chip, the status symbol, a face — made once and kept by what they show; every row drew
+  //  them again each time it was set, ~2 ms a row: the speed trial, Haris 2026-11-14)
+  private static let pics = NSCache<NSString, UIImage>()
+  private static func kept(_ key0: String, _ make: () -> UIImage) -> UIImage {
+    let key = key0 + "|\(UITraitCollection.current.userInterfaceStyle.rawValue)"   // (a grey of Apple's is drawn as the look is)
+    if let i = pics.object(forKey: key as NSString) { return i }
+    let i = make(); pics.setObject(i, forKey: key as NSString); return i
+  }
+  static func face(_ p: [String: Any]?, id: String, size: CGFloat) -> UIImage {
+    let ph = p?["photo"] as? String ?? ""
+    let key = "face|\(id)|\(ph.count)|\(ph.hashValue)|\(p?["initials"] as? String ?? "")|\((p?["color"] as? [NSNumber])?.map { $0.intValue } ?? [])|\(size)"
+    return kept(key) { roundPic(NativeSheetVC.photo(p), initials: p?["initials"] as? String, color: NativeSheetVC.color(p?["color"]), size: size) }
+  }
   static func cdChip(_ text: String, check: Bool, color: UIColor) -> UIImage {
+    var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0; color.getRed(&r, green: &g, blue: &b, alpha: &a)
+    return kept("cd|\(text)|\(check)|\(r),\(g),\(b),\(a)") { cdChipMade(text, check: check, color: color) }
+  }
+  private static func cdChipMade(_ text: String, check: Bool, color: UIColor) -> UIImage {
     let f = UIFont.systemFont(ofSize: 10.5, weight: .bold)
     let ts = (text as NSString).size(withAttributes: [.font: f])
     let tick: CGFloat = check ? 10 + 3 : 0
@@ -2000,6 +2017,9 @@ final class HomeCard: UIView, AppleRow {
     let kind = d?["kind"] as? String ?? "todo"
     let frac = CGFloat((d?["frac"] as? NSNumber)?.doubleValue ?? 0.5)
     let name = kind == "done" ? "checkmark.circle.fill" : kind == "todo" ? "circle.dashed" : frac < 0.6 ? "circle.lefthalf.filled" : "circle.inset.filled"
+    return kept("st|\(name)|\((d?["rgb"] as? [NSNumber])?.map { $0.intValue } ?? [])") { statusIconMade(name, col) }
+  }
+  private static func statusIconMade(_ name: String, _ col: UIColor) -> UIImage {
     let cfg = UIImage.SymbolConfiguration(pointSize: 19, weight: .medium)
     let sym = UIImage(systemName: name, withConfiguration: cfg)?.withTintColor(col, renderingMode: .alwaysOriginal) ?? UIImage()
     return UIGraphicsImageRenderer(size: CGSize(width: 22, height: 22)).image { _ in
