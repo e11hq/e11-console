@@ -100,18 +100,19 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
   #endif
   private func start() {
     guard let w = window else { return }
+    Probe.mark("app started — our code begins (memory \(Probe.memory))")
     Server.follow()
     if !Net.shared.signedIn, let c = SignInKeys.consoleReviewCookie { Net.shared.cookie = c }   // (App Review: Console's sign-in carried over)
     guard Net.shared.signedIn else { showSignIn(); return }
     Talk.shared.loadLocal()
-    Talk.shared.prune()
-    let main = mainTabs()
+    Probe.time("tidy the phone's copy (prune)") { Talk.shared.prune() }
+    let main = Probe.time("make the tabs") { mainTabs() }
     w.rootViewController = main
     // the startup screen over it until the chats are ready
     let sp = SplashView(name: Talk.shared.me?.name)
     sp.frame = w.bounds; sp.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     w.addSubview(sp)
-    sp.onDone = { [weak self] in self?.askNotifications(); if let g = self?.wantGroup { self?.wantGroup = nil; SceneDelegate.openGroup(g) } }
+    sp.onDone = { [weak self] in Probe.mark("startup screen gone"); self?.askNotifications(); if let g = self?.wantGroup { self?.wantGroup = nil; SceneDelegate.openGroup(g) } }
     if !Talk.shared.groups.isEmpty || Talk.shared.me != nil { sp.progress(0.7) }
     // a new phone (nothing of this account here yet): before anything comes in, look for an iCloud backup to restore
     let fresh = Talk.shared.isFresh
@@ -225,6 +226,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
     else { Talk.shared.refresh { if Talk.shared.groups[g] != nil { nav.pushViewController(ChatVC(group: g), animated: true) } } }
   }
   func sceneDidBecomeActive(_ s: UIScene) {
+    Probe.mark("app in front (memory \(Probe.memory))")
     guard Net.shared.signedIn, tabs != nil else { return }
     Net.shared.listen()
     // (signed in through E11 Console, and Console signed out since — its key gone: Talk signs out too, the plan)

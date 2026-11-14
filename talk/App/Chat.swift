@@ -102,6 +102,12 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     findAcc.isHidden = true
   }
 
+  // (TEMPORARY speed report: a chat's opening, and frames missed while it scrolls)
+  private let probeAt = Probe.now(), frames = Probe.Frames()
+  private var probed = false
+  func scrollViewWillBeginDragging(_ s: UIScrollView) { if s === table { frames.start("chat") } }
+  func scrollViewDidEndDragging(_ s: UIScrollView, willDecelerate d: Bool) { if s === table, !d { frames.stop() } }
+  func scrollViewDidEndDecelerating(_ s: UIScrollView) { if s === table { frames.stop() } }
   override func viewDidLoad() {
     super.viewDidLoad()
     view.backgroundColor = Look.chatBg
@@ -277,6 +283,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
   override func viewDidAppear(_ a: Bool) {
     super.viewDidAppear(a)
+    if !probed { probed = true; Probe.took((Probe.now() - probeAt) * 1000, "open a chat (tap → in place, slide included): \(Talk.shared.log(group).msgs.count) messages, memory \(Probe.memory)") }
     // (the back swipe from the edge goes first; a reply swipe starts away from the edge)
     if let pop = navigationController?.interactivePopGestureRecognizer, !swipeWaits { swipeWaits = true; swipe.require(toFail: pop) }
     homeLimits.forEach { $0.constant = -home }

@@ -11,7 +11,7 @@ import UserNotifications
 final class SettingsVC: UITableViewController {
   init() { super.init(style: .insetGrouped) }
   required init?(coder: NSCoder) { fatalError() }
-  enum Row: Hashable { case me, starred, contacts, notif, backup, storage, linked, help, about, signOut }
+  enum Row: Hashable { case me, starred, contacts, notif, backup, storage, linked, help, about, speed, signOut }   // (speed: TEMPORARY)
   private var data: UITableViewDiffableDataSource<Int, Row>!
   private var sigs: [Row: String] = [:]
   override func viewDidLoad() {
@@ -34,7 +34,7 @@ final class SettingsVC: UITableViewController {
     snap.appendItems([.me], toSection: 0)
     snap.appendItems([.starred] + (Talk.shared.boss && !isContact ? [.contacts] : []), toSection: 1)
     snap.appendItems([.notif, .backup, .storage] + (isContact ? [] : [.linked]), toSection: 2)
-    snap.appendItems([.help, .about], toSection: 3)
+    snap.appendItems([.help, .about, .speed], toSection: 3)
     snap.appendItems([.signOut], toSection: 4)
     var new: [Row: String] = [:]
     for r in snap.itemIdentifiers { new[r] = value(r) }
@@ -75,6 +75,7 @@ final class SettingsVC: UITableViewController {
     case .storage: row("Storage and Data", Tile.make(0x5E5CE6, "archivebox.fill"))
     case .linked: row("Linked Devices", Tile.make(0x0A84FF, "laptopcomputer.and.iphone"))
     case .help: row("Help", Tile.make(0x8E8E93, "questionmark"))
+    case .speed: row("Speed Report", Tile.make(0x30B0C7, "gauge.with.dots.needle.67percent"))
     case .about: row("About E11 Talk", Tile.e11())
     case .signOut:
       cfg = UIListContentConfiguration.cell(); cfg.text = "Sign Out"; cfg.textProperties.color = .systemRed
@@ -96,6 +97,7 @@ final class SettingsVC: UITableViewController {
     case .storage: push(StorageVC())
     case .linked: push(LinkedDevicesVC())
     case .help: push(HelpVC())
+    case .speed: push(ProbeVC())
     case .about: push(AboutVC())
     case .signOut:
       let a = UIAlertController(title: "Sign out of E11 Talk?", message: "The chats on this phone are removed.", preferredStyle: .actionSheet)
