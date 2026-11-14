@@ -65,7 +65,7 @@ final class MessageInfoVC: UIViewController {
       guard let self = self else { return }
       let pid = String(key.dropFirst(2)), T = Talk.shared, p = T.people[pid]
       var c = UIListContentConfiguration.cell()
-      c.text = p?.name ?? "Someone"; c.textProperties.font = .systemFont(ofSize: 17)
+      c.text = p?.name ?? "Someone"; c.textProperties.font = .systemFont(ofSize: 14)   // (the date and time's size — Haris 2026-11-14)
       if T.isContact, let r = p?.role, !r.isEmpty { c.secondaryText = r; c.secondaryTextProperties.font = .systemFont(ofSize: 13); c.secondaryTextProperties.color = .secondaryLabel }
       c.image = MessageInfoVC.face(pid) { [weak self] in self?.redraw(key) }
       c.imageProperties.maximumSize = CGSize(width: 35, height: 35); c.imageProperties.reservedLayoutSize = CGSize(width: 35, height: 35)
