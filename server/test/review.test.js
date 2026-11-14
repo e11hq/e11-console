@@ -150,3 +150,13 @@ test('E11 Talk on the App Review copy: its own JSON sign-in, made-up chats that 
   assert.equal((await sync()).events.length, s1.events.length);
   assert.deepEqual(realIn(JSON.stringify(s1.events) + JSON.stringify(st)), []);
 });
+
+test('e11hq.com: the apps’ home page, the privacy and support pages, and nothing else of the server', async () => {
+  const H = { 'X-Forwarded-Host': 'e11hq.com' };
+  const home = await fetch(base + '/', { headers: H });
+  assert.equal(home.status, 200);
+  const t = await home.text();
+  assert.match(t, /E11 Console/); assert.match(t, /E11 Talk/); assert.match(t, /apps\.apple\.com\/app\/e11-talk\/id6831289909/);
+  assert.equal((await fetch(base + '/privacy', { headers: { 'X-Forwarded-Host': 'www.e11hq.com' } })).status, 200);
+  for (const p of ['/api/snapshot', '/app', '/install', '/review/sign-in']) assert.equal((await fetch(base + p, { headers: H })).status, 404, p);
+});

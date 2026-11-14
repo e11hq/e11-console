@@ -67,6 +67,8 @@ export function createServer(cfg) {
   const talkAuth = cfg.talkAuth || createAuth({ team: cfg.cfTeam, aud: [TALK_AUD, TALK_TEST_AUD], dev: !!cfg.dev });
   const talkHost = (req) => /^talk(-test)?\./.test(String(req.headers.host || ''));
   // (the linked devices' own public name: Cloudflare lets it through, the Mac's key is its sign-in — Haris 2026-11-14)
+  // (e11hq.com and www.e11hq.com: the apps' home page)
+  const homeHost = (req) => /^(www\.)?e11hq\.com(:\d+)?$/i.test(String(req.headers['x-forwarded-host'] || req.headers.host || ''));
   const talkMacHost = (req) => /^talklink(-test)?\./.test(String(req.headers.host || ''));
   const access = createAccess(store, { ownerEmail: cfg.adminEmail, plans: true, now: cfg.now });   // (content plans: on everywhere since 2026-10-28)
   const files = createFiles(dataDir);
@@ -768,6 +770,15 @@ export function createServer(cfg) {
     // Our own sign-in (signin.js): its page and the OpenID Connect answers Cloudflare asks for — no sign-in needed to reach them
     if (signin && (p.startsWith('/oidc/') || p === '/.well-known/openid-configuration')) return signinRoute(req, res, p, url);
 
+    // e11hq.com itself (Haris 2026-11-14, mock-up approved): a page of E11 Agency's two apps — E11 Console and E11 Talk with
+    // their App Store badges — and the privacy and support pages; nothing else of the server answers on that name
+    if (homeHost(req) && webDir) {
+      if (p === '/' || p === '/index.html') {
+        const f = path.join(webDir, 'legal', 'home.html');
+        if (fs.existsSync(f)) { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=300' }); return res.end(req.method === 'HEAD' ? undefined : fs.readFileSync(f)); }
+      }
+      if (p !== '/privacy' && p !== '/support') { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Not found'); }
+    }
     // The privacy policy and support page (web/legal): public, no sign-in, no data — the App Store links to them
     if ((p === '/privacy' || p === '/support') && webDir) {
       const f = path.join(webDir, 'legal', p.slice(1) + '.html');
