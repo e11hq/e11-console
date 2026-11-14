@@ -11,6 +11,9 @@ on:
       roles:
         description: "Only these roles (comma separated, part of the name), or empty for all"
         default: ""
+      mode:
+        description: "crawl (every control, every role) or shots (the App Store screenshots that need a finger — ios/shots_ui.py)"
+        default: crawl
 permissions:
   contents: write
 jobs:
@@ -19,6 +22,9 @@ jobs:
     timeout-minutes: 330
     steps:
       - uses: actions/checkout@v4
+      - name: The live server's code
+        # (the app talks to the server on main — as ios.yml: main's server and shared rules, not this branch's older copy)
+        run: git fetch -q --depth=1 origin main && git checkout FETCH_HEAD -- server web && git log -1 --format='server and web from main %h %s' FETCH_HEAD
       - name: Homebrew's tools on this Mac
         run: for d in /opt/homebrew/bin /usr/local/bin; do [ -d "$d" ] && echo "$d" >> "$GITHUB_PATH"; done; true
       - uses: actions/setup-node@v4
@@ -34,7 +40,12 @@ jobs:
           xcodebuild -project ios/E11Console.xcodeproj -scheme E11Console -configuration Debug -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build-for-testing 2>&1 | tee "$RUNNER_TEMP/ios-crawl-build-full.log" | tail -40; status=${PIPESTATUS[0]}
           grep -E "error:" "$RUNNER_TEMP/ios-crawl-build-full.log" | head -60 > "$RUNNER_TEMP/ios-crawl-build.log"; exit $status
+      - name: App Store screenshots that need a finger
+        if: github.event.inputs.mode == 'shots'
+        continue-on-error: true
+        run: python3 ios/shots_ui.py build 2>&1 | tee "$RUNNER_TEMP/ios-hold.log"; true
       - name: Crawl every role
+        if: github.event.inputs.mode != 'shots'
         continue-on-error: true
         env:
           CRAWL_ROLES: ${{ github.event.inputs.roles }}
@@ -45,4 +56,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view ios-selftest >/dev/null 2>&1 || gh release create ios-selftest --prerelease --title "iPhone app self-test" --notes "Latest iPhone app self-test results." --target "$GITHUB_SHA"
-          for f in ios-crawl.txt ios-crawl.json ios-crawl.log ios-crawl-shots.zip ios-crawl-build.log; do if [ -s "$RUNNER_TEMP/$f" ]; then gh release upload ios-selftest "$RUNNER_TEMP/$f" --clobber || echo "upload failed: $f"; fi; done; true
+          for f in ios-crawl.txt ios-crawl.json ios-crawl.log ios-crawl-shots.zip ios-crawl-build.log ios-hold-shots.zip ios-hold.log; do if [ -s "$RUNNER_TEMP/$f" ]; then gh release upload ios-selftest "$RUNNER_TEMP/$f" --clobber || echo "upload failed: $f"; fi; done; true
