@@ -77,6 +77,11 @@ final class TalkShotsTests: XCTestCase {
         let pill = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "🔥")).firstMatch
         let pill2 = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "🔥")).firstMatch
         if pill.waitForExistence(timeout: 2) { pill.tap() } else if pill2.exists { pill2.tap() }
+        else {
+          // the pill has no words of its own: tapped where it sits, under the voice note (just above your reply)
+          let reply = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Got it")).firstMatch
+          if reply.exists { let f = reply.frame; app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: 90, dy: f.minY - 34)).tap() }
+        }
         Thread.sleep(forTimeInterval: 2); shot("reactions")
         app.swipeDown(velocity: .fast); Thread.sleep(forTimeInterval: 1.2)
         back()

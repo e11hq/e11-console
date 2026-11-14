@@ -37,7 +37,7 @@ if (others.length) {
   const wave = Buffer.from([10,18,30,46,34,20,40,62,52,30,18,34,56,74,48,26,14,30,52,42,26,14,30,22,36,26,44,60,38,22,12,26,40,58,44,28,18,32,50,36,22,12,24,18,30,20,14,10].map((v) => Math.min(255, v * 3.4))).toString('base64');
   const sent = talk.act(a, { act: 'send', group: g.id, text: '', file: { id: up.id, kind: 'voice', secs: 42, wave } });
   extra.voice = sent;
-  for (const [x, e] of [[others[1], '👏'], [others[2], '🔥'], [me, '👏']]) if (x && sent.id) talk.act(x, { act: 'react', msg: sent.id, emoji: e });
+  for (const [x, e] of [[others[1], '🔥'], [others[2], '👏'], [me, '👏']]) if (x && sent.id) talk.act(x, { act: 'react', msg: sent.id, emoji: e });
   extra.reply = talk.act(me, { act: 'send', group: g.id, text: 'Got it — thanks! 🙌' });
 }
 const db = new DatabaseSync(path.join(dataDir, 'db', 'talk.sqlite'));
