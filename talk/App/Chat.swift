@@ -106,6 +106,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     super.viewDidLoad()
     view.backgroundColor = Look.chatBg
     navigationItem.largeTitleDisplayMode = .never
+    // (the links in this chat's words found ahead, off the main thread — the bubbles then only look them up)
+    let texts = Talk.shared.log(group).msgs.suffix(300).map { $0.text }
+    DispatchQueue.global(qos: .userInitiated).async { texts.forEach { _ = BubbleCell.found($0) } }
     table.backgroundColor = .clear; table.separatorStyle = .none; table.keyboardDismissMode = .interactive
     table.delegate = self; table.estimatedRowHeight = 60; table.rowHeight = UITableView.automaticDimension
     table.register(BubbleCell.self, forCellReuseIdentifier: "b"); table.register(DayHeader.self, forHeaderFooterViewReuseIdentifier: "d"); table.register(IntroCell.self, forCellReuseIdentifier: "i")
@@ -2363,13 +2366,9 @@ final class BubbleCell: UITableViewCell {
           from = r.upperBound
         }
       }
-      if let d = BubbleCell.links, !txt.isEmpty {
-        let ns = txt as NSString
-        for hit in d.matches(in: txt, range: NSRange(location: 0, length: ns.length)) {
-          guard let u = hit.url, u.scheme?.hasPrefix("http") == true else { continue }
-          if link == nil { link = u }
-          a.addAttributes([.foregroundColor: mine ? UIColor.white : Look.linkInk, .underlineStyle: NSUnderlineStyle.single.rawValue], range: hit.range)
-        }
+      for (r, u) in BubbleCell.found(txt) {
+        if link == nil { link = u }
+        a.addAttributes([.foregroundColor: mine ? UIColor.white : Look.linkInk, .underlineStyle: NSUnderlineStyle.single.rawValue], range: r)
       }
       // (searching: every match marked in amber, the one shown brighter — the design's board "Search in a chat")
       if let f = find, !f.0.isEmpty {
@@ -2558,6 +2557,19 @@ final class BubbleCell: UITableViewCell {
     stamp.layer.shadowColor = UIColor.black.cgColor; stamp.layer.shadowOpacity = over ? 0.6 : 0; stamp.layer.shadowRadius = 2; stamp.layer.shadowOffset = CGSize(width: 0, height: 1)
   }
   static let links = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+  // the links in a message's words, found once and kept (Apple's link finder is slow: run each time a bubble was made, a
+  //  text bubble took 4–6 ms and one with a link card 10–18 ms — the speed report, Haris 2026-11-14)
+  private final class Hits { let v: [(NSRange, URL)]; init(_ v: [(NSRange, URL)]) { self.v = v } }
+  private static let hits = NSCache<NSString, Hits>()
+  static func found(_ txt: String) -> [(NSRange, URL)] {
+    guard !txt.isEmpty, let d = links else { return [] }
+    if let h = hits.object(forKey: txt as NSString) { return h.v }
+    let v = d.matches(in: txt, range: NSRange(location: 0, length: (txt as NSString).length)).compactMap { hit -> (NSRange, URL)? in
+      guard let u = hit.url, u.scheme?.hasPrefix("http") == true else { return nil }
+      return (hit.range, u)
+    }
+    hits.setObject(Hits(v), forKey: txt as NSString); return v
+  }
   // a document's kind as the design draws it: a grey page with its corner turned, the kind in white on it
   private static var icons: [String: UIImage] = [:]
   static func docIcon(_ ext: String) -> UIImage {
