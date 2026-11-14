@@ -116,11 +116,11 @@ def board(look):
                  + ag(K, 'Menu photography retouch', 'In Progress · Waiting for client', av('AB', '#2980B9', 22)) + ag(N, 'Showroom banner resize', 'To Do', av('JL', '#E67E22', 22)) + ag(P, 'Brand guidelines v2', 'In Review', av('MK', '#16A085', 22)))
     def cl(c, ini, name, o, pc):
         return f'<div style="display: flex; align-items: center; gap: 10px; padding: 6px 0"><span style="width: 30px; height: 30px; border-radius: 8px; background: {c}; color: #fff; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center">{ini}</span><div style="flex: 1"><div style="font-size: 13px; font-weight: 600">{name}</div><div style="font-size: 11px; color: {t["dim"]}">{o} open · {pc}% done</div><div style="margin-top: 4px; height: 3px; border-radius: 2px; background: {t["line"]}"><div style="width: {pc}%; height: 100%; border-radius: 2px; background: {c}"></div></div></div></div>'
-    clients = card(h2('Clients', f'<span style="font-size: 12px; color: {t["dim"]}">3</span>') + cl(N, 'NM', 'Northline Motors', 11, 64) + cl(K, 'KF', 'Kestrel Foods', 8, 52) + cl(P, 'PC', 'Pinecrest', 5, 71))
+    clients = card(extra='flex: 1', inner=h2('Clients', f'<span style="font-size: 12px; color: {t["dim"]}">3</span>') + cl(N, 'NM', 'Northline Motors', 11, 64) + cl(K, 'KF', 'Kestrel Foods', 8, 52) + cl(P, 'PC', 'Pinecrest', 5, 71))
     content = (f'<div style="position: absolute; left: 248px; right: 0; top: 52px; bottom: 0; background: {t["content"]}; border-top: 0.5px solid {t["line"]}; padding: 20px 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; overflow: hidden">'
                f'<div><div style="font-size: 12px; color: {t["dim"]}">Saturday, November 14</div><div style="font-size: 26px; font-weight: 700; letter-spacing: -0.3px">Good evening, Alex</div></div>'
                f'<div style="display: flex; gap: 12px">{stat(A, "cal", "Team tasks due today", 3, "2 overdue", red)}{stat(green, "check", "Finished by your team", 14, "↑ 4 vs last week", green)}{stat(orange, "sun", "Waiting for CD review", 2, "oldest 3 hours ago", orange)}</div>'
-               f'<div style="display: grid; grid-template-columns: 1fr 330px; gap: 14px; align-items: start">'
+               f'<div style="display: grid; grid-template-columns: 1fr 330px; gap: 14px; align-items: stretch">'
                f'<div style="display: flex; flex-direction: column; gap: 14px; min-width: 0">{card(h2("Team’s tasks", seg) + rows)}{chart}</div>'
                f'<div style="display: flex; flex-direction: column; gap: 14px">{sched}{clients}</div></div></div>')
     # a right-click menu: Apple's own, the website's choices
