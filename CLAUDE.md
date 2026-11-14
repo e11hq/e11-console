@@ -608,6 +608,16 @@ tall as ☺︎, the foot's soft shade as the top's, the reaction pill no longer 
 long messages without the extra room above the words (measured at the width they're laid out at). Kept for later, not done
 (Haris 13:04): the viewer's photo blurry then sharp — project doc `claude/speed-plan.md`. Nothing changes in its look,
 behaviour or code without telling Haris first and his yes.
+**E11 TALK — STABLE, LOCKED, the App Store release candidate: 1.0.0 build 126 (Haris, 2026-11-14 14:01: "Make talk as release
+candidate"):** commit 5a55c69 on talk-chat-1, branches `stable/talk-126`, `locked/talk-126` and
+`candidate/appstore-talk-1.0.0-build-126` (never moved or deleted; 123's, 120's and 109's stay as history — 126 replaces 123 as
+the candidate). 126 = 123 + the files folder made again after signing out (restored photos, a photo sent and group pictures
+were lost until the app was closed), the backup keeping a file while a message points to it and keeping group pictures, a file
+the server no longer has brought from the iCloud backup, group pictures tried again by themselves, Edit Group held while a new
+picture goes up (✕ and Done dimmed, the sheet springs back), and signing out keeping your chats on the phone (the same account
+finds them at once; another account's sign-in wipes them first, asked of the server before anything is read). Needs server
+1.9.55 (a group's picture stays while the group uses it). Nothing changes in its look, behaviour or code without telling Haris
+first and his yes.
 **Compile checks: `-f checks=compile -f walk=no`** — without `walk=no` the walk-through for every role runs too (~20 min),
 holding the Mac (2026-11-13).
 **The App Store release waits for E11 Talk (Haris, 2026-11-11 20:16: "3"):** the Talk button (E11 Day, Clients) does nothing
