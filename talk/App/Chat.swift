@@ -2234,7 +2234,10 @@ final class BubbleCell: UITableViewCell {
     emojis = !m.deleted && m.file == nil && m.reply == nil && m.fwd != true ? BubbleCell.emojiCount(m.text) : 0
     // (only a photo has the photo's height — a text bubble on a cell that last showed a photo grew to it, Haris 2026-11-12)
     photoH.isActive = isPhoto
-    textL.preferredMaxLayoutWidth = UIScreen.main.bounds.width * (mine ? 281 : 250) / 393 - 24
+    // (the words measured at exactly the width they're laid out at: 12 in from the bubble's left, 11 from its right on yours,
+    //  12 on theirs — yours were measured 1 narrower, wrapped onto a line more than they showed, and the room for it sat
+    //  above the words: Haris 2026-11-14)
+    textL.preferredMaxLayoutWidth = UIScreen.main.bounds.width * (mine ? 281 : 250) / 393 - (mine ? 23 : 24)
     // (a forwarded photo sits inside the bubble under "Forwarded", rounded 14, the bubble's colour round it)
     framed = isPhoto && m.fwd == true
     media = isPhoto && !framed; caption = isPhoto && !m.text.isEmpty; overPhoto = isPhoto && !caption
