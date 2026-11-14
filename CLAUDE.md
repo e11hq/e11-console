@@ -674,6 +674,11 @@ talk-chat-1, branches `stable/talk-135`, `locked/talk-135` and `candidate/appsto
 134's and earlier stay as history — 135 replaces 134 as the candidate). 135 = 134 + the last row's line pushed off past its right
 edge (134's right inset left a stub under the picture on a client's page). Needs server 1.9.56. Nothing changes in its look,
 behaviour or code without telling Haris first and his yes.
+**E11 TALK — STABLE, LOCKED, the App Store release candidate: 1.0.0 build 137 (Haris, 2026-11-14 18:12: "Yes"):** commit 518ce94 on
+talk-chat-1, branches `stable/talk-137`, `locked/talk-137` and `candidate/appstore-talk-1.0.0-build-137` (never moved or deleted;
+135's and earlier stay as history — 137 replaces 135 as the candidate). 137 = 135 + the last row's line inset by exactly the row's
+width (no stub under the picture) + Message info's names at their size on one line, a long one ending in … (as WhatsApp's). Needs
+server 1.9.56. Nothing changes in its look, behaviour or code without telling Haris first and his yes.
 **Compile checks: `-f checks=compile -f walk=no`** — without `walk=no` the walk-through for every role runs too (~20 min),
 holding the Mac (2026-11-13).
 **The App Store release waits for E11 Talk (Haris, 2026-11-11 20:16: "3"):** the Talk button (E11 Day, Clients) does nothing
