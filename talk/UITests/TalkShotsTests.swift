@@ -33,6 +33,10 @@ final class TalkShotsTests: XCTestCase {
     app.launch()
     _ = app.tabBars.firstMatch.waitForExistence(timeout: 90)
     Thread.sleep(forTimeInterval: 8)
+    // iPhone's "Would Like to Send You Notifications" — answered, so it isn't in the pictures
+    let sb = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+    for l in ["Allow", "Don’t Allow", "Don't Allow"] { let b = sb.buttons[l]; if b.waitForExistence(timeout: 2) { b.tap(); break } }
+    Thread.sleep(forTimeInterval: 2)
     shot("agency")
     // each tab's clients, each client's groups, each group's chat — scrolled to its end and once up
     for t in 0..<2 {
@@ -56,8 +60,8 @@ final class TalkShotsTests: XCTestCase {
     rows.element(boundBy: 0).swipeDown(); Thread.sleep(forTimeInterval: 1)
     let sf = app.searchFields.firstMatch
     if sf.waitForExistence(timeout: 3) {
-      sf.tap(); sf.typeText(env["E11_SEARCH"] ?? "banner"); Thread.sleep(forTimeInterval: 2.5); shot("search")
-      let cancel = app.buttons["Cancel"]; if cancel.exists { cancel.tap() }
+      sf.tap(); sf.typeText(env["E11_SEARCH"] ?? "captions"); Thread.sleep(forTimeInterval: 2.5); shot("search")
+      for l in ["Cancel", "Close"] { let b = app.buttons[l]; if b.exists { b.tap(); break } }; Thread.sleep(forTimeInterval: 1)
     }
     // Settings, Chat Backup, Linked Devices
     tab(2); shot("settings")
