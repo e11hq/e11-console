@@ -87,6 +87,11 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
   required init?(coder: NSCoder) { fatalError() }
   override var preferredStatusBarStyle: UIStatusBarStyle { Main.shared.statusStyle }
   override func loadView() { let v = UIView(); v.backgroundColor = HomeLook(nil).bg; view = v }   // (Home's own background, as every page — Haris 2026-11-11)
+  private var probeShown = false   // (TEMPORARY speed report)
+  override func viewDidAppear(_ a: Bool) {
+    super.viewDidAppear(a)
+    if !probeShown { probeShown = true; Probe.mark("E11 Day on screen") }
+  }
   override func viewDidLoad() {
     super.viewDidLoad()
     // (the big title: Apple's own default — its tab asks for big titles; never ".always", which kept the big title's room

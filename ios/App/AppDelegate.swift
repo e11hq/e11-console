@@ -98,12 +98,14 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
   var window: UIWindow?
   func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
     guard let ws = scene as? UIWindowScene else { return }
-    let w = UIWindow(windowScene: ws)
+    Probe.mark("app started — our code begins (memory \(Probe.memory))"); Probe.Hitches.shared.start()   // (TEMPORARY speed report)
+    let w = ShakeWindow(windowScene: ws)
     w.backgroundColor = BG
     // (iPhone's own navigation at the root — AppleNav.swift; its bar hidden over the app's own screens)
     w.rootViewController = APPLE_TABS ? AppleTabs(nav: AppleNav(rootViewController: Main.shared)) : APPLE_NAV ? AppleNav(rootViewController: Main.shared) : Main.shared
     w.makeKeyAndVisible()
     window = w
+    Probe.mark("first screen set up")   // (TEMPORARY speed report)
     if let u = connectionOptions.urlContexts.first?.url { Main.shared.openLink(u) }   // (started by a widget tap)
     // (started by a file link tapped elsewhere — files.e11hq.com/f/…, iPhone's universal links)
     if let a = connectionOptions.userActivities.first(where: { $0.activityType == NSUserActivityTypeBrowsingWeb }), let u = a.webpageURL { Main.shared.openLink(u) }
@@ -1921,6 +1923,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     return ["kind": kind, "on": defaults.bool(forKey: LOCK_KEY)]
   }
   func becameActive() {
+    Probe.mark("app in front (memory \(Probe.memory))")   // (TEMPORARY speed report)
     let away = awayAt.map { Date().timeIntervalSince($0) } ?? 0
     if defaults.bool(forKey: LOCK_KEY), lockView == nil, !authing, launchLock || away > 600 { lock() }
     else if lockView != nil, !authing { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.unlock() } }   // (asked again on coming back)

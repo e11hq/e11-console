@@ -129,7 +129,13 @@ final class TaskVC: UIViewController {
     v.backgroundColor = HomeLook(Main.shared.lookBoth).bg
     view = v
   }
+  private var probeT0 = 0.0   // (TEMPORARY speed report)
+  override func viewDidAppear(_ a: Bool) {
+    super.viewDidAppear(a)
+    if probeT0 > 0 { Probe.took((Probe.now() - probeT0) * 1000, "open a task (page made → in place, slide included), memory \(Probe.memory)"); probeT0 = 0 }
+  }
   override func viewDidLoad() {
+    probeT0 = Probe.now()
     super.viewDidLoad()
     navigationItem.largeTitleDisplayMode = .never
     navigationItem.backButtonDisplayMode = .minimal   // (a subtask over it: just ‹)

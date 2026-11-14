@@ -73,23 +73,35 @@ final class AppData: NSObject, URLSessionDataDelegate {
   private var watching = false
   private func boot(me: String) {
     // the engine with the website's files: the saved ones at once, then the server's (a new version comes in by itself)
+    var t0 = Probe.now()
     let saved = AppData.files.map { (try? String(contentsOf: dir.appendingPathComponent($0), encoding: .utf8)) ?? "" }
+    Probe.took((Probe.now() - t0) * 1000, "read the app's 7 saved scripts (\(saved.reduce(0) { $0 + $1.utf8.count } / 1024) KB)")
+    t0 = Probe.now()
     if !saved[0].isEmpty && !saved[1].isEmpty { makeEngine(saved) }
+    Probe.took((Probe.now() - t0) * 1000, "start the engine (JavaScript) with them")
     // the saved copy (if it's this person's)
     // Kept between launches (Haris, 2026-11-02: "only update what changed, without re-downloading all"): with a saved
     // copy, the app asks only for what changed since it (the stream's "since"); the server sends a fresh download only
     // when it must — what this person may see changed, or the copy is from before a restore. A week-old copy: a fresh one.
     var fromSaved = false
     let file = dir.appendingPathComponent("copy-\(me).json")
+    t0 = Probe.now()
     if ctx != nil, let raw = try? String(contentsOf: file, encoding: .utf8), !raw.isEmpty {
-      if call("E11AppView.load", [raw]) != nil {
+      let tr = Probe.now()
+      Probe.took((tr - t0) * 1000, "read the phone's copy: \(raw.utf8.count / 1024) KB")
+      let loaded = call("E11AppView.load", [raw]) != nil
+      Probe.took((Probe.now() - tr) * 1000, "load the copy into the engine")
+      if loaded {
+        Probe.mark("copy ready (from the phone)")
         markReady(); changed()   // (the screens waiting on it — a quick start — drawn from it now)
         let age = ((try? FileManager.default.attributesOfItem(atPath: file.path)[.modificationDate]) as? Date).map { Date().timeIntervalSince($0) } ?? .infinity
         fromSaved = age < 7 * 24 * 3600 && accessMark != nil
       }
     }
+    let tf = Probe.now()
     fetchScripts { [weak self] in
       guard let self = self else { return }
+      Probe.took((Probe.now() - tf) * 1000, "server: the 7 scripts (and the engine again if they changed)")
       if self.ctx == nil { return }
       if fromSaved && ((self.call("E11AppView.rev", []) as? NSNumber)?.intValue ?? 0) > 0 { self.openStream() } else { self.download() }
     }
@@ -133,9 +145,12 @@ final class AppData: NSObject, URLSessionDataDelegate {
   private func download() {
     guard let me = me, !loading else { return }
     loading = true
+    let t0 = Probe.now()
     raw("/api/snapshot") { [weak self] s in
       guard let self = self else { return }
+      Probe.took((Probe.now() - t0) * 1000, "server: the full download (snapshot) \((s?.utf8.count ?? 0) / 1024) KB")
       self.q.async {
+        let tl = Probe.now(); defer { Probe.took((Probe.now() - tl) * 1000, "load the download into the engine and save it") }
         self.loading = false
         guard let s = s, s.hasPrefix("{"), self.ctx != nil else { self.retryLater(); return }
         // (who it's for goes in with it: a copy is only ever used for that person)
@@ -211,10 +226,13 @@ final class AppData: NSObject, URLSessionDataDelegate {
   private func handle(_ ev: String, _ body: String) {
     switch ev {
     case "changes":
+      let t0 = Probe.now()
       if callFn("(function(raw){ var d = JSON.parse(raw); return E11AppView.apply(d.changes, d.rev); })", [body]) != nil { saveSoon(); changed() }
+      Probe.took((Probe.now() - t0) * 1000, "live change put into the copy (\(body.utf8.count) bytes)")
     case "resync":
       download()
     case "hello":
+      Probe.mark("live stream answering")
       guard let d = body.data(using: .utf8), let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { break }
       // (a new mark is kept only once the copy that goes with it is in: the server sends a fresh download for it)
       if let a = j["access"] as? String { if accessMark == nil || accessMark == a { accessMark = a } else { newMark = a } }
@@ -264,7 +282,10 @@ final class AppData: NSObject, URLSessionDataDelegate {
   // → (ready, the model): not ready — ask the server as before; ready with nil — not there / not for this person
   func screen(_ kind: String, _ a: String? = nil, _ b: String? = nil) -> (ready: Bool, model: [String: Any]?) {
     guard copyReady else { return (false, nil) }
+    let t0 = Probe.now()
     let out: String? = q.sync { call("E11AppView.screen", [kind, a ?? NSNull(), b ?? NSNull()]) as? String }
+    let ms = (Probe.now() - t0) * 1000
+    if ms >= 4 { Probe.took(ms, "work out a screen from the copy: \(kind) (\((out?.utf8.count ?? 0) / 1024) KB)") }
     guard let s = out, !s.isEmpty, let d = s.data(using: .utf8), let j = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any] else { return (false, nil) }
     if j["error"] != nil { return (false, nil) }   // (something it couldn't work out: the server's instead)
     return (true, j["model"] as? [String: Any])
@@ -368,8 +389,11 @@ final class AppData: NSObject, URLSessionDataDelegate {
       guard let url = URL(string: serverURL() + path) else { return done(nil) }
       var r = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60)
       if !cookie.isEmpty { r.setValue(cookie, forHTTPHeaderField: "Cookie") }
+      let t0 = Probe.now()
       URLSession.shared.dataTask(with: r) { d, resp, _ in
         let ok = ((resp as? HTTPURLResponse)?.statusCode ?? 0) == 200
+        let st = (resp as? HTTPURLResponse)?.value(forHTTPHeaderField: "Server-Timing") ?? "—"
+        Probe.add(String(format: "         server %@: %.0f ms on the phone, %d KB, server's own: %@", String(path.prefix(40)), (Probe.now() - t0) * 1000, (d?.count ?? 0) / 1024, st))
         done(ok ? d.map { String(decoding: $0, as: UTF8.self) } : nil)
       }.resume()
     } }

@@ -223,6 +223,7 @@ final class SplashView: UIView {
   func leave(fast: Bool = false, then: @escaping () -> Void) {
     if leaving { return }
     leaving = true
+    Probe.mark("startup screen going\(fast ? " (fast)" : "")")   // (TEMPORARY speed report)
     isUserInteractionEnabled = false
     UIView.animate(withDuration: fast ? 0.2 : 0.45, delay: 0, options: [.curveEaseInOut]) {
       self.alpha = 0; self.transform = CGAffineTransform(scaleX: 1.02, y: 1.02)
