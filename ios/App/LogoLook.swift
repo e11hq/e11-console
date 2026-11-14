@@ -1,4 +1,5 @@
 import UIKit
+import ImageIO
 
 /* A client's logo in its tile, everywhere (Haris 2026-11-08: "their logo's fit the thumbnail … not cut, with little
    spacing on the sides"): the whole logo, as large as the tile lets it be, with a small margin — never cropped. Its tile:
@@ -19,7 +20,31 @@ enum LogoLook {
   }
 
   // the logo drawn into its tile as one picture (an Apple cell's image — the Clients list, Haris 2026-11-10)
+  // (kept once made, by its logo and size — the Clients list drew every logo again, ~8 ms each, the first time it opened:
+  //  the speed trial, Haris 2026-11-14)
+  private static let tiles = NSCache<NSString, UIImage>()
   static func tile(_ img: UIImage, key: String?, side: CGFloat, radius: CGFloat) -> UIImage {
+    let tk = key.map { "\($0)|\(side)|\(radius)" as NSString }
+    if let tk = tk, let t = tiles.object(forKey: tk) { return t }
+    let t = made(img, key: key, side: side, radius: radius)
+    if let tk = tk { tiles.setObject(t, forKey: tk) }
+    return t
+  }
+  // the clients' logos made into their tiles away from the screen, a moment after the app has started — so the Clients
+  // list opens with them ready (from what the phone keeps; a logo not on the phone yet is made as before, when it comes)
+  static func warm(_ paths: [String]) {
+    DispatchQueue.global(qos: .utility).async {
+      for p in Set(paths) where tiles.object(forKey: "\(p)|40.0|11.0" as NSString) == nil {
+        let disk = SVGRaster.looksLikeSVG(Data(), path: p) ? p + "#svg2" : p
+        // (read small — a logo file can be thousands of pixels: read whole and kept, 13 of them took the app from 60 to
+        //  over 200 MB, speed report 1720; the tile is 40 points)
+        guard let d = DiskPics.get(disk), let src = CGImageSourceCreateWithData(d as CFData, nil),
+              let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 240] as CFDictionary) else { continue }
+        _ = tile(UIImage(cgImage: cg), key: p, side: 40, radius: 11)
+      }
+    }
+  }
+  private static func made(_ img: UIImage, key: String?, side: CGFloat, radius: CGFloat) -> UIImage {
     let l = look(img, key: key)
     return UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in
       let r = CGRect(x: 0, y: 0, width: side, height: side)

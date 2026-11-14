@@ -129,7 +129,7 @@ final class FileTile: UIView {
     let p = CommentCell.picURL(f)
     picPath = p
     if let p = p {
-      FeedLoader.shared.image(p) { [weak self] img in
+      FeedLoader.shared.small(p, px: 600) { [weak self] img, _ in
         guard let self = self, self.picPath == p, let img = img else { return }
         // (the picture's own shape — a photo wide, a document tall)
         self.aspect = max(0.5, min(2, img.size.width / max(1, img.size.height)))
@@ -295,13 +295,11 @@ final class FileListRow: UIView, AppleRow {
     if p != picPath {
       picPath = p; pic = nil
       if let p = p {
-        var now = true
-        FeedLoader.shared.image(p) { [weak self] img in
+        FeedLoader.shared.small(p, px: 132) { [weak self] img, atOnce in
           guard let self = self, self.picPath == p, let img = img else { return }
           self.pic = FileListRow.thumb(img)
-          if !now { self.paint(L); self.onLook?() }
+          if !atOnce { UIView.transition(with: self, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction]) { self.paint(L) }; self.onLook?() }
         }
-        now = false
       }
     }
     paint(L)

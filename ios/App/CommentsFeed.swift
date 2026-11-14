@@ -1,4 +1,5 @@
 import UIKit
+import ImageIO
 import AVFoundation
 import CryptoKit
 import AudioToolbox
@@ -26,6 +27,37 @@ final class FeedLoader {
   // pictures are kept on the phone too (Haris, 2026-11-02: coming back to the app, the pictures flashed as if it had
   // reloaded — iPhone empties the memory of an app that's away, or closes it): from the phone's copy they're there at
   // once, no shimmer, no request
+  // A picture at the size it's shown (pixels across at most), read and shrunk away from the screen once and kept — a list
+  // of files read each one whole and shrank it while scrolling, catching every row (speed trial, Haris 2026-11-14).
+  // done(image, at once): at once — it was kept, set it as it is; later — it has just come, fade it in.
+  private let smalls = NSCache<NSString, UIImage>()
+  func small(_ path: String, px: CGFloat, _ done: @escaping (UIImage?, Bool) -> Void) {
+    let key = "\(path)|\(Int(px))" as NSString
+    if let i = smalls.object(forKey: key) { return done(i, true) }
+    if let i = locals[path] ?? standIns[path] { return done(i, true) }
+    let shrink = { (d: Data) -> UIImage? in
+      guard let src = CGImageSourceCreateWithData(d as CFData, nil),
+            let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
+                                                                  kCGImageSourceShouldCacheImmediately: true, kCGImageSourceThumbnailMaxPixelSize: px] as CFDictionary) else { return nil }
+      return UIImage(cgImage: cg)
+    }
+    let disk = SVGRaster.looksLikeSVG(Data(), path: path) ? path + "#svg2" : path
+    DispatchQueue.global(qos: .userInitiated).async {
+      if let d = DiskPics.get(disk), let i = shrink(d) {
+        self.smalls.setObject(i, forKey: key); DispatchQueue.main.async { done(i, false) }; return
+      }
+      // (not on the phone yet: fetched as before, then shrunk)
+      DispatchQueue.main.async {
+        self.image(path) { img in
+          guard let img = img else { return done(nil, false) }
+          DispatchQueue.global(qos: .userInitiated).async {
+            let i = DiskPics.get(disk).flatMap(shrink) ?? img
+            self.smalls.setObject(i, forKey: key); DispatchQueue.main.async { done(i, false) }
+          }
+        }
+      }
+    }
+  }
   func image(_ path: String, _ done: @escaping (UIImage?) -> Void) {
     if let i = cache.object(forKey: path as NSString) ?? locals[path] { return done(i) }
     if path.hasPrefix("local:") { return done(nil) }

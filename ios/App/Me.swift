@@ -1668,10 +1668,12 @@ final class MeCtl {
       // (its Apple page made first: what it draws knows it's in Apple's navigation — Team members' search in Apple's bar)
       let vc = MePageVC(s.h)
       pageVCs[ObjectIdentifier(s.h)] = vc
-      draw(s)
       vc.onGone = { [weak self, weak h = s.h] in if let h = h { self?.navGone(h) } }
       vc.loadViewIfNeeded()
-      draw(s)   // (in Apple's list now)
+      // (drawn once, in Apple's list — it was drawn before its Apple page was loaded too, then again: every page twice,
+      //  ~15 ms more each time it opened, the speed trial of 2026-11-14; its ••• then told what the drawing gave it)
+      draw(s)
+      vc.menuChanged()
       // (Apple's navigation still moving — a page going back: pushed once it has settled, else Apple drops the push)
       let go = { [weak n] in guard let n = n else { return }; n.pushViewController(vc, animated: animated && n.view.window != nil) }
       if let tc = n.transitionCoordinator { tc.animate(alongsideTransition: nil) { _ in DispatchQueue.main.async { go() } } } else { go() }
