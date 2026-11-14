@@ -709,11 +709,19 @@ final class Avatar: UIView {
     img.image = nil; img.isHidden = true; lbl.isHidden = false
     let key = talkFile ?? picture
     want = key
-    if let f = talkFile {
-      var now = true
-      Net.shared.file(f) { [weak self] url in guard let self = self, self.want == key, let u = url, let i = UIImage(contentsOfFile: u.path) else { return }; self.reveal(i, fade: !now) }
-      now = false
-    } else if let p = picture { load(p, key, tries: 3) }
+    if let f = talkFile { loadFile(f, key, tries: 3) }
+    else if let p = picture { load(p, key, tries: 3) }
+  }
+  // (a group's picture tried again by itself too — the first ask right after signing in can miss, and it stayed initials
+  //  until the app came back from the background: Haris 2026-11-14)
+  private func loadFile(_ f: String, _ key: String?, tries: Int) {
+    var now = true
+    Net.shared.file(f) { [weak self] url in
+      guard let self = self, self.want == key else { return }
+      guard let u = url, let i = UIImage(contentsOfFile: u.path) else { if tries > 1 { DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in self?.loadFile(f, key, tries: tries - 1) } }; return }
+      self.reveal(i, fade: !now)
+    }
+    now = false
   }
   // the picture in place of the initials — one already on the phone just there, one arriving later fading in over them
   // (the no-snap rule, Haris 2026-11-13)
