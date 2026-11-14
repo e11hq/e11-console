@@ -1128,6 +1128,8 @@ export function createServer(cfg) {
     // for each screen again, as before (no app build needed)
     // (Part B step 1: the app's own tab bar — kv 'app-tabs' = 'off' turns it back to the page's, without an app build)
     if (p === '/api/appcopy' && req.method === 'GET') return json(res, 200, { ok: true, on: store.kv.get('app-copy') !== 'off', tabs: store.kv.get('app-tabs') !== 'off',
+      // (the version of the scripts the app runs: the app fetches them again only when it changed — 1.9.54)
+      scripts: appScriptsVersion(),
       // (Part B step 2: each page group from the app's own copy — kv 'app-me-<group>' = 'off' gives it back to the page)
       me: Object.fromEntries(['me', 'profile', 'team', 'trash', 'claims', 'expenses', 'overview', 'reviews', 'plans', 'assets'].map((g) => [g, store.kv.get('app-me-' + g) !== 'off'])) });
     // the iPhone app's native task page (shell 30+): the task as this person sees it, with what they may change
@@ -1553,6 +1555,22 @@ export function createServer(cfg) {
 
     if (p.startsWith('/api/')) return json(res, 404, { ok: false, error: 'Not found' });
     return serveWeb(req, res, p);
+  }
+
+  // the iPhone app's 7 scripts (AppData.files): one short fingerprint of them, worked out again only when a file changed
+  const APP_SCRIPTS = ['rules.js', 'appview.js', 'appme-money.js', 'appme-people.js', 'appme-plans.js', 'appme-tasks.js', 'places.js'];
+  let scriptsMemo = { key: '', v: null };
+  function appScriptsVersion() {
+    if (!webDir) return null;
+    try {
+      const key = APP_SCRIPTS.map((f) => { const st = fs.statSync(path.join(webDir, f)); return st.mtimeMs + ':' + st.size; }).join('|');
+      if (key !== scriptsMemo.key) {
+        const h = crypto.createHash('sha1');
+        for (const f of APP_SCRIPTS) h.update(fs.readFileSync(path.join(webDir, f)));
+        scriptsMemo = { key, v: h.digest('hex').slice(0, 16) };
+      }
+      return scriptsMemo.v;
+    } catch { return null; }
   }
 
   function serveWeb(req, res, p) {
