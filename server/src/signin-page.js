@@ -2,6 +2,8 @@
 // password, or a sign-in code (an admin's, or the owner's own) → set a password → in. One page, its steps drawn by a
 // little script; everything checked by the server (signin.js). Light and dark follow the phone. No outside files.
 
+// (E11 Talk: "Use your email." — its client contacts sign in with the email E11 set up for them, not a work email; Console
+//  keeps "work email": only the team uses it — Haris 2026-11-14)
 export function signinPage({ mark = '', req = {}, app = 'console' }) {
   // (inside a <script> block nothing is HTML-decoded: only what could close the block is escaped)
   const reqJson = JSON.stringify(req).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
@@ -72,13 +74,13 @@ function fail(msg){ var e = step.querySelector('.err'); if (e) e.textContent = m
 function done(r){ if (r && r.redirect) location.replace(r.redirect); else fail(r && r.error); }
 
 function emailStep(){
-  show('<h1>Sign in</h1><p class="sub">Use your work email.</p>'
+  show('<h1>Sign in</h1><p class="sub">${app === 'talk' ? 'Use your email.' : 'Use your work email.'}</p>'
     + '<form id="f" novalidate><label for="em" hidden>Email</label><input class="single" id="em" type="email" inputmode="email" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Email" value="' + esc(st.email) + '" required>'
     + '<p class="err" role="alert"></p><button class="go" type="submit">Continue</button></form>'
     + '<p class="foot">New here, or forgot your password? Ask your admin for a sign-in code.</p>');
   step.querySelector('#f').onsubmit = function(e){
     e.preventDefault(); var f = e.target, v = f.querySelector('#em').value.trim();
-    if (!v) return fail('Enter your work email.');
+    if (!v) return fail('${app === 'talk' ? 'Enter your email.' : 'Enter your work email.'}');
     busy(f, true);
     api('start', { email: v }).then(function(r){
       busy(f, false);
