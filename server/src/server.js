@@ -1627,6 +1627,15 @@ export function createServer(cfg) {
   }
 
   const server = http.createServer((req, res) => {
+    // (every answer of the apps' /api/ says how long the server itself took — Server-Timing — for the apps' speed reports,
+    //  to tell the server's own time from the network's; Haris 2026-11-14. Not the live streams: they never end.)
+    if (req.url.startsWith('/api/') && !req.url.startsWith('/api/events') && !req.url.startsWith('/api/talk/stream')) {
+      const t0 = performance.now(), wh = res.writeHead;
+      res.writeHead = function (...a) {
+        if (!this.headersSent && !this.getHeader('Server-Timing')) this.setHeader('Server-Timing', `total;dur=${(performance.now() - t0).toFixed(1)}`);
+        return wh.apply(this, a);
+      };
+    }
     handle(req, res).catch((e) => {
       const status = e.status || 500;
       if (status >= 500) console.error(new Date().toISOString(), req.method, req.url, e);
