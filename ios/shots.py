@@ -55,16 +55,21 @@ try:
     # the 6.9" iPhone: the newest Pro Max
     devs = json.loads(sh('xcrun', 'simctl', 'list', 'devices', 'available', '-j').stdout)['devices']
     rtv = lambda rt: [int(x) for x in re.findall(r'(\d+)', rt.split('iOS')[-1])[:2]]
-    phones = [(rtv(rt), d) for rt, ds in devs.items() if 'iOS' in rt for d in ds if re.match(r'iPhone \d+ Pro Max$', d['name'])]
-    phones.sort(key=lambda x: (x[0], x[1]['name']))
-    dev = phones[-1][1]; udid = dev['udid']
-    print('simulator', dev['name'], flush=True)
-    sh('xcrun', 'simctl', 'boot', udid); sh('xcrun', 'simctl', 'bootstatus', udid, '-b', timeout=300)
-    sh('xcrun', 'simctl', 'ui', udid, 'appearance', 'dark')
+    def newest(pat):
+        ph = [(rtv(rt), d) for rt, ds in devs.items() if 'iOS' in rt for d in ds if re.match(pat, d['name'])]
+        ph.sort(key=lambda x: (x[0], x[1]['name'])); return ph[-1][1] if ph else None
+    def boot(d):
+        sh('xcrun', 'simctl', 'boot', d['udid']); sh('xcrun', 'simctl', 'bootstatus', d['udid'], '-b', timeout=300)
+        sh('xcrun', 'simctl', 'ui', d['udid'], 'appearance', 'dark')
+        print('simulator', d['name'], flush=True); return d['udid']
+    # (SHOTS: all — every screen as before; home — only E11 Day's first steps, on the 6.9" Pro Max and the 6.3" Pro side by
+    #  side: E11 Day came out empty in the 2026-11-14 run, fine on Haris's phone — Haris 2026-11-14)
+    SHOTS = os.environ.get('SHOTS', 'all') or 'all'
+    dev = newest(r'iPhone \d+ Pro Max$'); udid = boot(dev)
     full = ['--time', '9:41', '--batteryState', 'charged', '--batteryLevel', '100', '--cellularMode', 'active', '--cellularBars', '4', '--dataNetwork', 'wifi', '--wifiMode', 'active', '--wifiBars', '3']
     def bars(*a): sh('xcrun', 'simctl', 'status_bar', udid, 'clear'); sh('xcrun', 'simctl', 'status_bar', udid, 'override', *a)
     def shot(name): sh('xcrun', 'simctl', 'io', udid, 'screenshot', os.path.join(OUT, name + '.png'))
-    def run(tag, email, mode, secs=420, every=True, extra=None, quick=None):
+    def run(tag, email, mode, secs=420, every=True, extra=None, quick=None, until=None):
         sh('xcrun', 'simctl', 'terminate', udid, BUNDLE); sh('xcrun', 'simctl', 'uninstall', udid, BUNDLE)
         sh('xcrun', 'simctl', 'install', udid, APP)
         lenv = dict(os.environ, SIMCTL_CHILD_E11_SERVER=BASE, SIMCTL_CHILD_E11_SELFTEST=mode, SIMCTL_CHILD_E11_SELFTEST_EMAIL=email, **(extra or {}))
@@ -83,12 +88,22 @@ try:
                 shot(f'{tag}-{n:03d}-{st}')
                 if st in ('lookFlip', 'tlookFlip'): sh('xcrun', 'simctl', 'ui', udid, 'appearance', 'light')
                 if st in ('lookLight', 'tlookLight'): sh('xcrun', 'simctl', 'ui', udid, 'appearance', 'dark')
-            if st == 'done' or time.time() - last > 100: break
+            if st == 'done' or st == until or time.time() - last > 100: break
             time.sleep(0.4)
         sh('xcrun', 'simctl', 'ui', udid, 'appearance', 'dark')
         print(tag, email, len(seen), 'steps', flush=True)
 
     bars(*full)
+    if SHOTS == 'home':
+        run('H-promax', EMAIL, '1', secs=240, until='homeFind', extra={'SIMCTL_CHILD_E11_SELFTEST_PICK': json.dumps(pick)})
+        time.sleep(4); shot('H-promax-zz-after')
+        sh('xcrun', 'simctl', 'shutdown', udid)
+        small = newest(r'iPhone \d+ Pro$')
+        if small:
+            udid = boot(small); bars(*full)
+            run('H-pro', EMAIL, '1', secs=240, until='homeFind', extra={'SIMCTL_CHILD_E11_SELFTEST_PICK': json.dumps(pick)})
+            time.sleep(4); shot('H-pro-zz-after')
+        raise SystemExit
     run('A-reviewer', EMAIL, '1', secs=1200, extra={'SIMCTL_CHILD_E11_SELFTEST_PICK': json.dumps(pick)})
     for tag, who in (('B-cd', cd), ('B-social', sm), ('B-office', of), ('B-reviewer', EMAIL)):
         if who: run(tag, who, 'apple')

@@ -21,6 +21,9 @@ on:
       checks:
         description: "The simulator self-test: full (default), none, compile or shots (the App Store screenshots: nothing signed or sent) — compile only builds it for the simulator (nothing signed or sent: a check while working, Haris 2026-11-11 14:12); none signs and sends straight after the app builds, for quick TestFlight builds while working; the full self-test runs as the last step before a release (Haris 2026-11-11)"
         default: full
+      shots:
+        description: "With checks=shots: all (every screen) or home (only E11 Day's first steps, on the Pro Max and the Pro)"
+        default: all
   # (no build on a push any more: every build only on Haris's word — Haris 2026-11-08; one build, straight to TestFlight)
 permissions:
   contents: write
@@ -74,6 +77,8 @@ jobs:
         if: inputs.checks == 'shots'
         continue-on-error: true
         timeout-minutes: 60
+        env:
+          SHOTS: ${{ inputs.shots }}
         run: python3 ios/shots.py build/Build/Products/Debug-iphonesimulator/E11Console.app 2>&1 | tee "$RUNNER_TEMP/ios-shots.log"; true
       - name: Walk-through for every role, without the website
         # (ios/walktest.py — Haris 2026-11-05: every button, every role; read from the release below)
