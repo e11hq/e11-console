@@ -52,8 +52,8 @@ def board(look):
             f'<span style="margin-left: auto">{sym("sidebar", t["dim"])}</span></div>'
             + item('house', 'Home', on=True) + item('tray', 'Inbox', '3', red=True) + item('sun', 'E11 Day', '7') + item('check', 'My Tasks', '8') + item('cal', 'Content plans', '1', red=True)
             + head('Clients', True) + client('#0E3E8C', 'Northline Motors') + client('#C8102E', 'Kestrel Foods') + client('#3E7D44', 'Pinecrest')
-            + head('Library') + item('folder', 'Client Assets', sub='Logos · Guidelines · Fonts') + item('dollar', 'Finance', sub='Dashboard · Clients · Expenses') + item('trash', 'Trash')
-            + f'<div style="margin-top: auto; border-top: 0.5px solid {t["sideLine"]}; padding: 10px 8px 0; display: flex; flex-direction: column; gap: 6px">'
+            + '<div style="margin-top: auto"></div>' + head('Library') + item('folder', 'Client Assets', sub='Logos · Guidelines · Fonts') + item('dollar', 'Finance', sub='Dashboard · Clients · Expenses') + item('trash', 'Trash')
+            + f'<div style="margin-top: 10px; border-top: 0.5px solid {t["sideLine"]}; padding: 10px 8px 0; display: flex; flex-direction: column; gap: 6px">'
             + f'<div style="display: flex; align-items: center; gap: 9px"><span style="width: 28px; height: 28px; border-radius: 14px; background: #7D5BD9; color: #fff; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center">AM</span>'
             + f'<div><div style="font-size: 13px; font-weight: 600">Alex Morgan</div><div style="font-size: 11px; color: {t["dim"]}">Super Admin</div></div></div>'
             + f'<div style="font-size: 11px; color: {t["dim"]}"><span style="color: #30d158">●</span> Synced · E11 Server</div></div></div>')
