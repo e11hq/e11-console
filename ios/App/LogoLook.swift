@@ -1,4 +1,5 @@
 import UIKit
+import ImageIO
 
 /* A client's logo in its tile, everywhere (Haris 2026-11-08: "their logo's fit the thumbnail … not cut, with little
    spacing on the sides"): the whole logo, as large as the tile lets it be, with a small margin — never cropped. Its tile:
@@ -36,9 +37,11 @@ enum LogoLook {
     DispatchQueue.global(qos: .utility).async {
       for p in Set(paths) where tiles.object(forKey: "\(p)|40.0|11.0" as NSString) == nil {
         let disk = SVGRaster.looksLikeSVG(Data(), path: p) ? p + "#svg2" : p
-        guard let d = DiskPics.get(disk), let img = UIImage(data: d) else { continue }
-        FeedLoader.shared.keep(img, p)
-        _ = tile(img, key: p, side: 40, radius: 11)
+        // (read small — a logo file can be thousands of pixels: read whole and kept, 13 of them took the app from 60 to
+        //  over 200 MB, speed report 1720; the tile is 40 points)
+        guard let d = DiskPics.get(disk), let src = CGImageSourceCreateWithData(d as CFData, nil),
+              let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 240] as CFDictionary) else { continue }
+        _ = tile(UIImage(cgImage: cg), key: p, side: 40, radius: 11)
       }
     }
   }

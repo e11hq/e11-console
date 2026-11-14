@@ -26,8 +26,6 @@ final class FeedLoader {
   // pictures are kept on the phone too (Haris, 2026-11-02: coming back to the app, the pictures flashed as if it had
   // reloaded — iPhone empties the memory of an app that's away, or closes it): from the phone's copy they're there at
   // once, no shimmer, no request
-  // (a picture read ahead, away from the screen — LogoLook.warm: kept as a read one is)
-  func keep(_ img: UIImage, _ path: String) { cache.setObject(img, forKey: path as NSString) }
   func image(_ path: String, _ done: @escaping (UIImage?) -> Void) {
     if let i = cache.object(forKey: path as NSString) ?? locals[path] { return done(i) }
     if path.hasPrefix("local:") { return done(nil) }
