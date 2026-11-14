@@ -37,7 +37,17 @@ form{width:100%;margin-top:30px;display:flex;flex-direction:column;gap:14px}
 input{display:block;width:100%;height:52px;border:0;border-radius:0;background:var(--card);padding:0 16px;font:inherit;font-size:17px;color:var(--ink);outline:none}
 .single{border-radius:14px}
 button.go{height:52px;border:0;border-radius:26px;background:var(--btn);color:var(--btnInk);font:inherit;font-size:17px;font-weight:600}
+button.go{position:relative;transition:opacity .2s}
 button.go:disabled{opacity:.5}
+/* signing in: the button fades and three dots move on it until the next page — Haris 2026-11-14 */
+button.go.busy{opacity:.55}
+button.go.busy .l{visibility:hidden}
+button.go .dots{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:6px}
+button.go .dots i{width:7px;height:7px;border-radius:50%;background:currentColor;animation:dot 1s infinite ease-in-out}
+button.go .dots i:nth-child(2){animation-delay:.15s}
+button.go .dots i:nth-child(3){animation-delay:.3s}
+@keyframes dot{0%,80%,100%{opacity:.25;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){button.go .dots i{animation:none;opacity:.8}}
 button.link{align-self:center;border:0;background:none;color:var(--blue);font:inherit;font-size:15px;font-weight:500;padding:8px}
 .digits{display:flex;gap:12px;justify-content:center}
 .digits input{width:60px;height:68px;border-radius:14px;text-align:center;font-size:30px;font-weight:600;padding:0}
@@ -87,9 +97,19 @@ function show(html, onBack){
   step.innerHTML = html; eyes(); back.style.display = onBack ? 'flex' : 'none'; back.onclick = onBack || null;
   var f = step.querySelector('input'); if (f) setTimeout(function(){ f.focus(); }, 50);
 }
-function busy(form, on){ var b = form.querySelector('button.go'); if (b) b.disabled = on; }
+function busy(form, on){
+  var b = form.querySelector('button.go'); if (!b) return;
+  b.disabled = on;
+  if (on && !b.classList.contains('busy')) { b.dataset.l = b.textContent; b.innerHTML = '<span class="l"></span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>'; b.firstChild.textContent = b.dataset.l; b.setAttribute('aria-busy', 'true'); }
+  if (!on && b.classList.contains('busy')) { b.textContent = b.dataset.l || b.textContent; b.removeAttribute('aria-busy'); }
+  b.classList.toggle('busy', on);
+}
 function fail(msg){ var e = step.querySelector('.err'); if (e) e.textContent = msg || 'That didn’t work — try again.'; }
-function done(r){ if (r && r.redirect) location.replace(r.redirect); else fail(r && r.error); }
+function done(r){
+  // (signed in: the button stays busy until the next page has come)
+  if (r && r.redirect) { var f = step.querySelector('form'); if (f) busy(f, true); location.replace(r.redirect); }
+  else fail(r && r.error);
+}
 
 function emailStep(){
   show('<h1>Sign in</h1><p class="sub">${app === 'talk' ? 'Use your email.' : 'Use your work email.'}</p>'
