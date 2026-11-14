@@ -592,6 +592,14 @@ when their words change + shorter sheet notes. Quick build. Nothing changes with
 shared sign-in, client contacts and their codes, Mark as Unread, a chat opening without waiting (row heights kept, photos made in
 the background, no repeated server asks), the first start's "Setting up your account", a tab tapped again going to the list's start.
 Nothing changes in its look, behaviour or code without telling Haris first and his yes.
+**E11 TALK — LOCKED at build 120 (Haris, 2026-11-14 12:02: "Send to test flight and lock after that"):** commit 7563719 on
+talk-chat-1, branches `stable/talk-120` and `locked/talk-120` (never moved or deleted; 109's stay as history). 120 = 109 +
+a video playing as it opens; a held bubble lifting as a picture in its exact shape (tail and reaction pill), its place empty
+while it's up, held anywhere on it (cards included), a held card / photo / link never opening; Talk following E11 Console's
+server and its App Review sign-in; the sign-in page the whole screen in Talk's colours; and the speed work (the startup
+screen not waiting for the server, one ask at start, link cards' pictures / links / card logos made once off the main thread,
+120 Hz) — measured with five timing builds (project doc `claude/speed-plan.md`). Nothing changes in its look, behaviour or
+code without telling Haris first and his yes.
 **Compile checks: `-f checks=compile -f walk=no`** — without `walk=no` the walk-through for every role runs too (~20 min),
 holding the Mac (2026-11-13).
 **The App Store release waits for E11 Talk (Haris, 2026-11-11 20:16: "3"):** the Talk button (E11 Day, Clients) does nothing
