@@ -17,7 +17,10 @@ export function signinPage({ mark = '', req = {}, app = 'console' }) {
 <title>Sign in · ${app === 'talk' ? 'E11 Talk' : 'E11 Console'}</title>
 <style>
 :root{--bg:#F2F2F7;--card:#fff;--ink:#000;--sub:#6C6C70;--btn:#000;--btnInk:#fff;--line:#E5E5EA;--blue:#007AFF;--bad:#D70015}
-@media (prefers-color-scheme: dark){:root{--bg:#000;--card:#1C1C1E;--ink:#fff;--sub:#98989F;--btn:#fff;--btnInk:#000;--line:#38383A;--blue:#0A84FF;--bad:#FF6961}}
+@media (prefers-color-scheme: dark){:root{--bg:#000;--card:#1C1C1E;--ink:#fff;--sub:#98989F;--btn:#fff;--btnInk:#000;--line:#38383A;--blue:#0A84FF;--bad:#FF6961}}${app === 'talk' ? `
+/* E11 Talk (mock-up "Talk — Sign-in, in Talk's colours", Haris 2026-11-14): Talk's white page, grey boxes, Talk's blue */
+:root{--bg:#fff;--card:#F2F2F7;--btn:#2F6FE4;--btnInk:#fff;--blue:#2F6FE4}
+@media (prefers-color-scheme: dark){:root{--bg:#000;--card:#1C1C1E;--btn:#2F6FE4;--btnInk:#fff;--blue:#5A9BFF}}` : ''}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,"SF Pro Text",Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
 main{min-height:100svh;max-width:420px;margin:0 auto;padding:max(env(safe-area-inset-top),24px) 24px max(env(safe-area-inset-bottom),28px);display:flex;flex-direction:column;align-items:center}
@@ -38,7 +41,7 @@ button.go:disabled{opacity:.5}
 button.link{align-self:center;border:0;background:none;color:var(--blue);font:inherit;font-size:15px;font-weight:500;padding:8px}
 .digits{display:flex;gap:12px;justify-content:center}
 .digits input{width:60px;height:68px;border-radius:14px;text-align:center;font-size:30px;font-weight:600;padding:0}
-.err{min-height:20px;margin:0;font-size:14px;color:var(--bad);text-align:center}
+.err{min-height:20px;margin:-4px 0 0;font-size:14px;color:var(--bad);text-align:center}  /* under the button, its room kept: nothing moves when it shows (Haris 2026-11-14) */
 .foot{margin-top:auto;padding-top:24px;font-size:13px;color:var(--sub);text-align:center;line-height:18px}
 .fade{animation:up .45s ease-out both}
 @keyframes tilt{from{opacity:0;transform:scale(.6) rotate(-12deg)}to{opacity:1;transform:none}}
@@ -76,7 +79,7 @@ function done(r){ if (r && r.redirect) location.replace(r.redirect); else fail(r
 function emailStep(){
   show('<h1>Sign in</h1><p class="sub">${app === 'talk' ? 'Use your email.' : 'Use your work email.'}</p>'
     + '<form id="f" novalidate><label for="em" hidden>Email</label><input class="single" id="em" type="email" inputmode="email" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Email" value="' + esc(st.email) + '" required>'
-    + '<p class="err" role="alert"></p><button class="go" type="submit">Continue</button></form>'
+    + '<button class="go" type="submit">Continue</button><p class="err" role="alert"></p></form>'
     + '<p class="foot">New here, or forgot your password? Ask your admin for a sign-in code.</p>');
   step.querySelector('#f').onsubmit = function(e){
     e.preventDefault(); var f = e.target, v = f.querySelector('#em').value.trim();
@@ -94,7 +97,7 @@ function passwordStep(){
   show('<h1>Welcome back</h1><p class="sub">' + esc(st.email) + '</p>'
     + '<form id="f"><input type="email" autocomplete="username" value="' + esc(st.email) + '" hidden>'
     + '<label for="pw" hidden>Password</label><input class="single" id="pw" type="password" autocomplete="current-password" placeholder="Password" required>'
-    + '<p class="err" role="alert"></p><button class="go" type="submit">Sign In</button>'
+    + '<button class="go" type="submit">Sign In</button><p class="err" role="alert"></p>'
     + '<button class="link" type="button" id="use">' + (st.owner ? 'Use Owner Code' : 'Use a Sign-in Code') + '</button></form>', emailStep);
   step.querySelector('#use').onclick = function(){ codeStep(st.owner); };
   step.querySelector('#f').onsubmit = function(e){
@@ -106,7 +109,7 @@ function codeStep(owner){
   show('<h1>' + (owner ? 'Enter your owner code' : 'Enter your code') + '</h1><p class="sub">'
     + (owner ? 'Your own 4 digits, for ' + esc(st.email) + ' — always the same, never runs out' : 'The 4-digit sign-in code your admin gave you for ' + esc(st.email)) + '</p>'
     + '<form id="f"><div class="digits">' + [0,1,2,3].map(function(i){ return '<input inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="' + (i ? 'off' : 'one-time-code') + '" aria-label="Digit ' + (i + 1) + '">'; }).join('') + '</div>'
-    + '<p class="err" role="alert"></p><button class="go" type="submit">Continue</button></form>'
+    + '<button class="go" type="submit">Continue</button><p class="err" role="alert"></p></form>'
     + '<p class="foot">' + (owner ? 'Then set a password, and add the team from the owner’s view.<br>5 wrong tries lock it for an hour — never for good.' : 'A code works once, only for this email, for 24 hours.<br>After 5 wrong tries it stops — ask for a new one.') + '</p>', function(){ emailStep(); });
   var boxes = [].slice.call(step.querySelectorAll('.digits input'));
   boxes.forEach(function(b, i){
@@ -134,7 +137,7 @@ function setStep(){
     + '<form id="f"><input type="email" autocomplete="username" value="' + esc(st.email) + '" hidden>'
     + '<div class="box"><label for="p1" hidden>New password</label><input id="p1" type="password" autocomplete="new-password" placeholder="New password" minlength="8" required>'
     + '<label for="p2" hidden>Confirm password</label><input id="p2" type="password" autocomplete="new-password" placeholder="Confirm password" minlength="8" required></div>'
-    + '<p class="err" role="alert"></p><button class="go" type="submit">Set Password</button></form>'
+    + '<button class="go" type="submit">Set Password</button><p class="err" role="alert"></p></form>'
     + '<p class="foot">At least 8 characters. Your old password stops working, and you’re signed out everywhere else.</p>');
   step.querySelector('#f').onsubmit = function(e){
     e.preventDefault(); var f = e.target, a = f.querySelector('#p1').value, b = f.querySelector('#p2').value;
