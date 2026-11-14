@@ -22,7 +22,8 @@ final class SignInVC: UIViewController, WKNavigationDelegate {
     web.isOpaque = false; web.backgroundColor = .systemBackground; web.scrollView.backgroundColor = .systemBackground
     logo.image = UIImage(named: "TalkMark"); logo.contentMode = .scaleAspectFit
     titleL.text = "Sign in to E11 Talk"; titleL.font = .systemFont(ofSize: 22, weight: .bold); titleL.textAlignment = .center
-    sub.text = "With your work email — a one-time code is sent to it."; sub.font = .systemFont(ofSize: 15); sub.textColor = .secondaryLabel; sub.textAlignment = .center; sub.numberOfLines = 2
+    // (the team and client contacts alike — Haris 2026-11-14; no one-time code since our own sign-in)
+    sub.text = "With the email E11 set up for you."; sub.font = .systemFont(ofSize: 15); sub.textColor = .secondaryLabel; sub.textAlignment = .center; sub.numberOfLines = 2
     [logo, titleL, sub].forEach { top.addSubview($0) }
     view.addSubview(top); view.addSubview(web); view.addSubview(spin)
     var rc = UIButton.Configuration.plain()
