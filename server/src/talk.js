@@ -893,12 +893,12 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       // ---- linked Macs: from the phone ----
       case 'linkMac': {
         const r = db.prepare('SELECT * FROM link_codes WHERE code = ?').get(String(b.code || ''));
-        if (!r || r.mac || t - r.at > LINK_MS) return bad('That code has run out — show a new one on the Mac');
+        if (!r || r.mac || t - r.at > LINK_MS) return bad('That code has run out — show a new one on the computer');
         // (E11 Talk for Mac's code has no one yet: the scanning phone's person signs it in — staff or client contact;
         //  E11 Console's Mac app shows its code as its signed-in person, who must be the phone's)
         const own = r.uid === '';
         if (!own && r.uid !== u.id) return bad('This Mac is signed in to E11 Console as someone else', 403);
-        if (macsOf(u.id).length >= 4) return bad('4 Macs at most — unlink one first');
+        if (macsOf(u.id).length >= 4) return bad('4 linked devices at most — unlink one first');
         phoneSeen(u);
         const id = rid('mac'), key = own ? id + '.' + crypto.randomBytes(32).toString('base64url') : null;
         db.prepare('INSERT INTO macs (id, uid, name, linked_at, seen_at, key_hash) VALUES (?, ?, ?, ?, ?, ?)').run(id, u.id, r.name, t, t, key ? hashKey(key) : null);
