@@ -251,6 +251,7 @@ final class AssetsCtl {
     if let c = client { open(client: c, folder: folder, animated: slide, direct: !rootTab) } else { openAll(animated: slide) }
   }
   private func take(_ m: [String: Any]) {
+    let probeT = Probe.now(); defer { Probe.span("Client Assets: its model put on the page (take)", probeT) }   // (TEMPORARY speed report)
     let kind = m["kind"] as? String
     if kind == "client", let cid = m["id"] as? String {
       // (which links are off: the client's files, and its folders as "d:<client>/<folder>")

@@ -322,6 +322,7 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     if ok { pending[i].done = true } else { pending.remove(at: i); if let m = model { draw(m) } }
   }
   private func draw(_ real: [String: Any], mine: Bool = false) {
+    let probeT = Probe.now(); defer { Probe.span("Comments: drawn (draw)", probeT) }   // (TEMPORARY speed report)
     dropArrived(real)
     model = real
     let m = withOverlays(real)

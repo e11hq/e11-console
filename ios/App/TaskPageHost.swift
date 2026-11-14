@@ -493,6 +493,7 @@ extension Main {
     }
   }
   private func prepFeed(_ p: TaskPage) {
+    let probeT = Probe.now(); defer { Probe.span("task page: Comments made ready (prepFeed)", probeT) }   // (TEMPORARY speed report)
     guard p.feed == nil else { return }
     FeedLoader.shared.cookies = serverHome.cookies
     p.layoutIfNeeded()
