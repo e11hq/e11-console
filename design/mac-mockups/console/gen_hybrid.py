@@ -101,13 +101,13 @@ def board(look):
             + f'<div style="font-size: 12px; color: {t["dim"]}; padding: 8px 10px 0">+3 more · See all</div>')
     bars = ''.join(f'<span style="flex: 1; height: {h}%; border-radius: 2px; background: {A if i < 14 else t["line"]}; opacity: {1 if i < 14 else 1}"></span>'
                    for i, h in enumerate([20, 45, 30, 60, 50, 8, 5, 55, 70, 40, 85, 65, 10, 30] + [4] * 16))
-    chart = card(f'<div style="display: flex; gap: 36px; align-items: flex-end">'
+    chart = card(extra='flex: 1; display: flex; flex-direction: column', inner=f'<div style="display: flex; gap: 36px; align-items: flex-end">'
                  + ''.join(f'<div><div style="font-size: 12px; color: {t["dim"]}">{l}</div><div style="display: flex; align-items: baseline; gap: 6px"><span style="font-size: 20px; font-weight: 700">{v}</span>{c}</div></div>'
                            for l, v, c in [('Completed', 41, f'<span style="font-size: 11px; color: {green}">+12%</span>'), ('On time', '86%', f'<span style="font-size: 11px; color: {green}">+4%</span>'), ('Overdue', 2, '')])
                  + f'<div style="margin-left: auto; text-align: right"><span style="font-size: 28px; font-weight: 700">41</span> <span style="font-size: 12px; color: {t["dim"]}">tasks completed · November</span></div></div>'
-                 + f'<div style="margin: 12px 0 10px; display: inline-flex; padding: 2px; border-radius: 8px; background: {t["field"]}">'
+                 + f'<div style="margin: 12px 0 10px; align-self: flex-start; display: inline-flex; padding: 2px; border-radius: 8px; background: {t["field"]}">'
                  + ''.join(f'<span style="padding: 3px 10px; border-radius: 6px; font-size: 12px; {"background:" + t["win"] + "; box-shadow: 0 0.5px 2px rgba(0,0,0,0.25); font-weight: 600;" if i == 0 else ""}">{l}</span>' for i, l in enumerate(['Completed by the team', 'Tasks created', 'Sent for CD review']))
-                 + f'</div><div style="display: flex; align-items: flex-end; gap: 4px; height: 90px">{bars}</div>')
+                 + f'</div><div style="display: flex; align-items: flex-end; gap: 4px; flex: 1; min-height: 60px">{bars}</div>')
     days = ''.join(f'<div style="flex: 1; text-align: center; padding: 6px 0; border-radius: 9px; {"background:" + A + "; color: #fff;" if d == "Mo" else ""}"><div style="font-size: 11px; {"" if d == "Mo" else "color:" + t["dim"]}">{d}</div><div style="font-size: 16px; font-weight: 600">{n}</div></div>'
                    for d, n in [('Mo', 16), ('Tu', 17), ('We', 18), ('Th', 19), ('Fr', 20)])
     def ag(c, name, sub, avs):
@@ -120,7 +120,7 @@ def board(look):
     content = (f'<div style="position: absolute; left: 248px; right: 0; top: 52px; bottom: 0; background: {t["content"]}; border-top: 0.5px solid {t["line"]}; padding: 20px 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; overflow: hidden">'
                f'<div><div style="font-size: 12px; color: {t["dim"]}">Saturday, November 14</div><div style="font-size: 26px; font-weight: 700; letter-spacing: -0.3px">Good evening, Alex</div></div>'
                f'<div style="display: flex; gap: 12px">{stat(A, "cal", "Team tasks due today", 3, "2 overdue", red)}{stat(green, "check", "Finished by your team", 14, "↑ 4 vs last week", green)}{stat(orange, "sun", "Waiting for CD review", 2, "oldest 3 hours ago", orange)}</div>'
-               f'<div style="display: grid; grid-template-columns: 1fr 330px; gap: 14px; align-items: stretch">'
+               f'<div style="display: grid; grid-template-columns: 1fr 330px; gap: 14px; align-items: stretch; flex: 1; min-height: 0">'
                f'<div style="display: flex; flex-direction: column; gap: 14px; min-width: 0">{card(h2("Team’s tasks", seg) + rows)}{chart}</div>'
                f'<div style="display: flex; flex-direction: column; gap: 14px">{sched}{clients}</div></div></div>')
     # a right-click menu: Apple's own, the website's choices
