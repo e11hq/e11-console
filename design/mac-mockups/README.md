@@ -10,6 +10,10 @@ The design canvases' boards as they stand, with a picture of each. Live canvases
 - F · Lists.png — the Clients list (staff, dark)
 - C · Main.png — Clients › Northline Motors › Launch campaign (staff, dark)
 - H · ClientView.png — a client contact (light)
+- CH1 · Chat.png — a chat, every kind of message, + open
+- CH2 · Compose.png — writing: a reply, the @ list
+- CH3 · ChatTools.png — # tasks and search in the chat
+- CH4 · Voice.png — recording a voice message
 - D · ChatLight.png — the chat (light), right-click menu
 - E · GroupInfo.png — Group Info
 - canvas.json — the boards' places and the notes (feature list, decisions, the lists check)
