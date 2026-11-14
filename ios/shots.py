@@ -104,6 +104,13 @@ try:
             run('H-pro', EMAIL, '1', secs=240, until='homeFind', extra={'SIMCTL_CHILD_E11_SELFTEST_PICK': json.dumps(pick)})
             time.sleep(4); shot('H-pro-zz-after')
         raise SystemExit
+    if SHOTS == 'rest':
+        # (only what the remaining boards need — Haris 2026-11-14: E11 Day, the morning round-up over it, E11 Day offline)
+        skip = 'first,homeS,homeL,homeP,homeD,homeF,homeR,wash,focus,cl,mytasks,titles,ibx,notifCats,slide'
+        run('R-reviewer', EMAIL, '1', secs=300, until='dailyDone', extra={'SIMCTL_CHILD_E11_SELFTEST_PICK': json.dumps(pick), 'SIMCTL_CHILD_E11_SELFTEST_SKIP': skip})
+        bars('--time', '9:41', '--batteryState', 'charged', '--batteryLevel', '100', '--cellularMode', 'notSupported', '--wifiMode', 'failed', '--wifiBars', '0')
+        run('D-offline', EMAIL, 'apple', quick=[8, 5, 5])
+        raise SystemExit
     run('A-reviewer', EMAIL, '1', secs=1200, extra={'SIMCTL_CHILD_E11_SELFTEST_PICK': json.dumps(pick)})
     for tag, who in (('B-cd', cd), ('B-social', sm), ('B-office', of), ('B-reviewer', EMAIL)):
         if who: run(tag, who, 'apple')

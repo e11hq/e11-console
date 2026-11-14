@@ -22,7 +22,7 @@ on:
         description: "The simulator self-test: full (default), none, compile or shots (the App Store screenshots: nothing signed or sent) — compile only builds it for the simulator (nothing signed or sent: a check while working, Haris 2026-11-11 14:12); none signs and sends straight after the app builds, for quick TestFlight builds while working; the full self-test runs as the last step before a release (Haris 2026-11-11)"
         default: full
       shots:
-        description: "With checks=shots: all (every screen) or home (only E11 Day's first steps, on the Pro Max and the Pro)"
+        description: "With checks=shots: all (every screen), home (only E11 Day's first steps, on the Pro Max and the Pro) or rest (E11 Day, the round-up over it, offline)"
         default: all
   # (no build on a push any more: every build only on Haris's word — Haris 2026-11-08; one build, straight to TestFlight)
 permissions:
