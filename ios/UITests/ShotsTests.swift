@@ -36,13 +36,21 @@ final class ShotsTests: XCTestCase {
       break
     }
     // the birthday's greeting
-    let bday = find("birthday")
+    let bday = app.cells.containing(NSPredicate(format: "label CONTAINS 'birthday'")).firstMatch
     if bday.waitForExistence(timeout: 5) {
       bday.tap()
-      Thread.sleep(forTimeInterval: 1.2); shot("04-greet")
-      Thread.sleep(forTimeInterval: 1.5); shot("05-greet")
-      Thread.sleep(forTimeInterval: 2.0); shot("06-greet")
+      for i in 0..<8 { Thread.sleep(forTimeInterval: 0.8); shot("04-greet-\(i)") }
     }
     shot("07-end")
+  }
+  // the birthday person's own greeting, as the app opens on their birthday (Boot: the pops' birthday)
+  func testGreet() {
+    let env = ProcessInfo.processInfo.environment
+    let out = URL(fileURLWithPath: env["E11_CRAWL_OUT"] ?? NSTemporaryDirectory(), isDirectory: true)
+    try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+    let app = XCUIApplication()
+    app.launchEnvironment = ["E11_SERVER": env["E11_SERVER"] ?? "", "E11_SELFTEST": "crawl", "E11_SELFTEST_EMAIL": env["E11_EMAIL2"] ?? ""]
+    app.launch()
+    for i in 0..<30 { Thread.sleep(forTimeInterval: 1.0); try? XCUIScreen.main.screenshot().pngRepresentation.write(to: out.appendingPathComponent(String(format: "G-%02d.png", i))) }
   }
 }

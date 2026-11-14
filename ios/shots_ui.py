@@ -32,8 +32,8 @@ try:
     sh('xcrun', 'simctl', 'status_bar', udid, 'override', '--time', '9:41', '--batteryState', 'charged', '--batteryLevel', '100', '--cellularMode', 'active', '--cellularBars', '4', '--dataNetwork', 'wifi', '--wifiMode', 'active', '--wifiBars', '3')
     sh('xcrun', 'simctl', 'uninstall', udid, 'ae.e11.console.ios')
     xctr = glob.glob(os.path.join(DD, 'Build', 'Products', '*.xctestrun'))
-    renv = dict(os.environ, TEST_RUNNER_E11_EMAIL=WHO, TEST_RUNNER_E11_SERVER=BASE, TEST_RUNNER_E11_CRAWL_OUT=OUT)
-    args = ['xcodebuild', 'test-without-building', '-destination', f'id={udid}', '-only-testing:E11ConsoleUITests/ShotsTests/testHold', '-resultBundlePath', os.path.join(TMP, 'hold.xcresult')]
+    renv = dict(os.environ, TEST_RUNNER_E11_EMAIL=WHO, TEST_RUNNER_E11_EMAIL2=(made.get('birthday') or {}).get('email', ''), TEST_RUNNER_E11_SERVER=BASE, TEST_RUNNER_E11_CRAWL_OUT=OUT)
+    args = ['xcodebuild', 'test-without-building', '-destination', f'id={udid}', '-only-testing:E11ConsoleUITests/ShotsTests', '-resultBundlePath', os.path.join(TMP, 'hold.xcresult')]
     args += ['-xctestrun', xctr[0]] if xctr else ['-project', os.path.join(ROOT, 'ios/E11Console.xcodeproj'), '-scheme', 'E11Console', '-derivedDataPath', DD]
     r = subprocess.run(args, env=renv, capture_output=True, text=True, timeout=1200)
     print('exit', r.returncode, r.stdout[-2500:], r.stderr[-1500:], flush=True)
