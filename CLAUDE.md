@@ -602,6 +602,11 @@ earlier stay as history — 1731 replaces 1728 as the candidate). 1731 = 1728 + 
 page (Cloudflare's "logged out" page kept out of sight) + Apple's tabs set aside at sign-out (the signed-out screens came back
 on returning to the app). With server 1.9.56: the sign-in page's buttons fade with moving dots while signing in. Quick build.
 Nothing changes in its look, behaviour or code without telling Haris first and his yes.
+**THE iPHONE APP — STABLE, LOCKED, the App Store release candidate: 1.2.0 build 1733 (Haris, 2026-11-14 15:41: "Yes"):** commit
+21d8acb, branches `stable/ios-1733`, `locked/ios-app-1733` and `candidate/appstore-ios-1.2.0-build-1733` (never moved or deleted;
+1731's and earlier stay as history — 1733 replaces 1731 as the candidate). 1733 = 1731 + the Talk button with E11 Talk not on the
+iPhone: "Get E11 Talk" opens its App Store page in Apple's own sheet (App Store ID 6831289909), or Cancel. Quick build. Nothing
+changes in its look, behaviour or code without telling Haris first and his yes.
 **E11 TALK — LOCKED at build 109 (Haris, 2026-11-13 22:05):** commit 13abaa4 on talk-chat-1, branches `stable/talk-109` and
 `locked/talk-109` (never moved or deleted). Holds every page as built today: Settings and its pages, Auto-download, who reacted,
 shared sign-in, client contacts and their codes, Mark as Unread, a chat opening without waiting (row heights kept, photos made in
