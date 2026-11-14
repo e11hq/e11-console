@@ -1243,7 +1243,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     //  given; a picture it does.)
     // (the picture's box on the screen's own pixels — at a part-pixel place it drew a pixel off: Haris 2026-11-13)
     // (letting go: the same picture back — the bubble is out of its place by then, there's nothing to draw)
-    if let s = heldShot, s.id == id, cell.held.alpha == 0 { return preview(s.img, s.r, s.shape, in: cell) }
+    if let s = heldShot, s.id == id { return preview(s.img, s.r, s.shape, in: cell) }   // (not asked of the bubble's alpha: it may already be on its way back)
     let k = cell.traitCollection.displayScale > 0 ? cell.traitCollection.displayScale : UIScreen.main.scale
     let h = cell.heldPath(origin: .zero).bounds
     let x0 = floor(h.minX * k) / k, y0 = floor(h.minY * k) / k, x1 = ceil(h.maxX * k) / k, y1 = ceil(h.maxY * k) / k
