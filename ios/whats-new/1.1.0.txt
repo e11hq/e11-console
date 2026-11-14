@@ -1,6 +1,0 @@
-• Faster and smoother everywhere: screens open straight from your phone.
-• Search forgives small typos and highlights what it found, in every list.
-• Files: previews stay on your phone, PDFs open at once, and uploads show as one card that scrolls into view.
-• Trash: tap a task to see it as it was, and restore it.
-• Creative Director review only when a CD is set.
-• Many smaller fixes and polish.

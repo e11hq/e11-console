@@ -74,6 +74,14 @@ export function demoData(store, me, filesRoot) {
     // every client shows its drawn logo
     for (const c of data.clients || []) { const lf = (c.folders || []).find((f) => f.name === 'Logos'); const svg = lf && lf.files.find((f) => /\.svg$/i.test(f.name)); if (svg && !c.logo) c.logo = svg.path; }
     for (const u of data.users) if (u.id !== me && u.name) u.email = `${u.name.toLowerCase().normalize('NFD').replace(/[^a-z ]/g, '').trim().replace(/\s+/g, '.')}@example.com`;
+    // the reviewer's own tasks too, so My Tasks isn't empty for App Review (Haris 2026-11-14): an admin's My Tasks lists the
+    // tasks they created — today's, and a couple overdue and coming up, made by the reviewer
+    {
+      const day = (ms) => new Date(ms + 4 * 3600e3).toISOString().slice(0, 10), today = day(Date.now());
+      const open = (data.tasks || []).filter((t) => !t.done && !t.parentId && !t.trashedAt && t.due).sort((a, b) => (a.due < b.due ? -1 : 1));
+      const pick = [...open.filter((t) => t.due === today), ...open.filter((t) => t.due < today).slice(-2), ...open.filter((t) => t.due > today).slice(0, 2)];
+      for (const t of pick) t.createdBy = me;
+    }
     if (stage) moveAll(stage, filesRoot);
     return data;
   } finally {
