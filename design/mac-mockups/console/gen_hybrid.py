@@ -48,7 +48,7 @@ def board(look):
             f'box-shadow: inset 0 0 0 0.5px {t["sideLine"]}, 0 8px 28px rgba(0,0,0,0.18); padding: 12px 8px; box-sizing: border-box; display: flex; flex-direction: column; z-index: 3">'
             '<div style="display: flex; gap: 8px; padding: 4px 8px 14px"><span style="width: 12px; height: 12px; border-radius: 6px; background: #ff5f57"></span><span style="width: 12px; height: 12px; border-radius: 6px; background: #febc2e"></span><span style="width: 12px; height: 12px; border-radius: 6px; background: #28c840"></span>'
             f'<span style="margin-left: auto">{sym("sidebar", t["dim"])}</span></div>'
-            + item('house', 'Home') + item('tray', 'Inbox', '3', red=True) + item('sun', 'E11 Day', '7', on=True) + item('check', 'My Tasks', '8') + item('cal', 'Content plans', '1', red=True)
+            + item('house', 'Home', on=True) + item('tray', 'Inbox', '3', red=True) + item('sun', 'E11 Day', '7') + item('check', 'My Tasks', '8') + item('cal', 'Content plans', '1', red=True)
             + head('Clients', True) + client('#0E3E8C', 'Northline Motors') + client('#C8102E', 'Kestrel Foods') + client('#3E7D44', 'Pinecrest')
             + head('Library') + item('folder', 'Client Assets', sub='Logos · Guidelines · Fonts') + item('dollar', 'Finance', sub='Dashboard · Clients · Expenses') + item('trash', 'Trash')
             + f'<div style="margin-top: auto; border-top: 0.5px solid {t["sideLine"]}; padding: 10px 8px 0; display: flex; flex-direction: column; gap: 6px">'
@@ -59,43 +59,69 @@ def board(look):
         return (f'<span style="height: 30px; {"width: 30px;" if not w else ""} padding: 0 {10 if w else 0}px; border-radius: 15px; background: {t["glass"]}; box-shadow: inset 0 0 0 0.5px {t["glassLine"]}; '
                 f'display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px">{inner}</span>')
     toolbar = (f'<div style="position: absolute; left: 248px; right: 0; top: 0; height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 16px; z-index: 2">'
-               f'<span style="font-size: 15px; font-weight: 700">E11 Day</span><span style="font-size: 12px; color: {t["dim"]}">Saturday, 14 November</span>'
+               f'<span style="font-size: 15px; font-weight: 700">Home</span>'
                f'<span style="margin-left: auto"></span>'
                + tb(sym('plus', t['fg']) + 'New Task', w=1) + tb(sym('moon', t['fg']))
                + tb(sym('bubble', t['fg']) + 'Talk <span style="min-width: 18px; height: 18px; border-radius: 9px; background: #ff3b30; color: #fff; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; box-sizing: border-box">5</span>', w=1)
                + f'<span style="width: 220px; height: 30px; border-radius: 15px; background: {t["field"]}; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; box-sizing: border-box; font-size: 13px; color: {t["dim"]}">{sym("search", t["dim"])}Search tasks<span style="margin-left: auto; font-size: 11px">⌘K</span></span>'
                + '</div>')
-    # the website's E11 Day, restyled for the Mac (inside the web view)
-    days = ''.join(
-        f'<div style="flex: 1; text-align: center; padding: 7px 0; border-radius: 9px; {"background:" + A + "; color: #fff;" if d == "Sat" else ""}">'
-        f'<div style="font-size: 11px; {"" if d == "Sat" else "color:" + t["dim"]}">{d}</div><div style="font-size: 17px; font-weight: 600">{n}</div>'
-        f'<div style="height: 6px; font-size: 9px; line-height: 6px">{dots}</div></div>'
-        for d, n, dots in [('Mon', 9, '•'), ('Tue', 10, ''), ('Wed', 11, '••'), ('Thu', 12, ''), ('Fri', 13, '•'), ('Sat', 14, '•••'), ('Sun', 15, '•')])
-    def grp(label, color, n, open_=True):
-        return (f'<div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px 6px; font-size: 13px; font-weight: 600">'
-                f'<span style="color: {t["dim"]}; font-size: 11px; width: 10px">{"▾" if open_ else "▸"}</span><span style="color: {color}">{label}</span>'
-                f'<span style="color: {t["dim"]}; font-weight: 400">{n}</span></div>')
-    def trow(i, name, status, sc, client, due, dc, pr, pc):
+    # the website's Home (an Admin's: layout A, home.js viewLead), restyled for the Mac (inside the web view)
+    orange, red, green, purple = '#ff9f0a', ('#ff453a' if look == 'dark' else '#e0352b'), ('#30d158' if look == 'dark' else '#28a745'), '#bf5af2'
+    yellow = '#ffd60a' if look == 'dark' else '#b98900'
+    def card(inner, extra=''):
+        return f'<div style="background: {t["card"]}; border-radius: 12px; padding: 14px 16px; box-sizing: border-box; {extra}">{inner}</div>'
+    def h2(title, right=''):
+        return f'<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px"><span style="font-size: 15px; font-weight: 700">{title}</span>{right}</div>'
+    def av(ini, c, sz=24, ml=0):
+        return f'<span style="width: {sz}px; height: {sz}px; border-radius: {sz//2}px; background: {c}; color: #fff; font-size: {int(sz*0.4)}px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; margin-left: {ml}px; box-shadow: 0 0 0 2px {t["card"]}">{ini}</span>'
+    def pill(text, c):
+        return f'<span style="font-size: 11px; font-weight: 600; color: {c}; background: color-mix(in srgb, {c} 16%, transparent); padding: 3px 8px; border-radius: 10px; white-space: nowrap">{text}</span>'
+    def stat(color, icon, label, n, note, nc, sel=False):
+        return card(f'<div style="display: flex; align-items: center; gap: 12px"><span style="width: 36px; height: 36px; border-radius: 10px; background: color-mix(in srgb, {color} 18%, transparent); display: inline-flex; align-items: center; justify-content: center">{sym(icon, color)}</span>'
+                    f'<div><div style="font-size: 12px; color: {t["dim"]}">{label}</div><div style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: 22px; font-weight: 700">{n}</span><span style="font-size: 12px; color: {nc}">{note}</span></div></div></div>', 'flex: 1')
+    seg = ''.join(f'<span style="padding: 3px 10px; border-radius: 6px; font-size: 12px; {"background:" + t["win"] + "; box-shadow: 0 0.5px 2px rgba(0,0,0,0.25); font-weight: 600;" if on else ""}">{l} <span style="color: {red if l == "Overdue" else t["dim"]}">{n}</span></span>'
+                  for l, n, on in [('Overdue', 2, False), ('Today', 3, False), ('This week', 9, True), ('All open', 24, False)])
+    seg = f'<span style="display: inline-flex; padding: 2px; border-radius: 8px; background: {t["field"]}">{seg}</span><span style="margin-left: auto; font-size: 12px; color: {A}">See All</span>'
+    def row(i, c, name, sub, cm, fl, avs, st, sc):
         bg = t['row'] if i % 2 else 'transparent'
-        return (f'<div style="display: grid; grid-template-columns: 1fr 120px 150px 90px 110px; align-items: center; height: 30px; padding: 0 12px; font-size: 13px; background: {bg}; border-radius: 6px">'
-                f'<span style="display: flex; align-items: center; gap: 8px"><span style="width: 14px; height: 14px; border-radius: 7px; border: 1.5px solid {t["ter"]}"></span>{name}</span>'
-                f'<span style="color: {sc}">{status}</span><span>{client}</span><span style="color: {dc}">{due}</span><span style="color: {pc}">{pr}</span></div>')
-    orange, red, yellow = '#ff9f0a', '#ff453a', '#ffd60a' if look == 'dark' else '#c79500'
-    content = (f'<div style="position: absolute; left: 248px; right: 0; top: 52px; bottom: 0; background: {t["content"]}; border-top: 0.5px solid {t["line"]}; padding: 18px 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px">'
-               f'<div style="display: flex; align-items: center; gap: 8px"><span style="color: {t["dim"]}">‹</span><div style="flex: 1; display: flex; gap: 6px">{days}</div><span style="color: {t["dim"]}">›</span>'
-               f'<span style="margin-left: 8px; padding: 4px 12px; border-radius: 7px; background: {t["field"]}; font-size: 12px">Today</span></div>'
-               f'<div style="display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 12px; background: {t["card"]}">'
-               f'<svg width="40" height="40" viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" fill="none" stroke="{t["line"]}" stroke-width="4"/><circle cx="20" cy="20" r="16" fill="none" stroke="#30d158" stroke-width="4" stroke-dasharray="29 100" transform="rotate(-90 20 20)" stroke-linecap="round"/><text x="20" y="24" font-size="10" font-weight="700" text-anchor="middle" fill="{t["fg"]}">29%</text></svg>'
-               f'<div style="flex: 1"><div style="font-size: 13px"><b>2</b> of <b>7</b> planned tasks done today</div><div style="margin-top: 6px; height: 4px; border-radius: 2px; background: {t["line"]}"><div style="width: 29%; height: 100%; border-radius: 2px; background: #30d158"></div></div></div>'
-               f'<span style="font-size: 12px; color: {red}">2 overdue</span><span style="font-size: 12px; color: {t["dim"]}">3 due</span><span style="font-size: 12px; color: #30d158">2 completed</span></div>'
-               f'<div style="height: 30px; border-radius: 8px; background: {t["field"]}; display: flex; align-items: center; gap: 8px; padding: 0 10px; font-size: 13px; color: {t["dim"]}">{sym("plus", t["dim"])}Add a task for today…</div>'
-               f'<div><div style="display: grid; grid-template-columns: 1fr 120px 150px 90px 110px; padding: 0 12px 6px; font-size: 11px; font-weight: 600; color: {t["dim"]}; border-bottom: 0.5px solid {t["line"]}"><span>Name</span><span>Status</span><span>Client</span><span>Due</span><span>Priority</span></div>'
-               + grp('Overdue', red, 2) + trow(0, 'Website — homepage copy', 'In Progress', orange, 'Pinecrest', 'Thu', red, '⚑ Priority 1', orange) + trow(1, 'Shoot day call sheet', 'To Do', t['dim'], 'Northline Motors', 'Fri', red, 'No priority', t['dim'])
-               + grp('Due today', A, 3) + trow(0, 'Winter Drive Campaign – Key Visual', 'In Review', yellow, 'Northline Motors', 'Today', t['fg'], '⚑ Urgent', red)
-               + trow(1, 'Launch socials — 6 posts', 'In Progress', orange, 'Northline Motors', 'Today', t['fg'], 'No priority', t['dim']) + trow(0, 'December content plan', 'To Do', t['dim'], 'Kestrel Foods', 'Today', t['fg'], 'No priority', t['dim'])
-               + grp('In progress (started, due later)', '#bf5af2', 1, False) + grp('Completed', '#30d158', 2, False) + '</div></div>')
+        return (f'<div style="display: grid; grid-template-columns: 10px 1fr 70px 76px 96px; gap: 12px; align-items: center; height: 44px; padding: 0 10px; border-radius: 7px; background: {bg}">'
+                f'<span style="width: 9px; height: 9px; border-radius: 3px; background: {c}"></span>'
+                f'<span style="min-width: 0"><div style="font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{name}</div><div style="font-size: 11px; color: {t["dim"]}">{sub}</div></span>'
+                f'<span style="font-size: 11px; color: {t["dim"]}">💬 {cm} · 📎 {fl}</span><span style="display: flex">{avs}</span><span>{pill(st, sc)}</span></div>')
+    N, K, P = '#0E3E8C', '#C8102E', '#3E7D44'
+    rows = (row(0, N, 'Winter Drive Campaign – Key Visual', f'Northline Motors · by Sam Rivera · due <span style="color: {t["fg"]}">Today</span>', 6, 4, av('JL', '#E67E22') + av('MK', '#16A085', ml=-6), 'In Review', yellow)
+            + row(1, N, 'Launch socials — 6 posts', f'Northline Motors · due <span style="color: {t["fg"]}">Today</span>', 3, 2, av('RT', '#8E44AD'), 'In Progress', orange)
+            + row(2, K, 'December content plan', f'Kestrel Foods · by Dana Cole · due <span style="color: {t["fg"]}">Today</span>', 1, 0, av('MK', '#16A085'), 'To Do', t['dim'])
+            + row(3, P, 'Website — homepage copy', f'Pinecrest · due <span style="color: {red}">Thu, Nov 12</span>', 9, 3, av('JL', '#E67E22'), 'In Progress', orange)
+            + row(4, K, 'Menu photography retouch', 'Kestrel Foods · due Mon, Nov 16', 2, 12, av('AB', '#2980B9') + av('RT', '#8E44AD', ml=-6), 'In Progress', orange)
+            + row(5, N, 'Dealer event invitation', 'Northline Motors · by Sam Rivera · due Wed, Nov 18', 0, 1, av('AB', '#2980B9'), 'To Do', t['dim'])
+            + f'<div style="font-size: 12px; color: {t["dim"]}; padding: 8px 10px 0">+3 more · See all</div>')
+    bars = ''.join(f'<span style="flex: 1; height: {h}%; border-radius: 2px; background: {A if i < 14 else t["line"]}; opacity: {1 if i < 14 else 1}"></span>'
+                   for i, h in enumerate([20, 45, 30, 60, 50, 8, 5, 55, 70, 40, 85, 65, 10, 30] + [4] * 16))
+    chart = card(f'<div style="display: flex; gap: 36px; align-items: flex-end">'
+                 + ''.join(f'<div><div style="font-size: 12px; color: {t["dim"]}">{l}</div><div style="display: flex; align-items: baseline; gap: 6px"><span style="font-size: 20px; font-weight: 700">{v}</span>{c}</div></div>'
+                           for l, v, c in [('Completed', 41, f'<span style="font-size: 11px; color: {green}">+12%</span>'), ('On time', '86%', f'<span style="font-size: 11px; color: {green}">+4%</span>'), ('Overdue', 2, '')])
+                 + f'<div style="margin-left: auto; text-align: right"><span style="font-size: 28px; font-weight: 700">41</span> <span style="font-size: 12px; color: {t["dim"]}">tasks completed · November</span></div></div>'
+                 + f'<div style="margin: 12px 0 10px; display: inline-flex; padding: 2px; border-radius: 8px; background: {t["field"]}">'
+                 + ''.join(f'<span style="padding: 3px 10px; border-radius: 6px; font-size: 12px; {"background:" + t["win"] + "; box-shadow: 0 0.5px 2px rgba(0,0,0,0.25); font-weight: 600;" if i == 0 else ""}">{l}</span>' for i, l in enumerate(['Completed by the team', 'Tasks created', 'Sent for CD review']))
+                 + f'</div><div style="display: flex; align-items: flex-end; gap: 4px; height: 90px">{bars}</div>')
+    days = ''.join(f'<div style="flex: 1; text-align: center; padding: 6px 0; border-radius: 9px; {"background:" + A + "; color: #fff;" if d == "Mo" else ""}"><div style="font-size: 11px; {"" if d == "Mo" else "color:" + t["dim"]}">{d}</div><div style="font-size: 16px; font-weight: 600">{n}</div></div>'
+                   for d, n in [('Mo', 16), ('Tu', 17), ('We', 18), ('Th', 19), ('Fr', 20)])
+    def ag(c, name, sub, avs):
+        return f'<div style="display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 0.5px solid {t["line"]}"><span style="width: 3px; height: 30px; border-radius: 2px; background: {c}"></span><div style="flex: 1; min-width: 0"><div style="font-size: 13px; font-weight: 600">{name}</div><div style="font-size: 11px; color: {t["dim"]}">{sub}</div></div>{avs}</div>'
+    sched = card(h2('Schedule', f'<span style="margin-left: auto; font-size: 12px; color: {t["dim"]}">Monday</span>') + f'<div style="display: flex; gap: 4px; margin-bottom: 8px">{days}</div>'
+                 + ag(K, 'Menu photography retouch', 'In Progress · Waiting for client', av('AB', '#2980B9', 22)) + ag(N, 'Showroom banner resize', 'To Do', av('JL', '#E67E22', 22)) + ag(P, 'Brand guidelines v2', 'In Review', av('MK', '#16A085', 22)))
+    def cl(c, ini, name, o, pc):
+        return f'<div style="display: flex; align-items: center; gap: 10px; padding: 6px 0"><span style="width: 30px; height: 30px; border-radius: 8px; background: {c}; color: #fff; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center">{ini}</span><div style="flex: 1"><div style="font-size: 13px; font-weight: 600">{name}</div><div style="font-size: 11px; color: {t["dim"]}">{o} open · {pc}% done</div><div style="margin-top: 4px; height: 3px; border-radius: 2px; background: {t["line"]}"><div style="width: {pc}%; height: 100%; border-radius: 2px; background: {c}"></div></div></div></div>'
+    clients = card(h2('Clients', f'<span style="font-size: 12px; color: {t["dim"]}">3</span>') + cl(N, 'NM', 'Northline Motors', 11, 64) + cl(K, 'KF', 'Kestrel Foods', 8, 52) + cl(P, 'PC', 'Pinecrest', 5, 71))
+    content = (f'<div style="position: absolute; left: 248px; right: 0; top: 52px; bottom: 0; background: {t["content"]}; border-top: 0.5px solid {t["line"]}; padding: 20px 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; overflow: hidden">'
+               f'<div><div style="font-size: 12px; color: {t["dim"]}">Saturday, November 14</div><div style="font-size: 26px; font-weight: 700; letter-spacing: -0.3px">Good evening, Alex</div></div>'
+               f'<div style="display: flex; gap: 12px">{stat(A, "cal", "Team tasks due today", 3, "2 overdue", red)}{stat(green, "check", "Finished by your team", 14, "↑ 4 vs last week", green)}{stat(orange, "sun", "Waiting for CD review", 2, "oldest 3 hours ago", orange)}</div>'
+               f'<div style="display: grid; grid-template-columns: 1fr 330px; gap: 14px; align-items: start">'
+               f'<div style="display: flex; flex-direction: column; gap: 14px; min-width: 0">{card(h2("Team’s tasks", seg) + rows)}{chart}</div>'
+               f'<div style="display: flex; flex-direction: column; gap: 14px">{sched}{clients}</div></div></div>')
     # a right-click menu: Apple's own, the website's choices
-    menu = (f'<div style="position: absolute; left: 640px; top: 520px; width: 220px; padding: 5px 0; border-radius: 10px; background: {"rgba(40,40,44,0.96)" if look == "dark" else "rgba(250,250,252,0.97)"}; '
+    menu = (f'<div style="position: absolute; left: 560px; top: 372px; width: 220px; padding: 5px 0; border-radius: 10px; background: {"rgba(40,40,44,0.96)" if look == "dark" else "rgba(250,250,252,0.97)"}; '
             f'box-shadow: 0 0 0 0.5px {t["glassLine"]}, 0 12px 36px rgba(0,0,0,0.3); z-index: 9; font-size: 13px">'
             + ''.join(f'<div style="padding: 4px 12px; margin: 0 5px; border-radius: 5px; {"background:" + A + "; color: #fff;" if i == 0 else ""}">{x}</div>' if x != '-' else f'<div style="height: 0.5px; background: {t["line"]}; margin: 4px 10px"></div>'
                       for i, x in enumerate(['Open Task', 'Status  ›', 'Mark Complete', '-', 'Copy Link']))
