@@ -75,6 +75,10 @@ final class Net {
   func call(_ path: String, method: String = "GET", json: [String: Any]? = nil, body: Data? = nil, done: @escaping ([String: Any]?) -> Void) {
     session.dataTask(with: request(path, method: method, json: json, body: body)) { [weak self] d, resp, _ in
       let http = resp as? HTTPURLResponse
+      // (TEMPORARY speed report: how long the server itself took, from its Server-Timing — the rest is the network)
+      if let st = http?.value(forHTTPHeaderField: "Server-Timing"), path.hasPrefix("/api/talk/state") || path.hasPrefix("/api/talk/sync") {
+        Probe.add("         server's own time for \(path.split(separator: "?").first ?? ""): \(st)  (\((d?.count ?? 0) / 1024) KB)")
+      }
       let j = d.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
       // (Cloudflare's sign-in page instead of the answer, or "please sign in": signed out)
       let signedOut = http.map { $0.statusCode == 401 || ($0.statusCode == 403 && j == nil) || (($0.value(forHTTPHeaderField: "Content-Type") ?? "").contains("text/html")) } ?? false
