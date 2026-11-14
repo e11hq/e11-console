@@ -811,6 +811,7 @@ final class MeCtl {
   private var copyWatch: UUID?
   private var trQv = "", trCatv = "all"
   private func own(_ p: [String: Any]) -> [String: Any] {
+    let probeT = Probe.now(); defer { Probe.span("Me: the page's model from the copy (own)", probeT) }   // (TEMPORARY speed report)
     guard AppData.shared.ready, let me = me, AppData.shared.me == me else { return p }
     var m = p
     let has = { (k: String) in p[k] != nil && !(p[k] is NSNull) }
@@ -1660,6 +1661,7 @@ final class MeCtl {
     push(screen(kind, id), animated: true)
   }
   private func push(_ s: Screen, animated: Bool) {
+    let probeT = Probe.now(); defer { Probe.span("Me: a page pushed (push, all of it)", probeT) }   // (TEMPORARY speed report)
     if let n = appleNav {
       stack.append(s); watchTouches()
       if !pageModel.isEmpty { model = own(pageModel) }
@@ -1899,6 +1901,7 @@ final class MeCtl {
   // ---------- what's on each ----------
   private func redrawRoot() { if let s = stack.first(where: { $0.kind == "me" }) { draw(s) } }
   private func draw(_ s: Screen) {
+    let probeT = Probe.now(); defer { Probe.span("Me: a page drawn (draw)", probeT) }   // (TEMPORARY speed report)
     var mm: [String: Any] = ["show": true, "me": me ?? "", "look": main.lookBoth]
     if s.kind == "me" { mm["title"] = apple ? "Settings" : "Me"; mm["date"] = "E11 Console App" }   // (in Apple's navigation: "Settings" — Haris 2026-11-08; the tab stays "Me")
     if s.h.assets == "overviewTab" { mm["title"] = "Overview"; mm["date"] = Date().formatted(.dateTime.weekday(.wide).month(.wide).day()) }

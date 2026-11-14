@@ -251,6 +251,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     it.height = h; c.setHeight(h)
   }
   func showFiles() {
+    let probeT = Probe.now(); defer { Probe.span("task page: files drawn (showFiles)", probeT) }   // (TEMPORARY speed report)
     guard tab == "details", let ip = listDS?.indexPath(for: "files") ?? listDS?.indexPath(for: "attach") else { return }
     // (the Files box's bottom just above the bottom edge — Apple's list scrolls it there)
     scroll.scrollToItem(at: ip, at: .bottom, animated: true)
@@ -267,6 +268,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
 
   init(id: String, frame: CGRect) {
     taskId = id
+    let probeT = Probe.now(); defer { Probe.span("task page: made (init)", probeT) }   // (TEMPORARY speed report)
     super.init(frame: frame)
     scroll.alwaysBounceVertical = true
     scroll.contentInsetAdjustmentBehavior = .never
@@ -371,6 +373,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   required init?(coder: NSCoder) { fatalError() }
 
   private func applyLook() {
+    let probeT = Probe.now(); defer { Probe.span("task page: look applied", probeT) }   // (TEMPORARY speed report)
     // (the window already takes the app's own light / dark: everything here follows it)
     backgroundColor = TaskPage.page   // (Home's own background, light and dark — every page: Haris 2026-11-09 19:00)
     commentsHost.backgroundColor = TaskPage.page
@@ -555,6 +558,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
 
   private var menuKey = ""
   private func makeMenu() {
+    let probeT = Probe.now(); defer { Probe.span("task page: ••• menu made", probeT) }   // (TEMPORARY speed report)
     guard let m = model else { return }
     // (made again only when what's in it changes — only what changed changes, Haris 2026-11-08)
     let key = "\((m["readOnly"] as? Bool) == true)|\((m["canDelete"] as? Bool) == true && !TaskPage.viewOnly)"
@@ -622,6 +626,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     return m
   }
   private func rebuild() {
+    let probeT = Probe.now(); defer { Probe.span("task page: rebuild Details (all)", probeT) }   // (TEMPORARY speed report)
     TaskPage.cardNow = nil
     guard let m = model.map({ TaskPage.basic($0) }) else { return }
     DescEditor.dark = !light   // (the description's file chips drawn in the page's look)
@@ -846,6 +851,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   private var drawnW: CGFloat = 0
   private func dSec(_ i: Int) -> DSec? { i >= 0 && i < dSecs.count ? dSecs[i] : nil }
   private func applyList(_ secs: [DSec], _ items: [String: DItem]) {
+    let probeT = Probe.now(); defer { Probe.span("task page: Apple's list told (applyList)", probeT) }   // (TEMPORARY speed report)
     var changed: [String] = []
     for (k, it) in items {
       guard let old = dItems[k] else { continue }
@@ -891,6 +897,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   }
   // Apple's grouped list: Apple's groups, headers and footer; the head (the title and its line) and the description without one
   private func makeListLayout() -> UICollectionViewLayout {
+    let probeT = Probe.now(); defer { Probe.span("task page: list layout made", probeT) }   // (TEMPORARY speed report)
     UICollectionViewCompositionalLayout { [weak self] i, env in
       let s = self?.dSec(i)
       // (full width, edge to edge — Apple's grouped list: Haris 2026-11-09)
@@ -1045,6 +1052,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   private var listW: CGFloat { let b = scroll.bounds.width; return b > 0 ? b : (window?.bounds.width ?? (bounds.width > 0 ? bounds.width : 390)) }
   // a piece's exact height for a width: a text view's words measured; anything else by its own constraints
   private func hostHeight(_ v: UIView, _ w: CGFloat) -> CGFloat {
+    let probeT = Probe.now(); defer { Probe.sum("task page: a block measured (hostHeight)", probeT) }   // (TEMPORARY speed report)
     let w = max(1, w)
     if let d = v as? DescBox { return d.height(for: w) }
     if let tv = v as? UITextView { return ceil(tv.sizeThatFits(CGSize(width: w, height: .greatestFiniteMagnitude)).height) }
@@ -1076,6 +1084,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   }
   func name(_ id: String) -> String { (people[id]?["first"] as? String) ?? "Someone" }
   private func avatar(_ id: String, _ side: CGFloat, ring: Bool = false, done: Bool = false) -> UIView {
+    let probeT = Probe.now(); defer { Probe.sum("task page: a face made", probeT) }   // (TEMPORARY speed report)
     let p = people[id] ?? [:]
     let v = UIView(); v.layer.cornerRadius = side / 2; v.clipsToBounds = true
     v.backgroundColor = TaskPage.rgb(p["color"])
