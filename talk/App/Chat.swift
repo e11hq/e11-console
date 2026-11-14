@@ -1043,7 +1043,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         guard let self = self else { return }
         let id = self.albums.first(where: { $0.value.contains { $0.id == x.id } })?.key ?? x.id
         guard let ip = self.data.indexPath(for: item(id)), let c = self.table.cellForRow(at: ip) as? BubbleCell else { return }
-        if on { UIView.animate(withDuration: Crossfade.time, delay: 0, options: [.allowUserInteraction]) { c.besides(1) } } else { c.besides(0) }
+        if on { UIView.animate(withDuration: Crossfade.time, delay: 0, options: [.allowUserInteraction]) { c.besides(1, pill: true) } } else { c.besides(0, pill: true) }
       }
       v.onReply = { [weak self] x in self?.startReply(x) }
       v.onForward = { [weak self] x in self?.forward(x) }
@@ -1924,7 +1924,7 @@ final class BubbleCell: UITableViewCell {
   private var linkShown: String?
   private var reactsFor: String?, reactsShown = false
   // the forward button and the reactions — beside the bubble, not lifted with it
-  func besides(_ a: CGFloat) { fwdB.alpha = a }   // (the reaction pill lifts with the bubble now: only the forward button steps aside)
+  func besides(_ a: CGFloat, pill: Bool = false) { fwdB.alpha = a; if pill { reacts.alpha = a } }   // (held: the reaction pill lifts with the bubble — only the forward button steps aside; a photo flying out to its viewer and back: the pill steps aside too, else the flying picture cut it — Haris 2026-11-14)
   // (the bubble's frame in the row — it sits inside `held` now)
   private var bubbleInRow: CGRect { bubble.frame.offsetBy(dx: held.frame.minX, dy: held.frame.minY) }
   var heldRect: CGRect { let f = bubbleInRow; return CGRect(x: f.minX - (tailOn && !isMine ? 10 : 0), y: f.minY, width: f.width + (tailOn ? 10 : 0), height: f.height) }

@@ -21,7 +21,7 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
 
   private let back = UIView(), pager = UIScrollView()
   private var pages: [ZoomPage] = []
-  private let top = UIView(), foot = UIView(), topShade = Shade()
+  private let top = UIView(), foot = UIView(), topShade = Shade(), footShade = Shade()
   private let who = UILabel(), when = UILabel(), backB = UIButton(type: .system), moreB = UIButton(type: .system)
   private let cap = UILabel(), reacts = UIButton(type: .system), smile = UIButton(type: .system), replyB = UIButton(type: .system)
   private let strip = UIScrollView(), stripRow = UIStackView(), tools = UIStackView()
@@ -137,6 +137,11 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     let g0 = topShade.layer as! CAGradientLayer
     g0.colors = [UIColor(white: 0, alpha: 0.5).cgColor, UIColor(white: 0, alpha: 0.18).cgColor, UIColor.clear.cgColor]; g0.locations = [0, 0.55, 1]
     topShade.isUserInteractionEnabled = false; top.clipsToBounds = false; top.insertSubview(topShade, at: 0)
+    // (the same soft shade under the buttons at the foot, the top's turned upside down — Haris 2026-11-14; it comes and
+    //  goes with them)
+    let g1 = footShade.layer as! CAGradientLayer
+    g1.colors = g0.colors?.reversed(); g1.locations = [0, 0.45, 1]
+    footShade.isUserInteractionEnabled = false; foot.clipsToBounds = false; foot.insertSubview(footShade, at: 0)
 
     let g = view.safeAreaLayoutGuide
     NSLayoutConstraint.activate([
@@ -165,6 +170,7 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
     topShade.frame = CGRect(x: 0, y: -top.frame.minY, width: view.bounds.width, height: top.frame.maxY + 30)
+    footShade.frame = CGRect(x: 0, y: -30, width: view.bounds.width, height: view.bounds.height - foot.frame.minY + 30)
     pager.frame = view.bounds
     for (i, p) in pages.enumerated() { p.frame = CGRect(x: CGFloat(i) * view.bounds.width, y: 0, width: view.bounds.width, height: view.bounds.height) }
     pager.contentSize = CGSize(width: view.bounds.width * CGFloat(pages.count), height: view.bounds.height)
