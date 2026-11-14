@@ -54,6 +54,12 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   try { db.exec('ALTER TABLE groups ADD COLUMN pin TEXT'); } catch { /* already there */ }
   // (a group's description — the intro card at the start of its chat, Talk's board 4; Haris 2026-11-13, test first)
   try { db.exec('ALTER TABLE groups ADD COLUMN about TEXT'); } catch { /* already there */ }
+  // (E11 Talk for Mac — its own app, signed in by linking from the phone, staff and client contacts alike, WhatsApp's way:
+  //  Haris 2026-11-14. A Mac's code has no person until a phone scans it (uid ''); the Mac waits with its ticket and, once
+  //  linked, picks up its own key once — kept here only as a hash)
+  try { db.exec('ALTER TABLE macs ADD COLUMN key_hash TEXT'); } catch { /* already there */ }
+  try { db.exec('ALTER TABLE link_codes ADD COLUMN ticket TEXT'); } catch { /* already there */ }
+  try { db.exec('ALTER TABLE link_codes ADD COLUMN key TEXT'); } catch { /* already there */ }
   const q = (sql) => db.prepare(sql);
   const Q = {
     group: q('SELECT * FROM groups WHERE id = ? AND gone = 0'),
@@ -138,6 +144,11 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     const r = db.prepare('SELECT * FROM contacts WHERE lower(email) = lower(?) AND gone = 0').get(String(email || ''));
     if (!r || !clientById(r.client)) return null;
     return { id: r.id, email: r.email, name: r.name, contact: true, client: r.client, role: 'contact', active: true };
+  }
+  // (the one a linked Mac signs in as: the team member, or the client contact — as their phone's requests see them)
+  function userById(id) {
+    if (isContactId(id)) { const r = contactRow(id); return r && clientById(r.client) ? contactByEmail(r.email) : null; }
+    const x = userOf(id); return active(x) ? x : null;
   }
   function personOfId(id) {
     if (isContactId(id)) {
@@ -248,12 +259,49 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     if (r.mac) { db.prepare('DELETE FROM link_codes WHERE code = ?').run(r.code); return { ok: true, mac: r.mac }; }
     return { ok: true, expired: now() - r.at > LINK_MS };
   }
+  // ---- E11 Talk for Mac (its own app): no one signed in on it — the Mac asks for a code, a phone scans it ----
+  function macCode(name) {
+    const t = now();
+    db.prepare('DELETE FROM link_codes WHERE at < ?').run(t - LINK_MS * 5);
+    // (a code costs nothing to ask for: at most 500 waiting at once, so nobody can fill the table)
+    if (db.prepare("SELECT COUNT(*) AS c FROM link_codes WHERE uid = ''").get().c >= 500) return bad('Too many devices waiting — try again in a minute', 429);
+    const code = crypto.randomBytes(12).toString('base64url'), ticket = crypto.randomBytes(24).toString('base64url');
+    db.prepare("INSERT INTO link_codes (code, uid, name, at, ticket) VALUES (?, '', ?, ?, ?)").run(code, clip(name || 'Computer', 60), t, ticket);
+    return { ok: true, code, ticket, expiresAt: t + LINK_MS };
+  }
+  // the Mac waits for a phone (its ticket proves it's the Mac that asked): linked — its id and key, once — or ran out
+  function macStatus(code, ticket) {
+    const r = db.prepare("SELECT * FROM link_codes WHERE code = ? AND uid = ''").get(String(code || ''));
+    if (!r || !r.ticket || !ticket || !safeEq(r.ticket, String(ticket))) return { ok: true, expired: true };
+    if (r.mac && r.key) {
+      db.prepare('DELETE FROM link_codes WHERE code = ?').run(r.code);
+      const m = db.prepare('SELECT * FROM macs WHERE id = ?').get(r.mac);
+      if (!m) return { ok: true, expired: true };
+      return { ok: true, mac: m.id, key: r.key, person: personOfId(m.uid), contact: isContactId(m.uid) };
+    }
+    return { ok: true, expired: now() - r.at > LINK_MS };
+  }
+  const hashKey = (k) => crypto.createHash('sha256').update(String(k)).digest('hex');
+  function safeEq(a, b) { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); }
+  // a request from E11 Talk for Mac: its key ("mac-….secret") — the Mac and its person, or nothing (unlinked)
+  function macByKey(key) {
+    const k = String(key || ''), dot = k.indexOf('.');
+    if (dot < 1) return null;
+    const m = db.prepare('SELECT * FROM macs WHERE id = ?').get(k.slice(0, dot));
+    if (!m || !m.key_hash || !safeEq(m.key_hash, hashKey(k))) return null;
+    if (!personActive(m.uid)) { unlinkMac(m.id, 'removed'); return null; }
+    db.prepare('UPDATE macs SET seen_at = ? WHERE id = ?').run(now(), m.id);
+    return m;
+  }
+  // (still on the team, or still a client contact)
+  const personActive = (uid) => isContactId(uid) ? !!contactRow(uid) && !!clientById(contactRow(uid).client) : active(userOf(uid));
   function unlinkMac(id, why = 'unlinked', tidy = true) {
     const m = db.prepare('SELECT * FROM macs WHERE id = ?').get(String(id || ''));
     if (!m) return false;
     for (const s of listeners.get(m.id) || []) { try { s.write(`event: unlinked\ndata: ${JSON.stringify({ why })}\n\n`); s.end(); } catch { /* closed */ } }
     db.prepare('DELETE FROM macs WHERE id = ?').run(m.id);
     db.prepare('DELETE FROM waiting WHERE uid = ?').run(m.id);
+    db.prepare('DELETE FROM needs WHERE uid = ?').run(m.id);
     if (tidy) sweep();
     return true;
   }
@@ -352,7 +400,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     // linked Macs: gone when their phone hasn't opened E11 Talk for 30 days, or their person has left the team
     for (const m of db.prepare('SELECT * FROM macs').all()) {
       const p = db.prepare('SELECT at FROM phone_seen WHERE uid = ?').get(m.uid);
-      if (!active(userOf(m.uid)) || (p && p.at < t - PHONE_MS) || (!p && m.linked_at < t - PHONE_MS)) unlinkMac(m.id, 'phone away', false);
+      if (!personActive(m.uid) || (p && p.at < t - PHONE_MS) || (!p && m.linked_at < t - PHONE_MS)) unlinkMac(m.id, 'phone away', false);
     }
     // groups with no new messages for 90 days: deleted, their people told (their phones clear it)
     for (const g of db.prepare('SELECT * FROM groups WHERE gone = 0 AND last_at < ?').all(t - IDLE_MS)) {
@@ -438,7 +486,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         Q.putSent.run(mid, id, by.id, tt, JSON.stringify(ln.file ? [ln.file.id] : []));
         const r = Q.addEvent.run(id, 'msg', JSON.stringify(data), tt, by.id);
         for (const m of devicesFor(memberIds(g), by.id)) waitFor(Number(r.lastInsertRowid), m);
-        if (ln.file) for (const m of memberIds(g)) if (m !== by.id) Q.addNeed.run(ln.file.id, m, id, tt);
+        if (ln.file) for (const m of devicesFor(memberIds(g), by.id)) if (m !== by.id) Q.addNeed.run(ln.file.id, m, id, tt);
         for (const [rw, e] of ln.react || []) emit(g, 'react', { id: mid, emoji: e }, rw.id);
       }
       for (const x of people) emit(g, 'read', { upto: ids[Math.max(0, ids.length - 2)] }, x.id, memberIds(g).filter((m) => m !== x.id));
@@ -510,7 +558,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     if (ks.some((k) => (contactRow(k) || {}).client !== g.client)) return bad('A client contact can only join their own client’s groups');
     return null;
   }
-  const CONTACT_ACTS = new Set(['send', 'edit', 'del', 'react', 'read', 'leave', 'pin', 'mute', 'typing', 'setOpt', 'unread']);   // (setOpt: their own notification choices)
+  const CONTACT_ACTS = new Set(['send', 'edit', 'del', 'react', 'read', 'leave', 'pin', 'mute', 'typing', 'setOpt', 'unread', 'linkMac', 'unlinkMac', 'unlinkAllMacs']);   // (linked devices too — a client contact links a computer as staff do: Haris 2026-11-14)   // (setOpt: their own notification choices)
 
   // ---------- typing (step 5, Haris 2026-11-12): passed straight to the group's other phones and Macs that are listening —
   // nothing kept; a phone shows it for a few seconds unless told again ----------
@@ -813,7 +861,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         const seq = emit(g, 'msg', { id, cid: clip(b.cid, 60), kind: file ? file.kind : 'text', text, file, reply, mentions, ...(b.fwd === true ? { fwd: true } : {}), ...(link ? { link } : {}), ...(task ? { task } : {}),
           ...(file && typeof b.album === 'string' && /^[A-Za-z0-9-]{6,40}$/.test(b.album) ? { album: b.album } : {}) }, u.id);   // (album: photos and videos sent together — one album in the chat, Haris 2026-11-12)   // (fwd: forwarded from another chat — "Forwarded" over it)
         // (each other member's phone downloads it — now, or later when their Auto-download is off; kept for them until then)
-        if (file) for (const uid of memberIds(g)) if (uid !== u.id) Q.addNeed.run(file.id, uid, g.id, t);
+        if (file) for (const d of devicesFor(memberIds(g), u.id)) if (d !== u.id) Q.addNeed.run(file.id, d, g.id, t);   // (linked Macs too — their own Auto-download)
         Q.touch.run(t, g.id);
         notify(g, u, file && !text.trim() ? ({ photo: '📷 Photo', video: '🎥 Video', voice: '🎤 Voice message' }[file.kind] || `📄 ${file.name}`) : task && !text.trim() ? `☑️ ${task.title}` : text, id, mentions);
         return { ok: true, id, seq, at: t };
@@ -846,13 +894,22 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       case 'linkMac': {
         const r = db.prepare('SELECT * FROM link_codes WHERE code = ?').get(String(b.code || ''));
         if (!r || r.mac || t - r.at > LINK_MS) return bad('That code has run out — show a new one on the Mac');
-        if (r.uid !== u.id) return bad('This Mac is signed in to E11 Console as someone else', 403);
+        // (E11 Talk for Mac's code has no one yet: the scanning phone's person signs it in — staff or client contact;
+        //  E11 Console's Mac app shows its code as its signed-in person, who must be the phone's)
+        const own = r.uid === '';
+        if (!own && r.uid !== u.id) return bad('This Mac is signed in to E11 Console as someone else', 403);
         if (macsOf(u.id).length >= 4) return bad('4 Macs at most — unlink one first');
         phoneSeen(u);
-        const id = rid('mac');
-        db.prepare('INSERT INTO macs (id, uid, name, linked_at, seen_at) VALUES (?, ?, ?, ?, ?)').run(id, u.id, r.name, t, t);
-        db.prepare('UPDATE link_codes SET mac = ? WHERE code = ?').run(id, r.code);
+        const id = rid('mac'), key = own ? id + '.' + crypto.randomBytes(32).toString('base64url') : null;
+        db.prepare('INSERT INTO macs (id, uid, name, linked_at, seen_at, key_hash) VALUES (?, ?, ?, ?, ?, ?)').run(id, u.id, r.name, t, t, key ? hashKey(key) : null);
+        db.prepare('UPDATE link_codes SET mac = ?, key = ? WHERE code = ?').run(id, key, r.code);
         return { ok: true, mac: { id, name: r.name, linkedAt: t, seenAt: t } };
+      }
+      // (signing out of E11 Talk on the phone: every Mac linked to it is signed out too — WhatsApp's way, Haris 2026-11-14)
+      case 'unlinkAllMacs': {
+        for (const m of macsOf(u.id)) unlinkMac(m.id, 'signed out on the phone', false);
+        sweep();
+        return { ok: true };
       }
       case 'unlinkMac': {
         const m = db.prepare('SELECT * FROM macs WHERE id = ? AND uid = ?').get(String(b.id || ''), u.id);
@@ -941,15 +998,14 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     const ev = db.prepare('SELECT e.grp FROM events e JOIN waiting w ON w.seq = e.seq WHERE w.uid = ? AND e.data LIKE ? LIMIT 1').get(u.id, `%"id":"${f.id}"%`);
     if (ev) return f;
     // (a message's file their phone hasn't downloaded yet — while they're still in its group)
-    const need = isMacId(u.id) ? null : Q.needOf.get(f.id, u.id);
-    if (need && db.prepare('SELECT 1 FROM members WHERE grp = ? AND uid = ?').get(need.grp, u.id)) return f;
+    const need = Q.needOf.get(f.id, u.id);
+    if (need && db.prepare('SELECT 1 FROM members WHERE grp = ? AND uid = ?').get(need.grp, pid)) return f;
     const pic = db.prepare('SELECT g.id FROM groups g JOIN members m ON m.grp = g.id WHERE m.uid = ? AND g.pic = ? AND g.gone = 0 LIMIT 1').get(pid, f.id);
     return pic ? f : null;
   }
   const filePath = (f) => path.join(relay, f.id);
   // a phone has the whole file now: it waits for that person no more (Auto-download off — Haris 2026-11-13)
   function fetched(u, id) {
-    if (isMacId(u.id)) return;
     Q.gotNeed.run(String(id), u.id);
     if (!Q.needed.get(String(id))) dropFiles([String(id)]);
   }
@@ -1030,5 +1086,5 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   // (whose E11 Console key — board 53's card: name, role, colour)
   function personByEmail(e) { const u = access.userByEmail(e); if (u) return personOf(u); const k = contactByEmail(e); return k ? { id: k.id, name: k.name, role: 'Client', photo: null, color: null } : null; }
   return { state, act, sync, ack, unreadFor, reviewDemo, sample, upload, tasksChanged, contactByEmail, personByEmail, fileFor, filePath, fetched, listen, sweep, isAdminOf,
-    linkCode, linkStatus, macFor, unlinkMac, history, hasFiles, resend, close: () => { clearInterval(sweepTimer); for (const set of listeners.values()) for (const r of set) try { r.end(); } catch { /* fine */ } db.close(); } };
+    linkCode, linkStatus, macFor, unlinkMac, macCode, macStatus, macByKey, userById, history, hasFiles, resend, close: () => { clearInterval(sweepTimer); for (const set of listeners.values()) for (const r of set) try { r.end(); } catch { /* fine */ } db.close(); } };
 }

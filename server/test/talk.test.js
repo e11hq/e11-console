@@ -296,6 +296,69 @@ test('a linked Mac: code from the Mac, scanned by the same person’s phone; get
   assert.equal((await state('am')).macs.length, 0);
 });
 
+test('a linked device of its own (E11 Talk for Mac): its code with no one signed in, a phone scans it — staff or client contact — its key, WhatsApp’s way', async () => {
+  const raw = async (p, { body, key, method } = {}) => { const r = await fetch(base + p, { method: method || (body ? 'POST' : 'GET'), headers: { 'Content-Type': 'application/json', ...(key ? { 'X-Talk-Key': key } : {}) }, body: body ? JSON.stringify(body) : undefined }); return { status: r.status, j: await r.json() }; };
+  const g = (await act('am', { act: 'newGroup', client: 'p1', name: 'Own Mac', members: ['u-des'] })).group.id;
+  // the device asks for a code — no sign-in; only its ticket finds out how it went
+  const c = (await raw('/api/talk/linked/code', { body: { name: 'Leila’s iMac' } })).j;
+  assert.ok(c.ok && c.code && c.ticket);
+  assert.equal((await raw(`/api/talk/linked/status?code=${c.code}&ticket=wrong`)).j.expired, true, 'another ticket learns nothing');
+  assert.ok(!(await raw(`/api/talk/linked/status?code=${c.code}&ticket=${c.ticket}`)).j.mac, 'not linked yet');
+  // any person's phone links it to that person (here Leila)
+  const l = await act('am', { act: 'linkMac', code: c.code });
+  assert.ok(l.ok, JSON.stringify(l));
+  const st = (await raw(`/api/talk/linked/status?code=${c.code}&ticket=${c.ticket}`)).j;
+  assert.ok(st.mac === l.mac.id && st.key && st.key.startsWith(st.mac + '.') && st.person.name === 'Leila' && st.contact === false);
+  assert.equal((await raw(`/api/talk/linked/status?code=${c.code}&ticket=${c.ticket}`)).j.key, undefined, 'the key is handed over once');
+  // with its key it is Leila's device: her state, her messages, and what it does is hers
+  const key = st.key;
+  assert.ok((await raw('/api/talk/state', { key })).j.groups.some((x) => x.id === g));
+  const m = await act('des', { act: 'send', group: g, text: 'To the iMac' });
+  const sy = (await raw('/api/talk/sync?after=0', { key })).j;
+  assert.ok(sy.events.some((e) => e.id === m.id));
+  const sent = (await raw('/api/talk/act', { key, body: { act: 'send', group: g, text: 'Typed on the iMac' } })).j;
+  assert.ok(sent.ok);
+  assert.ok((await sync('des')).events.some((e) => e.id === sent.id && e.by === 'u-am'), 'sent as Leila');
+  assert.ok((await sync('am')).events.some((e) => e.id === sent.id), 'and on her phone too');
+  // what only the phone does: never from the device
+  assert.equal((await raw('/api/talk/act', { key, body: { act: 'unlinkAllMacs' } })).status, 403);
+  assert.equal((await raw('/api/talk/link/code', { key, body: { name: 'x' } })).status, 403);
+  // a wrong key: unlinked
+  assert.equal((await raw('/api/talk/sync?after=0', { key: st.mac + '.nope' })).status, 410);
+  // a file sent while the device's Auto-download is off: kept for it until it fetches it
+  const up = await (await fetch(base + '/api/talk/upload?name=deck.pdf&offset=0&last=1', { method: 'POST', headers: { 'X-Dev-Email': 'des@x.com', 'Content-Type': 'application/octet-stream' }, body: Buffer.from('PDF') })).json();
+  const fm = await act('des', { act: 'send', group: g, text: '', file: { id: up.id, kind: 'file', name: 'deck.pdf', size: 3 } });
+  assert.ok(fm.ok, JSON.stringify(fm));
+  const s2 = (await raw('/api/talk/sync?after=' + sy.last, { key })).j;
+  await raw('/api/talk/ack', { key, body: { upto: s2.last } });
+  await ack('am', 1e9); await ack('des', 1e9);
+  const f = await fetch(base + '/api/talk/file/' + up.id, { headers: { 'X-Talk-Key': key } });
+  assert.equal(f.status, 200, 'the device still gets the file after everyone else has the message');
+  assert.equal(await f.text(), 'PDF');
+  // signing out of Talk on the phone signs the device out
+  assert.ok((await act('am', { act: 'unlinkAllMacs' })).ok);
+  assert.equal((await raw('/api/talk/state', { key })).status, 410);
+  // a client contact links one too — and keeps it (a contact's device isn't swept as "off the team")
+  const kc = (await act('off', { act: 'addContact', name: 'Lina Client', email: 'lina@client.ae', client: 'p1' })).contact;
+  const KL = { 'X-Dev-Email': 'lina@client.ae', 'Content-Type': 'application/json' };
+  const c2 = (await raw('/api/talk/linked/code', { body: {} })).j;
+  const l2 = await (await fetch(base + '/api/talk/act', { method: 'POST', headers: KL, body: JSON.stringify({ act: 'linkMac', code: c2.code }) })).json();
+  assert.ok(l2.ok, JSON.stringify(l2));
+  const st2 = (await raw(`/api/talk/linked/status?code=${c2.code}&ticket=${c2.ticket}`)).j;
+  assert.ok(st2.key && st2.contact === true);
+  await fetch(base + '/api/talk/sync', { headers: KL });
+  app.talk.sweep();
+  assert.equal((await raw('/api/talk/state', { key: st2.key })).status, 200, 'still linked after the sweep');
+  // the contact removed: their device is signed out
+  assert.ok((await act('adm', { act: 'removeContact', id: kc.id })).ok);
+  assert.equal((await raw('/api/talk/state', { key: st2.key })).status, 410);
+  // the device's own public name answers nothing but E11 Talk
+  const http = await import('node:http');
+  const port = new URL(base).port;
+  const code404 = await new Promise((ok) => http.get({ host: '127.0.0.1', port, path: '/', headers: { Host: 'talklink.e11hq.com' } }, (r) => { r.resume(); ok(r.statusCode); }));
+  assert.equal(code404, 404);
+});
+
 test('step 5: typing passed on to members only; # tasks in a staff group — the card made by the server, never with a client', async () => {
   app.store.apply([
     { kind: 'tasks', id: 't-a', data: { id: 't-a', projectId: 'p1', sectionId: null, parentId: null, title: 'Hero banner — round 3', done: false, due: '2026-11-13', assignees: ['u-des', 'u-am'], updatedAt: '2026-11-12T08:00:00Z' } },

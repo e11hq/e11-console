@@ -66,6 +66,8 @@ export function createServer(cfg) {
   const TALK_TEST_AUD = '3b15d6abf5004bb97e3366fa4c08db65731165302af2e0cf1b92b10f2e70a49d';
   const talkAuth = cfg.talkAuth || createAuth({ team: cfg.cfTeam, aud: [TALK_AUD, TALK_TEST_AUD], dev: !!cfg.dev });
   const talkHost = (req) => /^talk(-test)?\./.test(String(req.headers.host || ''));
+  // (the linked devices' own public name: Cloudflare lets it through, the Mac's key is its sign-in — Haris 2026-11-14)
+  const talkMacHost = (req) => /^talklink(-test)?\./.test(String(req.headers.host || ''));
   const access = createAccess(store, { ownerEmail: cfg.adminEmail, plans: true, now: cfg.now });   // (content plans: on everywhere since 2026-10-28)
   const files = createFiles(dataDir);
   // Our own sign-in (signin.js, Haris 2026-11-11): only where SIGNIN_ISSUER is set — the test copy first
@@ -595,15 +597,15 @@ export function createServer(cfg) {
     };
     try {
       // ---- a linked Mac (E11 Console's Mac app, as its signed-in person): its own messages to pick up ----
-      const macId = String(req.headers['x-talk-mac'] || '');
-      let dev = u;
+      const macId = req.talkMac ? '' : String(req.headers['x-talk-mac'] || '');
+      let dev = req.talkMac || u;
       if (macId) {
         dev = t.macFor(u, macId);
         if (!dev) return json(res, 410, { ok: false, unlinked: true, error: 'This Mac isn’t linked any more' });
         if (p === '/api/talk/link/leave' && req.method === 'POST') { t.unlinkMac(macId, 'signed out'); return out({ ok: true }); }
       }
       if (p.startsWith('/api/talk/link/')) {
-        if (String(u.id).startsWith('k-')) return json(res, 403, { ok: false, error: 'Not for client contacts' });
+        // (client contacts link a device too, handing it their chats — Haris 2026-11-14)
         if (p === '/api/talk/link/code' && req.method === 'POST') { const b = await readBody(req, 16 * 1024); return out(t.linkCode(u, b.name)); }
         if (p === '/api/talk/link/status' && req.method === 'GET') return out(t.linkStatus(u, url.searchParams.get('code')));
         if (p === '/api/talk/link/has' && req.method === 'POST') { const b = await readBody(req, 1024 * 1024); return out(t.hasFiles(u, b.ids)); }
@@ -615,7 +617,12 @@ export function createServer(cfg) {
         if (p === '/api/talk/link/history' && req.method === 'POST') { const b = await readBody(req, 64 * 1024 * 1024); return out(t.history(u, b.mac, b.groups, b.files)); }
       }
       if (p === '/api/talk/state' && req.method === 'GET') return out(t.state(u));
-      if (p === '/api/talk/act' && req.method === 'POST') return out(t.act(u, await readBody(req, 256 * 1024)));
+      if (p === '/api/talk/act' && req.method === 'POST') {
+        const b = await readBody(req, 256 * 1024);
+        // (linking and unlinking Macs is the phone's — never from a Mac)
+        if (req.talkMac && ['linkMac', 'unlinkMac', 'unlinkAllMacs'].includes(b && b.act)) return json(res, 403, { ok: false, error: 'Only on the phone' });
+        return out(t.act(u, b));
+      }
       // (test site only, the owner: sample groups and messages — talk.js sample)
       if (p === '/api/talk/sample' && req.method === 'POST') { if (!testCopy || !isOwner(req.realUser || u)) return json(res, 403, { ok: false, error: 'Only the owner, on the test site' }); return out(t.sample(req.realUser || u)); }
       if (p === '/api/talk/sync' && req.method === 'GET') return out(t.sync(dev, url.searchParams.get('after'), url.searchParams.get('limit')));
@@ -754,6 +761,9 @@ export function createServer(cfg) {
     const p = decodeURIComponent(url.pathname);
 
     if (p === '/api/health') return json(res, 200, { ok: true, version, rev: store.rev() });
+    // (the linked devices' own public name answers nothing but E11 Talk's addresses — the website and the rest stay behind
+    //  Cloudflare's sign-in on their own names)
+    if (talkMacHost(req) && !p.startsWith('/api/talk/')) return json(res, 404, { ok: false, error: 'Not found' });
 
     // Our own sign-in (signin.js): its page and the OpenID Connect answers Cloudflare asks for — no sign-in needed to reach them
     if (signin && (p.startsWith('/oidc/') || p === '/.well-known/openid-configuration')) return signinRoute(req, res, p, url);
@@ -831,6 +841,21 @@ export function createServer(cfg) {
     if (filesHost && String(req.headers['x-forwarded-host'] || req.headers.host || '') === filesHost) { res.writeHead(404, { 'Content-Type': 'text/plain', 'X-Robots-Tag': 'noindex, nofollow' }); return res.end('Not found'); }
 
     // E11 Talk (talk.js) — the chat app's own addresses: the team as everywhere, and client contacts (E11 Talk only)
+    // E11 Talk for Mac (its own app, Haris 2026-11-14): no one is signed in on it — it asks for a code, a phone scans it,
+    // and from then on every request carries its own key. Its own public name (talklink[-test].e11hq.com, let through by
+    // Cloudflare) answers only these: a code, its status, and the key's requests — nothing else of the server.
+    if (p === '/api/talk/linked/code' && req.method === 'POST') { const b = await readBody(req, 4096).catch(() => ({})); const r = talkNow().macCode(b.name); return json(res, r.status || (r.ok === false ? 400 : 200), r); }
+    if (p === '/api/talk/linked/status' && req.method === 'GET') return json(res, 200, talkNow().macStatus(url.searchParams.get('code'), url.searchParams.get('ticket')));
+    if (p.startsWith('/api/talk/') && (req.headers['x-talk-key'] || talkMacHost(req))) {
+      const t = talkNow(), m = t.macByKey(req.headers['x-talk-key']);
+      const mu = m ? t.userById(m.uid) : null;
+      if (!mu) return json(res, 410, { ok: false, unlinked: true, error: 'This device isn’t linked any more' });
+      // (what only the phone does — linking, its notifications, its device key, sample data — never from the Mac)
+      if (p.startsWith('/api/talk/link/') || p === '/api/talk/device' || p.startsWith('/api/talk/push') || p === '/api/talk/sample') return json(res, 403, { ok: false, error: 'Only on the phone' });
+      if (p === '/api/talk/linked/leave' && req.method === 'POST') { t.unlinkMac(m.id, 'signed out on that device'); return json(res, 200, { ok: true }); }
+      req.talkT0 = performance.now(); req.talkMac = { ...mu, id: m.id, person: mu.id };
+      return talkRoute(req, res, p, url, mu);
+    }
     if (p.startsWith('/api/talk/')) { req.talkT0 = performance.now(); const tu = await talkWho(req, res); if (!tu) return; req.talkWhoMs = performance.now() - req.talkT0; return talkRoute(req, res, p, url, tu); }
     // (E11 Talk's pictures — people's photos and client logos — on Talk's own address, signed in as Talk is: Console's
     //  file address asked for Console's sign-in, so Talk showed initials everywhere, Haris 2026-11-12. The team: what they
