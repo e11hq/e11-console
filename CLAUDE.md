@@ -665,6 +665,10 @@ talk-chat-1, branches `stable/talk-133`, `locked/talk-133` and `candidate/appsto
 132's and earlier stay as history — 133 replaces 132 as the candidate). 133 = 132 + clients and groups newest first right after a
 fresh sign-in (the server's last activity counted too, not only the messages already on the phone). Needs server 1.9.56. Nothing
 changes in its look, behaviour or code without telling Haris first and his yes.
+**E11 TALK — STABLE, LOCKED, the App Store release candidate: 1.0.0 build 134 (Haris, 2026-11-14 17:42: "Send"):** commit ed6209d on
+talk-chat-1, branches `stable/talk-134`, `locked/talk-134` and `candidate/appstore-talk-1.0.0-build-134` (never moved or deleted;
+133's and earlier stay as history — 134 replaces 133 as the candidate). 134 = 133 + no line under a list's last row (E11 Agency,
+Clients, a client's groups). Needs server 1.9.56. Nothing changes in its look, behaviour or code without telling Haris first and his yes.
 **Compile checks: `-f checks=compile -f walk=no`** — without `walk=no` the walk-through for every role runs too (~20 min),
 holding the Mac (2026-11-13).
 **The App Store release waits for E11 Talk (Haris, 2026-11-11 20:16: "3"):** the Talk button (E11 Day, Clients) does nothing
