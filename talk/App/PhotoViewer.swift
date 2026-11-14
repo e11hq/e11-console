@@ -148,7 +148,7 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
       foot.leadingAnchor.constraint(equalTo: view.leadingAnchor), foot.trailingAnchor.constraint(equalTo: view.trailingAnchor), foot.bottomAnchor.constraint(equalTo: g.bottomAnchor),
       cap.topAnchor.constraint(equalTo: foot.topAnchor), cap.leadingAnchor.constraint(equalTo: foot.leadingAnchor, constant: 18), cap.trailingAnchor.constraint(equalTo: foot.trailingAnchor, constant: -18),
       row.topAnchor.constraint(equalTo: cap.bottomAnchor, constant: 12), row.leadingAnchor.constraint(equalTo: foot.leadingAnchor, constant: 14), row.trailingAnchor.constraint(equalTo: foot.trailingAnchor, constant: -14),
-      replyB.heightAnchor.constraint(equalToConstant: 34), reacts.heightAnchor.constraint(equalToConstant: 32),
+      replyB.heightAnchor.constraint(equalToConstant: 34), reacts.heightAnchor.constraint(equalToConstant: 42),
       strip.topAnchor.constraint(equalTo: row.bottomAnchor, constant: 12), strip.leadingAnchor.constraint(equalTo: foot.leadingAnchor), strip.trailingAnchor.constraint(equalTo: foot.trailingAnchor), strip.heightAnchor.constraint(equalToConstant: 40),
       stripRow.centerYAnchor.constraint(equalTo: strip.centerYAnchor), stripRow.leadingAnchor.constraint(equalTo: strip.contentLayoutGuide.leadingAnchor, constant: 14),
       stripRow.trailingAnchor.constraint(equalTo: strip.contentLayoutGuide.trailingAnchor, constant: -14), stripRow.topAnchor.constraint(equalTo: strip.contentLayoutGuide.topAnchor, constant: 2),
