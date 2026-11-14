@@ -532,7 +532,9 @@ final class Talk {
   }
   func last(_ g: String) -> Msg? { log(g).msgs.last }
   // newest activity first: the last message, or when the group was made / changed
-  func activity(_ g: Group) -> Double { max(last(g.id)?.at ?? 0, g.createdAt) }
+  // (and the server's own last activity — right after a fresh sign-in the messages aren't on the phone yet, and the clients
+  //  came out in the order their groups were made: Haris 2026-11-14)
+  func activity(_ g: Group) -> Double { max(last(g.id)?.at ?? 0, g.lastAt, g.createdAt) }
   // (tab: nil — every group; false — the Groups tab: groups without a client contact; true — the Clients tab)
   func groups(of client: String, withClient: Bool? = nil) -> [Group] { groups.values.filter { $0.client == client && (withClient == nil || $0.withClient == withClient!) }.sorted { activity($0) > activity($1) } }
   func clientActivity(_ c: String, withClient: Bool? = nil) -> Double { groups(of: c, withClient: withClient).map { activity($0) }.max() ?? 0 }
