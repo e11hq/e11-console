@@ -1788,6 +1788,16 @@ final class Bleed: UIView {
 
 final class BubbleCell: UITableViewCell {
   // (a logo on a link card: drawn in the middle with room around it — a third of the card's height each side)
+  // (a logo with its room round it, made once off the main thread and kept: made again each time a card was drawn — its
+  //  edges trimmed, its colour read, a bigger picture drawn — an E11 card took 9–12 ms; the speed report, Haris 2026-11-14)
+  private static let pads = NSCache<NSString, UIImage>()
+  static func padded(_ raw: UIImage, key: String, _ done: @escaping (UIImage) -> Void) {
+    if let i = pads.object(forKey: key as NSString) { done(i); return }
+    DispatchQueue.global(qos: .userInitiated).async {
+      let i = padded(raw); pads.setObject(i, forKey: key as NSString)
+      DispatchQueue.main.async { done(i) }
+    }
+  }
   static func padded(_ raw: UIImage) -> UIImage {
     let i = BubbleCell.trimmed(raw)
     let W = max(i.size.width, i.size.height * 1.91) * 1.5, H = W / 1.91
@@ -2444,7 +2454,8 @@ final class BubbleCell: UITableViewCell {
           linkImg.image = nil; linkShown = p
           Net.shared.picture(p, max: logo ? 600 : 160) { [weak self] i in
             guard let self = self, self.msg?.id == m.id, self.linkShown == p else { return }
-            self.linkImg.land(logo ? i.map { BubbleCell.padded($0) } : i)
+            guard logo, let i = i else { self.linkImg.land(i); return }
+            BubbleCell.padded(i, key: p) { [weak self] pi in guard let self = self, self.msg?.id == m.id, self.linkShown == p else { return }; self.linkImg.land(pi) }
           }
         }
       } else { linkImg.image = nil; linkShown = nil }
@@ -3569,7 +3580,8 @@ final class E11CardView: UIView {
       pic.image = nil; picShown = p
       Net.shared.picture(p, max: logo ? 600 : 160) { [weak self] i in
         guard let self = self, still() == msg, self.picShown == p else { return }
-        self.pic.land(logo ? i.map { BubbleCell.padded($0) } : i)
+        guard logo, let i = i else { self.pic.land(i); return }
+        BubbleCell.padded(i, key: p) { [weak self] pi in guard let self = self, still() == msg, self.picShown == p else { return }; self.pic.land(pi) }
       }
     }
     let mark = NSTextAttachment(image: UIImage(systemName: folder ? "folder" : "doc", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold))!.withTintColor(subInk))
