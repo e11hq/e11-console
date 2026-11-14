@@ -600,6 +600,14 @@ server and its App Review sign-in; the sign-in page the whole screen in Talk's c
 screen not waiting for the server, one ask at start, link cards' pictures / links / card logos made once off the main thread,
 120 Hz) — measured with five timing builds (project doc `claude/speed-plan.md`). Nothing changes in its look, behaviour or
 code without telling Haris first and his yes.
+**E11 TALK — STABLE, LOCKED, the App Store release candidate: 1.0.0 build 123 (Haris, 2026-11-14 13:08: "Lock the talk app as
+stable app store release candidate"):** commit 5f06b6a on talk-chat-1, branches `stable/talk-123`, `locked/talk-123` and
+`candidate/appstore-talk-1.0.0-build-123` (never moved or deleted; 120's and 109's stay as history). 123 = 120 + the photo
+viewer's buttons Apple's own glass (top, ☺︎, Reply, reactions; Share · Forward + Save · Delete as Photos), the reactions pill as
+tall as ☺︎, the foot's soft shade as the top's, the reaction pill no longer cut as a photo flies back into its bubble, your
+long messages without the extra room above the words (measured at the width they're laid out at). Kept for later, not done
+(Haris 13:04): the viewer's photo blurry then sharp — project doc `claude/speed-plan.md`. Nothing changes in its look,
+behaviour or code without telling Haris first and his yes.
 **Compile checks: `-f checks=compile -f walk=no`** — without `walk=no` the walk-through for every role runs too (~20 min),
 holding the Mac (2026-11-13).
 **The App Store release waits for E11 Talk (Haris, 2026-11-11 20:16: "3"):** the Talk button (E11 Day, Clients) does nothing
