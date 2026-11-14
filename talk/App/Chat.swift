@@ -2398,16 +2398,43 @@ final class BubbleCell: UITableViewCell {
       linkURL.text = title == nil ? u.absoluteString : nil; linkURL.textColor = sub
       linkLine.backgroundColor = sub.withAlphaComponent(0.3)
       let mark = NSTextAttachment(image: UIImage(systemName: pv?.e11 == "folder" ? "folder" : pv?.e11 == "file" ? "doc" : "link", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold))!.withTintColor(sub))
-      if let ic = pv?.icon, let i = UIImage(contentsOfFile: Net.local(ic).path) { mark.image = i; mark.bounds = CGRect(x: 0, y: -2, width: 14, height: 14) }
-      let lf = NSMutableAttributedString(attachment: mark)
-      lf.append(NSAttributedString(string: "  " + site, attributes: [.foregroundColor: sub])); linkFoot.attributedText = lf
+      // (the site's icon and the card's picture: read and shrunk off the main thread once, then kept — read from the file
+      //  each time a link card was made, it took 10–19 ms a bubble and the chat stuttered as it scrolled: the speed report,
+      //  Haris 2026-11-14)
+      let foot = { [weak self] (icon: UIImage?) in
+        guard let self = self else { return }
+        if let i = icon { mark.image = i; mark.bounds = CGRect(x: 0, y: -2, width: 14, height: 14) }
+        let lf = NSMutableAttributedString(attachment: mark)
+        lf.append(NSAttributedString(string: "  " + site, attributes: [.foregroundColor: sub])); self.linkFoot.attributedText = lf
+      }
+      if let ic = pv?.icon, let i = BubbleCell.cached(ic) { foot(i) }
+      else {
+        foot(nil)
+        if let ic = pv?.icon {
+          let url = Net.local(ic)
+          DispatchQueue.global(qos: .userInitiated).async {
+            let i = BubbleCell.picture(url, ic, max: 48)
+            DispatchQueue.main.async { [weak self] in if i != nil, self?.msg?.id == m.id { foot(i) } }
+          }
+        }
+      }
       let hasImg = pv?.img != nil || pv?.pic != nil
       linkImgOff.isActive = !hasImg; linkImgH.isActive = hasImg; linkPlay.isHidden = !(hasImg && pv?.video == true)
       wideCard = true
       if pv?.pic == nil { linkImg.contentMode = .scaleAspectFill }
       if let id = pv?.img {
-        if let i = UIImage(contentsOfFile: Net.local(id).path) { linkImg.image = i }
-        else { linkImg.image = nil; linkShown = nil; Net.shared.file(id) { [weak self] url in guard let self = self, self.msg?.id == m.id, let url = url else { return }; self.linkImg.land(UIImage(contentsOfFile: url.path)) } }
+        if let i = BubbleCell.cached(id) { linkImg.image = i; linkShown = id }
+        else if linkShown != id || linkImg.image == nil {
+          linkImg.image = nil; linkShown = id
+          let shrink = { (url: URL) in
+            DispatchQueue.global(qos: .userInitiated).async {
+              let i = BubbleCell.picture(url, id)
+              DispatchQueue.main.async { [weak self] in guard let self = self, self.msg?.id == m.id, self.linkShown == id else { return }; self.linkImg.land(i) }
+            }
+          }
+          if FileManager.default.fileExists(atPath: Net.local(id).path) { shrink(Net.local(id)) }
+          else { Net.shared.file(id) { url in if let url = url { shrink(url) } } }
+        }
       } else if let p = pv?.pic {
         // (an E11 link: its page's own picture, kept once fetched; a logo (SVG — its own file, /view) whole, smaller, with
         //  room around it, not cropped to the card: Haris 2026-11-12)
@@ -2551,10 +2578,10 @@ final class BubbleCell: UITableViewCell {
   // a photo, shrunk once to the bubble's size and kept
   private static let pictures = NSCache<NSString, UIImage>()
   static func cached(_ id: String) -> UIImage? { pictures.object(forKey: id as NSString) ?? frames.object(forKey: id as NSString) }
-  static func picture(_ url: URL, _ id: String) -> UIImage? {
+  static func picture(_ url: URL, _ id: String, max: Int = 800) -> UIImage? {
     if let i = pictures.object(forKey: id as NSString) { return i }
     guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
-          let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 800] as CFDictionary) else { return UIImage(contentsOfFile: url.path) }
+          let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: max] as CFDictionary) else { return UIImage(contentsOfFile: url.path) }
     let i = UIImage(cgImage: cg); pictures.setObject(i, forKey: id as NSString); return i
   }
   // a video's first frame (kept)
