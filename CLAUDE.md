@@ -587,6 +587,14 @@ branches `stable/ios-1710` and `locked/ios-app-1710` (never moved or deleted; 17
 Out of Office (Me's switch, Apple's calendar sheet sized to it, the card's and the people sheet's orange line, shown at once) +
 the Talk button (your Talk unread count as Apple's badge, live from the server; a tap opens E11 Talk) + Me's footers crossfading
 when their words change + shorter sheet notes. Quick build. Nothing changes without telling Haris first and his yes.
+**THE iPHONE APP — STABLE, LOCKED, the App Store release candidate: 1.2.0 build 1728 (Haris, 2026-11-14 14:53: "Send 1728 and
+mark it as release candidate and lock it"):** commit 202ef25, branches `stable/ios-1728`, `locked/ios-app-1728` and
+`candidate/appstore-ios-1.2.0-build-1728` (never moved or deleted; 1710's and earlier stay as history). 1728 = 1710 + the
+App Review sign-in link under our own sign-in page + the timing trial's five fixes, no timers (project doc `claude/speed-plan.md`):
+the scripts only when the server's version changes (server 1.9.54+), client logos made ahead small and kept, a task row's CD
+chip / status symbol / faces made once and kept, Client Assets' pictures read small and kept (fading in the first time), Me's
+pages drawn once. Quick build, no simulator self-test. Nothing changes in its look, behaviour or code without telling Haris
+first and his yes.
 **E11 TALK — LOCKED at build 109 (Haris, 2026-11-13 22:05):** commit 13abaa4 on talk-chat-1, branches `stable/talk-109` and
 `locked/talk-109` (never moved or deleted). Holds every page as built today: Settings and its pages, Auto-download, who reacted,
 shared sign-in, client contacts and their codes, Mark as Unread, a chat opening without waiting (row heights kept, photos made in
