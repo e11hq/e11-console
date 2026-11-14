@@ -1103,17 +1103,20 @@ final class EditGroupVC: UITableViewController, PHPickerViewControllerDelegate, 
     let sq = UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in img.draw(in: CGRect(x: (side - img.size.width * s) / 2, y: (side - img.size.height * s) / 2, width: img.size.width * s, height: img.size.height * s)) }
     guard let d = sq.jpegData(compressionQuality: 0.85) else { return }
     pic.show(sq); spin.startAnimating()
+    // (Done only once the picture is up and set — Apple's own dimmed Done meanwhile: Haris 2026-11-14)
+    navigationItem.rightBarButtonItem?.isEnabled = false
     Net.shared.upload(d, name: "group.jpg", progress: { _ in }) { [weak self] fid in
-      guard let fid = fid else { self?.spin.stopAnimating(); if let g = self?.g { self?.pic.set(group: g) }; toast("The picture didn’t upload — try again"); return }
+      guard let fid = fid else { self?.spin.stopAnimating(); self?.navigationItem.rightBarButtonItem?.isEnabled = true; if let g = self?.g { self?.pic.set(group: g) }; toast("The picture didn’t upload — try again"); return }
       try? d.write(to: Net.local(fid))
       self?.setPic(fid, sq)
     }
   }
   private func setPic(_ fid: String?, _ shown: UIImage?) {
     if shown == nil { spin.startAnimating() }
+    navigationItem.rightBarButtonItem?.isEnabled = false
     Net.shared.act(["act": "setPic", "group": group, "file": fid.map { $0 as Any } ?? NSNull()]) { [weak self] j in
       if (j?["ok"] as? Bool) == true { Talk.shared.refresh(); Talk.shared.sync() } else { toast(j?["error"] as? String ?? "Couldn’t do that — try again") }
-      self?.spin.stopAnimating(); if let g = self?.g { self?.pic.set(group: g) }
+      self?.spin.stopAnimating(); self?.navigationItem.rightBarButtonItem?.isEnabled = true; if let g = self?.g { self?.pic.set(group: g) }
       if let self = self { (self.tableView.tableHeaderView?.subviews.compactMap { $0 as? UIButton }.first)?.menu = UIMenu(children: self.picMenu()) }
     }
   }
