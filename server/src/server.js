@@ -587,7 +587,12 @@ export function createServer(cfg) {
   }
   async function talkRoute(req, res, p, url, u) {
     const t = talkNow();
-    const out = (r) => json(res, r.status || (r.ok === false ? 400 : 200), r);
+    // (how long the server itself took — who's asking, then the answer — for the app's speed report: Server-Timing,
+    //  Haris 2026-11-14; the rest of what the phone waits for is the network to the NAS)
+    const out = (r) => {
+      if (req.talkT0 != null && !res.headersSent) res.setHeader('Server-Timing', `who;dur=${(req.talkWhoMs || 0).toFixed(1)}, total;dur=${(performance.now() - req.talkT0).toFixed(1)}`);
+      return json(res, r.status || (r.ok === false ? 400 : 200), r);
+    };
     try {
       // ---- a linked Mac (E11 Console's Mac app, as its signed-in person): its own messages to pick up ----
       const macId = String(req.headers['x-talk-mac'] || '');
@@ -826,7 +831,7 @@ export function createServer(cfg) {
     if (filesHost && String(req.headers['x-forwarded-host'] || req.headers.host || '') === filesHost) { res.writeHead(404, { 'Content-Type': 'text/plain', 'X-Robots-Tag': 'noindex, nofollow' }); return res.end('Not found'); }
 
     // E11 Talk (talk.js) — the chat app's own addresses: the team as everywhere, and client contacts (E11 Talk only)
-    if (p.startsWith('/api/talk/')) { const tu = await talkWho(req, res); if (!tu) return; return talkRoute(req, res, p, url, tu); }
+    if (p.startsWith('/api/talk/')) { req.talkT0 = performance.now(); const tu = await talkWho(req, res); if (!tu) return; req.talkWhoMs = performance.now() - req.talkT0; return talkRoute(req, res, p, url, tu); }
     // (E11 Talk's pictures — people's photos and client logos — on Talk's own address, signed in as Talk is: Console's
     //  file address asked for Console's sign-in, so Talk showed initials everywhere, Haris 2026-11-12. The team: what they
     //  may read in E11 Console. A client contact: their own client's logo and the team's photos, nothing else.)
