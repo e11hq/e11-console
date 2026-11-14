@@ -606,8 +606,23 @@ final class Talk {
     loadLocal()
     NotificationCenter.default.post(name: .talkChanged, object: nil)
   }
+  // Signing out keeps this account's chats on the phone, out of sight (Haris 2026-11-14: "I want this"): the same account
+  // signing in again finds them all at once, no restore; another account signing in — they're wiped first, never seen
+  // (SceneDelegate.start asks the server who it is before anything of the phone's is read). The sign-in running out keeps
+  // them too, as before.
+  static var keptFor: String? {
+    get { UserDefaults.standard.string(forKey: "talk_kept_for") }
+    set { UserDefaults.standard.set(newValue, forKey: "talk_kept_for") }
+  }
   func signOut() {
     Net.shared.stopListening(); Net.shared.cookie = nil
+    flush()
+    if let id = me?.id ?? Talk.keptFor { Talk.keptFor = id } else { wipe() }   // (nobody known: nothing kept)
+    logs = [:]; groups = [:]; me = nil; Talk.cards = Cards()   // (starred kept with the chats: read again only when wiped)
+  }
+  // another account signing in on this phone: the last one's chats, files and place in the server's history gone
+  func wipe() {
+    Talk.keptFor = nil
     logs = [:]; groups = [:]; me = nil
     try? FileManager.default.removeItem(at: dir); try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     try? FileManager.default.removeItem(at: Net.filesDir)

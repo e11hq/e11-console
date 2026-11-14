@@ -104,6 +104,19 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
     Server.follow()
     if !Net.shared.signedIn, let c = SignInKeys.consoleReviewCookie { Net.shared.cookie = c }   // (App Review: Console's sign-in carried over)
     guard Net.shared.signedIn else { showSignIn(); return }
+    // (chats kept from a sign-out: whose they are is checked with the server first — another account's are wiped before
+    //  anything of them is read; the same account's are simply there)
+    if let kept = Talk.keptFor {
+      Net.shared.get("/api/talk/state") { [weak self] j in
+        guard let id = (j?["me"] as? [String: Any])?["id"] as? String else {
+          if Net.shared.signedIn { DispatchQueue.main.asyncAfter(deadline: .now() + 3) { self?.start() } } else { self?.showSignIn() }
+          return
+        }
+        if id == kept { Talk.keptFor = nil } else { Talk.shared.wipe() }
+        self?.start()
+      }
+      return
+    }
     Talk.shared.loadLocal()
     Talk.shared.prune()
     let main = mainTabs()

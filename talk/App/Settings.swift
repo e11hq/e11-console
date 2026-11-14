@@ -98,7 +98,7 @@ final class SettingsVC: UITableViewController {
     case .help: push(HelpVC())
     case .about: push(AboutVC())
     case .signOut:
-      let a = UIAlertController(title: "Sign out of E11 Talk?", message: "The chats on this phone are removed.", preferredStyle: .actionSheet)
+      let a = UIAlertController(title: "Sign out of E11 Talk?", message: "Your chats stay on this phone for when you sign in again. If someone else signs in here, they’re removed first.", preferredStyle: .actionSheet)
       a.addAction(UIAlertAction(title: "Sign Out", style: .destructive) { _ in SceneDelegate.current?.signOutNow() })
       a.addAction(UIAlertAction(title: "Cancel", style: .cancel)); present(a, animated: true)
     case .me: break
