@@ -82,8 +82,19 @@ final class SignInVC: UIViewController, WKNavigationDelegate {
     web.frame = CGRect(x: 0, y: s.top, width: W, height: reviewB.frame.minY - s.top - 4)
     spin.center = CGPoint(x: W / 2, y: web.frame.midY)
   }
+  // our server's answer to /api/talk/ is for the app to read, never to be seen: the page fades away as it comes in (its
+  // words showed for a moment after Sign In — Haris 2026-11-14), and fades back for any page of the sign-in
+  func webView(_ w: WKWebView, decidePolicyFor r: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+    let answer = r.isForMainFrame && r.response.url?.host == Server.host && (r.response.url?.path.hasPrefix("/api/talk/") ?? false)
+      && (r.response.mimeType ?? "").contains("json")
+    if r.isForMainFrame, (answer ? 0 : 1) != w.alpha {
+      UIView.animate(withDuration: Crossfade.time, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { w.alpha = answer ? 0 : 1 }
+      if answer { spin.startAnimating() }
+    }
+    decisionHandler(.allow)
+  }
   func webView(_ w: WKWebView, didFinish n: WKNavigation!) {
-    spin.stopAnimating()
+    if w.alpha == 1 { spin.stopAnimating() }
     guard let u = w.url, u.host == Server.host, u.path.hasPrefix("/api/talk/") else { return }
     // back on our server with an answer: the sign-in is done — keep its cookies
     w.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cs in
