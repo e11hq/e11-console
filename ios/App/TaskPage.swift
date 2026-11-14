@@ -898,7 +898,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   // Apple's grouped list: Apple's groups, headers and footer; the head (the title and its line) and the description without one
   private func makeListLayout() -> UICollectionViewLayout {
     let probeT = Probe.now(); defer { Probe.span("task page: list layout made", probeT) }   // (TEMPORARY speed report)
-    UICollectionViewCompositionalLayout { [weak self] i, env in
+    return UICollectionViewCompositionalLayout { [weak self] i, env in
       let s = self?.dSec(i)
       // (full width, edge to edge — Apple's grouped list: Haris 2026-11-09)
       var c = UICollectionLayoutListConfiguration(appearance: .grouped)
