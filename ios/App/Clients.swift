@@ -39,6 +39,7 @@ final class ClientListRow: UIView, AppleRow {
   }
   required init?(coder: NSCoder) { fatalError() }
   func set(_ r: [String: Any], inactive: Bool, look: HomeLook, people: [String: [String: Any]]) {
+    let probeT = Probe.now(); defer { Probe.sum("a client row set (Clients.swift)", probeT) }   // (TEMPORARY speed report)
     self.r = r; self.inactive = inactive; L = look
     // its logo: from the phone at once when it's kept there, else fetched once and the cell set again
     let lp = r["logo"] as? String

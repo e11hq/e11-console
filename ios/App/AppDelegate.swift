@@ -1287,6 +1287,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   // (My Tasks' actions still waiting from before the app was closed go even if My Tasks isn't opened)
   func myTasksWaiting() -> ServerHome? { serverMyTasksIfMade ?? (defaults.data(forKey: "e11HomeQueue-mytasks").map { $0.count > 2 } == true ? serverMyTasks : nil) }
   func myTasksCommand(_ a0: [String: Any]) {
+    let probeT = Probe.now(); defer { Probe.span("My Tasks: draw its list", probeT) }   // (TEMPORARY speed report)
     defer { updateCorner() }
     guard let show = a0["show"] as? Bool else { return }
     if show { myTasksPageSignal = a0 }
@@ -1384,6 +1385,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     inboxPageOwn = v
   }
   func inboxCommand(_ a: [String: Any]) {
+    let probeT = Probe.now(); defer { Probe.span("Inbox: draw its list", probeT) }   // (TEMPORARY speed report)
     defer { updateCorner() }
     guard let show = a["show"] as? Bool else { return }
     if !show { inboxWanted = false; if !APPLE_INBOX { inboxIfMade?.isHidden = true }; return }   // (its own Apple tab keeps it — Haris 2026-11-08)
@@ -1707,6 +1709,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     updateCorner()
   }
   func drawServerClients(_ m: [String: Any]) {
+    let probeT = Probe.now(); defer { Probe.span("Clients: draw the list / a client's page", probeT) }   // (TEMPORARY speed report)
     defer { updateCorner() }
     guard clientsPageMe != nil, (m["me"] as? String) == clientsPageMe else { return }
     let page = (m["kind"] as? String) == "client"

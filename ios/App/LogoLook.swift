@@ -20,6 +20,7 @@ enum LogoLook {
 
   // the logo drawn into its tile as one picture (an Apple cell's image — the Clients list, Haris 2026-11-10)
   static func tile(_ img: UIImage, key: String?, side: CGFloat, radius: CGFloat) -> UIImage {
+    let probeT = Probe.now(); defer { Probe.sum("a logo tile made", probeT) }   // (TEMPORARY speed report)
     let l = look(img, key: key)
     return UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in
       let r = CGRect(x: 0, y: 0, width: side, height: side)

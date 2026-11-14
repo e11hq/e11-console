@@ -84,3 +84,16 @@ final class ProbeVC: UIViewController {
     navigationItem.leftBarButtonItem = UIBarButtonItem(systemItem: .close, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
   }
 }
+
+// (TEMPORARY speed report) a piece of the app timed: logged when it took 4 ms or more; `sum` adds up many small ones made
+// in one go (rows, logos) and logs the total once the screen is free again
+extension Probe {
+  static func span(_ name: String, _ t0: Double) { let ms = (now() - t0) * 1000; if ms >= 4 { took(ms, name) } }
+  private static var sums: [String: (n: Int, ms: Double)] = [:]
+  static func sum(_ name: String, _ t0: Double) {
+    let ms = (now() - t0) * 1000
+    guard Thread.isMainThread else { if ms >= 4 { took(ms, name + " (in background)") }; return }
+    if sums.isEmpty { DispatchQueue.main.async { for (k, v) in sums where v.ms >= 4 { took(v.ms, "\(v.n) × \(k)") }; sums = [:] } }
+    let o = sums[name] ?? (0, 0); sums[name] = (o.n + 1, o.ms + ms)
+  }
+}

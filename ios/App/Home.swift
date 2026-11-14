@@ -662,6 +662,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   // animation; for someone else (View as…), the old rows and cards simply go and theirs are there at once — the Inbox
   // faded the other person's rows into these, Haris 2026-11-05
   func drawFor(_ model: [String: Any]) {
+    let probeT = Probe.now(); defer { Probe.span("a list page: draw its model (drawFor)", probeT) }   // (TEMPORARY speed report)
     let was = m["me"] as? String, now = model["me"] as? String
     if let was = was, let now = now, was != now { UIView.performWithoutAnimation { update(model); setNeedsLayout(); layoutIfNeeded() }; layer.removeAllAnimations(); subviews.forEach { $0.layer.removeAllAnimations() } }
     else { update(model) }
@@ -1832,6 +1833,7 @@ final class HomeCard: UIView, AppleRow {
   required init?(coder: NSCoder) { fatalError() }
 
   func set(_ d: [String: Any], look: HomeLook) {
+    let probeT = Probe.now(); defer { Probe.sum("a task row set", probeT) }   // (TEMPORARY speed report)
     // (the same as it shows: left as it is — its faces, words and icon not made again: Haris 2026-11-08)
     let sig = drawSig(d) + "|" + look.key
     c = d; L = look
@@ -2025,6 +2027,7 @@ final class HomeClientRow: UIView, AppleRow {
   var rowLate: Bool { false }
   func rowTapped() { onTap?() }
   func set(_ c: [String: Any], look L: HomeLook) {
+    let probeT = Probe.now(); defer { Probe.sum("a client row set (Home.swift)", probeT) }   // (TEMPORARY speed report)
     let sig = drawSig(c) + "|" + L.key
     if sig == rowSig { return }
     rowSig = sig
@@ -2078,6 +2081,7 @@ final class InboxRow: UIView {
   }
   required init?(coder: NSCoder) { fatalError() }
   func set(_ r: [String: Any], photo: UIImage?) {
+    let probeT = Probe.now(); defer { Probe.sum("an Inbox row set", probeT) }   // (TEMPORARY speed report)
     info = r
     id = r["id"] as? String ?? ""
     read = (r["read"] as? Bool) == true
@@ -2624,6 +2628,7 @@ extension HomeView {
   // the page as Apple's sections: a title and the group under it — one section; the words under a group — its footer;
   // anything else of the page's — in its own section, as before
   func applyMeList(animated: Bool) {
+    let probeT = Probe.now(); defer { Probe.span("Me: set its rows (applyMeList)", probeT) }   // (TEMPORARY speed report)
     guard let ds = listDS else { return }
     var snap = NSDiffableDataSourceSnapshot<Int, String>()
     var views: [String: UIView] = [:], items: [String: SetItem] = [:], secs: [Int: MeSec] = [:]

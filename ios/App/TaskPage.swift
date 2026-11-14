@@ -510,6 +510,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   var onFilesShown: (([String]) -> Void)?
   private var askedLinks = Set<String>()
   func draw(_ m: [String: Any]) {
+    let probeT = Probe.now(); defer { Probe.span("task page: draw (all of it)", probeT) }   // (TEMPORARY speed report)
     spinner.stopAnimating()
     model = m
     let paths = (((m["files"] as? [[String: Any]]) ?? []) + ((m["commentFiles"] as? [[String: Any]]) ?? [])).compactMap { $0["file"] as? String }

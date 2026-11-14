@@ -214,6 +214,7 @@ final class AssetsCtl {
   }
   // show / hide, and what's shown changed (opened by the app's own screens)
   func command(_ a: [String: Any]) {
+    let probeT = Probe.now(); defer { Probe.span("Client Assets: draw", probeT) }   // (TEMPORARY speed report)
     // (live: what's shown changed on the page — someone else's change, another device's)
     if (a["push"] as? Bool) == true {
       if let m = a["model"] as? [String: Any] { take(m); return }
