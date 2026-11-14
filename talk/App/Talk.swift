@@ -149,14 +149,25 @@ final class Talk {
 
   // ---------- from the phone first (at once), then the server ----------
   func loadLocal() {
+    // (TEMPORARY speed report: how long reading the phone's copy takes, and how big it is)
+    let a = Probe.now()
     if let d = try? Data(contentsOf: stateFile), let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] { take(j, save: false) }
+    Probe.took((Probe.now() - a) * 1000, "read the phone's copy: \(Probe.kb(stateFile)) KB, \(groups.count) groups, \(people.count) people")
   }
   func log(_ g: String) -> GroupLog {
     if let l = logs[g] { return l }
+    let a = Probe.now()
     let l = (try? Data(contentsOf: logFile(g))).flatMap { try? JSONDecoder().decode(GroupLog.self, from: $0) } ?? GroupLog()
     logs[g] = l
+    let ms = (Probe.now() - a) * 1000
+    if ms > 2 { Probe.took(ms, "read a chat from the phone: \(l.msgs.count) messages, \(Probe.kb(logFile(g))) KB\(Thread.isMainThread ? "" : " (in the background)")") }
     return l
   }
+  // (TEMPORARY speed report)
+  var loadedChats: Int { logs.count }
+  var loadedMessages: Int { logs.values.reduce(0) { $0 + $1.msgs.count } }
+  var copyKB: Int { Probe.kb(stateFile) }
+  var chatsKB: Int { ((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []).filter { $0.lastPathComponent.hasPrefix("g-") }.reduce(0) { $0 + Probe.kb($1) } }
   private var dirty = Set<String>()
   private func saveSoon(_ g: String) {
     dirty.insert(g)
@@ -172,7 +183,9 @@ final class Talk {
   }
 
   func refresh(_ done: (() -> Void)? = nil) {
+    let a = Probe.now()
     Net.shared.get("/api/talk/state") { [weak self] j in
+      Probe.took((Probe.now() - a) * 1000, "server: the list of groups and people (state)")
       if let j = j, (j["ok"] as? Bool) == true { self?.take(j, save: true) }
       // (signed in, but the email isn't anyone's in E11 Talk — said plainly, never an empty list)
       else if let e = j?["error"] as? String, e.hasPrefix("No E11 Talk account") { NotificationCenter.default.post(name: .talkRefused, object: e) }
@@ -235,14 +248,17 @@ final class Talk {
     if holdSync { done?(); return }
     if syncing { again = true; done?(); return }
     syncing = true
+    let a = Probe.now()
     Net.shared.get("/api/talk/sync?after=\(lastSeq)") { [weak self] j in
       guard let self = self else { return }
       self.syncing = false
-      guard let j = j, (j["ok"] as? Bool) == true else { done?(); return }
+      guard let j = j, (j["ok"] as? Bool) == true else { Probe.took((Probe.now() - a) * 1000, "server: sync failed"); done?(); return }
       let evs = (j["events"] as? [[String: Any]]) ?? []
+      let b = Probe.now()
       var touched = Set<String>(), groupChanged = false
       for e in evs { if let g = self.apply(e, &groupChanged) { touched.insert(g) } }
       self.flush()
+      if !evs.isEmpty { Probe.took((b - a) * 1000, "server: sync answer, \(evs.count) changes"); Probe.took((Probe.now() - b) * 1000, "put \(evs.count) changes in \(touched.count) chats and saved them") }
       let last = j["last"] as? Int ?? self.lastSeq
       touched.forEach { NotificationCenter.default.post(name: .talkGroup, object: $0) }
       if !touched.isEmpty { NotificationCenter.default.post(name: .talkChanged, object: nil); self.badge() }
@@ -275,6 +291,7 @@ final class Talk {
   private var catching = false
   func catchUp() {
     guard !catching, me != nil else { return }
+    let probeA = Probe.now(); defer { Probe.took((Probe.now() - probeA) * 1000, "Auto-download: looked through \(groups.count) chats") }
     let since = Date().timeIntervalSince1970 * 1000 - Auto.keep
     var want: [(id: String, size: Int, kind: String)] = []
     for g in groups.keys {

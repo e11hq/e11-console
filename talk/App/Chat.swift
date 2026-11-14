@@ -102,6 +102,12 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     findAcc.isHidden = true
   }
 
+  // (TEMPORARY speed report: a chat's opening, and frames missed while it scrolls)
+  private let probeAt = Probe.now(), frames = Probe.Frames()
+  private var probed = false
+  func scrollViewWillBeginDragging(_ s: UIScrollView) { if s === table { frames.start("chat") } }
+  func scrollViewDidEndDragging(_ s: UIScrollView, willDecelerate d: Bool) { if s === table, !d { frames.stop() } }
+  func scrollViewDidEndDecelerating(_ s: UIScrollView) { if s === table { frames.stop() } }
   override func viewDidLoad() {
     super.viewDidLoad()
     view.backgroundColor = Look.chatBg
@@ -145,7 +151,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
           // (laid out here only when it's on the screen being set again — a new bubble is laid out once, by the list, as it
           //  takes its height; laying it out here too doubled each bubble's making as a chat opened: 24 bubbles, 100 ms,
           //  measured on Haris's phone 2026-11-13)
+          let pa = Probe.now()
           UIView.performWithoutAnimation { c.set(m, group: g, log: Talk.shared.log(self.group), run: self.runs[id] ?? Run()); if c.window != nil { c.contentView.layoutIfNeeded() } }
+          let pms = (Probe.now() - pa) * 1000; if pms > 4 { Probe.took(pms, "made a \(m.kind) bubble\(m.album != nil ? " (album)" : "")\(m.link != nil ? " (link card)" : "")") }
         }
         c.onReplyTap = { [weak self] rid in self?.jump(to: rid) }
         c.onFileTap = { [weak self, weak c] m in self?.openFrom = (m.kind == "photo" || m.kind == "video") ? c?.photo : nil; self?.open(m) }
@@ -277,6 +285,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
   override func viewDidAppear(_ a: Bool) {
     super.viewDidAppear(a)
+    if !probed { probed = true; Probe.took((Probe.now() - probeAt) * 1000, "open a chat (tap → in place, slide included): \(Talk.shared.log(group).msgs.count) messages, memory \(Probe.memory)") }
     // (the back swipe from the edge goes first; a reply swipe starts away from the edge)
     if let pop = navigationController?.interactivePopGestureRecognizer, !swipeWaits { swipeWaits = true; swipe.require(toFail: pop) }
     homeLimits.forEach { $0.constant = -home }

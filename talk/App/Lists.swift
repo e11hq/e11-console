@@ -83,8 +83,13 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
   private var startY: CGFloat?
   override func viewDidAppear(_ a: Bool) {
     super.viewDidAppear(a)
-    if startY == nil, !table.isDragging, !table.isDecelerating { startY = table.contentOffset.y }
+    if startY == nil, !table.isDragging, !table.isDecelerating { startY = table.contentOffset.y; Probe.mark("list on screen: \(title ?? "") (\(table.numberOfSections > 0 ? table.numberOfRows(inSection: 0) : 0) rows)") }
   }
+  // (TEMPORARY speed report: frames missed while the list scrolls)
+  private let frames = Probe.Frames()
+  func scrollViewWillBeginDragging(_ s: UIScrollView) { if s === table { frames.start("list " + (title ?? "")) } }
+  func scrollViewDidEndDragging(_ s: UIScrollView, willDecelerate d: Bool) { if s === table, !d { frames.stop() } }
+  func scrollViewDidEndDecelerating(_ s: UIScrollView) { if s === table { frames.stop() } }
   func toStart() {
     guard let y = startY, !search.isActive else { return }
     table.setContentOffset(CGPoint(x: table.contentOffset.x, y: y), animated: true)
