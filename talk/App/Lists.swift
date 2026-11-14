@@ -323,9 +323,14 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
     emptyNote()
   }
   // (no line under the list's last row — only between rows: Haris 2026-11-14 "Remove the divider after the last list")
+  //  (the line pushed off past the row's right edge — a right inset left a stub under the picture: Haris 2026-11-14 17:47)
+  private var lineLeft: [ObjectIdentifier: CGFloat] = [:]
   func lineUnder(_ c: UITableViewCell, _ ip: IndexPath) {
     let last = ip.row == table.numberOfRows(inSection: ip.section) - 1
-    var i = c.separatorInset; i.right = last ? max(table.bounds.width, 1000) : 0; c.separatorInset = i
+    let key = ObjectIdentifier(c)
+    if lineLeft[key] == nil { lineLeft[key] = c.separatorInset.left }
+    let left = last ? max(table.bounds.width, 1000) : (lineLeft[key] ?? 0)
+    if c.separatorInset.left != left || c.separatorInset.right != 0 { c.separatorInset = UIEdgeInsets(top: 0, left: left, bottom: 0, right: 0) }
   }
   func tableView(_ tv: UITableView, willDisplay cell: UITableViewCell, forRowAt ip: IndexPath) { lineUnder(cell, ip) }
   func emptyNote() {}
