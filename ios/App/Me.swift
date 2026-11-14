@@ -1536,8 +1536,8 @@ final class MeCtl {
 
   // ---------- from the page ----------
   func command(_ a: [String: Any]) {
-    // (a Content plan    let probeT = Probe.now(); defer { Probe.span("Me: draw a page", probeT) }   // (TEMPORARY speed report)
- opened on the page — an Inbox update, a notification: the app's own page for it)
+    let probeT = Probe.now(); defer { Probe.span("Me: draw a page", probeT) }   // (TEMPORARY speed report)
+    // (a Content plan opened on the page — an Inbox update, a notification: the app's own page for it)
     // (a review request opened on the page — an Inbox update: the Reviews tab's own page for it)
     if let o = a["open"] as? [String: Any], (o["kind"] as? String) == "review", let rid = o["id"] as? String {
       wantOpenId = rid; wantOpen = "review"
