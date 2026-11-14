@@ -626,6 +626,13 @@ picture goes up (✕ and Done dimmed, the sheet springs back), and signing out k
 finds them at once; another account's sign-in wipes them first, asked of the server before anything is read). Needs server
 1.9.55 (a group's picture stays while the group uses it). Nothing changes in its look, behaviour or code without telling Haris
 first and his yes.
+**E11 TALK — STABLE, LOCKED, the App Store release candidate: 1.0.0 build 130 (Haris, 2026-11-14 15:04: "130 is a release
+candidate, lock it"):** commit 9c8fa29 on talk-chat-1, branches `stable/talk-130`, `locked/talk-130` and
+`candidate/appstore-talk-1.0.0-build-130` (never moved or deleted; 126's and earlier stay as history — 130 replaces 126 as the
+candidate). 130 = 126 + a group's picture that can't be had showing its client's logo meanwhile (the picture fading in if it
+comes); letting go of a held message exactly as in 126 / 127 (128's and 129's changes taken back, Haris 14:50 — the wavy words
+as the menu closes are iPhone's own glass). Needs server 1.9.55. Nothing changes in its look, behaviour or code without telling
+Haris first and his yes.
 **Compile checks: `-f checks=compile -f walk=no`** — without `walk=no` the walk-through for every role runs too (~20 min),
 holding the Mac (2026-11-13).
 **The App Store release waits for E11 Talk (Haris, 2026-11-11 20:16: "3"):** the Talk button (E11 Day, Clients) does nothing
