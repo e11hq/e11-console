@@ -723,7 +723,7 @@ final class Avatar: UIView {
     lbl.text = Look.initials(name); backgroundColor = color; isLogo = logo
     img.image = nil; img.isHidden = true; lbl.isHidden = false
     let key = talkFile ?? picture
-    want = key
+    want = key; standIn = nil
     if let f = talkFile { loadFile(f, key, tries: 3) }
     else if let p = picture { load(p, key, tries: 3) }
   }
@@ -733,7 +733,13 @@ final class Avatar: UIView {
     var now = true
     Net.shared.file(f) { [weak self] url in
       guard let self = self, self.want == key else { return }
-      guard let u = url, let i = UIImage(contentsOfFile: u.path) else { if tries > 1 { DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in self?.loadFile(f, key, tries: tries - 1) } }; return }
+      guard let u = url, let i = UIImage(contentsOfFile: u.path) else {
+        // (a group's picture that can't be had: its client's logo meanwhile, as a group without one — Haris 2026-11-14)
+        if let p = self.standIn { self.standIn = nil; self.loadLogo(p, key) }
+        if tries > 1 { DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in self?.loadFile(f, key, tries: tries - 1) } }
+        return
+      }
+      self.isLogo = false
       self.reveal(i, fade: !now)
     }
     now = false
@@ -770,10 +776,18 @@ final class Avatar: UIView {
       i.draw(in: CGRect(x: (side - w) / 2, y: (side - h) / 2, width: w, height: h))
     }
   }
+  // (the client's logo, shown while a group's own picture can't be had)
+  private var standIn: String?
+  private func loadLogo(_ p: String, _ key: String?) {
+    Net.shared.picture(p) { [weak self] i in
+      guard let self = self, self.want == key, let i = i, self.img.isHidden else { return }
+      self.isLogo = true; self.reveal(Avatar.inCircle(i), fade: true)
+    }
+  }
   // a group: its own picture, else its client's logo, else a letter on the client's colour
   func set(group g: Group) {
     let c = Talk.shared.clients[g.client]
-    if g.pic != nil { set(name: g.name, color: Look.hex(c?.color) ?? Look.accent, picture: nil, talkFile: g.pic) }
+    if g.pic != nil { set(name: g.name, color: Look.hex(c?.color) ?? Look.accent, picture: nil, talkFile: g.pic); standIn = c?.logo }
     else if c?.logo != nil { set(name: c?.name ?? g.name, color: Look.hex(c?.color) ?? Look.accent, picture: c?.logo, logo: true) }
     else { lbl.text = String(g.name.prefix(1)).uppercased(); backgroundColor = Look.hex(c?.color) ?? Look.accent; img.isHidden = true; lbl.isHidden = false; want = nil }
   }
