@@ -63,7 +63,7 @@ final class LinkedDevicesVC: UITableViewController {
       // (Apple's filled button on the page's own ground, as the board's)
       c.contentConfiguration = nil; c.accessoryType = .none; c.selectionStyle = .none
       var bg = UIBackgroundConfiguration.clear(); bg.backgroundColor = .clear; c.backgroundConfiguration = bg
-      var bc = UIButton.Configuration.filled(); bc.title = "Link a Mac"; bc.cornerStyle = .capsule; bc.baseBackgroundColor = Look.dyn(0x2F7BFF, 0x2F7BFF)
+      var bc = UIButton.Configuration.filled(); bc.title = "Link a Device"; bc.cornerStyle = .capsule; bc.baseBackgroundColor = Look.dyn(0x2F7BFF, 0x2F7BFF)
       bc.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { var a = $0; a.font = .systemFont(ofSize: 17, weight: .semibold); return a }
       let b = UIButton(configuration: bc, primaryAction: UIAction { [weak self] _ in self?.scan() }); b.tag = 78
       b.frame = c.contentView.bounds; b.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -73,17 +73,17 @@ final class LinkedDevicesVC: UITableViewController {
   override func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat { data.itemIdentifier(for: ip) == .link ? 50 : UITableView.automaticDimension }
   private final class Source: UITableViewDiffableDataSource<Int, Row> {
     weak var owner: LinkedDevicesVC?
-    override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? { snapshot().sectionIdentifiers[s] == 0 ? "Linked Macs" : nil }
+    override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? { snapshot().sectionIdentifiers[s] == 0 ? "Linked Devices" : nil }
     override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
       snapshot().sectionIdentifiers[s] == 0
-        ? "A linked Mac gets your chats straight from your iPhone and keeps up by itself. It unlinks after 30 days if this iPhone doesn’t open E11 Talk."
-        : "On the Mac: open E11 Talk for Mac, then scan the code it shows."
+        ? "A linked device gets your chats straight from your iPhone and keeps up by itself. It unlinks after 30 days if this iPhone doesn’t open E11 Talk."
+        : "On your computer: open E11 Talk, then scan the code it shows."
     }
   }
   override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) {
     tv.deselectRow(at: ip, animated: true)
     guard case .mac(let id)? = data.itemIdentifier(for: ip), let m = macs.first(where: { $0.id == id }) else { return }
-    let a = UIAlertController(title: m.name, message: "Unlink this Mac? Its E11 Talk chats are removed from it.", preferredStyle: .actionSheet)
+    let a = UIAlertController(title: m.name, message: "Unlink this device? Its E11 Talk chats are removed from it.", preferredStyle: .actionSheet)
     a.addAction(UIAlertAction(title: "Unlink", style: .destructive) { _ in
       Net.shared.act(["act": "unlinkMac", "id": m.id]) { j in
         if (j?["ok"] as? Bool) == true { toast("Unlinked"); Talk.shared.refresh() } else { toast(j?["error"] as? String ?? "Couldn’t unlink — try again") }
@@ -98,7 +98,7 @@ final class LinkedDevicesVC: UITableViewController {
     case .authorized: openScanner()
     case .notDetermined: AVCaptureDevice.requestAccess(for: .video) { ok in DispatchQueue.main.async { if ok { self.openScanner() } } }
     default:
-      let a = UIAlertController(title: "Camera is off for E11 Talk", message: "To scan the Mac’s code, allow the camera in Settings.", preferredStyle: .alert)
+      let a = UIAlertController(title: "Camera is off for E11 Talk", message: "To scan the device’s code, allow the camera in Settings.", preferredStyle: .alert)
       a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
       a.addAction(UIAlertAction(title: "Settings", style: .default) { _ in if let u = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(u) } })
       present(a, animated: true)
@@ -112,10 +112,10 @@ final class LinkedDevicesVC: UITableViewController {
           s?.failed(j?["error"] as? String ?? "Couldn’t link — try again"); return
         }
         UINotificationFeedbackGenerator().notificationOccurred(.success)
-        s?.linked(m["name"] as? String ?? "Mac")
+        s?.linked(m["name"] as? String ?? "Computer")
         Talk.shared.refresh()
         self?.handOver(to: id, progress: { p in s?.progress(p) }) { ok in
-          s?.dismiss(animated: true) { toast(ok ? "Linked — your chats are on the Mac" : "Linked — some chats didn’t reach the Mac") }
+          s?.dismiss(animated: true) { toast(ok ? "Linked — your chats are on it" : "Linked — some chats didn’t reach it") }
         }
       }
     }
@@ -156,7 +156,7 @@ final class ScanVC: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
   override func viewDidLoad() {
     super.viewDidLoad()
     view.backgroundColor = .black
-    title = "Link a Mac"
+    title = "Link a Device"
     navigationItem.leftBarButtonItem = UIBarButtonItem(systemItem: .close, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
     navigationController?.navigationBar.barStyle = .black; navigationController?.navigationBar.tintColor = .white
     if let cam = AVCaptureDevice.default(for: .video), let input = try? AVCaptureDeviceInput(device: cam), session.canAddInput(input) {
@@ -168,8 +168,8 @@ final class ScanVC: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
     dim.fillColor = UIColor.black.withAlphaComponent(0.55).cgColor; dim.fillRule = .evenOdd; view.layer.addSublayer(dim)
     corners.strokeColor = UIColor.white.cgColor; corners.fillColor = UIColor.clear.cgColor; corners.lineWidth = 4; corners.lineCap = .round
     view.layer.addSublayer(corners)
-    hint.text = "Point your iPhone at the code on your Mac"; hint.textColor = .white; hint.font = .systemFont(ofSize: 17); hint.textAlignment = .center; hint.numberOfLines = 0
-    line.text = "Open E11 Talk for Mac. The code works once, for 2 minutes."
+    hint.text = "Point your iPhone at the code on your computer"; hint.textColor = .white; hint.font = .systemFont(ofSize: 17); hint.textAlignment = .center; hint.numberOfLines = 0
+    line.text = "Open E11 Talk on your computer. The code works once, for 2 minutes."
     line.textColor = UIColor(white: 0.68, alpha: 1); line.font = .systemFont(ofSize: 14); line.textAlignment = .center; line.numberOfLines = 0
     bar.isHidden = true; bar.progressTintColor = Look.accent
     [hint, line, bar].forEach { view.addSubview($0) }
@@ -198,7 +198,7 @@ final class ScanVC: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
   override func viewWillDisappear(_ a: Bool) { super.viewWillDisappear(a); let s = session; DispatchQueue.global().async { s.stopRunning() } }
   func metadataOutput(_ o: AVCaptureMetadataOutput, didOutput objs: [AVMetadataObject], from c: AVCaptureConnection) {
     guard !busy, let v = (objs.first as? AVMetadataMachineReadableCodeObject)?.stringValue else { return }
-    guard v.hasPrefix("e11talk-link:") else { hint.text = "That isn’t an E11 Talk for Mac code"; return }
+    guard v.hasPrefix("e11talk-link:") else { hint.text = "That isn’t an E11 Talk code"; return }
     busy = true
     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     corners.strokeColor = Look.accent.cgColor
@@ -208,7 +208,7 @@ final class ScanVC: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
   func failed(_ why: String) {
     UINotificationFeedbackGenerator().notificationOccurred(.error)
     hint.text = why; corners.strokeColor = UIColor.systemRed.cgColor
-    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in self?.busy = false; self?.corners.strokeColor = UIColor.white.cgColor; self?.hint.text = "Point your iPhone at the code on your Mac" }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in self?.busy = false; self?.corners.strokeColor = UIColor.white.cgColor; self?.hint.text = "Point your iPhone at the code on your computer" }
   }
   func linked(_ name: String) {
     let s = session; DispatchQueue.global().async { s.stopRunning() }

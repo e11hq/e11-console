@@ -225,6 +225,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
     if let t = UserDefaults.standard.string(forKey: "talk_push_token") { Net.shared.post("/api/talk/push", ["token": t, "off": true]) }
     SignInKeys.dropOwn()   // (a client contact's own key for Face ID let go)
     UserDefaults.standard.removeObject(forKey: "talk_via_console")
+    // (every device linked to this phone signed out with it — WhatsApp's way, Haris 2026-11-14)
+    if !Talk.shared.macs.isEmpty { Net.shared.act(["act": "unlinkAllMacs"]) }
     Talk.shared.signOut()
     UserDefaults.standard.removeObject(forKey: "talk_review")   // (off the App Review copy — after its own copy is gone)
     showSignIn()

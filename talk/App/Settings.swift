@@ -445,7 +445,7 @@ final class HelpVC: UITableViewController {
       ("Muting a Group", "Hold a group in the list and tap Mute. A muted group still tells you when someone @mentions you."),
       ("Chat Backup", "Your chats back up to your own iCloud. Restore them any time from Settings › Chat Backup."),
     ]
-    a.append(("Linked Devices", "Link E11 Talk for Mac to see your chats on your Mac."))
+    a.append(("Linked Devices", "Link a computer to see your chats on it too."))
     if Talk.shared.boss { a.append(("Client Contacts", "Add the people from each client who can be in groups. They only see the groups they’re added to.")) }
     return a
   }
