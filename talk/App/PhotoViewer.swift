@@ -50,8 +50,10 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     }
 
     // the top: ‹ · who and when · •••
+    // (Apple's own glass, as Photos — Haris 2026-11-14; before iOS 26 the grey capsule as before)
     func glass(_ b: UIButton, _ sym: String, _ label: String) {
-      var c = UIButton.Configuration.gray(); c.cornerStyle = .capsule; c.baseForegroundColor = .white; c.background.backgroundColor = UIColor(white: 0.16, alpha: 0.8)
+      var c: UIButton.Configuration
+      if #available(iOS 26.0, *) { c = .glass() } else { c = .gray(); c.cornerStyle = .capsule; c.baseForegroundColor = .white; c.background.backgroundColor = UIColor(white: 0.16, alpha: 0.8) }
       c.image = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)); c.contentInsets = .zero
       b.configuration = c; b.accessibilityLabel = label; b.translatesAutoresizingMaskIntoConstraints = false
       NSLayoutConstraint.activate([b.widthAnchor.constraint(equalToConstant: 42), b.heightAnchor.constraint(equalToConstant: 42)])
@@ -73,11 +75,13 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
 
     // the foot: the caption · reactions, ☺︎, Reply · the strip · Share · Forward · Save · Delete
     cap.textColor = .white; cap.font = .systemFont(ofSize: 17); cap.numberOfLines = 3
-    var rc = UIButton.Configuration.gray(); rc.cornerStyle = .capsule; rc.background.backgroundColor = UIColor(white: 0.16, alpha: 0.9); rc.baseForegroundColor = UIColor(white: 0.8, alpha: 1)
+    var rc: UIButton.Configuration
+    if #available(iOS 26.0, *) { rc = .glass() } else { rc = .gray(); rc.cornerStyle = .capsule; rc.background.backgroundColor = UIColor(white: 0.16, alpha: 0.9); rc.baseForegroundColor = UIColor(white: 0.8, alpha: 1) }
     reacts.configuration = rc; reacts.isUserInteractionEnabled = false
     glass(smile, "face.smiling", "React")
     smile.addAction(UIAction { [weak self] _ in guard let self = self, let m = self.items[safe: self.at] else { return }; self.onReact?(m) }, for: .touchUpInside)
-    var pc = UIButton.Configuration.gray(); pc.cornerStyle = .capsule; pc.background.backgroundColor = UIColor(white: 0.16, alpha: 0.9); pc.baseForegroundColor = .white
+    var pc: UIButton.Configuration
+    if #available(iOS 26.0, *) { pc = .glass() } else { pc = .gray(); pc.cornerStyle = .capsule; pc.background.backgroundColor = UIColor(white: 0.16, alpha: 0.9); pc.baseForegroundColor = .white }
     pc.image = UIImage(systemName: "arrowshape.turn.up.left.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .semibold)); pc.imagePadding = 6
     pc.attributedTitle = AttributedString("Reply", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 17, weight: .semibold)]))
     replyB.configuration = pc
@@ -102,10 +106,31 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
       b.tintColor = red ? .systemRed : .white; b.accessibilityLabel = label
       b.addAction(UIAction { _ in act() }, for: .touchUpInside); return b
     }
-    tools.axis = .horizontal; tools.distribution = .equalSpacing
-    [tool("square.and.arrow.up", "Share") { [weak self] in self?.share() }, tool("arrowshape.turn.up.right", "Forward") { [weak self] in self?.forwardCurrent() },
-     tool("arrow.down.to.line", "Save") { [weak self] in self?.save() },
-     tool("trash", "Delete", true) { [weak self] in guard let self = self, let m = self.items[safe: self.at] else { return }; self.dismiss(animated: true) { self.onDelete?(m) } }].forEach { tools.addArrangedSubview($0) }
+    tools.axis = .horizontal; tools.distribution = .equalSpacing; tools.alignment = .center
+    let shareT = tool("square.and.arrow.up", "Share") { [weak self] in self?.share() }
+    let fwdT = tool("arrowshape.turn.up.right", "Forward") { [weak self] in self?.forwardCurrent() }
+    let saveT = tool("arrow.down.to.line", "Save") { [weak self] in self?.save() }
+    let delT = tool("trash", "Delete", true) { [weak self] in guard let self = self, let m = self.items[safe: self.at] else { return }; self.dismiss(animated: true) { self.onDelete?(m) } }
+    if #available(iOS 26.0, *) {
+      // (as Photos — Haris 2026-11-14: Share on its own on the left, Forward · Save together in one glass in the middle,
+      //  Delete on its own on the right; each Apple's own glass, the same taps as before)
+      for (b, sym) in [(shareT, "square.and.arrow.up"), (delT, "trash")] {
+        var c = UIButton.Configuration.glass(); c.image = b.image(for: .normal); c.contentInsets = .zero
+        if sym == "trash" { c.baseForegroundColor = .systemRed }
+        b.setImage(nil, for: .normal); b.configuration = c; b.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([b.widthAnchor.constraint(equalToConstant: 48), b.heightAnchor.constraint(equalToConstant: 48)])
+      }
+      let pair = UIVisualEffectView(effect: UIGlassEffect()); pair.cornerConfiguration = .capsule()
+      let both = UIStackView(arrangedSubviews: [fwdT, saveT]); both.axis = .horizontal; both.distribution = .fillEqually
+      [fwdT, saveT].forEach { $0.tintColor = .label }
+      both.translatesAutoresizingMaskIntoConstraints = false; pair.contentView.addSubview(both); pair.translatesAutoresizingMaskIntoConstraints = false
+      NSLayoutConstraint.activate([pair.widthAnchor.constraint(equalToConstant: 112), pair.heightAnchor.constraint(equalToConstant: 48),
+        both.leadingAnchor.constraint(equalTo: pair.contentView.leadingAnchor, constant: 6), both.trailingAnchor.constraint(equalTo: pair.contentView.trailingAnchor, constant: -6),
+        both.topAnchor.constraint(equalTo: pair.contentView.topAnchor), both.bottomAnchor.constraint(equalTo: pair.contentView.bottomAnchor)])
+      [shareT, pair, delT].forEach { tools.addArrangedSubview($0) }
+    } else {
+      [shareT, fwdT, saveT, delT].forEach { tools.addArrangedSubview($0) }
+    }
     let row = UIStackView(arrangedSubviews: [reacts, smile, UIView(), replyB]); row.axis = .horizontal; row.spacing = 10; row.alignment = .center
     [cap, row, strip, tools].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; foot.addSubview($0) }
     [top, foot].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; view.addSubview($0) }
@@ -128,7 +153,7 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
       stripRow.centerYAnchor.constraint(equalTo: strip.centerYAnchor), stripRow.leadingAnchor.constraint(equalTo: strip.contentLayoutGuide.leadingAnchor, constant: 14),
       stripRow.trailingAnchor.constraint(equalTo: strip.contentLayoutGuide.trailingAnchor, constant: -14), stripRow.topAnchor.constraint(equalTo: strip.contentLayoutGuide.topAnchor, constant: 2),
       tools.topAnchor.constraint(equalTo: strip.bottomAnchor, constant: 10), tools.leadingAnchor.constraint(equalTo: foot.leadingAnchor, constant: 34), tools.trailingAnchor.constraint(equalTo: foot.trailingAnchor, constant: -34),
-      tools.heightAnchor.constraint(equalToConstant: 40), tools.bottomAnchor.constraint(equalTo: foot.bottomAnchor, constant: -4),
+      tools.heightAnchor.constraint(equalToConstant: { if #available(iOS 26.0, *) { return 48 } else { return 40 } }()), tools.bottomAnchor.constraint(equalTo: foot.bottomAnchor, constant: -4),
     ])
     strip.isHidden = items.count < 2
     let tap = UITapGestureRecognizer(target: self, action: #selector(toggleChrome))
