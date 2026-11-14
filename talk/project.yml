@@ -13,9 +13,26 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Automatic
 targets:
+  # (the App Store screenshots' UI test — never part of the app itself)
+  E11TalkUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: E11Talk
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ae.e11.talk.ios.uitests
+        TEST_TARGET_NAME: E11Talk
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1"
   E11Talk:
     type: application
     platform: iOS
+    # (the scheme with the App Store screenshots' UI test — talk/UITests, talk.yml mode=shots)
+    scheme:
+      testTargets: [E11TalkUITests]
     sources:
       - path: App
     settings:

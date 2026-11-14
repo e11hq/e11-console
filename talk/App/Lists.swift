@@ -329,7 +329,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
     let last = ip.row == table.numberOfRows(inSection: ip.section) - 1
     let key = ObjectIdentifier(c)
     if lineLeft[key] == nil { lineLeft[key] = c.separatorInset.left }
-    let left = last ? max(table.bounds.width, 1000) : (lineLeft[key] ?? 0)
+    let left = last ? (table.bounds.width > 0 ? table.bounds.width : UIScreen.main.bounds.width) : (lineLeft[key] ?? 0)   // (exactly the row's width: wider, and UIKit drew the line in the left gap instead)
     if c.separatorInset.left != left || c.separatorInset.right != 0 { c.separatorInset = UIEdgeInsets(top: 0, left: left, bottom: 0, right: 0) }
   }
   func tableView(_ tv: UITableView, willDisplay cell: UITableViewCell, forRowAt ip: IndexPath) { lineUnder(cell, ip) }

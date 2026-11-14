@@ -19,7 +19,15 @@ enum Server {
     guard u != url else { return }
     url = u; Net.shared.reload()
   }
+  // (the App Store screenshots' run only — Haris 2026-11-14: in a simulator test build, a local server with the App Review
+  //  copy's made-up chats, signed in by its development header; never in a TestFlight or App Store build)
+  #if DEBUG
+  static let devEmail: String? = ProcessInfo.processInfo.environment["E11_TALK_DEV_EMAIL"].flatMap { $0.isEmpty ? nil : $0 }
+  #endif
   private static func resolve() -> String {
+    #if DEBUG
+    if let s = ProcessInfo.processInfo.environment["E11_TALK_SERVER"], !s.isEmpty { return s }
+    #endif
     if UserDefaults.standard.bool(forKey: "talk_review") { return reviewURL }
     if let h = SignInKeys.consoleSignIn.flatMap({ URL(string: $0.server)?.host }) {
       if h == "console.e11hq.com" { return "https://talk.e11hq.com" }
@@ -60,12 +68,20 @@ final class Net {
   }()
   init() { cookie = Keychain.get("cookie-" + Server.host) }
   func reload() { stopListening(); cookie = Keychain.get("cookie-" + Server.host) }   // (another server: its own sign-in)
-  var signedIn: Bool { !(cookie ?? "").isEmpty }
+  var signedIn: Bool {
+    #if DEBUG
+    if Server.devEmail != nil { return true }
+    #endif
+    return !(cookie ?? "").isEmpty
+  }
 
   func request(_ path: String, method: String = "GET", json: [String: Any]? = nil, body: Data? = nil, type: String? = nil) -> URLRequest {
     var r = URLRequest(url: URL(string: Server.url + path)!)
     r.httpMethod = method
     if let c = cookie { r.setValue(c, forHTTPHeaderField: "Cookie") }
+    #if DEBUG
+    if let e = Server.devEmail { r.setValue(e, forHTTPHeaderField: "X-Dev-Email") }
+    #endif
     r.setValue("application/json", forHTTPHeaderField: "Accept")
     if let j = json { r.httpBody = try? JSONSerialization.data(withJSONObject: j); r.setValue("application/json", forHTTPHeaderField: "Content-Type") }
     if let b = body { r.httpBody = b; r.setValue(type ?? "application/octet-stream", forHTTPHeaderField: "Content-Type") }
