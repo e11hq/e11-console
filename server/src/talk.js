@@ -324,6 +324,9 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     for (const id of ids) {
       if (Q.fileInUse.get(`%"id":"${id}"%`)) continue;   // (still in an event someone hasn't picked up)
       if (Q.needed.get(id)) continue;   // (someone's phone hasn't downloaded it yet — Auto-download off; at most 30 days)
+      // (a group's picture stays while the group uses it — a phone signed out and in again, or a new one, fetches it again:
+      //  it was let go once everyone had it, and group pictures went missing — Haris 2026-11-14)
+      if (db.prepare('SELECT 1 FROM groups WHERE pic = ? AND gone = 0 LIMIT 1').get(id)) continue;
       try { fs.rmSync(path.join(relay, id), { force: true }); } catch { /* fine */ }
       Q.dropFile.run(id);
     }
