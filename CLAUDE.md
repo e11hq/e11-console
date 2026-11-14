@@ -679,6 +679,17 @@ talk-chat-1, branches `stable/talk-137`, `locked/talk-137` and `candidate/appsto
 135's and earlier stay as history — 137 replaces 135 as the candidate). 137 = 135 + the last row's line inset by exactly the row's
 width (no stub under the picture) + Message info's names at their size on one line, a long one ending in … (as WhatsApp's). Needs
 server 1.9.56. Nothing changes in its look, behaviour or code without telling Haris first and his yes.
+**E11 TALK 1.0.0 — APPROVED and RELEASED on the App Store (Haris 2026-11-14 22:16 approved; released 22:23, all 175 countries,
+public):** build 137, commit 518ce94, branch `approved/appstore-talk-1.0.0-build-137` (never moved or deleted). **1.0.1 build 143
+submitted 22:40 (Waiting for Review, manual release):** commit 78d8d31, branch `candidate/appstore-talk-1.0.1-build-143` — 137 +
+the sign-in page fading out as the server answers (no raw text after Sign In) + the message box growing / shrinking a line as
+one with its bar. Builds made under a released version can't be sent again: the next update is **1.0.2** (Haris 22:51: "we'll
+update more then release").
+**E11 TALK — STABLE, LOCKED at build 144 (Haris, 2026-11-14 22:59: "Lock the latest version"):** commit 50a1753 on talk-chat-1,
+branches `stable/talk-144` and `locked/talk-144` (never moved or deleted; 137's and earlier stay as history). 144 = 143 + the reply /
+edit strip fading in and out while the message bar grows or shrinks as one (✕ no longer drops the box). On TestFlight; version
+1.0.1 in the build — the next App Store update is set to 1.0.2. Not in it, on its own branch `talk-maclink`: "Link a Device" for
+E11 Talk for Mac. Nothing changes in its look, behaviour or code without telling Haris first and his yes.
 **Compile checks: `-f checks=compile -f walk=no`** — without `walk=no` the walk-through for every role runs too (~20 min),
 holding the Mac (2026-11-13).
 **The App Store release waits for E11 Talk (Haris, 2026-11-11 20:16: "3"):** the Talk button (E11 Day, Clients) does nothing
