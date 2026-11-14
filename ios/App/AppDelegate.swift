@@ -414,6 +414,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     } else { web.load(URLRequest(url: u)) }
   }
   var tabCover = -1
+  var signOutThenIn = false   // (Boot.signOutNative: straight on to our sign-in once Cloudflare has signed out)
   var serverHost: String { URL(string: serverURL())?.host ?? "" }
 
   /* ---------- navigation: our server and its sign-in stay here; other sites open in Safari ---------- */
@@ -465,6 +466,12 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     if webView.url?.host == serverHost { bootCommitted() }   // (back from signing in: the startup screen — Boot.swift)
   }
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    // (signed out by Cloudflare: on to our own sign-in at once — Boot.signOutNative)
+    if signOutThenIn {
+      let h = webView.url?.host ?? ""
+      if h.hasSuffix(".cloudflareaccess.com") || webView.url?.path.hasPrefix("/cdn-cgi/access/logout") == true { signOutThenIn = false; loadHome(); return }
+    }
+    if webView.alpha < 1 { webView.alpha = 1 }
     let onServer = webView.url?.host == serverHost
     // (and under our own sign-in page — signin.… — since Cloudflare's page is skipped (2026-11-11): the link had gone with it)
     let signHost = webView.url?.host ?? ""
@@ -480,6 +487,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { failed(error) }
   func failed(_ error: Error) {
     let e = error as NSError
+    if e.code != NSURLErrorCancelled, signOutThenIn || web.alpha < 1 { signOutThenIn = false; web.alpha = 1 }   // (never left out of sight)
     let offline = [NSURLErrorCannotConnectToHost, NSURLErrorNotConnectedToInternet, NSURLErrorTimedOut, NSURLErrorNetworkConnectionLost,
                    NSURLErrorCannotFindHost, NSURLErrorDNSLookupFailed, NSURLErrorBadServerResponse, NSURLErrorSecureConnectionFailed]
     if e.domain == NSURLErrorDomain, offline.contains(e.code) { showOffline() }

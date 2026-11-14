@@ -186,6 +186,10 @@ extension Main {
     q["me"] = nil
     if let d = try? JSONSerialization.data(withJSONObject: q) { defaults.set(d, forKey: "e11_quick") }
     let review = defaults.string(forKey: "e11_server") == "review"
+    // (Cloudflare's sign-out ends on its own "You successfully logged out" page with its list of sign-in options — its skip
+    //  to our sign-in works only when signing in. So once it has signed out, the app goes on to sign in again at once, and
+    //  Cloudflare skips to our own sign-in page, as on a fresh start; its page kept out of sight meanwhile — Haris 2026-11-14)
+    if !review { signOutThenIn = true; web.alpha = 0; DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in self?.web.alpha = 1 } }
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.loadHome(review ? "/review/sign-out" : "/cdn-cgi/access/logout") }
   }
 
