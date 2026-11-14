@@ -1194,7 +1194,9 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   // the server's Home drawn (with the page's colours), when Home is on screen
   func drawServerHome(_ m: [String: Any]) {
     defer { updateCorner() }
-    guard let h = homeIfMade else { return }
+    // (not made yet — the first sign-in: the copy is in before E11 Day's screen is made; kept, and drawn the moment it shows,
+    //  as when it's hidden — dropped, E11 Day stayed empty after a first sign-in: Haris 2026-11-14)
+    guard let h = homeIfMade else { homeMissed = m; return }
     // (Home hidden — another tab on: what changed (a task restored from the Trash, done elsewhere…) is kept and drawn the
     //  moment Home shows again; it was dropped, and Home showed the old list until the app was opened again — Haris
     //  2026-11-07)
