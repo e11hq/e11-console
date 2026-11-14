@@ -93,6 +93,12 @@ final class ContinueView: UIView {
     [logo, titleL, sub, card, go, foot].forEach { addSubview($0) }
   }
   required init?(coder: NSCoder) { fatalError() }
+  // (signing in: Apple's own spinner in the button and the button dimmed, until the chats come or Face ID is cancelled —
+  //  Haris 2026-11-14)
+  func busy(_ on: Bool) {
+    go.configuration?.showsActivityIndicator = on
+    go.isEnabled = !on
+  }
   override func layoutSubviews() {
     super.layoutSubviews()
     let s = safeAreaInsets, W = bounds.width
@@ -134,13 +140,13 @@ extension SignInVC {
       }.resume()
     }
     // (Face ID, then the key in place of the password — our page only if that doesn't work)
-    let faceID = { (k: String, own: Bool) in
+    let faceID = { (k: String, own: Bool, idle: (() -> Void)?) in
       let ctx = LAContext(); ctx.localizedFallbackTitle = "Use Passcode"
       var err: NSError?
       guard ctx.canEvaluatePolicy(.deviceOwnerAuthentication, error: &err) else { show(); return }
       ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Sign in to E11 Talk") { ok, _ in
         DispatchQueue.main.async {
-          guard ok else { if own { show() }; return }   // (cancelled: board 53 stays, Continue tries again; a client: the page)
+          guard ok else { idle?(); if own { show() }; return }   // (cancelled: board 53 stays, Continue tries again; a client: the page)
           post("device", ["req": req, "key": k]) { j in
             if (j?["ok"] as? Bool) == true, let to = (j?["redirect"] as? String).flatMap(URL.init(string:)) { web.load(URLRequest(url: to)); return }
             if own, j != nil { SignInKeys.keepOwn(nil) }   // (Talk's own key no longer counts: gone)
@@ -155,14 +161,14 @@ extension SignInVC {
         guard let self = self, (j?["ok"] as? Bool) == true, let n = j?["name"] as? String else { show(); return }
         let v = ContinueView(name: n, color: Look.hex(j?["color"] as? String) ?? Look.accent)
         v.frame = self.view.bounds; v.autoresizingMask = [.flexibleWidth, .flexibleHeight]; v.alpha = 0
-        v.onContinue = { faceID(k, false) }
+        v.onContinue = { [weak v] in v?.busy(true); faceID(k, false) { v?.busy(false) } }
         self.cover?.removeFromSuperview(); self.cover = v
         self.view.addSubview(v)
         UIView.animate(withDuration: Crossfade.time) { v.alpha = 1 }
       }
       return true
     }
-    if let k = SignInKeys.ownKey { faceID(k, true); return true }
+    if let k = SignInKeys.ownKey { faceID(k, true, nil); return true }
     return false
   }
 }
