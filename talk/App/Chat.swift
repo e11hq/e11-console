@@ -1431,10 +1431,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let cell = heldCell(c)
     let finish = { [weak self] in
       guard let self = self else { return }; self.holding = false; let f = self.afterHold; self.afterHold = nil; f?(); self.fitBottom()
-      cell?.held.alpha = 1; self.heldShot = nil   // (back in its place the moment the picture has landed on it)
+      cell?.held.alpha = 1; self.heldShot = nil
       if let cell = cell { UIView.animate(withDuration: Crossfade.time, delay: 0, options: [.allowUserInteraction]) { cell.besides(1) } }
     }
-    if let a = animator { a.addCompletion(finish) } else { DispatchQueue.main.async(execute: finish) }
+    // (the bubble comes back into its place along with the picture's way home, in iPhone's own return animation — so when
+    //  iPhone fades its picture away, the same bubble is already under it. Shown only once the fade had ended, the text went
+    //  faded for a moment and the two copies blended, the words seeming to move: Haris's recording, 2026-11-14)
+    if let a = animator { a.addAnimations { cell?.held.alpha = 1 }; a.addCompletion(finish) } else { DispatchQueue.main.async(execute: finish) }
     if let veil = holdVeil {
       holdVeil = nil; let a = holdBlur; holdBlur = nil
       UIView.animate(withDuration: 0.25, animations: { veil.alpha = 0 }) { _ in a?.stopAnimation(true); veil.removeFromSuperview() }
