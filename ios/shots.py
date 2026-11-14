@@ -104,6 +104,11 @@ try:
             run('H-pro', EMAIL, '1', secs=240, until='homeFind', extra={'SIMCTL_CHILD_E11_SELFTEST_PICK': json.dumps(pick)})
             time.sleep(4); shot('H-pro-zz-after')
         raise SystemExit
+    if SHOTS == 'offline':
+        # (Works offline — Haris 2026-11-14: E11 Day with no signal in the status bar)
+        bars('--time', '9:41', '--batteryState', 'charged', '--batteryLevel', '100', '--cellularMode', 'notSupported', '--wifiMode', 'failed', '--wifiBars', '0')
+        run('O-offline', EMAIL, '1', secs=200, until='firstMt', extra={'SIMCTL_CHILD_E11_SELFTEST_PICK': json.dumps(pick)})
+        raise SystemExit
     if SHOTS == 'rest':
         # (only what the remaining boards need — Haris 2026-11-14: E11 Day, the morning round-up over it, E11 Day offline)
         skip = 'first,homeS,homeL,homeP,homeD,homeF,homeR,wash,focus,cl,mytasks,titles,ibx,notifCats,slide'
