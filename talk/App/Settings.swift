@@ -5,7 +5,7 @@ import UserNotifications
    2026-11-13: checked against the boards, with every change from the done pages): Apple's grouped list —
    your card (picture, name, your role in your colour, "From E11 Console"; a client: "Client · their client" and the email);
    Starred Messages · Client Contacts (Super / Office Admins, how many); Notifications · Chat Backup (when it last backed up)
-   · Storage and Data (how much) · Linked Devices (staff); Help · About E11 Talk (the version); Sign Out and what it does.
+   · Storage and Data (how much) · Linked Devices; Help · About E11 Talk (the version); Sign Out and what it does.
    Each row's icon in its own coloured tile, as iPhone's Settings. A value that changes is set again in its own row only,
    crossfading (a fingerprint per row) — nothing else drawn again, nothing moving. */
 final class SettingsVC: UITableViewController {
@@ -33,7 +33,7 @@ final class SettingsVC: UITableViewController {
     snap.appendSections([0, 1, 2, 3, 4])
     snap.appendItems([.me], toSection: 0)
     snap.appendItems([.starred] + (Talk.shared.boss && !isContact ? [.contacts] : []), toSection: 1)
-    snap.appendItems([.notif, .backup, .storage] + (isContact ? [] : [.linked]), toSection: 2)
+    snap.appendItems([.notif, .backup, .storage, .linked], toSection: 2)   // (Linked Devices for client contacts too — E11 Talk for Mac: Haris 2026-11-14)
     snap.appendItems([.help, .about], toSection: 3)
     snap.appendItems([.signOut], toSection: 4)
     var new: [Row: String] = [:]
@@ -445,7 +445,7 @@ final class HelpVC: UITableViewController {
       ("Muting a Group", "Hold a group in the list and tap Mute. A muted group still tells you when someone @mentions you."),
       ("Chat Backup", "Your chats back up to your own iCloud. Restore them any time from Settings › Chat Backup."),
     ]
-    if !Talk.shared.isContact { a.append(("Linked Devices", "Link the E11 Console Mac app to see your chats on your Mac.")) }
+    a.append(("Linked Devices", "Link E11 Talk for Mac to see your chats on your Mac."))
     if Talk.shared.boss { a.append(("Client Contacts", "Add the people from each client who can be in groups. They only see the groups they’re added to.")) }
     return a
   }

@@ -2,10 +2,10 @@ import UIKit
 import AVFoundation
 
 /* Link a Mac — WhatsApp's way (Haris 2026-11-05/06). In E11 Talk: Settings → Linked devices → Link a Mac: the camera
-   reads the code the E11 Console Mac app shows under E11 Talk. The server links only when that Mac is signed in to
-   E11 Console as the same person. Then this phone hands the Mac its chats (the last 90 days: every group's messages and
+   reads the code E11 Talk for Mac shows (its own app, staff and client contacts alike — Haris 2026-11-14); the scan signs
+   that Mac in as this phone's person. Then this phone hands the Mac its chats (the last 90 days: every group's messages and
    their photos, files and voice messages — videos stay on the phone), and from then on the Mac gets every new message
-   itself, even with the phone off. The link stays until it's unlinked here, E11 Console is signed out on that Mac, the
+   itself, even with the phone off. The link stays until it's unlinked here, Talk is signed out on this phone, the
    person leaves the team, or this phone hasn't opened E11 Talk for 30 days. */
 final class LinkedDevicesVC: UITableViewController {
   init() { super.init(style: .insetGrouped) }
@@ -77,7 +77,7 @@ final class LinkedDevicesVC: UITableViewController {
     override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
       snapshot().sectionIdentifiers[s] == 0
         ? "A linked Mac gets your chats straight from your iPhone and keeps up by itself. It unlinks after 30 days if this iPhone doesn’t open E11 Talk."
-        : "On the Mac: E11 Console › E11 Talk › Link this Mac, then scan its code. The Mac must be signed in as you."
+        : "On the Mac: open E11 Talk for Mac, then scan the code it shows."
     }
   }
   override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) {
@@ -169,7 +169,7 @@ final class ScanVC: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
     corners.strokeColor = UIColor.white.cgColor; corners.fillColor = UIColor.clear.cgColor; corners.lineWidth = 4; corners.lineCap = .round
     view.layer.addSublayer(corners)
     hint.text = "Point your iPhone at the code on your Mac"; hint.textColor = .white; hint.font = .systemFont(ofSize: 17); hint.textAlignment = .center; hint.numberOfLines = 0
-    line.text = "E11 Console on the Mac › E11 Talk › Link this Mac. The code works once, for 2 minutes."
+    line.text = "Open E11 Talk for Mac. The code works once, for 2 minutes."
     line.textColor = UIColor(white: 0.68, alpha: 1); line.font = .systemFont(ofSize: 14); line.textAlignment = .center; line.numberOfLines = 0
     bar.isHidden = true; bar.progressTintColor = Look.accent
     [hint, line, bar].forEach { view.addSubview($0) }
@@ -198,7 +198,7 @@ final class ScanVC: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
   override func viewWillDisappear(_ a: Bool) { super.viewWillDisappear(a); let s = session; DispatchQueue.global().async { s.stopRunning() } }
   func metadataOutput(_ o: AVCaptureMetadataOutput, didOutput objs: [AVMetadataObject], from c: AVCaptureConnection) {
     guard !busy, let v = (objs.first as? AVMetadataMachineReadableCodeObject)?.stringValue else { return }
-    guard v.hasPrefix("e11talk-link:") else { hint.text = "That isn’t an E11 Console code"; return }
+    guard v.hasPrefix("e11talk-link:") else { hint.text = "That isn’t an E11 Talk for Mac code"; return }
     busy = true
     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     corners.strokeColor = Look.accent.cgColor
