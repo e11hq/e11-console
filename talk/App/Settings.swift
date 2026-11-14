@@ -161,12 +161,13 @@ enum Tile {
     }
     made[key] = i; return i
   }
-  // About's: E11's own, the word on its blue
+  // About's: E11 Talk's own app icon, in the tile's size and corners (Haris 2026-11-14: "keep it talks app icon")
   static func e11() -> UIImage {
     if let i = made["e11"] { return i }
-    let i = draw(0x2B5FA3) { r in
-      let t = NSAttributedString(string: "E11", attributes: [.font: UIFont.systemFont(ofSize: 11, weight: .heavy), .foregroundColor: UIColor.white])
-      let z = t.size(); t.draw(at: CGPoint(x: (r.width - z.width) / 2, y: (r.height - z.height) / 2))
+    let r = CGRect(x: 0, y: 0, width: 30, height: 30)
+    let i = UIGraphicsImageRenderer(bounds: r).image { _ in
+      UIBezierPath(roundedRect: r, cornerRadius: 7).addClip()
+      UIImage(named: "TalkMark")?.draw(in: r)
     }
     made["e11"] = i; return i
   }

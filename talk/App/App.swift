@@ -98,6 +98,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
     }
   }
   #endif
+  private var startedAt: Date?
   private func start() {
     guard let w = window else { return }
     Server.follow()
@@ -112,9 +113,12 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
     sp.frame = w.bounds; sp.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     w.addSubview(sp)
     sp.onDone = { [weak self] in self?.askNotifications(); if let g = self?.wantGroup { self?.wantGroup = nil; SceneDelegate.openGroup(g) } }
-    if !Talk.shared.groups.isEmpty || Talk.shared.me != nil { sp.progress(0.7) }
     // a new phone (nothing of this account here yet): before anything comes in, look for an iCloud backup to restore
     let fresh = Talk.shared.isFresh
+    // (the chats already on this phone: the startup screen goes once its logo has played — never waiting for the server,
+    //  which brings what's new behind it; it waited ~1.5 s for two answers, the speed report of 2026-11-14)
+    if !Talk.shared.groups.isEmpty || Talk.shared.me != nil { sp.progress(0.7); if !fresh { sp.finish() } }
+    startedAt = Date()
     if fresh { Talk.shared.holdSync = true; sp.setup() }
     Talk.shared.refresh { [weak self, weak sp] in
       sp?.setName(Talk.shared.me?.name); sp?.progress(0.85)
@@ -229,6 +233,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
     Net.shared.listen()
     // (signed in through E11 Console, and Console signed out since — its key gone: Talk signs out too, the plan)
     if UserDefaults.standard.bool(forKey: "talk_via_console"), SignInKeys.consoleKey == nil, !Talk.shared.isContact { signOutNow(); return }
+    // (just started: the start has asked the server already — asking again at once made both answers slower)
+    if let a = startedAt, Date().timeIntervalSince(a) < 3 { return }
     Talk.shared.refresh { Talk.shared.prune(); SignInKeys.refreshOwn() }; Talk.shared.sync()
     // (Auto-download: the network watched; what waited for Wi-Fi comes if it's here now)
     Auto.startOnce(); Talk.shared.catchUp()
