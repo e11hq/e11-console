@@ -2978,14 +2978,15 @@ final class MessageBar: UIView, UITextViewDelegate {
   required init?(coder: NSCoder) { fatalError() }
   // (the bar stays above the home indicator when the keyboard is down)
   private var mentionH: CGFloat { mentionBox.isHidden ? 0 : CGFloat(mentionV.arrangedSubviews.count) * 52 }
-  override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: (locked ? 83 : boxH + 13) + (replyV.isHidden ? 0 : 52)) }
+  override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: (locked ? 83 : boxH + 13) + (replyOn ? 52 : 0)) }
+  private var replyOn = false   // (the reply / edit strip's room — the strip itself fades in and out)
   override func layoutSubviews() {
     super.layoutSubviews()
     defer { onLayout?() }
-    let W = bounds.width, mh = mentionH, top: CGFloat = replyV.isHidden ? 0 : 52
+    let W = bounds.width, mh = mentionH, top: CGFloat = replyOn ? 52 : 0
     blur.frame = CGRect(x: 0, y: 0, width: W, height: bounds.height + 420)   // (down behind the home line and the keyboard)
     mentionBox.frame = CGRect(x: 0, y: -mh, width: W, height: mh); mentionV.frame = mentionBox.bounds
-    replyV.frame = CGRect(x: 0, y: 0, width: W, height: 52)
+    replyV.frame = CGRect(x: 0, y: replyOn ? 0 : -52, width: W, height: 52)   // (going: it stays where it was on the screen, fading, as the bar shrinks under it)
     replyBar.frame = CGRect(x: 0, y: 0, width: 4, height: 52)
     let tx: CGFloat = editing ? 40 : 12
     editIcon.frame = CGRect(x: 10, y: 12, width: 24, height: 28)
@@ -3320,8 +3321,9 @@ final class MessageBar: UIView, UITextViewDelegate {
     onSend?(t, ms, task)
   }
   func setReply(_ r: (String, String)?, editing: Bool, ink: UIColor = Look.accent) {
-    replyV.isHidden = r == nil
-    replyName.text = r?.0; replyText.text = r?.1
+    let on = r != nil, changed = on != replyOn
+    replyOn = on
+    if let r = r { replyName.text = r.0; replyText.text = r.1 }   // (going away it keeps its words while it fades)
     // (editing, as the design: our blue, the pencil, the old words in grey; ✓ in place of send)
     let wasEditing = self.editing
     self.editing = editing && r != nil
@@ -3336,6 +3338,15 @@ final class MessageBar: UIView, UITextViewDelegate {
     }
     if wasEditing && !self.editing && !box.text.isEmpty { box.text = ""; textChanged() }
     invalidateIntrinsicContentSize(); setNeedsLayout()
+    // the strip coming or going: it fades while the whole bar grows or shrinks as one, the chat above gliding — the page
+    // laid out inside the animation (✕ dropped the box and brought it back: the bar's insides moved before the bar itself —
+    // Haris 2026-11-14)
+    guard changed else { return }
+    guard window != nil, let host = superview else { replyV.isHidden = !on; replyV.alpha = 1; return }
+    if on { replyV.alpha = 0; replyV.isHidden = false }
+    UIView.animate(withDuration: 0.25, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+      self.replyV.alpha = on ? 1 : 0; host.layoutIfNeeded()
+    } completion: { _ in if !self.replyOn { self.replyV.isHidden = true; self.replyV.alpha = 1 } }
   }
 }
 
