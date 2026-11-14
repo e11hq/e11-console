@@ -4,6 +4,8 @@ The design canvases' boards as they stand, with a picture of each. Live canvases
 "E11 Console for Mac — native". Plan and decisions: project doc `claude/mac-native-plan.md`.
 
 ## talk/ — E11 Talk for Mac
+- S1 · Startup.png — every start, as the iPhone's startup screen
+- S2 · Setup.png — just linked: "Setting up your account" while the iPhone hands over the chats
 - A · Link.png — the first screen: Link this Mac (the iPhone signs it in)
 - F · Lists.png — the Clients list (staff, dark)
 - C · Main.png — Clients › Northline Motors › Launch campaign (staff, dark)
