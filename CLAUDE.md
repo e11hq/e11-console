@@ -607,6 +607,11 @@ Nothing changes in its look, behaviour or code without telling Haris first and h
 1731's and earlier stay as history — 1733 replaces 1731 as the candidate). 1733 = 1731 + the Talk button with E11 Talk not on the
 iPhone: "Get E11 Talk" opens its App Store page in Apple's own sheet (App Store ID 6831289909), or Cancel. Quick build. Nothing
 changes in its look, behaviour or code without telling Haris first and his yes.
+**THE iPHONE APP — STABLE, LOCKED, the App Store release candidate: 1.2.0 build 1736 (Haris, 2026-11-14 17:03):** commit b3fe45a,
+branches `stable/ios-1736`, `locked/ios-app-1736` and `candidate/appstore-ios-1.2.0-build-1736` (never moved or deleted; 1733's and
+earlier stay as history — 1736 replaces 1733 as the candidate). 1736 = 1733 + E11 Day after a first sign-in: the list worked out
+before E11 Day's screen was made kept and drawn when it shows (it was dropped — E11 Day stayed empty until something changed; checked
+in the simulator, shots=home). Quick build. Nothing changes in its look, behaviour or code without telling Haris first and his yes.
 **E11 TALK — LOCKED at build 109 (Haris, 2026-11-13 22:05):** commit 13abaa4 on talk-chat-1, branches `stable/talk-109` and
 `locked/talk-109` (never moved or deleted). Holds every page as built today: Settings and its pages, Auto-download, who reacted,
 shared sign-in, client contacts and their codes, Mark as Unread, a chat opening without waiting (row heights kept, photos made in
@@ -655,6 +660,11 @@ talk-chat-1, branches `stable/talk-132`, `locked/talk-132` and `candidate/appsto
 131's and earlier stay as history — 132 replaces 131 as the candidate). 132 = 131 + Group Info's Search working when Group Info was
 opened by holding a group in the list (the chat put in under it first). Needs server 1.9.56. Nothing changes in its look, behaviour or
 code without telling Haris first and his yes.
+**E11 TALK — STABLE, LOCKED, the App Store release candidate: 1.0.0 build 133 (Haris, 2026-11-14 17:03):** commit 1909a10 on
+talk-chat-1, branches `stable/talk-133`, `locked/talk-133` and `candidate/appstore-talk-1.0.0-build-133` (never moved or deleted;
+132's and earlier stay as history — 133 replaces 132 as the candidate). 133 = 132 + clients and groups newest first right after a
+fresh sign-in (the server's last activity counted too, not only the messages already on the phone). Needs server 1.9.56. Nothing
+changes in its look, behaviour or code without telling Haris first and his yes.
 **Compile checks: `-f checks=compile -f walk=no`** — without `walk=no` the walk-through for every role runs too (~20 min),
 holding the Mac (2026-11-13).
 **The App Store release waits for E11 Talk (Haris, 2026-11-11 20:16: "3"):** the Talk button (E11 Day, Clients) does nothing
