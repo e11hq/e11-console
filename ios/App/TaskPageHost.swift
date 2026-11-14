@@ -12,7 +12,10 @@ extension Main {
     endEditing()
     ProfileAskCard.current?.go()   // (a task opened: the birthday / city card slips away)
     FeedLoader.shared.cookies = serverHome.cookies   // (before anything is drawn: its pictures are fetched with it)
+    var lapT = Probe.now(); var laps: [String] = []   // (TEMPORARY speed report: each step of opening a task)
+    let lap = { (s: String) in let n = Probe.now(); laps.append(String(format: "%@ %.0f", s, (n - lapT) * 1000)); lapT = n }
     let p = TaskPage(id: id, frame: view.bounds)
+    lap("make the page")
     p.trashId = trash
     // (typing a comment, a tap anywhere else only puts the keyboard away — it never taps what's under it: Haris 2026-11-04,
     //  a standard; the description locks the page itself and ends with Done)
@@ -31,6 +34,7 @@ extension Main {
       vc.loadViewIfNeeded()
       p.frame = vc.view.bounds
       vc.view.addSubview(p)
+      lap("its screen")
     }
     else { view.insertSubview(p, belowSubview: tabsMark) }
     // (opened while the startup screen shows — a task link, a notification: the startup screen stays on top and fades
@@ -43,12 +47,15 @@ extension Main {
     p.setTab(tab == "comments" ? "comments" : "details", tell: false)
     p.loading()
     // (opened before: drawn at once as it was, then brought up to date; its comments fetched now, so the Comments tab is ready)
+    lap("wire")
     if let m = serverTask.cache[id] { drawTask(p, m) }
     refreshTaskPage(p)
+    lap("draw Details")
     if !AppData.shared.ready { CommentsFeed.prefetch(id, cookies: serverHome.cookies) }
     // (the corner button: Search / Mark all read slides over into ••• as the page comes in — the page laid out
     //  first: before that its ‹ and ••• places are nothing, at the top-left corner, and the buttons flew off there)
     p.setNeedsLayout(); p.layoutIfNeeded()
+    lap("lay out")
     updateCornerNow()
     // (opened straight on Comments — a comment's notification or Inbox row: the comments drawn now, from the app's copy,
     //  so they slide in with the page — they came only once it had arrived, a black page meanwhile: Haris 2026-11-05)
@@ -64,8 +71,12 @@ extension Main {
       }
     }
     // iPhone's own push: Apple's slide, the screen under it moving aside, the swipe back — all Apple's
+    if p.tab == "comments" { lap("comments") }
     if let vc = pushVC, let nav = stageNav {
       nav.pushViewController(vc, animated: true)
+      lap("push")
+      Probe.add("   opening a task, ms each: " + laps.joined(separator: " · "))
+      DispatchQueue.main.async { Probe.took((Probe.now() - lapT) * 1000, "a task's first frame on the way in (after push)") }
       let done = { [weak self, weak p] in
         guard let self = self, let p = p, self.taskPages.last === p else { return }
         self.tabBar.isHidden = true

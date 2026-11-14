@@ -55,9 +55,10 @@ final class AppData: NSObject, URLSessionDataDelegate {
     if switching { if Thread.isMainThread { copyReady = false } else { DispatchQueue.main.async { self.copyReady = false } }; stopStream() }
     // (the saved copy at once — step 3: the app opens on it, before any answer from the server; switched off on the
     //  server, it's put away again)
-    q.async { self.boot(me: me) }
+    q.async { self.copyAnswer = nil; self.boot(me: me) }
     request("/api/appcopy") { [weak self] j in
       guard let self = self else { return }
+      self.q.async { self.copyAnswer = j ?? [:]; self.scriptsGate() }   // (the scripts' version — fetched only when it changed)
       if (j?["on"] as? Bool) == false { self.started = false; self.stopStream(); DispatchQueue.main.async { self.copyReady = false } }
       // (the app's own tab bar — Part B step 1; off on the server: the page's again)
       let t = (j?["tabs"] as? Bool) != false
@@ -99,12 +100,28 @@ final class AppData: NSObject, URLSessionDataDelegate {
       }
     }
     let tf = Probe.now()
-    fetchScripts { [weak self] in
+    afterScripts = { [weak self] in
       guard let self = self else { return }
-      Probe.took((Probe.now() - tf) * 1000, "server: the 7 scripts (and the engine again if they changed)")
+      Probe.took((Probe.now() - tf) * 1000, "server: the scripts' version asked (and the 7 scripts only if they changed)")
       if self.ctx == nil { return }
       if fromSaved && ((self.call("E11AppView.rev", []) as? NSNumber)?.intValue ?? 0) > 0 { self.openStream() } else { self.download() }
     }
+    scriptsGate()
+  }
+  // The scripts only when the server has new ones (speed trial, Haris 2026-11-14): every start and every return to the
+  // app downloaded all 7 (308 KB, ~0.5 s) even when nothing had changed. The server names their version in
+  // /api/appcopy ("scripts"); the same as the ones kept on the phone → nothing fetched. A server without it: as before.
+  private var copyAnswer: [String: Any]?, afterScripts: (() -> Void)?
+  private var scriptsKept: String? { get { UserDefaults.standard.string(forKey: "app-scripts-version") } set { UserDefaults.standard.set(newValue, forKey: "app-scripts-version") } }
+  private func scriptsGate() {   // (on q: once both the boot and the server's answer are there)
+    guard let next = afterScripts, let ans = copyAnswer else { return }
+    afterScripts = nil
+    scriptsFor(ans["scripts"] as? String, next)
+  }
+  private func scriptsFor(_ v: String?, _ then: @escaping () -> Void) {
+    if let v = v, v == scriptsKept, ctx != nil { then(); return }
+    scriptsKept = nil
+    fetchScripts { [weak self] ok in if ok, let v = v { self?.scriptsKept = v }; then() }
   }
   // the website's files the app runs: the rules, the app's screens, and (Part B step 2) Me's pages, Claims, Expenses,
   // Overview, Reviews, Team, Trash, Content plans and Client Assets — the first two needed, the rest when there
@@ -120,7 +137,7 @@ final class AppData: NSObject, URLSessionDataDelegate {
     if !keep.isEmpty { _ = call("E11AppView.load", [keep]) }
   }
   // the website's two files, from the server (kept for next time)
-  private func fetchScripts(_ then: @escaping () -> Void) {
+  private func fetchScripts(_ then: @escaping (Bool) -> Void) {
     var got: [String: String] = [:]
     let group = DispatchGroup()
     for f in AppData.files {
@@ -130,6 +147,7 @@ final class AppData: NSObject, URLSessionDataDelegate {
     }
     group.notify(queue: q) { [weak self] in
       guard let self = self else { return }
+      let ok = got.count == AppData.files.count
       if got["rules.js"] != nil, got["appview.js"] != nil {
         let now = AppData.files.map { got[$0] ?? "" }
         let old = AppData.files.map { (try? String(contentsOf: self.dir.appendingPathComponent($0), encoding: .utf8)) ?? "" }
@@ -138,7 +156,7 @@ final class AppData: NSObject, URLSessionDataDelegate {
           self.makeEngine(now)
         }
       }
-      then()
+      then(ok)
     }
   }
   // everything this person may see, once (and again when the server says to)
@@ -259,7 +277,10 @@ final class AppData: NSObject, URLSessionDataDelegate {
     //  once, not only after the app is closed and opened again: Overview still said "AED" — Haris 2026-11-05)
     guard started, ctx != nil, Date().timeIntervalSince(scriptsAt) > 60 else { return }
     scriptsAt = Date()
-    fetchScripts { [weak self] in self?.changed() }
+    raw("/api/appcopy") { [weak self] s in
+      let v = s.flatMap { $0.data(using: .utf8) }.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }?["scripts"] as? String
+      self?.q.async { self?.scriptsFor(v) { [weak self] in self?.changed() } }
+    }
   }
   private var scriptsAt = Date()
   private func sleep() { q.async { self.inBackground = true }; saveNow(); stopStream() }
@@ -282,10 +303,12 @@ final class AppData: NSObject, URLSessionDataDelegate {
   // → (ready, the model): not ready — ask the server as before; ready with nil — not there / not for this person
   func screen(_ kind: String, _ a: String? = nil, _ b: String? = nil) -> (ready: Bool, model: [String: Any]?) {
     guard copyReady else { return (false, nil) }
-    let t0 = Probe.now()
-    let out: String? = q.sync { call("E11AppView.screen", [kind, a ?? NSNull(), b ?? NSNull()]) as? String }
-    let ms = (Probe.now() - t0) * 1000
-    if ms >= 4 { Probe.took(ms, "work out a screen from the copy: \(kind) (\((out?.utf8.count ?? 0) / 1024) KB)") }
+    let t0 = Probe.now(); var tc = t0
+    let out: String? = q.sync { tc = Probe.now(); return call("E11AppView.screen", [kind, a ?? NSNull(), b ?? NSNull()]) as? String }
+    let ms = (Probe.now() - tc) * 1000, wait = (tc - t0) * 1000
+    let main = Thread.isMainThread ? "on screen" : "in background"
+    if ms >= 4 { Probe.took(ms, "work out a screen from the copy, \(main): \(kind) \(a ?? "") (\((out?.utf8.count ?? 0) / 1024) KB)") }
+    if wait >= 4 && Thread.isMainThread { Probe.took(wait, "the screen waited for the engine (busy with something else) before \(kind) \(a ?? "")") }
     guard let s = out, !s.isEmpty, let d = s.data(using: .utf8), let j = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any] else { return (false, nil) }
     if j["error"] != nil { return (false, nil) }   // (something it couldn't work out: the server's instead)
     return (true, j["model"] as? [String: Any])

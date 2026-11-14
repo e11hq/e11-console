@@ -1405,6 +1405,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   }
   // what the page found for the bar (the search command): clients, then tasks — in the cards of Home
   func searchResults(_ r: [String: Any]) {
+    let probeT = Probe.now(); defer { Probe.took((Probe.now() - probeT) * 1000, "search: results put on screen (\((r["tasks"] as? [Any])?.count ?? 0) tasks)") }   // (TEMPORARY speed report)
     guard searching, (r["q"] as? String) == findText else { return }
     showResults(r)
   }

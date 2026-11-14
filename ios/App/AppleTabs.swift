@@ -292,11 +292,18 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
     guard let item = main.tabBar.items?.first(where: { $0.tag == i }) else { return false }
     // (the button in the corner as the tab left showed it — the next tab's squashes and stretches out of it)
     fabLeft = vc === selectedViewController ? nil : AppleTabs.cornerScreen(selectedViewController)?.fabInWindow
+    // (TEMPORARY speed report: a tab's first screen made now, timed — the same moment it's made anyway)
+    if let top = (vc as? UINavigationController)?.topViewController, !top.isViewLoaded {
+      let t0 = Probe.now(); top.loadViewIfNeeded()
+      Probe.took((Probe.now() - t0) * 1000, "a tab's first opening: make \(type(of: top))'s screen")
+    }
+    probeTab = Probe.now()
     if !own(i) { host(in: slots[i]) }
     if main.tabBar.selectedItem !== item { selecting = true; main.tabBar.selectedItem = item; selecting = false }
     return true
   }
   // ---- + New task ↔ + Add client as the tab changes: our button only (Haris 2026-11-08) ----
+  private var probeTab = 0.0   // (TEMPORARY speed report)
   private var fabLeft: (frame: CGRect, config: UIButton.Configuration?, label: String)?
   // the screen on show in a tab with its own button (the tab's top page)
   static func cornerScreen(_ vc: UIViewController?) -> HomeView? {
@@ -311,7 +318,11 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
     guard let i = (0..<slots.count).first(where: { tabVC($0) === vc }) else { return }
     let main = Main.shared
     guard let item = main.tabBar.items?.first(where: { $0.tag == i }) else { return }
+    let t1 = Probe.now()
     main.tabBar(main.tabBar, didSelect: item)
+    let t2 = Probe.now()
+    let tapped = probeTab
+    DispatchQueue.main.async { Probe.took((Probe.now() - tapped) * 1000, String(format: "tab \(type(of: (vc as? UINavigationController)?.topViewController ?? vc)) tapped → first frame (the app's tab work %.0f ms)", (t2 - t1) * 1000)) }
     if let old = fabLeft { fabLeft = nil; AppleTabs.cornerScreen(vc)?.fabArrive(from: old) }
   }
 }
