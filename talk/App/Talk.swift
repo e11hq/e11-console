@@ -611,6 +611,9 @@ final class Talk {
     logs = [:]; groups = [:]; me = nil
     try? FileManager.default.removeItem(at: dir); try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     try? FileManager.default.removeItem(at: Net.filesDir)
+    // (and made again at once: it was only made when the app started, so after signing out and in again without closing
+    //  the app nothing could be kept — a restore's photos, a photo sent, group pictures: Haris 2026-11-14)
+    try? FileManager.default.createDirectory(at: Net.filesDir, withIntermediateDirectories: true)
     UserDefaults.standard.removeObject(forKey: "talk_seq_" + Server.host)
     VoiceHeard.clear(); starred = []; Talk.cards = Cards()
   }

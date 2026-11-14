@@ -45,7 +45,8 @@ final class Backup {
     guard !running, let uid = Talk.shared.me?.id else { done?(running ? nil : "Not signed in"); return }
     running = true; lastError = nil; changed()
     let T = Talk.shared
-    let ids = T.fileIds(videos: videos)
+    // (the chats' files and the groups' pictures — the server lets a picture go once everyone has it, Haris 2026-11-14)
+    let ids = T.fileIds(videos: videos).union(T.groups.values.compactMap { $0.pic })
     let seq = T.syncedUpTo, src = T.localDir, files = Net.filesDir
     q.async { [self] in
       var err: String?
@@ -69,8 +70,10 @@ final class Backup {
           var keep = Set<String>()
           for id in ids {
             let from = Net.local(id), name = from.lastPathComponent
-            guard let n = (try? fm.attributesOfItem(atPath: from.path))?[.size] as? Int else { continue }   // (never opened here: not on the phone)
+            // (kept in the backup while a message points to it, even when this phone hasn't it — a backup from a phone
+            //  missing a file took it out of the backup too: Haris 2026-11-14)
             keep.insert(name)
+            guard let n = (try? fm.attributesOfItem(atPath: from.path))?[.size] as? Int else { continue }   // (never opened here: not on the phone)
             let to = fdir.appendingPathComponent(name)
             if ((try? fm.attributesOfItem(atPath: to.path))?[.size] as? Int) != n || fm.fileExists(atPath: fdir.appendingPathComponent("." + name + ".icloud").path) {
               try? fm.removeItem(at: to)
@@ -115,6 +118,22 @@ final class Backup {
     return fm.fileExists(atPath: url.path)
   }
   private func placeholder(_ url: URL) -> Bool { fm.fileExists(atPath: url.deletingLastPathComponent().appendingPathComponent("." + url.lastPathComponent + ".icloud").path) }
+  // a file the server no longer has: from this account's backup when it's there (on the main thread; nil: not there)
+  func recover(_ id: String, uid: String?, _ done: @escaping (URL?) -> Void) {
+    guard let uid = uid else { done(nil); return }
+    DispatchQueue.global(qos: .userInitiated).async { [self] in
+      let to = Net.local(id)
+      var got: URL?
+      if let r = root(uid) {
+        let u = r.appendingPathComponent("files", isDirectory: true).appendingPathComponent(to.lastPathComponent)
+        if fm.fileExists(atPath: u.path) || placeholder(u), fetch(u, wait: 30) {
+          try? fm.removeItem(at: to)
+          if (try? fm.copyItem(at: u, to: to)) != nil { got = to }
+        }
+      }
+      DispatchQueue.main.async { done(got) }
+    }
+  }
   // this account's backup, if there is one (done on the main thread; nil: none, or iCloud off)
   func find(_ uid: String, _ done: @escaping (BackupMeta?) -> Void) {
     q.async { [self] in

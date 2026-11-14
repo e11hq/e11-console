@@ -144,8 +144,12 @@ final class Net {
   func file(_ id: String, _ done: @escaping (URL?) -> Void) {
     let to = Net.local(id)
     if FileManager.default.fileExists(atPath: to.path) { done(to); return }
+    let uid = Talk.shared.me?.id
     session.downloadTask(with: request("/api/talk/file/" + id)) { tmp, resp, _ in
-      guard let tmp = tmp, (resp as? HTTPURLResponse)?.statusCode == 200 else { DispatchQueue.main.async { done(nil) }; return }
+      let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+      // (no longer on the server: from the iCloud backup when it's there — Haris 2026-11-14)
+      if (400..<500).contains(code) { DispatchQueue.main.async { Backup.shared.recover(id, uid: uid, done) }; return }
+      guard let tmp = tmp, code == 200 else { DispatchQueue.main.async { done(nil) }; return }
       try? FileManager.default.removeItem(at: to)
       try? FileManager.default.moveItem(at: tmp, to: to)
       DispatchQueue.main.async { done(FileManager.default.fileExists(atPath: to.path) ? to : nil) }
@@ -156,8 +160,10 @@ final class Net {
   func fetch(_ id: String, _ done: @escaping (Bool) -> Void) {
     let to = Net.local(id)
     if FileManager.default.fileExists(atPath: to.path) { done(true); return }
+    let uid = Talk.shared.me?.id
     session.downloadTask(with: request("/api/talk/file/" + id)) { tmp, resp, _ in
       let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+      if (400..<500).contains(code) { DispatchQueue.main.async { Backup.shared.recover(id, uid: uid) { _ in done(true) } }; return }
       if code == 200, let tmp = tmp { try? FileManager.default.removeItem(at: to); try? FileManager.default.moveItem(at: tmp, to: to) }
       DispatchQueue.main.async { done(code == 200 || (400..<500).contains(code)) }
     }.resume()
