@@ -1243,7 +1243,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     //  given; a picture it does.)
     // (the picture's box on the screen's own pixels — at a part-pixel place it drew a pixel off: Haris 2026-11-13)
     // (letting go: the same picture back — the bubble is out of its place by then, there's nothing to draw)
-    if let s = heldShot, s.id == id { return preview(s.img, s.r, s.shape, in: cell) }   // (not asked of the bubble's alpha: it may already be on its way back)
+    if let s = heldShot, s.id == id, cell.held.alpha == 0 { return preview(s.img, s.r, s.shape, in: cell) }
     let k = cell.traitCollection.displayScale > 0 ? cell.traitCollection.displayScale : UIScreen.main.scale
     let h = cell.heldPath(origin: .zero).bounds
     let x0 = floor(h.minX * k) / k, y0 = floor(h.minY * k) / k, x1 = ceil(h.maxX * k) / k, y1 = ceil(h.maxY * k) / k
@@ -1431,13 +1431,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let cell = heldCell(c)
     let finish = { [weak self] in
       guard let self = self else { return }; self.holding = false; let f = self.afterHold; self.afterHold = nil; f?(); self.fitBottom()
-      cell?.held.alpha = 1; self.heldShot = nil
+      cell?.held.alpha = 1; self.heldShot = nil   // (back in its place the moment the picture has landed on it)
       if let cell = cell { UIView.animate(withDuration: Crossfade.time, delay: 0, options: [.allowUserInteraction]) { cell.besides(1) } }
     }
-    // (the bubble back in its place the moment it's let go, under the picture on its way home — so when iPhone takes its
-    //  picture away, the same bubble is already there. Shown only at the end, or faded in alongside, iPhone's picture went
-    //  first and the words were faded for a moment: Haris's recordings, 2026-11-14)
-    cell?.held.alpha = 1
     if let a = animator { a.addCompletion(finish) } else { DispatchQueue.main.async(execute: finish) }
     if let veil = holdVeil {
       holdVeil = nil; let a = holdBlur; holdBlur = nil
