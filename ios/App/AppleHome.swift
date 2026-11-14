@@ -1,4 +1,5 @@
 import UIKit
+import StoreKit
 
 /* Home as its own screen in Apple's tab container (Haris 2026-11-07: "our design as it is, but opening Apple's way instead
    of altering the code"): Home's tab is its own navigation (HomeNav) with Home's own view controller (HomeVC) at its root —
@@ -64,11 +65,24 @@ enum BarImage {
   static func open() {
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     guard let u = URL(string: "e11talk://"), UIApplication.shared.canOpenURL(u) else {
-      let a = UIAlertController(title: "E11 Talk isn’t on this iPhone yet", message: "It’ll be on the App Store soon.", preferredStyle: .alert)
-      a.addAction(UIAlertAction(title: "OK", style: .default))
+      // (not on this iPhone: its App Store page, Apple's own sheet over the app — App Store ID 6831289909, Haris 2026-11-14)
+      let a = UIAlertController(title: "E11 Talk isn’t on this iPhone", message: "Get it from the App Store to chat with the team and our clients.", preferredStyle: .alert)
+      a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+      let get = UIAlertAction(title: "Get E11 Talk", style: .default) { _ in showStore() }
+      a.addAction(get); a.preferredAction = get
       Main.shared.topMost().present(a, animated: true); return
     }
     UIApplication.shared.open(u)
+  }
+  static let appStoreID = "6831289909"
+  private static let storeDone = StoreDone()
+  private static func showStore() {
+    let vc = SKStoreProductViewController(); vc.delegate = storeDone
+    vc.loadProduct(withParameters: [SKStoreProductParameterITunesItemIdentifier: appStoreID], completionBlock: nil)
+    Main.shared.topMost().present(vc, animated: true)
+  }
+  private final class StoreDone: NSObject, SKStoreProductViewControllerDelegate {
+    func productViewControllerDidFinish(_ vc: SKStoreProductViewController) { vc.dismiss(animated: true) }
   }
 }
 
