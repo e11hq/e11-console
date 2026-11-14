@@ -547,7 +547,14 @@ final class GroupInfoVC: UITableViewController {
   }
   // Search: back to the chat, its own search open
   private func search() {
-    guard let nav = navigationController, let chat = nav.viewControllers.last(where: { ($0 as? ChatVC)?.group == group }) as? ChatVC else { return }
+    guard let nav = navigationController else { return }
+    // (Group Info opened from holding the group in the list has no chat under it: the chat put in under Group Info first,
+    //  Apple's own way (setViewControllers), so the search opens there as from the chat — it did nothing, Haris 2026-11-14)
+    let chat: ChatVC
+    if let c = nav.viewControllers.last(where: { ($0 as? ChatVC)?.group == group }) as? ChatVC { chat = c } else {
+      chat = ChatVC(group: group); chat.loadViewIfNeeded()
+      var vcs = nav.viewControllers; vcs.insert(chat, at: max(0, vcs.count - 1)); nav.setViewControllers(vcs, animated: false)
+    }
     // (the chat is already searching as it slides back in — Apple's bar brings the search field in with the slide, and the
     //  keyboard comes up once it's there; set after the slide, the title went and the field popped in: Haris 2026-11-13)
     chat.startFind(focus: false, animated: false)
