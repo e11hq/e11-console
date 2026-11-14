@@ -3297,9 +3297,18 @@ final class MessageBar: UIView, UITextViewDelegate {
   func textChanged() {
     place.isHidden = !box.text.isEmpty
     let h = min(130, max(30, ceil(box.sizeThatFits(CGSize(width: max(100, box.bounds.width), height: 400)).height)))
-    box.isScrollEnabled = h >= 130
-    if h != boxH { boxH = h; invalidateIntrinsicContentSize() }
-    UIView.animate(withDuration: 0.15) { self.setNeedsLayout(); self.layoutIfNeeded() }
+    let scrolls = h >= 130
+    if box.isScrollEnabled != scrolls { box.isScrollEnabled = scrolls; if scrolls { box.scrollRangeToVisible(box.selectedRange) } }
+    guard h != boxH, window != nil, let host = superview else {
+      if h != boxH { boxH = h; invalidateIntrinsicContentSize() }
+      UIView.animate(withDuration: 0.15) { self.setNeedsLayout(); self.layoutIfNeeded() }
+      return
+    }
+    // a line more or less: the whole bar grows or shrinks upward as one, with the chat above it — the page laid out
+    // inside the animation (only the bar's own insides were before, the bar itself snapping to its new height after:
+    // the box jumped with each new line — Haris 2026-11-14)
+    boxH = h; invalidateIntrinsicContentSize(); setNeedsLayout()
+    UIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { host.layoutIfNeeded() }
   }
   private func sendNow() {
     let t = box.text.trimmingCharacters(in: .whitespacesAndNewlines)
