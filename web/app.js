@@ -4954,6 +4954,18 @@ document.addEventListener('contextmenu', (e) => {
   e.preventDefault();
 });
 
+/* A right-click's menu open: a click outside it only closes it — nothing under the pointer is clicked (Haris 2026-11-15
+   13:20), as the Mac's own menus do. */
+let ctxSwallow = false;
+addEventListener('mousedown', (e) => {
+  const m = document.querySelector('.menu.ctx');
+  if (!m || m.contains(e.target)) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  closeMenus(); ctxSwallow = true;
+}, true);
+addEventListener('click', (e) => { if (!ctxSwallow) return; ctxSwallow = false; e.preventDefault(); e.stopImmediatePropagation(); }, true);
+addEventListener('mouseup', () => { if (ctxSwallow) setTimeout(() => { ctxSwallow = false; }, 0); }, true);
+
 /* ================= Overlays ================= */
 function closeMenus() { $$('.menu:not(.ph-out)').forEach((m) => { if (typeof SheetMotion !== 'undefined' && SheetMotion.out(m)) return; m.remove(); }); }   // (iPhone app: a sheet slides away)
 
@@ -4977,7 +4989,7 @@ function showMenu(anchor, items, opts = {}) {
   // (no doubled, leading or trailing dividers when some options aren't there; positions kept for data-mi)
   items = items.map((it, i, a) => (it === '-' && (i === 0 || i === a.length - 1 || a[i - 1] === '-' || a.slice(i + 1).every((x) => x === '-') || a.slice(0, i).every((x) => x === '-')) ? { skip: true } : it));
   const m = document.createElement('div');
-  m.className = 'menu';
+  m.className = 'menu' + (anchor && anchor.__pt ? ' ctx' : '');   // (ctx: a right-click's — a click outside only closes it)
   m.innerHTML = items.map((it, i) => {
     if (it && it.skip) return '';
     if (it === '-') return '<div class="sep"></div>';
