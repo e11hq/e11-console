@@ -32,6 +32,7 @@ def sym(name, color):
       'tick': '<path d="M5 12.5l4.5 4.5L19 7"/>',
       'shield': '<path d="M12 3l8 3v6c0 4.5-3.4 7.8-8 9-4.6-1.2-8-4.5-8-9V6z"/>',
       'users': '<circle cx="9" cy="8" r="3.2"/><path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5M16 5.2a3 3 0 010 5.6M18 13.8c2 .7 3 2.6 3 5.2"/>',
+      'download': '<path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/>',
       'moon': '<path d="M20 14A8 8 0 0110 4a8 8 0 1010 10z"/>',
     }[name]
     return f'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{p}</svg>'
@@ -260,12 +261,15 @@ def board(look, page='lead'):
             return card(extra='flex: 1', inner=f'<div style="display: flex; align-items: center; gap: 14px"><span style="font-size: 28px; font-weight: 700; color: {tone}">{n}</span><div><div style="font-size: 13px; font-weight: 600">{label}</div><div style="font-size: 12px; color: {t["dim"]}">{sub}</div></div></div>')
         segx = lambda items, on: f'<span style="margin-left: auto; display: inline-flex; padding: 2px; border-radius: 8px; background: {t["field"]}">' + ''.join(f'<span style="padding: 3px 10px; border-radius: 6px; font-size: 12px; {"background:" + t["win"] + "; box-shadow: 0 0.5px 2px rgba(0,0,0,0.25); font-weight: 600;" if x == on else ""}">{x}</span>' for x in items) + '</span>'
         ext = lambda e, c: f'<span style="width: 38px; height: 30px; border-radius: 7px; background: {c}; color: #fff; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex: none">{e}</span>'
+        # no details box (Haris 11:21): a selected file shows its size in its line and two small icon buttons — Open Folder · Download —
+        # where its time was (Finder's way); right-click has the same and Quick Look (space)
+        ibtn = lambda name: f'<span style="width: 26px; height: 26px; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center; background: {t["glass"]}; box-shadow: inset 0 0 0 0.5px {t["glassLine"]}">{sym(name, t["fg"])}</span>'
         def frow(e, c, name, where, when, sel=False):
-            det = (f'<div style="margin: 2px 0 6px 48px; padding: 10px 12px; border-radius: 9px; background: {t["field"]}; font-size: 12px; display: grid; grid-template-columns: 70px 1fr; gap: 4px 10px">'
-                   f'<span style="color: {t["dim"]}">Added by</span><span>Maya Kent</span><span style="color: {t["dim"]}">Added</span><span>14 November 2026</span><span style="color: {t["dim"]}">Size</span><span>1.2 MB</span><span style="color: {t["dim"]}">Folder</span><span>Northline Motors › Logos</span>'
-                   f'<span></span><span style="display: flex; gap: 6px; margin-top: 6px">{btn("Open folder")}{btn("Download")}</span></div>') if sel else ''
+            right = (f'<span style="display: flex; gap: 6px">{ibtn("folder")}{ibtn("download")}</span>' if sel
+                     else f'<span style="font-size: 11.5px; color: {t["dim"]}">{when}</span>')
+            sub = where + (' · 1.2 MB' if sel else '')
             return (f'<div style="display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; {"background:" + t["sel"] + ";" if sel else ""}">{ext(e, c)}'
-                    f'<div style="flex: 1; min-width: 0"><div style="font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{name}</div><div style="font-size: 11.5px; color: {t["dim"]}">{where}</div></div><span style="font-size: 11.5px; color: {t["dim"]}">{when}</span></div>' + det)
+                    f'<div style="flex: 1; min-width: 0"><div style="font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{name}</div><div style="font-size: 11.5px; color: {t["dim"]}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{sub}</div></div>{right}</div>')
         chips = ''.join(f'<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 14px; font-size: 12px; {"background:" + A + "; color: #fff;" if on else "background:" + t["field"] + ";"}"><i style="width: 8px; height: 8px; border-radius: 4px; background: {"#fff" if on else c}"></i>{n}</span>' for n, c, on in [('All clients', '#9aa0ab', True), ('Northline Motors', N, False), ('Kestrel Foods', K, False), ('Pinecrest', P, False)])
         assets = card(extra='display: flex; flex-direction: column; min-height: 0', inner=h2('Latest in Client Assets', f'<span style="margin-left: auto; font-size: 12px; color: {t["dim"]}">128 files</span>')
             + f'<div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px">{chips}</div>'
@@ -281,11 +285,14 @@ def board(look, page='lead'):
             + nrow('RT', '#8E44AD', 'Rui Tan submitted his November claim', 'Expense claim', '4h ago')
             + f'<div style="margin-top: auto; padding-top: 10px; border-top: 0.5px solid {t["line"]}; display: flex; font-size: 12px; color: {t["dim"]}"><span>Open an update to see it</span><span style="margin-left: auto; color: {A}">Mark all read</span></div>')
         sub_c, ok_c, paid_c = orange, green, A
+        # roomier (Haris 11:21): no status pill beside an action — the group's title already says it (Need HR approval = submitted,
+        # HR approved and paid); one button per row; a paid one shows only "Paid"; rows taller, more space before the button
         def crow(ini, c, name, items, amt, state, act=''):
             pc = {'Submitted': sub_c, 'HR approved': ok_c, 'Paid': paid_c}[state]
-            a = f'<span style="font-size: 11.5px; padding: 3px 9px; border-radius: 6px; background: {t["glass"]}; box-shadow: inset 0 0 0 0.5px {t["glassLine"]}">{act}</span>' if act else ''
-            return (f'<div style="display: flex; align-items: center; gap: 10px; padding: 8px 6px; border-top: 0.5px solid {t["line"]}">{av(ini, c, 28)}'
-                    f'<div style="flex: 1; min-width: 0"><div style="font-size: 13px; font-weight: 600">{name}</div><div style="font-size: 11.5px; color: {t["dim"]}; white-space: nowrap">{items} · AED {amt}</div></div>{pill(state, pc)}{a}</div>')
+            right = (f'<span style="height: 26px; padding: 0 12px; display: inline-flex; align-items: center; white-space: nowrap; font-size: 12px; border-radius: 7px; background: {t["glass"]}; box-shadow: inset 0 0 0 0.5px {t["glassLine"]}">{act}</span>'
+                     if act else pill(state, pc))
+            return (f'<div style="display: flex; align-items: center; gap: 12px; padding: 10px 6px; border-top: 0.5px solid {t["line"]}">{av(ini, c, 30)}'
+                    f'<div style="flex: 1; min-width: 0"><div style="font-size: 13px; font-weight: 600">{name}</div><div style="font-size: 11.5px; color: {t["dim"]}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{items} · AED {amt}</div></div><span style="flex: none; margin-left: 16px">{right}</span></div>')
         # the iPhone's five, on the Mac (Haris 11:04): the month (the last 12) · Paid On… with a date · ••• Mark All HR Approved /
         # Set All Paid On… · a claim right-clicked: HR Approved / Paid On… · Need HR approval and the rest as their own groups, See All
         monthbtn = (f'<span style="display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: 6px; font-size: 12.5px; '
