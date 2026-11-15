@@ -290,7 +290,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
         return
       }
       slideSide(show: show, shownF, goneF)
-    } else { side.frame = shownF; side.alphaValue = 1; side.isHidden = !show }
+    } else { side.frame = shownF; side.alphaValue = side.covered ? 0 : 1; side.isHidden = !show }
   }
   private func slideSide(show: Bool, _ shownF: NSRect, _ goneF: NSRect) {
     NSAnimationContext.runAnimationGroup({ c in
@@ -298,7 +298,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       c.timingFunction = CAMediaTimingFunction(name: show ? .easeOut : .easeIn)
       c.allowsImplicitAnimation = true
       self.side.animator().frame = show ? shownF : goneF
-      self.side.animator().alphaValue = show ? 1 : 0
+      self.side.animator().alphaValue = show && !self.side.covered ? 1 : 0
     }, completionHandler: { if !self.side.shown { self.side.isHidden = true; self.side.frame = shownF; self.side.alphaValue = 1 } })
   }
   @objc func toggleSidebar(_ s: Any?) {
@@ -573,6 +573,17 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
         done(["ok": true, "shown": true, "goneIn": wait * 1000]); break
       }
       done(["ok": true, "shown": true])
+    // a file open in the page's preview (viewer.js): the sidebar, its top row and the edge that shows it fade away, so the preview
+    // has the whole window; back as it closes (Haris 2026-11-15 15:38)
+    case "sideCover":
+      let on = (a["on"] as? Bool) == true
+      side.covered = on
+      NSAnimationContext.runAnimationGroup { c in
+        c.duration = 0.2
+        for v in [side, side.topRow] as [NSView] { v.animator().alphaValue = on ? 0 : 1 }
+      }
+      side.edgeHot.isHidden = on || !(side.on && side.hiddenMode)
+      done(["ok": true])
     case "appInfo":
       done(["ok": true, "server": SERVER, "shell": SHELL_VERSION, "native": "swift",
             "version": info["CFBundleShortVersionString"] as? String ?? "3.0.0", "touchID": defaults.bool(forKey: LOCK_KEY),

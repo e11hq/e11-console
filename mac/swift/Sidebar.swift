@@ -388,6 +388,7 @@ final class Sidebar: NSView {
   var on = false
   var hiddenMode = false          // (the page's "collapsed": hidden completely)
   private(set) var peeking = false
+  var covered = false   // (a file open in the page's preview: no showing on hover meanwhile)
   var shown: Bool { on && (!hiddenMode || peeking) }
   // one top row for the window (Haris 2026-11-15 14:20: "the icons repeat … it should be same as claude's"): the sidebar
   // button and ‹ › stay put over everything whether the sidebar is shown, hidden or peeking — only the sidebar moves
@@ -463,7 +464,7 @@ final class Sidebar: NSView {
   /* ---------- hidden: shown over the page while the pointer is on it ---------- */
   func peek(_ on: Bool) {
     peekEnd?.cancel(); peekEnd = nil
-    guard self.on, hiddenMode, on != peeking else { return }
+    guard self.on, hiddenMode, on != peeking, !(on && covered) else { return }
     peeking = on
     layer?.shadowColor = NSColor.black.cgColor
     layer?.shadowOpacity = on ? 0.22 : 0
