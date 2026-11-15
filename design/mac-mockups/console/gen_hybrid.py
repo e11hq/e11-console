@@ -43,7 +43,7 @@ H = 1250
 
 WHO = {'lead': ('#7D5BD9', 'AM', 'Alex Morgan', 'Super Admin'), 'member': ('#E67E22', 'JL', 'Jamie Lowe', 'Production'), 'office': ('#2C7A7B', 'NH', 'Nadine Hale', 'Office Admin')}
 
-def board(look, page='lead'):
+def board(look, page='lead', sb='float'):
     t = T[look]; A = t['accent']
     # TODAY'S Mac sidebar, exactly as it is (mac/swift/Sidebar.swift — Haris 2026-11-15: "sidebar will remain exactly as now"):
     # a floating glass panel 244 wide, 8 in; top row 44 (the window's buttons left; theme · New task · collapse as round
@@ -72,11 +72,22 @@ def board(look, page='lead'):
         return f'<span style="width: 10px; height: 10px; border-radius: 5px; background: {c}"></span>'
     def rb(name):
         return f'<span style="width: 30px; height: 30px; border-radius: 15px; background: {btnbg}; box-shadow: inset 0 0 0 0.5px {btnedge}; display: inline-flex; align-items: center; justify-content: center">{sym(name, sec).replace("width=\"15\" height=\"15\"", "width=\"14\" height=\"14\"")}</span>'
-    side = (f'<div style="position: absolute; left: 8px; top: 8px; bottom: 8px; width: 244px; border-radius: 18px; background: {t["side"]}; backdrop-filter: blur(30px); '
-            f'box-shadow: inset 0 0 0 0.5px {t["sideLine"]}, 0 8px 28px rgba(0,0,0,0.18); box-sizing: border-box; display: flex; flex-direction: column; z-index: 3">'
+    # the sidebar as Claude's (Haris 2026-11-15 13:20): pinned edge to edge; hidden completely; shown floating while the pointer
+    # is on its button. Top row: the window's buttons, the sidebar button, ‹ ›, and light / dark as two buttons; no New task.
+    plain = 'rgba(30,30,32,0.92)' if look == 'dark' else 'rgba(246,246,248,0.96)'
+    shell = {'float': f'left: 8px; top: 8px; bottom: 8px; width: 244px; border-radius: 18px; background: {t["side"]}; backdrop-filter: blur(30px); box-shadow: inset 0 0 0 0.5px {t["sideLine"]}, 0 8px 28px rgba(0,0,0,0.18);',
+             'pinned': f'left: 0; top: 0; bottom: 0; width: 252px; padding-left: 8px; background: {plain}; box-shadow: inset -0.5px 0 0 {t["sideLine"]};',
+             'peek': f'left: 8px; top: 8px; bottom: 8px; width: 244px; border-radius: 18px; background: {t["side"]}; backdrop-filter: blur(30px); box-shadow: inset 0 0 0 0.5px {t["sideLine"]}, 0 18px 50px rgba(0,0,0,0.35);'}.get(sb, '')
+    def seg2(a, b, on):
+        bt = lambda name, sel: f'<span style="width: 28px; height: 24px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; {"background:" + t["win"] + "; box-shadow: 0 0.5px 2px rgba(0,0,0,0.25);" if sel else ""}">{sym(name, t["fg"] if sel else sec).replace(chr(34) + "15" + chr(34), chr(34) + "13" + chr(34))}</span>'
+        return f'<span style="margin-left: auto; display: inline-flex; padding: 2px; border-radius: 9px; background: {t["field"]}">{bt(a, on == a)}{bt(b, on == b)}</span>'
+    nav = lambda: (f'<span style="display: inline-flex; align-items: center; gap: 14px; margin-left: 10px; color: {sec}">{sym("sidebar", t["fg"])}'
+                   f'<span style="font-size: 17px; line-height: 1">‹</span><span style="font-size: 17px; line-height: 1; color: {ter}">›</span></span>')
+    side = (f'<div style="position: absolute; {shell} box-sizing: border-box; display: flex; flex-direction: column; z-index: 3">'
             '<div style="height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 16px; flex: none"><span style="width: 12px; height: 12px; border-radius: 6px; background: #ff5f57"></span><span style="width: 12px; height: 12px; border-radius: 6px; background: #febc2e"></span><span style="width: 12px; height: 12px; border-radius: 6px; background: #28c840"></span>'
-            f'<span style="margin-left: auto; display: flex; gap: 6px">{rb("moon")}{rb("plus") if page != "office" else ""}{rb("sidebar")}</span></div>'
-            '<div style="padding: 8px 10px 0; display: flex; flex-direction: column; flex: 1; min-height: 0">'
+            + (f'<span style="margin-left: auto; display: flex; gap: 6px">{rb("moon")}{rb("plus") if page != "office" else ""}{rb("sidebar")}</span></div>' if sb == 'float'
+               else f'{nav()}{seg2("sun", "moon", "sun" if look == "light" else "moon")}</div>')
+            + '<div style="padding: 8px 10px 0; display: flex; flex-direction: column; flex: 1; min-height: 0">'
             + ((item('house', 'Home', on=True) + item('tray', 'Inbox', '3', red=True) + item('sun', 'E11 Day' if page == 'lead' else 'My Day', '7' if page == 'lead' else '4') + item('check', 'My Tasks', '8' if page == 'lead' else '5') + item('cal', 'Content plans', '1', red=True)
             + head('Clients', True) + item(dot('#0E3E8C'), 'Northline Motors', '11') + item(dot('#C8102E'), 'Kestrel Foods', '8') + item(dot('#3E7D44'), 'Pinecrest', '5')
             + '<div style="margin-top: auto"></div>' + head('Library') + item('grid', 'Client Assets', '13') + (item('dollar', 'Finance') if page == 'lead' else '') + item('trash', 'Trash', '3')) if page != 'office' else
@@ -90,10 +101,12 @@ def board(look, page='lead'):
             + f'<div style="flex: 1"><div style="font-size: 13px; font-weight: 600">{WHO[page][2]}</div><div style="font-size: 11.5px; color: {sec}">{WHO[page][3]}</div></div><span style="color: {ter}; font-size: 10px">⌄</span></div>'
             + f'<div style="margin-top: 2px; height: 18px; display: flex; align-items: center; gap: 7px; padding-left: 1px"><span style="width: 7px; height: 7px; border-radius: 4px; background: #30d158"></span><span style="font-size: 11.5px; color: {sec}">Synced · E11 Server</span></div>'
             + f'<div style="padding-left: 10px; font-size: 11px; color: {ter}">© 2026 E11 Agency</div></div></div>')
+    if sb == 'hidden':
+        side = (f'<div style="position: absolute; left: 0; top: 0; height: 52px; display: flex; align-items: center; gap: 8px; padding: 0 0 0 16px; z-index: 3">' + '<span style="width: 12px; height: 12px; border-radius: 6px; background: #ff5f57"></span><span style="width: 12px; height: 12px; border-radius: 6px; background: #febc2e"></span><span style="width: 12px; height: 12px; border-radius: 6px; background: #28c840"></span>' + nav() + '</div>')
     def tb(inner, w=None):
         return (f'<span style="height: 30px; {"width: 30px;" if not w else ""} padding: 0 {10 if w else 0}px; border-radius: 15px; background: {t["glass"]}; box-shadow: inset 0 0 0 0.5px {t["glassLine"]}; '
                 f'display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px">{inner}</span>')
-    searching = look == 'light' and page == 'lead'
+    searching = look == 'light' and page == 'lead' and sb == 'float'
     toolbar = (f'<div style="position: absolute; left: 260px; right: 0; top: 0; height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 16px; z-index: 2">'
                f'<span style="font-size: 15px; font-weight: 700">Home</span>'
                f'<span style="margin-left: auto"></span>'
@@ -339,7 +352,7 @@ def board(look, page='lead'):
             f'box-shadow: 0 0 0 0.5px {t["glassLine"]}, 0 12px 36px rgba(0,0,0,0.3); z-index: 9; font-size: 13px">'
             + ''.join(f'<div style="padding: 4px 12px; margin: 0 5px; border-radius: 5px; {"background:" + A + "; color: #fff;" if i == 0 else ""}">{x}</div>' if x != '-' else f'<div style="height: 0.5px; background: {t["line"]}; margin: 4px 10px"></div>'
                       for i, x in enumerate(['Open Task', '-', 'Status  ›', 'Mark Complete', 'Due Date…', '-', 'Attach Files…', 'Copy Link', '-', 'Trash']))
-            + '</div>') if look == 'dark' and page == 'lead' else ''
+            + '</div>') if look == 'dark' and page == 'lead' and sb == 'float' else ''
     body = (f'<div style="width: 1440px; height: {H}px; background: {t["desk"]}; position: relative; overflow: hidden; font-family: -apple-system, \'SF Pro Text\', \'Helvetica Neue\', Inter, sans-serif; color: {t["fg"]}">'
             f'<div style="position: absolute; inset: 0; background: {t["win"]}; border-radius: 14px; overflow: hidden">{side}{toolbar}{content}{menu}{search_pop}{office_menu if page == "office" else ""}</div></div>')
     return f'''<!doctype html>
@@ -359,4 +372,9 @@ open(os.path.join(P, 'MemberLight.dc.html'), 'w').write(board('light', 'member')
 H = 900
 open(os.path.join(P, 'Office.dc.html'), 'w').write(board('dark', 'office'))
 open(os.path.join(P, 'OfficeLight.dc.html'), 'w').write(board('light', 'office'))
+H = 1250
+open(os.path.join(P, 'SidePinned.dc.html'), 'w').write(board('light', 'lead', 'pinned'))
+open(os.path.join(P, 'SideHidden.dc.html'), 'w').write(board('light', 'lead', 'hidden'))
+open(os.path.join(P, 'SidePeek.dc.html'), 'w').write(board('light', 'lead', 'peek'))
+open(os.path.join(P, 'SidePinnedDark.dc.html'), 'w').write(board('dark', 'lead', 'pinned'))
 print('ok')

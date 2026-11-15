@@ -17,7 +17,7 @@ def smooth(src, look, h=1300):
     out = (head + body).replace('height: 1250px; background:', f'height: {h}px; background:', 1).replace('height: 900px; background:', f'height: {h}px; background:', 1).replace('"height":1250', f'"height":{h}')
     return out
 # run after gen_hybrid.py: every board gets it
-for f, look, h in [('Hybrid', 'dark', 1300), ('HybridLight', 'light', 1300), ('Member', 'dark', 1230), ('MemberLight', 'light', 1230), ('Office', 'dark', 900), ('OfficeLight', 'light', 900)]:
+for f, look, h in [('Hybrid', 'dark', 1300), ('HybridLight', 'light', 1300), ('Member', 'dark', 1230), ('MemberLight', 'light', 1230), ('Office', 'dark', 900), ('OfficeLight', 'light', 900), ('SidePinned', 'light', 1300), ('SideHidden', 'light', 1300), ('SidePeek', 'light', 1300), ('SidePinnedDark', 'dark', 1300)]:
     pth = os.path.join(P, f + '.dc.html')
     s = open(pth).read()
     if '-webkit-font-smoothing: auto' not in s: open(pth, 'w').write(smooth(s, look, h))
