@@ -16,6 +16,28 @@ import ImageIO
 // (.intro — a group's own card at the very start of its chat, the design's board 4)
 enum ChatItem: Hashable { case msg(String); case intro }
 
+/* To a far end of a long chat, Claude's way (Haris 2026-11-15, his recording of Claude's app): never a long scroll through
+   everything — the chat put a screen away from where it's going, under a quick crossfade from how it looked, then the last
+   screen glides there smoothly (Apple's own scroll animation). Near enough already: just the glide. `to` is asked again
+   after the jump: messages coming into view take their real heights, and the end moves with them. */
+extension UIScrollView {
+  func glide(_ to: () -> CGFloat) {
+    layoutIfNeeded()
+    let y0 = to(), d = y0 - contentOffset.y, h = bounds.height
+    guard abs(d) > h * 1.5, let host = superview else { setContentOffset(CGPoint(x: contentOffset.x, y: y0), animated: true); return }
+    let shot = snapshotView(afterScreenUpdates: false)
+    UIView.performWithoutAnimation {
+      setContentOffset(CGPoint(x: contentOffset.x, y: y0 - (d > 0 ? h : -h)), animated: false)
+      layoutIfNeeded()
+    }
+    if let s = shot {
+      s.frame = frame; host.insertSubview(s, aboveSubview: self)
+      UIView.animate(withDuration: 0.2, delay: 0, options: [.curveEaseOut], animations: { s.alpha = 0 }, completion: { _ in s.removeFromSuperview() })
+    }
+    setContentOffset(CGPoint(x: contentOffset.x, y: to()), animated: true)
+  }
+}
+
 final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDataSource, QLPreviewControllerDelegate, UIGestureRecognizerDelegate {
   let group: String
   private let table = UITableView(frame: .zero, style: .plain)
@@ -436,6 +458,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     shownFrom = all[max(0, i - 20)].id
     reload(animated: false); table.layoutIfNeeded()
   }
+  // a tap on the top of the screen (the clock / the notch): to the top Claude's way, not a long scroll through the chat
+  func scrollViewShouldScrollToTop(_ s: UIScrollView) -> Bool { s.glide { -s.adjustedContentInset.top }; return false }
   func scrollViewDidScroll(_ s: UIScrollView) {
     if hasOlder && s.contentOffset.y < -s.adjustedContentInset.top + 700 && (s.isDragging || s.isDecelerating) { older() }
     let away = s.contentOffset.y + s.bounds.height < s.contentSize.height - 160
@@ -861,7 +885,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     guard let last = s.sectionIdentifiers.last, s.numberOfItems(inSection: last) > 0 else { return }
     if !animated { table.scrollToRow(at: IndexPath(row: s.numberOfItems(inSection: last) - 1, section: s.numberOfSections - 1), at: .bottom, animated: false) }
     let end = { () -> CGPoint in self.table.layoutIfNeeded(); return CGPoint(x: 0, y: max(-self.table.adjustedContentInset.top, self.table.contentSize.height + self.table.adjustedContentInset.bottom - self.table.bounds.height)) }
-    guard !animated else { table.setContentOffset(end(), animated: true); return }
+    guard !animated else { table.glide { end().y }; return }   // (far away: Claude's way — Haris 2026-11-15)
     // (the rows near the end take their real heights once they're in view — placed again until the end stays put, so
     //  the chat doesn't open a little short and then jump to its end)
     for _ in 0..<4 { let e = end(); if abs(table.contentOffset.y - e.y) < 0.5 { break }; table.contentOffset = e }
