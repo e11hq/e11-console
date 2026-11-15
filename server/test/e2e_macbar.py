@@ -46,6 +46,14 @@ async def main():
                     check(not errs, f'no page errors (12) {errs[:2]}')
                     await ctx.close(); continue
                 check(await E("getComputedStyle(document.querySelector('#topbar .search')).visibility") == 'visible' and await E("window.__native.bar") is None, 'the top bar stays the page\u2019s own (Talk and search)')
+                # Home (Haris 2026-11-15 14:08–14:12): opens on Today; Team goals achieved above Schedule, its ring filling once;
+                # the clients' lines growing once, their colour easing lighter to the right
+                hm = await E("(() => { const a = document.querySelector('.hm-lead aside'); return [document.querySelector('.hm-tab.on').dataset.v, a.firstElementChild.classList.contains('hm-goal'), !!a.querySelector('.hm-goal + .hm-card .hm-h h2') && a.querySelector('.hm-goal + .hm-card .hm-h h2').textContent, !!document.querySelector('.hm-hero'), getComputedStyle(document.querySelector('.hm-pbar i')).backgroundImage.startsWith('linear-gradient')]; })()")
+                check(hm == ['today', True, 'Schedule', False, True], f'Home: Today first, Team goals achieved above Schedule, the clients\u2019 lines a gradient {hm}')
+                await pg.screenshot(path=os.environ.get('SHOT_DIR', '/tmp') + '/macbar-home.png')
+                await E("render()"); await pg.wait_for_timeout(100)
+                again = await E("[document.querySelectorAll('.hm-pbar i.hm-grow').length, document.querySelectorAll('.hm-ring.hm-grow').length]")
+                check(again == [0, 0], f'drawn again later: the lines and the ring stay still {again}')
                 # Apple's SF Symbols for Home's icons (and the top bar's), the page's drawings hidden under them (Haris 2026-11-15)
                 await pg.wait_for_timeout(300)
                 sf = await E("(() => { const e = document.querySelector('.hm [data-i=\"hm-chat\"]'); const t = document.querySelector('#topbar [data-i=\"search\"]'); const c = getComputedStyle(e); return [document.documentElement.classList.contains('mac-sf'), (c.webkitMaskImage || c.maskImage || '').startsWith('url('), getComputedStyle(e.firstElementChild).visibility, (getComputedStyle(t).webkitMaskImage || '').startsWith('url(')]; })()")

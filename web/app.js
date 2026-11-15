@@ -532,10 +532,21 @@ const AppIcon = (() => {
 // window (double-click zooms, like any Mac title bar). Older Mac apps keep the normal title bar.
 const MacChrome = (() => {
   let on = false;
+  // the room for the Mac's sidebar made as the script loads, from the shell the app had last time — waiting for the app's
+  // answer let a page drawn from the phone's copy first sit at the left and then move over (Haris 2026-11-15 14:20: "the
+  // right side of the app shifts slightly on startup")
+  const room = (shell) => {
+    const de = document.documentElement;
+    de.style.setProperty('--nsb-room', (shell >= 13 ? 252 : 260) + 'px'); de.style.setProperty('--nsb-slim', (shell >= 13 ? 0 : 108) + 'px');
+    if (shell >= 13) de.classList.add('mac-nsb13');
+    const app = document.getElementById('app'); if (app && !app.classList.contains('locked')) de.classList.add('mac-nsb', 'mac-nsb-o');
+  };
+  try { const s0 = Number(localStorage.getItem('e11-mac-shell')) || 0; if (Host.isMacApp && s0 >= 12) { document.documentElement.classList.add('mac-chrome'); room(s0); } } catch (e) { /* ignore */ }
   async function init() {
     if (!Host.isMacApp || on) return;
     let shell = 1;
     try { shell = Number((await NativeMac.call('appInfo')).shell) || 1; } catch (e) { return; }
+    try { localStorage.setItem('e11-mac-shell', String(shell)); } catch (e) { /* ignore */ }
     if (shell >= 6) {
       const mark = (n) => { const u = typeof me === 'function' && typeof db !== 'undefined' && db && currentUserId ? me() : null; if (!u) { if (n < 60) setTimeout(() => mark(n + 1), 1000); return; } if (!u.macApp) { u.macApp = true; persist(0); } };
       mark(0);
@@ -556,11 +567,8 @@ const MacChrome = (() => {
     if (shell >= 12) {
       // the room for the Mac's sidebar made at once, before the page is drawn — not slid in once it shows (Haris 2026-11-15
       // 13:06: "the whole right side slides in to make space for the sidebar"); 13+: edge to edge, 252 shown / 0 hidden
-      const de = document.documentElement;
-      de.style.setProperty('--nsb-room', (shell >= 13 ? 252 : 260) + 'px'); de.style.setProperty('--nsb-slim', (shell >= 13 ? 0 : 108) + 'px');
       // (13: the sidebar as Claude's — shown, or hidden completely with the window's row over the page's top-left; ‹ › in it)
-      if (shell >= 13) de.classList.add('mac-nsb13');
-      const app = document.getElementById('app'); if (app && !app.classList.contains('locked')) de.classList.add('mac-nsb', 'mac-nsb-o');
+      room(shell);
       NativeSide.start();   // (Mac app 12: the sidebar is the Mac's own)
     }
     const ACTIVE = 'button, a, input, textarea, select, label, [contenteditable="true"], [data-action], [data-nav], [data-id], .tabs, .search, .tm-crumbs > *, #overlay-root *, .tm-backdrop';
@@ -10232,9 +10240,9 @@ function paintThemeButtons() {
   const title = `${auto ? `Automatic — ${light ? 'light' : 'dark'} now` : light ? 'Light mode' : 'Dark mode'}. Click for ${light ? 'dark' : 'light'} mode`;
   document.querySelectorAll('.theme-toggle').forEach((b) => { b.innerHTML = icon(auto ? 'theme-auto' : light ? 'sun' : 'moon'); b.title = title; b.setAttribute('aria-label', title); });
 }
-function setSidebarCollapsed(on) {
+function setSidebarCollapsed(on, opening) {
   // (the page's room for the Mac's sidebar slides only as it's collapsed or expanded — never as the app opens)
-  const de = document.documentElement; de.classList.add('nsb-anim'); clearTimeout(setSidebarCollapsed.t); setSidebarCollapsed.t = setTimeout(() => de.classList.remove('nsb-anim'), 400);
+  const de = document.documentElement; if (!opening) de.classList.add('nsb-anim'); clearTimeout(setSidebarCollapsed.t); setSidebarCollapsed.t = setTimeout(() => de.classList.remove('nsb-anim'), 400);
   document.getElementById('app').classList.toggle('sb-collapsed', on);
   document.querySelectorAll('.sb-toggle').forEach((b) => { b.title = on ? 'Expand sidebar' : 'Collapse sidebar'; });
   savePref('sidebarCollapsed', on);
@@ -10285,7 +10293,7 @@ function initSidebar() {
     if (prefs.detailMode == null && localStorage.getItem('e11-detail-mode')) prefs.detailMode = localStorage.getItem('e11-detail-mode');
   } catch (e) { /* ignore */ }
   const on = !!prefs.sidebarCollapsed;
-  setSidebarCollapsed(on);
+  setSidebarCollapsed(on, true);
   Theme.apply();
   ui.detailMode = ['side', 'full'].includes(prefs.detailMode) ? prefs.detailMode : 'modal';
 }

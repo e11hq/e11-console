@@ -155,6 +155,10 @@
 .hm-proj b { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hm-pbar { display: block; height: 4px; border-radius: 3px; background: var(--hover); margin-top: 5px; overflow: hidden; }
 .hm-pbar i { display: block; height: 100%; border-radius: 3px; }
+.hm-pbar i { background: linear-gradient(90deg, var(--pc), color-mix(in srgb, var(--pc) 68%, #fff)); transform-origin: left center; }
+.hm-pbar i.hm-grow { animation: hm-grow .8s cubic-bezier(.22, .8, .3, 1) both; }
+@keyframes hm-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@media (prefers-reduced-motion: reduce) { .hm-pbar i.hm-grow { animation: none; } }
 
 /* purple cards */
 .hm-hero { padding: 20px 22px; border-radius: 16px; background: var(--accent-strong); color: #fff; position: relative; overflow: hidden; }
@@ -384,6 +388,30 @@ html.mac-chrome .hm-cl { border-top: 0; padding: 6px 0; gap: 10px; }
 html.mac-chrome .hm-cl b { font-weight: 400; }
 html.mac-chrome .hm-chk { width: 16px; height: 16px; border-radius: 4px; border: 0; box-shadow: inset 0 0 0 1px var(--mc-ter); }
 html.mac-chrome .hm-chk.on { background: var(--mc-blue); box-shadow: none; color: #fff; }
+/* Team goals achieved (Mac app, above Schedule — Haris 2026-11-15 14:10): the card's colour with a soft E11-purple tint,
+   Apple's activity ring in green, the +N solid */
+html.mac-chrome .hm-goal { display: flex; flex-direction: column; gap: 12px; padding: 16px; background: linear-gradient(160deg, var(--mc-tint), var(--mc-card) 75%); background-color: var(--mc-card); box-shadow: inset 0 0 0 .5px rgba(124, 108, 255, .30); --mc-tint: rgba(124, 108, 255, .14); }
+html.mac-chrome[data-theme="light"] .hm-goal { --mc-tint: rgba(124, 108, 255, .10); }
+html.mac-chrome .hm-goal h2 { margin: 0; font-size: 15px; font-weight: 600; }
+html.mac-chrome .hm-gr { display: flex; align-items: center; gap: 14px; }
+html.mac-chrome .hm-gr svg { flex: none; }
+html.mac-chrome .hm-gr circle { fill: none; stroke-width: 9; }
+html.mac-chrome .hm-ring-bg { stroke: var(--mc-field); }
+html.mac-chrome .hm-ring { stroke: var(--mc-green, #30d158); stroke-linecap: round; }
+html.mac-chrome[data-theme="light"] .hm-ring { stroke: #28a745; }
+html.mac-chrome .hm-ring.hm-grow { animation: hm-ring 1.1s cubic-bezier(.22, .8, .3, 1) both; }
+@keyframes hm-ring { from { stroke-dashoffset: var(--c); } }
+@media (prefers-reduced-motion: reduce) { html.mac-chrome .hm-ring.hm-grow { animation: none; } }
+html.mac-chrome .hm-gr text { font-size: 15px; font-weight: 600; fill: var(--mc-fg); }
+html.mac-chrome .hm-gr b { display: block; font-size: 13px; font-weight: 600; }
+html.mac-chrome .hm-gr span { font-size: 12px; }
+html.mac-chrome .hm-gr .ok { color: #30d158; } html.mac-chrome[data-theme="light"] .hm-gr .ok { color: #28a745; }
+html.mac-chrome .hm-gr .warn { color: #ff9f0a; }
+html.mac-chrome .hm-goal .hm-avs { margin: 0; }
+html.mac-chrome .hm-goal .hm-avs .av { box-shadow: 0 0 0 2px var(--mc-card); }
+html.mac-chrome .hm-goal .hm-avs .av.more { background: #3d3d42; color: var(--mc-dim); opacity: 1; }
+html.mac-chrome[data-theme="light"] .hm-goal .hm-avs .av.more { background: #e4e4e9; }
+html.mac-chrome .hm-goal p { margin: 0; font-size: 12px; line-height: 1.35; color: var(--mc-dim); }
 html.mac-chrome .hm-hero { border-radius: 12px; padding: 16px; background: linear-gradient(140deg, #5b4ee0, #2f7bff); }
 html.mac-chrome .hm-hero::after { display: none; }
 html.mac-chrome .hm-hero h2 { font-size: 15px; }

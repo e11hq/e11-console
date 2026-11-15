@@ -3,7 +3,8 @@
    Production, Social and everyone else: what to work on next, their pipeline and week (layout C).
    Everything comes from task data the app already keeps. The phone has its own Home. */
 const Home = (() => {
-  const st = { range: 'week', metric: 'done', day: null, next: 0, lane: null };
+  let growT0 = 0;
+  const st = { range: 'today', metric: 'done', day: null, next: 0, lane: null };
   const DAY = 86400000;
   const WD = ['Mo', 'Tu', 'We', 'Th', 'Fr'];
   const first = (u) => fullName(u).split(' ')[0];
@@ -100,7 +101,7 @@ const Home = (() => {
       week: (t) => !!t.due && t.due >= today && t.due <= wkEnd,
       all: () => true,
     };
-    if (!RANGES[st.range]) st.range = 'week';
+    if (!RANGES[st.range]) st.range = 'today';
     const ranged = open.filter(RANGES[st.range]).sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || byPrio(a, b));
     const rows = ranged.slice(0, 6);
     const rangeTabs = [['late', 'Overdue'], ['today', 'Today'], ['week', 'This week'], ['all', 'All open']].map(([k, l]) => { const n = open.filter(RANGES[k]).length; return `<button type="button" class="hm-tab ${st.range === k ? 'on' : ''} ${k === 'late' && n ? 'red' : ''}" data-hm="range" data-v="${k}">${l}<i>${n}</i></button>`; }).join('');
@@ -156,13 +157,33 @@ const Home = (() => {
       const d = ts.filter((t) => t.done).length;
       return { p, open: ts.length - d, pc: pct(d, ts.length) };
     });
+    // each client's line grows once as the app opens, its colour easing a little lighter to the right (Haris 2026-11-15
+    // 14:08); drawn again in that first moment, it carries on where it was rather than starting over — after that, still
+    if (projects.length && !growT0) growT0 = Date.now();
+    const growing = growT0 ? Date.now() - growT0 : 1e9;
+    const grow = growing < 900 ? ` class="hm-grow"` : '', growDelay = growing < 900 ? `animation-delay:-${growing}ms;` : '';
     const projCard = `<section class="hm-card">
         <div class="hm-h"><h2>${admin ? 'Clients' : 'My clients'}</h2><span class="hm-mute">${projects.length}</span></div>
-        ${projects.length ? `<div class="hm-projs">${projects.map(({ p, open: o, pc }) => `<div class="hm-proj" data-project="${p.id}"><span class="hm-pi" style="background:${p.color}">${esc(initials(p.name))}</span><span class="hm-main"><b>${esc(p.name)}</b><span class="hm-sub">${o} open · ${pc}% done</span><span class="hm-pbar"><i style="width:${pc}%;background:${p.color}"></i></span></span></div>`).join('')}</div>` : '<div class="hm-empty">Projects with your tasks show up here.</div>'}
+        ${projects.length ? `<div class="hm-projs">${projects.map(({ p, open: o, pc }) => `<div class="hm-proj" data-project="${p.id}"><span class="hm-pi" style="background:${p.color}">${esc(initials(p.name))}</span><span class="hm-main"><b>${esc(p.name)}</b><span class="hm-sub">${o} open · ${pc}% done</span><span class="hm-pbar"><i${grow} style="width:${pc}%;--pc:${p.color};${growDelay}"></i></span></span></div>`).join('')}</div>` : '<div class="hm-empty">Projects with your tasks show up here.</div>'}
       </section>`;
 
     // team on time this month
     const team = [...new Set(doneM.flatMap((t) => t.assignees || []))].filter((u) => userById(u));
+
+    // Team goals achieved — the Mac app's card above Schedule (Haris 2026-11-15 14:10 / 14:12: board T1's C with B's soft
+    // purple tint, the +N solid): Apple's activity ring, filling from 0 once as the app opens, then still
+    const goalCard = () => {
+      if (!growT0) growT0 = Date.now();
+      const e = Date.now() - growT0, R = 30, C = 2 * Math.PI * R, p = doneM.length ? onT / 100 : 0;
+      const d = doneM.length && doneL.length ? onT - onTL : null, lmName = new Date(ly, lm, 1).toLocaleDateString('en-US', { month: 'long' });
+      return `<section class="hm-card hm-goal">
+            <h2>Team goals achieved</h2>
+            <div class="hm-gr"><svg viewBox="0 0 76 76" width="76" height="76" aria-hidden="true"><circle cx="38" cy="38" r="${R}" class="hm-ring-bg"/>${p > 0 ? `<circle cx="38" cy="38" r="${R}" class="hm-ring${e < 1200 ? ' hm-grow' : ''}" style="--c:${C.toFixed(1)};stroke-dasharray:${C.toFixed(1)};stroke-dashoffset:${(C * (1 - p)).toFixed(1)};${e < 1200 ? `animation-delay:-${e}ms` : ''}" transform="rotate(-90 38 38)"/>` : ''}<text x="38" y="43" text-anchor="middle">${doneM.length ? onT + '%' : '–'}</text></svg>
+              <div><b>On time this month</b><span class="${d == null || d >= 0 ? 'ok' : 'warn'}">${d == null ? 'this month' : `${d >= 0 ? '↑' : '↓'} ${d >= 0 ? '+' : ''}${d}% vs ${esc(lmName)}`}</span></div></div>
+            ${team.length ? `<div class="hm-avs">${avatarStack(team, 30, 5)}</div>` : ''}
+            <p>${admin ? 'Team tasks' : 'Tasks you created'} finished by their due date this month</p>
+          </section>`;
+    };
 
     const statCard = (cls, ic, l, n, note, noteCls, kind) => `<button type="button" class="hm-stat" data-hm="stat" data-v="${kind}"><span class="hm-ic ${cls}">${ik(ic, 1.5)}</span><span><span class="hm-sl">${l}</span><span class="hm-sn"><b>${n}</b><span class="${noteCls}">${note}</span></span></span></button>`;
 
@@ -206,6 +227,7 @@ const Home = (() => {
           ${actCard(acts, admin ? 'When people work on the team’s tasks, it shows up here.' : 'When your team works on the tasks you created, it shows up here.', 'grow')}
         </div>
         <aside class="hm-col">
+          ${Host.isMacApp ? goalCard() : ''}
           <section class="hm-card">
             <div class="hm-h"><h2>Schedule</h2><span class="hm-mute">${sel === today ? 'Today' : parseYmd(sel).toLocaleDateString('en-US', { weekday: 'long' })}</span></div>
             ${dayStrip(days, sel, lateOn)}
@@ -216,12 +238,12 @@ const Home = (() => {
             <div class="hm-h"><h2>Checklist</h2><span class="hm-mute">${items.length ? `${itemsDone} of ${items.length} done` : ''}</span></div>
             ${items.length ? items.map(({ t, c }) => `<div class="hm-cl"><button type="button" class="hm-chk ${c.done ? 'on' : ''}" data-hm="cl" data-task-id="${t.id}" data-v="${c.id}" aria-label="Done">${tick}</button><span class="hm-main" data-task="${t.id}"><b class="${c.done ? 'struck' : ''}">${esc(c.text)}</b><span class="hm-sub">${title(t)}</span></span></div>`).join('') : `<div class="hm-empty">Checklist items on ${admin ? 'the team’s tasks' : 'the tasks you created'} show up here.</div>`}
           </section>
-          <section class="hm-hero">
+          ${Host.isMacApp ? '' : `<section class="hm-hero">
             <h2>Team on time</h2>
             <div class="hm-hn"><b>${doneM.length ? onT + '%' : '–'}</b><span>${doneM.length && doneL.length ? `${onT - onTL >= 0 ? '+' : ''}${onT - onTL}% vs<br>${new Date(ly, lm, 1).toLocaleDateString('en-US', { month: 'long' })}` : 'this month'}</span></div>
             ${team.length ? `<div class="hm-avs">${avatarStack(team, 32, 5)}</div>` : ''}
             <p>${admin ? 'Team tasks' : 'Tasks you created'} that were finished by their due date this month</p>
-          </section>
+          </section>`}
         </aside>
       </div>
     </div>`;
