@@ -360,7 +360,7 @@ final class Talk {
   }
 
   // ---------- sending from here: shown at once, then the server's copy takes its place ----------
-  func send(_ g: String, text: String, reply: Msg? = nil, mentions: [String] = [], file: Msg.FileRef? = nil, localFile: URL? = nil, upload: Data? = nil, fwd: Bool = false, album: String? = nil, task: Msg.TaskCard? = nil, progress: ((Double) -> Void)? = nil) {
+  func send(_ g: String, text: String, reply: Msg? = nil, mentions: [String] = [], file: Msg.FileRef? = nil, localFile: URL? = nil, upload: Data? = nil, fwd: Bool = false, album: String? = nil, task: Msg.TaskCard? = nil, link: LinkPrevMaker.Pick = .auto, progress: ((Double) -> Void)? = nil) {
     guard let me = me else { return }
     let cid = UUID().uuidString
     var l = log(g)
@@ -394,10 +394,10 @@ final class Talk {
         m.file?.id = fid
         go(fid)
       }
-    } else if file == nil, !fwd, task == nil, let u = LinkPrevMaker.firstLink(text), !LinkPrevMaker.ours(u) {
-      // (words with a link: its preview made here first — the picture and the site's icon sent up as files — then the
-      //  message with it; the clock shows meanwhile, and the message goes without a preview if none comes)
-      LinkPrevMaker.make(u) { [weak self] prev, img, icon in
+    } else if file == nil, !fwd, task == nil, let u = LinkPrevMaker.firstLink(text), !LinkPrevMaker.ours(u), { if case .none = link { return false }; return true }() {
+      // (words with a link: its preview — read in the box while it was typed, as far as it got (WhatsApp's), or else read
+      //  here first — the picture and the site's icon sent up as files, then the message with it)
+      let handle: (Msg.LinkPrev?, Data?, Data?) -> Void = { [weak self] prev, img, icon in
         guard let self = self, var prev = prev else { go(nil); return }
         let up = { (d: Data?, name: String, done: @escaping (String?) -> Void) in
           guard let d = d else { done(nil); return }
@@ -415,6 +415,7 @@ final class Talk {
           }
         }
       }
+      if case .given(let r) = link, r.prev.url == u.absoluteString { handle(r.prev, r.img, r.icon) } else { LinkPrevMaker.make(u, done: handle) }
     } else { go(nil) }
   }
   private func mark(_ g: String, _ cid: String, failed: Bool) {
@@ -866,6 +867,28 @@ enum LinkPrevMaker {
   static func firstLink(_ text: String) -> URL? {
     guard let d = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return nil }
     return d.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { $0.url }.first { $0.scheme?.hasPrefix("http") == true }
+  }
+  // what the box read for a link while it was typed (WhatsApp's card above the box, Haris 2026-11-15): given to send as
+  // it is at that moment — or nothing, if nothing was read yet or its card was closed with ✕
+  struct Ready { var prev: Msg.LinkPrev; var img: Data?; var icon: Data? }
+  enum Pick { case auto, given(Ready), none }
+  // read while the words are still in the box: the title and site first, then the picture and the icon as each comes
+  @discardableResult
+  static func read(_ url: URL, step: @escaping (Ready) -> Void) -> LPMetadataProvider {
+    let p = LPMetadataProvider(); p.timeout = 20
+    p.startFetchingMetadata(for: url) { md, _ in
+      guard let md = md else { return }
+      let site = (md.url ?? url).host?.replacingOccurrences(of: "www.", with: "")
+      var r = Ready(prev: Msg.LinkPrev(url: url.absoluteString, title: md.title, site: site, video: md.videoProvider != nil || md.remoteVideoURL != nil, img: nil, icon: nil), img: nil, icon: nil)
+      DispatchQueue.main.async { step(r) }
+      if let ip = md.iconProvider, ip.canLoadObject(ofClass: UIImage.self) {
+        ip.loadObject(ofClass: UIImage.self) { o, _ in let d = (o as? UIImage).flatMap { shrink($0, 64)?.pngData() }; DispatchQueue.main.async { if d != nil { r.icon = d; step(r) } } }
+      }
+      if let ip = md.imageProvider, ip.canLoadObject(ofClass: UIImage.self) {
+        ip.loadObject(ofClass: UIImage.self) { o, _ in let d = (o as? UIImage).flatMap { shrink($0, 800)?.jpegData(compressionQuality: 0.75) }; DispatchQueue.main.async { if d != nil { r.img = d; step(r) } } }
+      }
+    }
+    return p
   }
   static func make(_ url: URL, done: @escaping (Msg.LinkPrev?, Data?, Data?) -> Void) {
     let p = LPMetadataProvider(); p.timeout = 6

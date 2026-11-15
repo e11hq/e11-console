@@ -1,4 +1,5 @@
 import UIKit
+import LinkPresentation
 import UIKit.UIGestureRecognizerSubclass
 import PhotosUI
 import QuickLook
@@ -214,7 +215,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     spotW = titleSpot.widthAnchor.constraint(equalToConstant: 200)
     NSLayoutConstraint.activate([spotW, titleSpot.heightAnchor.constraint(equalToConstant: 39)])
     setBarButtons()
-    bar.onSend = { [weak self] t, ms, task in self?.send(t, mentions: ms, task: task) }
+    bar.onSend = { [weak self] t, ms, task, link in self?.send(t, mentions: ms, task: task, link: link) }
     // (step 5: the others see "… is typing"; # finds E11 Console's tasks for a staff group)
     bar.onTyping = { [weak self] in guard let self = self else { return }; Net.shared.act(["act": "typing", "group": self.group]) }
     bar.onFindTasks = { [weak self] q, done in
@@ -954,13 +955,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
 
   // ---------- sending ----------
-  private func send(_ text: String, mentions: [String] = [], task: Msg.TaskCard? = nil) {
+  private func send(_ text: String, mentions: [String] = [], task: Msg.TaskCard? = nil, link: LinkPrevMaker.Pick = .auto) {
     if let e = editingMsg {
       editingMsg = nil; bar.setReply(nil, editing: false)
       Net.shared.act(["act": "edit", "msg": e.id, "text": text]) { j in if (j?["ok"] as? Bool) == true { Talk.shared.sync() } else { toast(j?["error"] as? String ?? "Couldn’t edit it") } }
       return
     }
-    Talk.shared.send(group, text: text, reply: replying, mentions: mentions, task: task)
+    Talk.shared.send(group, text: text, reply: replying, mentions: mentions, task: task, link: link)
     replying = nil
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     toBottom(true)
@@ -2865,11 +2866,16 @@ final class MessageBar: UIView, UITextViewDelegate {
   // (the strip's room above the box: it clips the strip, so the strip slides up out from behind the box's row and back down
   //  behind it — WhatsApp's, Haris 2026-11-15)
   private let replyClip = UIView()
+  // (a link typed or pasted: its card above the box as it's read — WhatsApp's; the bubble's own card stays ours.
+  //  Haris 2026-11-15: the link's mark and its site first, then its title, then its picture in the mark's place; ✕ sends
+  //  it without; sent early, it goes with whatever was read)
+  private let linkV = UIView(), linkPic = UIImageView(), linkTitle = UILabel(), linkSite = UILabel(), linkX = UIButton(type: .system)
+  private var linkOn = false, linkURL: URL?, linkReady: LinkPrevMaker.Ready?, linkProv: LPMetadataProvider?, linkOff = Set<String>(), linkWait: DispatchWorkItem?
   // (editing: the pencil before "Edit message", and send turns into ✓ — the design's board 34)
   private let editIcon = UIImageView(image: UIImage(systemName: "pencil", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)))
   private(set) var editing = false
   private let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
-  var onSend: ((String, [String], Msg.TaskCard?) -> Void)?
+  var onSend: ((String, [String], Msg.TaskCard?, LinkPrevMaker.Pick) -> Void)?
   var onPlus: ((String) -> Void)?
   var onCancelReply: (() -> Void)?
   var onVoice: ((URL, Double, String) -> Void)?
@@ -3000,23 +3006,37 @@ final class MessageBar: UIView, UITextViewDelegate {
     editIcon.tintColor = Look.accent; editIcon.contentMode = .center; editIcon.isHidden = true
     [replyBar, editIcon, replyName, replyText, replyX].forEach { replyV.addSubview($0) }
     replyV.isHidden = true; replyClip.clipsToBounds = true; replyClip.addSubview(replyV); addSubview(replyClip)
+    linkV.backgroundColor = .tertiarySystemFill; linkV.isHidden = true
+    linkPic.contentMode = .center; linkPic.clipsToBounds = true; linkPic.layer.cornerRadius = 6; linkPic.layer.cornerCurve = .continuous; linkPic.tintColor = .secondaryLabel
+    linkTitle.font = .systemFont(ofSize: 15, weight: .semibold); linkTitle.textColor = .label
+    linkSite.font = .systemFont(ofSize: 13); linkSite.textColor = .secondaryLabel
+    linkX.setImage(UIImage(systemName: "xmark.circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 21, weight: .light)), for: .normal); linkX.tintColor = .label
+    linkX.accessibilityLabel = "Send without the link's card"
+    linkX.addAction(UIAction { [weak self] _ in guard let self = self, let u = self.linkURL else { return }; self.linkOff.insert(u.absoluteString); self.linkCheck() }, for: .touchUpInside)
+    [linkPic, linkTitle, linkSite, linkX].forEach { linkV.addSubview($0) }
+    replyClip.addSubview(linkV)
     textChanged()
   }
   required init?(coder: NSCoder) { fatalError() }
   // (the bar stays above the home indicator when the keyboard is down)
   private var mentionH: CGFloat { mentionBox.isHidden ? 0 : CGFloat(mentionV.arrangedSubviews.count) * 52 }
-  override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: (locked ? 83 : boxH + 13) + (replyOn ? 52 : 0)) }
+  override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: (locked ? 83 : boxH + 13) + (replyOn ? 52 : 0) + (linkOn ? 60 : 0)) }
   private var replyOn = false   // (the reply / edit strip's room — the strip slides up into it from behind the box, and back)
   override func layoutSubviews() {
     super.layoutSubviews()
     defer { onLayout?() }
-    let W = bounds.width, mh = mentionH, top: CGFloat = replyOn ? 52 : 0
+    let W = bounds.width, mh = mentionH, lh: CGFloat = linkOn ? 60 : 0, top: CGFloat = (replyOn ? 52 : 0) + lh
     blur.frame = CGRect(x: 0, y: 0, width: W, height: bounds.height + 420)   // (down behind the home line and the keyboard)
     mentionBox.frame = CGRect(x: 0, y: -mh, width: W, height: mh); mentionV.frame = mentionBox.bounds
     // (the room grows with the bar's top as the bar grows, the strip at its top: the strip rises with the bar's top out from
     //  behind the box's row, which stays where it is; going, the other way round — sliding down behind it, no fade)
     replyClip.frame = CGRect(x: 0, y: 0, width: W, height: top)
-    replyV.frame = CGRect(x: 0, y: 0, width: W, height: 52)
+    replyV.frame = CGRect(x: 0, y: lh, width: W, height: 52)
+    linkV.frame = CGRect(x: 0, y: 0, width: W, height: 60)
+    linkPic.frame = CGRect(x: 10, y: 6, width: 48, height: 48)
+    let lx: CGFloat = 68
+    linkTitle.frame = CGRect(x: lx, y: 10, width: W - 52 - lx, height: 19); linkSite.frame = CGRect(x: lx, y: 31, width: W - 52 - lx, height: 17)
+    linkX.frame = CGRect(x: W - 46, y: 10, width: 40, height: 40)
     replyBar.frame = CGRect(x: 0, y: 0, width: 4, height: 52)
     let tx: CGFloat = editing ? 40 : 12
     editIcon.frame = CGRect(x: 10, y: 12, width: 24, height: 28)
@@ -3328,6 +3348,7 @@ final class MessageBar: UIView, UITextViewDelegate {
   func textChanged() {
     place.isHidden = !box.text.isEmpty
     paintMentions()
+    linkCheck()
     let h = min(130, max(30, ceil(box.sizeThatFits(CGSize(width: max(100, box.bounds.width), height: 400)).height)))
     let scrolls = h >= 130
     if box.isScrollEnabled != scrolls { box.isScrollEnabled = scrolls; if scrolls { box.scrollRangeToVisible(box.selectedRange) } }
@@ -3341,6 +3362,46 @@ final class MessageBar: UIView, UITextViewDelegate {
     // the box jumped with each new line — Haris 2026-11-14)
     boxH = h; invalidateIntrinsicContentSize(); setNeedsLayout()
     UIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { host.layoutIfNeeded() }
+  }
+  // the link's card above the box: a link in the words (not our own, not closed with ✕) is read a moment after it's typed;
+  // the strip comes up from behind the box (as the reply strip) with the link's mark and its site, then fills in
+  private func linkCheck() {
+    let u = editing ? nil : LinkPrevMaker.firstLink(box.text).flatMap { LinkPrevMaker.ours($0) || linkOff.contains($0.absoluteString) ? nil : $0 }
+    guard u != linkURL || (u != nil) != linkOn else { return }
+    linkWait?.cancel(); linkProv?.cancel(); linkProv = nil; linkReady = nil
+    linkURL = u
+    guard let u = u else { setLinkOn(false); return }
+    linkPic.image = UIImage(systemName: "link", withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .regular)); linkPic.contentMode = .center; linkPic.backgroundColor = .clear
+    linkTitle.text = nil; linkSite.text = u.host?.replacingOccurrences(of: "www.", with: "")
+    setLinkOn(true)
+    let w = DispatchWorkItem { [weak self] in
+      guard let self = self, self.linkURL == u else { return }
+      self.linkProv = LinkPrevMaker.read(u) { [weak self] r in
+        guard let self = self, self.linkURL == u else { return }
+        self.linkReady = r
+        UIView.transition(with: self.linkV, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction]) {
+          self.linkTitle.text = r.prev.title; self.linkSite.text = r.prev.site ?? self.linkSite.text
+          if let d = r.img ?? r.icon, let i = UIImage(data: d) { self.linkPic.image = i; self.linkPic.contentMode = .scaleAspectFill }
+        }
+      }
+    }
+    linkWait = w; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: w)
+  }
+  private func setLinkOn(_ on: Bool) {
+    guard on != linkOn else { return }
+    linkOn = on
+    invalidateIntrinsicContentSize(); setNeedsLayout()
+    guard window != nil, let host = superview else { linkV.isHidden = !on; return }
+    if on { linkV.isHidden = false }
+    UIView.animate(withDuration: 0.25, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { host.layoutIfNeeded() } completion: { _ in if !self.linkOn { self.linkV.isHidden = true } }
+  }
+  // sent: the link's card as far as it was read — nothing if nothing yet, or if its card was closed
+  private func takeLink(_ t: String) -> LinkPrevMaker.Pick {
+    defer { linkOff.removeAll() }
+    guard let u = LinkPrevMaker.firstLink(t), !LinkPrevMaker.ours(u) else { return .auto }
+    if linkOff.contains(u.absoluteString) { return .none }
+    if let r = linkReady, r.prev.url == u.absoluteString { return .given(r) }
+    return .none
   }
   // the people picked with @ shown in the box as they'll be sent: the name in our blue, its @ in grey (WhatsApp's; Haris
   // 2026-11-15) — only the colours set, the words and the caret left where they are
@@ -3370,8 +3431,9 @@ final class MessageBar: UIView, UITextViewDelegate {
     // (the people picked with @ whose name is still in the words)
     let ms = picked.filter { t.contains("@" + $0.value) }.map { $0.key }
     let task = pickedTask
+    let link = takeLink(t)
     box.text = ""; picked = [:]; showMentions([]); if task != nil { setTask(nil) }; textChanged()
-    onSend?(t, ms, task)
+    onSend?(t, ms, task, link)
   }
   func setReply(_ r: (String, String)?, editing: Bool, ink: UIColor = Look.accent) {
     let on = r != nil, changed = on != replyOn
