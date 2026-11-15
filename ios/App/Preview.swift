@@ -458,8 +458,17 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     view.addGestureRecognizer(pan)
     pull = pan
   }
+  // (a strip shorter than the screen sits in its middle — Haris 2026-11-15: the pictures weren't centred)
+  private func centreStrip() {
+    let row = stripRow.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).width + 28
+    let pad = max(0, (strip.bounds.width - row) / 2)
+    guard abs(strip.contentInset.left - pad) > 0.5 else { return }
+    strip.contentInset = UIEdgeInsets(top: 0, left: pad, bottom: 0, right: pad)
+    if row <= strip.bounds.width { strip.contentOffset = CGPoint(x: -pad, y: 0) }
+  }
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
+    centreStrip()
     if let l = pager.collectionViewLayout as? UICollectionViewFlowLayout, l.itemSize != view.bounds.size { l.itemSize = view.bounds.size; l.invalidateLayout() }
     topShade.frame = CGRect(x: 0, y: -topBar.frame.minY, width: view.bounds.width, height: topBar.frame.maxY + 30)
     footShade.frame = CGRect(x: 0, y: -30, width: view.bounds.width, height: view.bounds.height - bottomBar.frame.minY + 30)
@@ -538,8 +547,9 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     for (i, b) in stripRow.arrangedSubviews.enumerated() { b.layer.borderWidth = i == at ? 1.5 : 0; b.layer.borderColor = UIColor.white.cgColor }
     if let b = stripRow.arrangedSubviews[safe: at], files.count > 1 {
       if !stripPlaced { view.layoutIfNeeded() } else { strip.layoutIfNeeded() }
+      centreStrip()
       let maxX = max(0, strip.contentSize.width - strip.bounds.width)
-      let x = min(maxX, max(0, b.frame.midX - strip.bounds.width / 2))
+      let x = maxX == 0 ? -strip.contentInset.left : min(maxX, max(0, b.frame.midX - strip.bounds.width / 2))
       strip.setContentOffset(CGPoint(x: x, y: 0), animated: stripPlaced)
       stripPlaced = true
     }
