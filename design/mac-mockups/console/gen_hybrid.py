@@ -31,6 +31,7 @@ def sym(name, color):
       'flag': '<path d="M5 21V4h11l-2 4 2 4H5"/>',
       'tick': '<path d="M5 12.5l4.5 4.5L19 7"/>',
       'shield': '<path d="M12 3l8 3v6c0 4.5-3.4 7.8-8 9-4.6-1.2-8-4.5-8-9V6z"/>',
+      'users': '<circle cx="9" cy="8" r="3.2"/><path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5M16 5.2a3 3 0 010 5.6M18 13.8c2 .7 3 2.6 3 5.2"/>',
       'moon': '<path d="M20 14A8 8 0 0110 4a8 8 0 1010 10z"/>',
     }[name]
     return f'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{p}</svg>'
@@ -38,6 +39,8 @@ def sym(name, color):
 MARK = 'M274.8 108.1 L274.2 108.8 L274.4 130.5 L275.2 131.2 L296.8 131.1 L297.4 130.2 L297.2 108.5 L296.6 108.0Z M212.8 2.0 L211.6 3.2 L211.9 24.5 L218.6 25.2 L224.8 28.0 L229.2 32.2 L231.4 36.0 L232.6 40.0 L232.8 130.6 L233.4 131.9 L254.8 131.9 L255.9 130.4 L255.9 43.5 L254.9 35.5 L253.2 29.8 L250.0 22.6 L247.8 19.2 L242.4 13.1 L237.6 9.2 L232.4 6.2 L225.0 3.5 L219.0 2.2Z M149.8 2.0 L148.6 3.2 L148.9 24.5 L155.6 25.2 L161.8 28.0 L166.2 32.2 L168.4 36.0 L169.6 40.0 L169.8 130.6 L170.4 131.9 L191.8 131.9 L192.9 130.4 L192.9 43.5 L191.9 35.5 L190.2 29.8 L187.0 22.6 L184.8 19.2 L179.4 13.1 L174.6 9.2 L169.4 6.2 L162.0 3.5 L156.0 2.2Z M11.6 8.8 L7.8 12.8 L3.9 18.6 L1.4 24.8 L0.0 31.5 L0.0 98.4 L1.1 104.1 L2.8 108.9 L5.4 113.8 L8.4 117.9 L13.5 122.8 L17.9 125.6 L23.2 128.0 L31.5 129.9 L129.2 129.8 L129.9 128.9 L129.9 107.9 L128.9 106.8 L34.1 106.8 L30.5 105.9 L27.1 103.8 L24.6 100.9 L23.0 96.1 L22.9 71.5 L23.6 70.4 L105.8 70.1 L106.5 69.2 L106.6 48.4 L105.8 47.0 L24.1 47.0 L22.9 45.9 L22.9 34.6 L23.6 31.1 L25.6 27.6 L28.9 24.8 L34.1 23.1 L128.9 23.1 L129.9 22.0 L129.8 0.6 L128.9 0.0 L31.5 0.0 L27.5 0.6 L20.1 3.1 L17.0 4.8Z'
 
 H = 1250
+
+WHO = {'lead': ('#7D5BD9', 'AM', 'Alex Morgan', 'Super Admin'), 'member': ('#E67E22', 'JL', 'Jamie Lowe', 'Production'), 'office': ('#2C7A7B', 'NH', 'Nadine Hale', 'Office Admin')}
 
 def board(look, page='lead'):
     t = T[look]; A = t['accent']
@@ -71,16 +74,19 @@ def board(look, page='lead'):
     side = (f'<div style="position: absolute; left: 8px; top: 8px; bottom: 8px; width: 244px; border-radius: 18px; background: {t["side"]}; backdrop-filter: blur(30px); '
             f'box-shadow: inset 0 0 0 0.5px {t["sideLine"]}, 0 8px 28px rgba(0,0,0,0.18); box-sizing: border-box; display: flex; flex-direction: column; z-index: 3">'
             '<div style="height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 16px; flex: none"><span style="width: 12px; height: 12px; border-radius: 6px; background: #ff5f57"></span><span style="width: 12px; height: 12px; border-radius: 6px; background: #febc2e"></span><span style="width: 12px; height: 12px; border-radius: 6px; background: #28c840"></span>'
-            f'<span style="margin-left: auto; display: flex; gap: 6px">{rb("moon")}{rb("plus")}{rb("sidebar")}</span></div>'
+            f'<span style="margin-left: auto; display: flex; gap: 6px">{rb("moon")}{rb("plus") if page != "office" else ""}{rb("sidebar")}</span></div>'
             '<div style="padding: 8px 10px 0; display: flex; flex-direction: column; flex: 1; min-height: 0">'
-            + item('house', 'Home', on=True) + item('tray', 'Inbox', '3', red=True) + item('sun', 'E11 Day' if page == 'lead' else 'My Day', '7' if page == 'lead' else '4') + item('check', 'My Tasks', '8' if page == 'lead' else '5') + item('cal', 'Content plans', '1', red=True)
+            + ((item('house', 'Home', on=True) + item('tray', 'Inbox', '3', red=True) + item('sun', 'E11 Day' if page == 'lead' else 'My Day', '7' if page == 'lead' else '4') + item('check', 'My Tasks', '8' if page == 'lead' else '5') + item('cal', 'Content plans', '1', red=True)
             + head('Clients', True) + item(dot('#0E3E8C'), 'Northline Motors', '11') + item(dot('#C8102E'), 'Kestrel Foods', '8') + item(dot('#3E7D44'), 'Pinecrest', '5')
-            + '<div style="margin-top: auto"></div>' + head('Library') + item('grid', 'Client Assets', '13') + (item('dollar', 'Finance') if page == 'lead' else '') + item('trash', 'Trash', '3')
+            + '<div style="margin-top: auto"></div>' + head('Library') + item('grid', 'Client Assets', '13') + (item('dollar', 'Finance') if page == 'lead' else '') + item('trash', 'Trash', '3')) if page != 'office' else
+              (item('house', 'Home', on=True) + item('tray', 'Inbox', '3', red=True)
+               + head('Finance') + item('house', 'Dashboard') + item('folder', 'Clients') + item('users', 'Reimbursements', '4') + item('dollar', 'Expenses')
+               + '<div style="margin-top: auto"></div>' + head('Library') + item('grid', 'Client Assets', '13') + item('trash', 'Trash', '3')))
             + '<div style="height: 6px; flex: none"></div></div>'
             + f'<div style="height: 92px; flex: none; position: relative; padding: 0 10px">'
             + f'<div style="position: absolute; left: 19px; right: 19px; top: 0; height: 0.5px; background: {t["sideLine"]}"></div>'
-            + f'<div style="margin-top: 8px; height: 42px; display: flex; align-items: center; padding: 0 8px; gap: 10px"><span style="width: 30px; height: 30px; border-radius: 15px; background: {"#7D5BD9" if page == "lead" else "#E67E22"}; color: #fff; font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center">{"AM" if page == "lead" else "JL"}</span>'
-            + f'<div style="flex: 1"><div style="font-size: 13px; font-weight: 600">{"Alex Morgan" if page == "lead" else "Jamie Lowe"}</div><div style="font-size: 11.5px; color: {sec}">{"Super Admin" if page == "lead" else "Production"}</div></div><span style="color: {ter}; font-size: 10px">⌄</span></div>'
+            + f'<div style="margin-top: 8px; height: 42px; display: flex; align-items: center; padding: 0 8px; gap: 10px"><span style="width: 30px; height: 30px; border-radius: 15px; background: {WHO[page][0]}; color: #fff; font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center">{WHO[page][1]}</span>'
+            + f'<div style="flex: 1"><div style="font-size: 13px; font-weight: 600">{WHO[page][2]}</div><div style="font-size: 11.5px; color: {sec}">{WHO[page][3]}</div></div><span style="color: {ter}; font-size: 10px">⌄</span></div>'
             + f'<div style="margin-top: 2px; height: 18px; display: flex; align-items: center; gap: 7px; padding-left: 1px"><span style="width: 7px; height: 7px; border-radius: 4px; background: #30d158"></span><span style="font-size: 11.5px; color: {sec}">Synced · E11 Server</span></div>'
             + f'<div style="padding-left: 10px; font-size: 11px; color: {ter}">© 2026 E11 Agency</div></div></div>')
     def tb(inner, w=None):
@@ -91,7 +97,7 @@ def board(look, page='lead'):
                f'<span style="font-size: 15px; font-weight: 700">Home</span>'
                f'<span style="margin-left: auto"></span>'
                               + tb(sym('bubble', t['fg']) + 'Talk <span style="min-width: 18px; height: 18px; border-radius: 9px; background: #ff3b30; color: #fff; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; box-sizing: border-box">5</span>', w=1)
-               + f'<span style="width: 220px; height: 30px; border-radius: 15px; background: {t["field"]}; {"box-shadow: 0 0 0 3px color-mix(in srgb, " + A + " 45%, transparent);" if searching else ""} display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; box-sizing: border-box; font-size: 13px; color: {t["dim"]}">{sym("search", t["dim"])}{"<span style=" + chr(34) + "color:" + t["fg"] + chr(34) + ">maya</span>" if searching else "Search tasks"}<span style="margin-left: auto; font-size: 11px">⌘K</span></span>'
+               + ('' if page == 'office' else f'<span style="width: 220px; height: 30px; border-radius: 15px; background: {t["field"]}; {"box-shadow: 0 0 0 3px color-mix(in srgb, " + A + " 45%, transparent);" if searching else ""} display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; box-sizing: border-box; font-size: 13px; color: {t["dim"]}">{sym("search", t["dim"])}{"<span style=" + chr(34) + "color:" + t["fg"] + chr(34) + ">maya</span>" if searching else "Search tasks"}<span style="margin-left: auto; font-size: 11px">⌘K</span></span>')
                + f'<svg viewBox="0 0 297.5 132.0" style="height: 18px; width: auto; margin-left: 6px; flex: none" aria-hidden="true"><path fill="{"#fff" if look == "dark" else "#000"}" fill-rule="evenodd" d="{MARK}"/></svg>'
                + '</div>')
     # the website's Home (an Admin's: layout A, home.js viewLead), restyled for the Mac (inside the web view)
@@ -189,7 +195,7 @@ def board(look, page='lead'):
             f'<div style="display: flex; align-items: center; gap: 12px; margin: 8px 0 10px"><span style="font-size: 40px; font-weight: 700; letter-spacing: -1px">86%</span><span style="font-size: 12px; opacity: 0.85; line-height: 1.3">+4% vs<br>October</span></div>'
             f'<div style="display: flex; margin-bottom: 10px">' + ''.join(av(i, c, 30, ml=(0 if k == 0 else -8)) .replace(f'box-shadow: 0 0 0 2px {t["card"]}', 'box-shadow: 0 0 0 2px #4766e9') for k, (i, c) in enumerate([('JL', '#E67E22'), ('MK', '#16A085'), ('RT', '#8E44AD'), ('AB', '#2980B9'), ('SR', '#C0392B')])) + '</div>'
             f'<div style="font-size: 12px; opacity: 0.9">Team tasks that were finished by their due date this month</div></div>')
-    btn = lambda label, primary=False: (f'<span style="height: 28px; padding: 0 12px; border-radius: 7px; font-size: 13px; display: inline-flex; align-items: center; '
+    btn = lambda label, primary=False: (f'<span style="height: 28px; padding: 0 12px; white-space: nowrap; border-radius: 7px; font-size: 13px; display: inline-flex; align-items: center; '
                                          + (f'background: {A}; color: #fff; font-weight: 500">' if primary else f'background: {t["glass"]}; box-shadow: inset 0 0 0 0.5px {t["glassLine"]}">') + label + '</span>')
     content = (f'<div style="position: absolute; left: 260px; right: 0; top: 52px; bottom: 0; background: {t["content"]}; border-top: 0.5px solid {t["line"]}; padding: 20px 24px 8px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; overflow: hidden">'
                f'<div style="display: flex; align-items: flex-end"><div><div style="font-size: 12px; color: {t["dim"]}">Saturday, November 14</div><div style="font-size: 26px; font-weight: 700; letter-spacing: -0.3px">Good evening, Alex</div></div>'
@@ -249,6 +255,49 @@ def board(look, page='lead'):
                    f'<div style="display: grid; grid-template-columns: 1fr 330px; gap: 14px; align-items: stretch; flex: 1; min-height: 0">'
                    f'<div style="display: flex; flex-direction: column; gap: 14px; min-width: 0">{upnext}{pipeline}{week}{macts}</div>'
                    f'<div style="display: flex; flex-direction: column; gap: 14px">{rev}{amends}{files}{streak}</div></div></div>')
+    if page == 'office':
+        def tile(n, label, sub, tone):
+            return card(extra='flex: 1', inner=f'<div style="display: flex; align-items: center; gap: 14px"><span style="font-size: 28px; font-weight: 700; color: {tone}">{n}</span><div><div style="font-size: 13px; font-weight: 600">{label}</div><div style="font-size: 12px; color: {t["dim"]}">{sub}</div></div></div>')
+        segx = lambda items, on: f'<span style="margin-left: auto; display: inline-flex; padding: 2px; border-radius: 8px; background: {t["field"]}">' + ''.join(f'<span style="padding: 3px 10px; border-radius: 6px; font-size: 12px; {"background:" + t["win"] + "; box-shadow: 0 0.5px 2px rgba(0,0,0,0.25); font-weight: 600;" if x == on else ""}">{x}</span>' for x in items) + '</span>'
+        ext = lambda e, c: f'<span style="width: 38px; height: 30px; border-radius: 7px; background: {c}; color: #fff; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex: none">{e}</span>'
+        def frow(e, c, name, where, when, sel=False):
+            det = (f'<div style="margin: 2px 0 6px 48px; padding: 10px 12px; border-radius: 9px; background: {t["field"]}; font-size: 12px; display: grid; grid-template-columns: 70px 1fr; gap: 4px 10px">'
+                   f'<span style="color: {t["dim"]}">Added by</span><span>Maya Kent</span><span style="color: {t["dim"]}">Added</span><span>14 November 2026</span><span style="color: {t["dim"]}">Size</span><span>1.2 MB</span><span style="color: {t["dim"]}">Folder</span><span>Northline Motors › Logos</span>'
+                   f'<span></span><span style="display: flex; gap: 6px; margin-top: 6px">{btn("Open folder")}{btn("Download")}</span></div>') if sel else ''
+            return (f'<div style="display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; {"background:" + t["sel"] + ";" if sel else ""}">{ext(e, c)}'
+                    f'<div style="flex: 1; min-width: 0"><div style="font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{name}</div><div style="font-size: 11.5px; color: {t["dim"]}">{where}</div></div><span style="font-size: 11.5px; color: {t["dim"]}">{when}</span></div>' + det)
+        chips = ''.join(f'<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 14px; font-size: 12px; {"background:" + A + "; color: #fff;" if on else "background:" + t["field"] + ";"}"><i style="width: 8px; height: 8px; border-radius: 4px; background: {"#fff" if on else c}"></i>{n}</span>' for n, c, on in [('All clients', '#9aa0ab', True), ('Northline Motors', N, False), ('Kestrel Foods', K, False), ('Pinecrest', P, False)])
+        assets = card(extra='display: flex; flex-direction: column; min-height: 0', inner=h2('Latest in Client Assets', f'<span style="margin-left: auto; font-size: 12px; color: {t["dim"]}">128 files</span>')
+            + f'<div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px">{chips}</div>'
+            + frow('SVG', N, 'Northline-logo-white.svg', 'Northline Motors › Logos · Maya', '2h ago', sel=True) + frow('PDF', K, 'Kestrel-brand-guidelines-2026.pdf', 'Kestrel Foods › Guidelines · Ana', '5h ago')
+            + frow('OTF', P, 'Pinecrest-Serif-Bold.otf', 'Pinecrest › Fonts · Rui', 'Yesterday') + frow('PNG', N, 'Showroom-banner-1920.png', 'Northline Motors › Banners · Jamie', 'Thu') + frow('JPG', K, 'Menu-hero-02.jpg', 'Kestrel Foods › Photos · Maya', 'Wed'))
+        def nrow(ini, c, text, kind, when, unread=True):
+            return (f'<div style="display: flex; align-items: center; gap: 10px; padding: 8px 6px; border-top: 0.5px solid {t["line"]}">{av(ini, c, 28)}'
+                    f'<div style="flex: 1; min-width: 0"><div style="font-size: 13px; {"font-weight: 600;" if unread else ""}">{text}</div><div style="font-size: 11.5px; color: {t["dim"]}">{kind} · {when}</div></div>'
+                    + (f'<span style="width: 8px; height: 8px; border-radius: 4px; background: {A}"></span>' if unread else '') + '</div>')
+        inbox = card(extra='display: flex; flex-direction: column; min-height: 0', inner=h2('Inbox', segx(['Unread', 'All'], 'Unread'))
+            + nrow('JL', '#E67E22', 'Jamie Lowe submitted his November claim', 'Expense claim', '20m ago')
+            + nrow('MK', '#16A085', 'Maya Kent added 3 files to Northline Motors › Logos', 'Client Assets', '2h ago')
+            + nrow('RT', '#8E44AD', 'Rui Tan submitted his November claim', 'Expense claim', '4h ago')
+            + f'<div style="margin-top: auto; padding-top: 10px; border-top: 0.5px solid {t["line"]}; display: flex; font-size: 12px; color: {t["dim"]}"><span>Open an update to see it</span><span style="margin-left: auto; color: {A}">Mark all read</span></div>')
+        sub_c, ok_c, paid_c = orange, green, A
+        def crow(ini, c, name, items, amt, state, act=''):
+            pc = {'Submitted': sub_c, 'HR approved': ok_c, 'Paid': paid_c}[state]
+            a = f'<span style="font-size: 11.5px; padding: 3px 9px; border-radius: 6px; background: {t["glass"]}; box-shadow: inset 0 0 0 0.5px {t["glassLine"]}">{act}</span>' if act else ''
+            return (f'<div style="display: flex; align-items: center; gap: 10px; padding: 8px 6px; border-top: 0.5px solid {t["line"]}">{av(ini, c, 28)}'
+                    f'<div style="flex: 1; min-width: 0"><div style="font-size: 13px; font-weight: 600">{name}</div><div style="font-size: 11.5px; color: {t["dim"]}; white-space: nowrap">{items} · AED {amt}</div></div>{pill(state, pc)}{a}</div>')
+        fin = card(extra='display: flex; flex-direction: column; min-height: 0', inner=h2('Finance · November', segx(['Claims', 'Expenses'], 'Claims'))
+            + f'<div style="display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin: 2px 0 8px"><span style="width: 50%; background: {sub_c}"></span><span style="width: 25%; background: {ok_c}"></span><span style="width: 25%; background: {paid_c}"></span></div>'
+            + f'<div style="display: flex; gap: 12px; font-size: 12px; color: {t["dim"]}; margin-bottom: 6px"><span><b style="color: {sub_c}">2</b> submitted</span><span><b style="color: {ok_c}">1</b> HR approved</span><span><b style="color: {paid_c}">1</b> paid</span><span style="margin-left: auto; color: {t["fg"]}; font-weight: 600">AED  3,140.00</span></div>'
+            + crow('AB', '#2980B9', 'Ana Brooks', '3 items', '420.00', 'Paid') + crow('JL', '#E67E22', 'Jamie Lowe', '5 items', '1,260.00', 'Submitted', 'HR approve')
+            + crow('MK', '#16A085', 'Maya Kent', '2 items', '310.00', 'HR approved', 'Mark paid') + crow('RT', '#8E44AD', 'Rui Tan', '4 items', '1,150.00', 'Submitted', 'HR approve')
+            + f'<div style="margin-top: auto; padding-top: 10px; border-top: 0.5px solid {t["line"]}; display: flex; gap: 8px">{btn("Open Dashboard")}{btn("All reimbursements")}</div>')
+        osearch = f'<span style="width: 360px; height: 32px; border-radius: 9px; background: {t["field"]}; display: inline-flex; align-items: center; gap: 7px; padding: 0 11px; box-sizing: border-box; font-size: 13px; white-space: nowrap; color: {t["dim"]}">{sym("search", t["dim"])}Search Client Assets — e.g. “northline logo svg”</span>'
+        content = (f'<div style="position: absolute; left: 260px; right: 0; top: 52px; bottom: 0; background: {t["content"]}; border-top: 0.5px solid {t["line"]}; padding: 20px 24px 8px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; overflow: hidden">'
+                   f'<div style="display: flex; align-items: flex-end"><div><div style="font-size: 12px; color: {t["dim"]}">Saturday, November 14 · Office Admin</div><div style="font-size: 26px; font-weight: 700; letter-spacing: -0.3px">Good evening, Nadine</div></div>'
+                   f'<div style="margin-left: auto">{osearch}</div></div>'
+                   f'<div style="display: flex; gap: 12px">{tile(3, "Clients", "in Client Assets", "#8b7cf6")}{tile(3, "Unread", "in your Inbox", red)}{tile(17, "Team members", "Open Team page", A)}{tile(2, "Claims to approve", "November", orange)}</div>'
+                   f'<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; flex: 1; min-height: 0">{assets}{inbox}{fin}</div></div>')
     # search (Haris 10:41): people too, and where each was found — as the iPhone's
     def sr(lead, title, sub, found=''):
         f = f'<div style="font-size: 11px; color: {t["dim"]}; margin-top: 1px">{found}</div>' if found else ''
@@ -284,4 +333,7 @@ open(os.path.join(P, 'Hybrid.dc.html'), 'w').write(board('dark'))
 open(os.path.join(P, 'HybridLight.dc.html'), 'w').write(board('light'))
 open(os.path.join(P, 'Member.dc.html'), 'w').write(board('dark', 'member'))
 open(os.path.join(P, 'MemberLight.dc.html'), 'w').write(board('light', 'member'))
+H = 900
+open(os.path.join(P, 'Office.dc.html'), 'w').write(board('dark', 'office'))
+open(os.path.join(P, 'OfficeLight.dc.html'), 'w').write(board('light', 'office'))
 print('ok')

@@ -14,10 +14,10 @@ def smooth(src, look, h=1300):
     body = body.replace('#98989d' if look == 'dark' else '#6e6e73', dim)
     body = body.replace('position: absolute; left: 260px; right: 0; top: 52px;',
                         f'position: absolute; left: 260px; right: 0; top: 52px; color: {fg}; line-height: 1.3; -webkit-font-smoothing: auto; font-family: system-ui, -apple-system, \'SF Pro Text\', sans-serif;', 1)
-    out = (head + body).replace('height: 1250px; background:', f'height: {h}px; background:', 1).replace('"height":1250', f'"height":{h}')
+    out = (head + body).replace('height: 1250px; background:', f'height: {h}px; background:', 1).replace('height: 900px; background:', f'height: {h}px; background:', 1).replace('"height":1250', f'"height":{h}')
     return out
 # run after gen_hybrid.py: every board gets it
-for f, look, h in [('Hybrid', 'dark', 1300), ('HybridLight', 'light', 1300), ('Member', 'dark', 1230), ('MemberLight', 'light', 1230)]:
+for f, look, h in [('Hybrid', 'dark', 1300), ('HybridLight', 'light', 1300), ('Member', 'dark', 1230), ('MemberLight', 'light', 1230), ('Office', 'dark', 900), ('OfficeLight', 'light', 900)]:
     pth = os.path.join(P, f + '.dc.html')
     s = open(pth).read()
     if '-webkit-font-smoothing: auto' not in s: open(pth, 'w').write(smooth(s, look, h))
