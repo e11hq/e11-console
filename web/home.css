@@ -323,7 +323,7 @@ html.mac-chrome :is(.oh, .hm) .btn.sm { height: 28px; padding: 0 12px; border-ra
 html.mac-chrome .hm-stats { gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)) 330px; }
 html.mac-chrome .hm-stat { gap: 12px; padding: 14px 16px; }
 /* the top cards pointed at: the Talk button's own hover — its grey laid over the card (Haris 2026-11-15 14:40) */
-html.mac-chrome :is(.hm-stat, .oh-stat):hover { background: linear-gradient(var(--mc-sel), var(--mc-sel)), var(--mc-content); }   /* (the Talk button's own: its grey on the window's colour — 15:06) */
+html.mac-chrome :is(.hm-stat, .oh-stat):hover { background: linear-gradient(var(--mc-sel), var(--mc-sel)), var(--mc-content); box-shadow: inset 0 0 0 .5px var(--mc-glass-line); }   /* (the Talk button's own: its grey on the window's colour — 15:06) */
 html.mac-chrome .hm-ic { width: 36px; height: 36px; border-radius: 10px; }
 html.mac-chrome .hm-ic svg { width: 16px; height: 16px; }
 html.mac-chrome .hm-ic.blue { background: color-mix(in srgb, var(--mc-blue) 18%, transparent); color: var(--mc-blue); }
@@ -601,4 +601,28 @@ html.mac-chrome { --mc-ired: #ff453a; } html.mac-chrome[data-theme="light"] { --
 html.mac-chrome .hm-pill { background: color-mix(in srgb, currentColor 16%, transparent); }
 /* E11 Day / + New task: fully round, as the search and Talk (15:06) */
 html.mac-chrome .hm-btn { border-radius: 14px; }
+/* ===== the other Home against H3 / H4 again (Haris 2026-11-15 15:19) ===== */
+/* the chosen lane's list: rows straight on the card, a line between them */
+html.mac-chrome .hm-lane-list { margin-top: 10px; border: 0; border-radius: 0; overflow: visible; }
+html.mac-chrome .hm-lrow { border-top: .5px solid var(--mc-line); border-radius: 0; }
+html.mac-chrome .hm-lrow > i { width: 8px; height: 8px; border-radius: 3px; }
+/* My CD reviews: the ring 74, its words in the text colour, the month's line grey */
+html.mac-chrome .hm-rev { gap: 14px; margin-top: 0; }
+html.mac-chrome .hm-rev svg { width: 74px; height: 74px; }
+html.mac-chrome .hm-rev .trk { stroke: var(--mc-line); }
+html.mac-chrome .hm-rev .val { stroke: var(--mc-green); }
+html.mac-chrome .hm-rev > div:last-child { color: var(--mc-fg); }
+/* Latest files: the kind in the top left corner */
+html.mac-chrome .hm-thumb { border-radius: 9px; font-weight: 400; }
+html.mac-chrome .hm-kind { left: 7px; right: auto; font-weight: 600; background: rgba(0, 0, 0, .35); }
+/* On-time streak: plain rows — a small round tick (or !) and the date */
+html.mac-chrome .hm-hrow { grid-template-columns: 16px minmax(0, 1fr) auto; gap: 8px; padding: 3px 0; border-radius: 0; background: none; }
+html.mac-chrome .hm-hrow:hover { background: none; }
+html.mac-chrome .hm-hrow:hover span { text-decoration: underline; }
+html.mac-chrome .hm-hrow i { width: 16px; height: 16px; background: rgba(255, 255, 255, .22); color: #fff; }
+html.mac-chrome .hm-hrow i.late { background: rgba(255, 90, 90, .5); color: #fff; }
+html.mac-chrome .hm-hrow i svg { width: 9px; height: 9px; }
 
+html.mac-chrome .hm-rev { margin-top: 10px; }
+html.mac-chrome .hm .hm-lh b { font-weight: 900 !important; color: var(--mc-fg); }
+html.mac-chrome .hm-rev small { font-size: smaller; }

@@ -189,7 +189,7 @@ const Home = (() => {
 
     return `<div class="hm hm-lead">
       <header class="hm-head"><div><div class="hm-date">${dateLine()}</div><h1>${hello(first(me()))}</h1></div>
-        <div class="hm-btns"><button type="button" class="hm-btn" data-nav="today">${esc(Work.dayTitle())}</button><button type="button" class="hm-btn primary" data-action="new-task">+ New task</button></div></header>
+        <div class="hm-btns">${Host.isMacApp ? '' : `<button type="button" class="hm-btn" data-nav="today">${esc(Work.dayTitle())}</button>`}<button type="button" class="hm-btn primary" data-action="new-task">+ New task</button></div></header>
       <section class="hm-stats">
         ${statCard('blue', Host.isMacApp ? 'cal' : 'clock', admin ? 'Team tasks due today' : 'Your tasks due today', due0.length, overdue.length ? `${overdue.length} overdue` : 'none overdue', overdue.length ? 'warn' : 'ok', 'today')}
         ${statCard('green', 'check', 'Finished by your team', doneWeek, doneWeek - donePrev >= 0 ? `↑ ${doneWeek - donePrev} vs last week` : `↓ ${donePrev - doneWeek} vs last week`, doneWeek >= donePrev ? 'ok' : 'warn', 'finished')}
@@ -345,7 +345,7 @@ const Home = (() => {
     const roleL = roleOf(u);
     return `<div class="hm hm-member">
       <header class="hm-head"><div><div class="hm-date">${dateLine()}${roleL ? ' · ' + esc(roleL) : ''}</div><h1>${hello(first(u))}</h1></div>
-        <div class="hm-btns"><button type="button" class="hm-btn" data-nav="today">My Day</button>${can('createTask') ? '<button type="button" class="hm-btn primary" data-action="new-task">+ New task</button>' : ''}</div></header>
+        <div class="hm-btns">${Host.isMacApp ? '' : '<button type="button" class="hm-btn" data-nav="today">My Day</button>'}${can('createTask') ? '<button type="button" class="hm-btn primary" data-action="new-task">+ New task</button>' : ''}</div></header>
       <div class="hm-grid">
         <div class="hm-col">
           ${hero}
