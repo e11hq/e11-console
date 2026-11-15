@@ -83,6 +83,7 @@ class SideHit: FlippedView {
 final class SideIcon: SideHit {
   let img = NSImageView()
   var onHover: ((Bool) -> Void)?
+  var plain = false   // (no hover box: the light / dark pair draws its own)
   var enabled = true { didSet { img.alphaValue = enabled ? 1 : 0.35 } }
   init(_ image: NSImage?, _ tip: String) {
     super.init(frame: NSRect(x: 0, y: 0, width: 28, height: 28))
@@ -98,7 +99,7 @@ final class SideIcon: SideHit {
   override func mouseExited(with e: NSEvent) { super.mouseExited(with: e); onHover?(false) }
   override func mouseUp(with e: NSEvent) { if enabled { super.mouseUp(with: e) } else { pressed = false } }
   override func draw(_ r: NSRect) {
-    guard enabled, hovering || pressed else { return }
+    guard enabled, !plain, hovering || pressed else { return }
     (pressed ? SIDE_SEL : SIDE_HOVER).setFill(); NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill()
   }
   // Claude's sidebar button: a rounded box with a short bar near its left (template: it follows light / dark)
@@ -136,6 +137,53 @@ final class SideTopRow: FlippedView {
     back.enabled = b; fwd.enabled = f
     toggle.toolTip = hidden ? "Show sidebar" : "Hide sidebar"
   }
+}
+
+// light / dark as the mock-up's two buttons (Haris 2026-11-15 14:20: "not same as mockup"): a soft grey field, the picked
+// one raised — the window's own colour with a small shadow — its symbol in the label colour, the other in grey
+final class SideThemePair: FlippedView {
+  static let W: CGFloat = 60, H: CGFloat = 28
+  private let field = dynColor(NSColor(srgbRed: 118/255, green: 118/255, blue: 128/255, alpha: 0.12), NSColor(srgbRed: 118/255, green: 118/255, blue: 128/255, alpha: 0.24))
+  private let raised = dynColor(.white, NSColor(srgbRed: 0x1e/255, green: 0x1e/255, blue: 0x20/255, alpha: 1))
+  let sun = SideIcon(sideSymbol("sun", 12.5), "Light"), moon = SideIcon(sideSymbol("moon", 12.5), "Dark")
+  var onPick: ((Bool) -> Void)?   // (true: light)
+  var light = false { didSet { if light != oldValue { look() } } }
+  private let knob = NSView()
+  override init(frame: NSRect) {
+    super.init(frame: frame)
+    wantsLayer = true
+    knob.wantsLayer = true
+    knob.layer?.cornerRadius = 7
+    knob.shadow = { let s = NSShadow(); s.shadowColor = NSColor(white: 0, alpha: 0.25); s.shadowBlurRadius = 2; s.shadowOffset = NSSize(width: 0, height: -0.5); return s }()
+    addSubview(knob)
+    for (b, l) in [(sun, true), (moon, false)] {
+      b.plain = true
+      b.onClick = { [weak self] in guard let self = self, self.light != l else { return }; self.light = l; self.onPick?(l) }
+      addSubview(b)
+    }
+    look()
+  }
+  required init?(coder: NSCoder) { nil }
+  override func layout() {
+    super.layout()
+    sun.frame = NSRect(x: 2, y: 2, width: 28, height: 24)
+    moon.frame = NSRect(x: 30, y: 2, width: 28, height: 24)
+    knob.frame = light ? sun.frame : moon.frame
+  }
+  private func look() {
+    sun.img.contentTintColor = light ? .labelColor : .secondaryLabelColor
+    moon.img.contentTintColor = light ? .secondaryLabelColor : .labelColor
+    needsLayout = true; needsDisplay = true
+  }
+  override func draw(_ r: NSRect) {
+    field.setFill(); NSBezierPath(roundedRect: bounds, xRadius: 9, yRadius: 9).fill()
+  }
+  // (layer colours don't follow the look by themselves: set again as it changes)
+  override func viewDidChangeEffectiveAppearance() {
+    super.viewDidChangeEffectiveAppearance()
+    effectiveAppearance.performAsCurrentDrawingAppearance { self.knob.layer?.backgroundColor = self.raised.cgColor }
+  }
+  override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); viewDidChangeEffectiveAppearance() }
 }
 
 // the window's left edge while the sidebar is hidden: the pointer there shows it
@@ -332,8 +380,10 @@ final class Sidebar: NSView {
   var hiddenMode = false          // (the page's "collapsed": hidden completely)
   private(set) var peeking = false
   var shown: Bool { on && (!hiddenMode || peeking) }
-  let row = SideTopRow(), hiddenRow = SideTopRow(), edgeHot = SideEdge()
-  let themeSeg = NSSegmentedControl()
+  // one top row for the window (Haris 2026-11-15 14:20: "the icons repeat … it should be same as claude's"): the sidebar
+  // button and ‹ › stay put over everything whether the sidebar is shown, hidden or peeking — only the sidebar moves
+  let topRow = SideTopRow(), edgeHot = SideEdge()
+  let themePair = SideThemePair()
   private var peekArmed = true, peekEnd: DispatchWorkItem?
   private(set) var model: [String: Any] = [:]
   let inner = SideInner()
@@ -376,23 +426,15 @@ final class Sidebar: NSView {
     scroll.layer?.mask = fade
     scroll.contentView.postsBoundsChangedNotifications = true
     NotificationCenter.default.addObserver(self, selector: #selector(scrolled), name: NSView.boundsDidChangeNotification, object: scroll.contentView)
-    [scroll, row, themeSeg, footLine, me, sync, copy].forEach { inner.addSubview($0) }
-    // light / dark: Apple's two-button control (as Claude's pair)
-    themeSeg.segmentCount = 2
-    themeSeg.setImage(sideSymbol("sun", 12.5), forSegment: 0); themeSeg.setImage(sideSymbol("moon", 12.5), forSegment: 1)
-    themeSeg.setToolTip("Light", forSegment: 0); themeSeg.setToolTip("Dark", forSegment: 1)
-    themeSeg.trackingMode = .selectOne
-    themeSeg.controlSize = .small
-    themeSeg.target = self; themeSeg.action = #selector(pickTheme)
-    for r in [row, hiddenRow] {
-      r.toggle.onClick = { [weak self] in self?.host?.sideCall(["kind": "collapse"], nil) }
-      r.back.onClick = { [weak self] in self?.host?.sideCall(["kind": "back"], nil) }
-      r.fwd.onClick = { [weak self] in self?.host?.sideCall(["kind": "fwd"], nil) }
-    }
+    [scroll, themePair, footLine, me, sync, copy].forEach { inner.addSubview($0) }
+    themePair.onPick = { [weak self] light in self?.host?.sideCall(["kind": "theme", "mode": light ? "light" : "dark"], nil) }
+    topRow.toggle.onClick = { [weak self] in self?.host?.sideCall(["kind": "collapse"], nil) }
+    topRow.back.onClick = { [weak self] in self?.host?.sideCall(["kind": "back"], nil) }
+    topRow.fwd.onClick = { [weak self] in self?.host?.sideCall(["kind": "fwd"], nil) }
     // hidden: the pointer on the sidebar button (once it has left it after hiding) or the left edge shows it over the page
-    hiddenRow.toggle.onHover = { [weak self] inside in
+    topRow.toggle.onHover = { [weak self] inside in
       guard let self = self else { return }
-      if inside { if self.peekArmed { self.peek(true) } } else { self.peekArmed = true }
+      if inside { if self.hiddenMode && self.peekArmed { self.peek(true) } } else { self.peekArmed = true }
     }
     edgeHot.onEnter = { [weak self] in self?.peek(true) }
     sync.addSubview(syncDot); sync.addSubview(syncText)
@@ -408,7 +450,6 @@ final class Sidebar: NSView {
   var width: CGFloat { Sidebar.WIDE }
   // where the page starts (the window's left edge to the page): beside the sidebar when it's shown, else the edge
   var pageX: CGFloat { on && !hiddenMode ? Sidebar.INSET + width : 0 }
-  @objc func pickTheme() { host?.sideCall(["kind": "theme", "mode": themeSeg.selectedSegment == 0 ? "light" : "dark"], nil) }
 
   /* ---------- hidden: shown over the page while the pointer is on it ---------- */
   func peek(_ on: Bool) {
@@ -443,11 +484,11 @@ final class Sidebar: NSView {
     hiddenMode = (m["collapsed"] as? Bool) == true
     if !hiddenMode { peeking = false; layer?.shadowOpacity = 0 }
     if hiddenMode && !wasHidden { peekArmed = false; peeking = false }   // (just hidden with the pointer on the button: not shown again until it leaves)
-    hiddenRow.isHidden = !(on && hiddenMode); edgeHot.isHidden = hiddenRow.isHidden
+    topRow.isHidden = !on; edgeHot.isHidden = !(on && hiddenMode)
     guard on else { isHidden = true; if wasOn { host?.sideLayoutChanged(animated: false) }; return }
-    themeSeg.selectedSegment = (m["light"] as? Bool) == true ? 0 : 1
+    themePair.light = (m["light"] as? Bool) == true
     let b = (m["back"] as? Bool) == true, f = (m["fwd"] as? Bool) == true
-    row.set(back: b, fwd: f, hidden: hiddenMode); hiddenRow.set(back: b, fwd: f, hidden: hiddenMode)
+    topRow.set(back: b, fwd: f, hidden: hiddenMode)
     buildRows()
     let me0 = m["me"] as? [String: Any] ?? [:]
     me.name.stringValue = me0["name"] as? String ?? ""
@@ -516,10 +557,8 @@ final class Sidebar: NSView {
     inner.frame = NSRect(x: Sidebar.INSET, y: Sidebar.INSET, width: max(0, bounds.width - Sidebar.INSET), height: max(0, bounds.height - Sidebar.INSET * 2))
     edge.frame = NSRect(x: bounds.width - 1, y: 0, width: 1, height: bounds.height)
     let W = inner.bounds.width, H = inner.bounds.height
-    // top row: the window's buttons at its left (placed by the app), then the sidebar button and ‹ ›; light / dark at its right
-    row.frame = NSRect(x: SideTopRow.X - Sidebar.INSET, y: (Sidebar.TOP - SideTopRow.H) / 2, width: SideTopRow.W, height: SideTopRow.H)
-    themeSeg.sizeToFit()
-    themeSeg.frame = NSRect(x: W - 10 - themeSeg.frame.width, y: (Sidebar.TOP - themeSeg.frame.height) / 2, width: themeSeg.frame.width, height: themeSeg.frame.height)
+    // top row: the window's buttons, the sidebar button and ‹ › (the window's own, over the sidebar); light / dark at its right
+    themePair.frame = NSRect(x: W - 10 - SideThemePair.W, y: (Sidebar.TOP - SideThemePair.H) / 2, width: SideThemePair.W, height: SideThemePair.H)
     let y = Sidebar.TOP + 8
     // the footer
     let footH: CGFloat = 92

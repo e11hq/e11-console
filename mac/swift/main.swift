@@ -192,12 +192,12 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     side.host = self
     side.frame = NSRect(x: 0, y: 0, width: Sidebar.INSET + Sidebar.WIDE, height: window.contentView!.bounds.height)   // (edge to edge)
     side.autoresizingMask = [.height]
-    // (hidden: the sidebar button and ‹ › over the page's top-left, the window's left edge that shows it; under it)
-    side.hiddenRow.isHidden = true; side.edgeHot.isHidden = true
-    side.hiddenRow.autoresizingMask = [.minYMargin]; side.edgeHot.autoresizingMask = [.height]
-    window.contentView!.addSubview(side.hiddenRow, positioned: .above, relativeTo: web)
-    window.contentView!.addSubview(side.edgeHot, positioned: .above, relativeTo: side.hiddenRow)
+    // (the window's left edge that shows the hidden sidebar under it; the sidebar button and ‹ › over it, never moving)
+    side.topRow.isHidden = true; side.edgeHot.isHidden = true
+    side.topRow.autoresizingMask = [.minYMargin]; side.edgeHot.autoresizingMask = [.height]
+    window.contentView!.addSubview(side.edgeHot, positioned: .above, relativeTo: web)
     window.contentView!.addSubview(side, positioned: .above, relativeTo: side.edgeHot)
+    window.contentView!.addSubview(side.topRow, positioned: .above, relativeTo: side)
     #if APPSTORE
     reviewLink.frame = NSRect(x: 0, y: 14, width: window.contentView!.bounds.width, height: 30)
     reviewLink.autoresizingMask = [.width]
@@ -261,23 +261,25 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   // layouts at sizes that used to show two columns (Haris, 2026-10-30)
   func sideLayoutChanged(animated: Bool) {
     guard let cv = window?.contentView, let web = web else { return }
-    // (edge to edge; hidden: slid off the window's left edge — Haris 2026-11-15)
+    // as Claude's (Haris 2026-11-15 14:20: "it should not slide all the way"): hiding, it fades out moving a little to the
+    // left; shown or peeking, it fades in from there — the sidebar button and ‹ › stay where they are
     let w = Sidebar.INSET + side.width, H = cv.bounds.height
-    let shownF = NSRect(x: 0, y: 0, width: w, height: H), goneF = shownF.offsetBy(dx: -w, dy: 0)
+    let shownF = NSRect(x: 0, y: 0, width: w, height: H), goneF = shownF.offsetBy(dx: -14, dy: 0)
     web.frame = cv.bounds
     placeLights()
-    side.hiddenRow.frame = NSRect(x: SideTopRow.X, y: H - Sidebar.INSET - (Sidebar.TOP + SideTopRow.H) / 2, width: SideTopRow.W, height: SideTopRow.H)
+    side.topRow.frame = NSRect(x: SideTopRow.X, y: H - Sidebar.INSET - (Sidebar.TOP + SideTopRow.H) / 2, width: SideTopRow.W, height: SideTopRow.H)
     side.edgeHot.frame = NSRect(x: 0, y: 0, width: 5, height: H)
     let show = side.shown
     if animated {
-      if show && side.isHidden { side.frame = goneF; side.isHidden = false }
+      if show && side.isHidden { side.frame = goneF; side.alphaValue = 0; side.isHidden = false }
       NSAnimationContext.runAnimationGroup({ c in
-        c.duration = 0.22
-        c.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        c.duration = show ? 0.2 : 0.16
+        c.timingFunction = CAMediaTimingFunction(name: show ? .easeOut : .easeIn)
         c.allowsImplicitAnimation = true
         self.side.animator().frame = show ? shownF : goneF
-      }, completionHandler: { if !self.side.shown { self.side.isHidden = true } })
-    } else { side.frame = show ? shownF : goneF; side.isHidden = !show }
+        self.side.animator().alphaValue = show ? 1 : 0
+      }, completionHandler: { if !self.side.shown { self.side.isHidden = true; self.side.frame = shownF; self.side.alphaValue = 1 } })
+    } else { side.frame = shownF; side.alphaValue = 1; side.isHidden = !show }
   }
   @objc func toggleSidebar(_ s: Any?) {
     if side.on { sideCall(["kind": "collapse"], nil) } else { pageJS("(function(){ var b = document.querySelector('[data-action=\"toggle-sidebar\"]'); if (b) b.click(); })()") }
@@ -757,7 +759,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     cv.addSubview(v, positioned: .above, relativeTo: nil)
     lockView = v
     web.isHidden = true
-    side.isHidden = true; side.hiddenRow.isHidden = true; side.edgeHot.isHidden = true
+    side.isHidden = true; side.topRow.isHidden = true; side.edgeHot.isHidden = true
     window.makeFirstResponder(b)
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.unlock() }
   }
@@ -772,7 +774,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   func unlocked() {
     lockView?.removeFromSuperview(); lockView = nil
     web.isHidden = false
-    side.isHidden = !side.shown; side.hiddenRow.isHidden = !(side.on && side.hiddenMode); side.edgeHot.isHidden = side.hiddenRow.isHidden
+    side.isHidden = !side.shown; side.topRow.isHidden = !side.on; side.edgeHot.isHidden = !(side.on && side.hiddenMode)
     window.makeFirstResponder(web)
     lastActive = Date()
   }
@@ -998,13 +1000,13 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
         out.lockFocus()
         (self.window.backgroundColor ?? .black).setFill(); NSRect(origin: .zero, size: cv.bounds.size).fill()
         page.draw(in: self.web.frame)
-        if self.side.on, let rep = self.side.bitmapImageRepForCachingDisplay(in: self.side.bounds) {
+        if !self.side.isHidden, let rep = self.side.bitmapImageRepForCachingDisplay(in: self.side.bounds) {
           self.side.cacheDisplay(in: self.side.bounds, to: rep)
           let si = NSImage(size: self.side.bounds.size); si.addRepresentation(rep)
           si.draw(in: self.side.frame)
         }
         // what lies over the page: the window's title-bar row (its buttons)
-        for v in [self.side.hiddenRow as NSView?, self.window.standardWindowButton(.closeButton)?.superview?.superview] {
+        for v in [self.side.topRow as NSView?, self.window.standardWindowButton(.closeButton)?.superview?.superview] {
           guard let v = v, !v.isHidden, v.bounds.width > 0, let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) else { continue }
           v.cacheDisplay(in: v.bounds, to: rep)
           let vi = NSImage(size: v.bounds.size); vi.addRepresentation(rep)
