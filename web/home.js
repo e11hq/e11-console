@@ -6,6 +6,12 @@ const Home = (() => {
   // how long ago the page came on show (the startup screen gone): 0 until then — what grows waits, held at its start, and
   // drawn again while growing it carries on where it was rather than starting over
   const grown = () => (window.__e11ShownAt ? Date.now() - window.__e11ShownAt : 0);
+  // a ring's green arc (viewBox 36, r 15.9): in the Mac app it fills from 0 once as the page shows, then stays still (Haris
+  // 2026-11-15 15:28: "where ever there will be a green ring … will go from 0 to current")
+  const ringArc = (p, C, cls) => {
+    const e = grown(), go = Host.isMacApp && e < 1200 && p > 0;
+    return `<circle cx="18" cy="18" r="15.9" class="${cls} hm-arc${go ? ' hm-grow' : ''}" style="--c:${C.toFixed(1)};stroke-dasharray:${C.toFixed(1)};stroke-dashoffset:${(C * (1 - p)).toFixed(1)};${go && e > 0 ? `animation-delay:-${e}ms` : ''}" transform="rotate(-90 18 18)"/>`;
+  };
   const st = { range: 'today', metric: 'done', day: null, next: 0, lane: null };
   const DAY = 86400000;
   const WD = ['Mo', 'Tu', 'We', 'Th', 'Fr'];
@@ -334,13 +340,28 @@ const Home = (() => {
     const files = mineAll.flatMap((t) => shownAtts(t).map((a) => ({ t, a }))).sort((x, y) => String(y.a.addedAt || '').localeCompare(String(x.a.addedAt || ''))).slice(0, 4);
     const thumb = ({ t, a }) => {
       const img = fileKind(a) === 'image' && Host.isNative ? `<img src="${imgUrl(a, 320)}" alt="" loading="lazy">` : '';
-      return `<div class="hm-thumb" data-task="${t.id}" title="${esc(a.name)} · ${esc(t.title || '')}" style="--pc:${pColor(t)}">${img}<span class="hm-kind">${esc((fileExt(a.name) || 'file').toUpperCase().slice(0, 4))}</span><span class="hm-fname">${esc(a.name)}</span></div>`;
+      return `<div class="hm-thumb" data-hm="file" data-v="${esc(a.id || a.path || a.name)}" title="${esc(a.name)} · ${esc(t.title || '')}" style="--pc:${pColor(t)}">${img}<span class="hm-kind">${esc((fileExt(a.name) || 'file').toUpperCase().slice(0, 4))}</span><span class="hm-fname">${esc(a.name)}</span></div>`;
     };
+
+    st.files = files;   // (a file opened: the viewer, its next / previous the other files here — Haris 2026-11-15 15:28)
 
     // On-time streak: my finished tasks, newest first, until one was late
     const finished = mineAll.filter((t) => myDoneAt(t) && t.due).sort((a, b) => String(myDoneAt(b)).localeCompare(String(myDoneAt(a))));
     let streak = 0;
     for (const t of finished) { if (onTime(t, myDoneAt(t))) streak++; else break; }
+
+    // the Mac app: On-time streak as Team goals achieved (Haris 2026-11-15 15:28) — the soft purple card, the ring the share of
+    // your recent finished tasks that were on time with the streak in it, the rows under it, the line saying what it counts
+    const streakCard = () => {
+      const recent = finished.slice(0, 12), okN = recent.filter((t) => onTime(t, myDoneAt(t))).length, C = 2 * Math.PI * 15.9;
+      return `<section class="hm-card hm-goal hm-streak">
+            <h2>On-time streak</h2>
+            <div class="hm-gr"><svg viewBox="0 0 36 36" width="76" height="76" aria-hidden="true"><circle cx="18" cy="18" r="15.9" class="hm-ring-bg"/>${recent.length ? ringArc(okN / recent.length, C, 'hm-ring') : ''}<text x="18" y="21" text-anchor="middle">${streak}</text></svg>
+              <div><b>${streak === 1 ? 'Task' : 'Tasks'} in a row on time</b><span class="${!recent.length || okN === recent.length ? 'ok' : 'warn'}">${recent.length ? `${okN} of your last ${recent.length} on time` : 'nothing finished yet'}</span></div></div>
+            ${recent.length ? `<div class="hm-hlist" aria-label="Recently finished">${recent.map((t) => { const ok = onTime(t, myDoneAt(t)); return `<div class="hm-hrow" data-task="${t.id}"><i class="${ok ? 'ok' : 'late'}" title="${ok ? 'On time' : 'Late'}">${icon(ok ? 'check' : 'clock')}</i><span>${esc(t.title || 'Untitled task')}</span><em>${esc(fmtDay(ymdOf(myDoneAt(t))))}</em></div>`; }).join('')}</div>` : ''}
+            <p>Your tasks finished by their due date, newest first</p>
+          </section>`;
+    };
 
     const roleL = roleOf(u);
     return `<div class="hm hm-member">
@@ -357,7 +378,7 @@ const Home = (() => {
           <section class="hm-card">
             <h2>My CD reviews</h2>
             <div class="hm-rev">
-              <svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15.9" class="trk"/><circle cx="18" cy="18" r="15.9" class="val" stroke-dasharray="${(ft / 100) * ring} ${ring}" transform="rotate(-90 18 18)"/><text x="18" y="20.6" text-anchor="middle">${decidedTasks ? ft + '%' : '–'}</text></svg>
+              <svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15.9" class="trk"/>${ringArc(ft / 100, ring, 'val')}<text x="18" y="20.6" text-anchor="middle">${decidedTasks ? ft + '%' : '–'}</text></svg>
               <div><b>Approved first time</b><br><span class="mono">${approved}</span> approved · <span class="mono">${amended}</span> amended<br><span class="mono">${waiting}</span> waiting with the CD<br><small>Your submissions in ${now.toLocaleDateString('en-US', { month: 'long' })}</small></div>
             </div>
           </section>
@@ -369,11 +390,11 @@ const Home = (() => {
             <div class="hm-h"><h2>Latest files</h2><span class="hm-mute">on your tasks</span></div>
             ${files.length ? `<div class="hm-files">${files.map(thumb).join('')}</div>` : '<div class="hm-empty">Files on your tasks show up here.</div>'}
           </section>
-          <section class="hm-hero">
+          ${Host.isMacApp ? streakCard() : `<section class="hm-hero">
             <h2>On-time streak</h2>
             <div class="hm-hn"><b>${streak}</b><span>task${streak === 1 ? '' : 's'} in a row finished by their due date</span></div>
             ${finished.length ? `<div class="hm-hlist" aria-label="Recently finished">${finished.slice(0, 12).map((t) => { const ok = onTime(t, myDoneAt(t)); return `<div class="hm-hrow" data-task="${t.id}"><i class="${ok ? 'ok' : 'late'}" title="${ok ? 'On time' : 'Late'}">${icon(ok ? 'check' : 'clock')}</i><span>${esc(t.title || 'Untitled task')}</span><em>${esc(fmtDay(ymdOf(myDoneAt(t))))}</em></div>`; }).join('')}</div>` : ''}
-          </section>
+          </section>`}
         </aside>
       </div>
     </div>`;
@@ -417,6 +438,10 @@ const Home = (() => {
       return go('mytasks');
     }
     else if (k === 'open') return openTask(v);
+    else if (k === 'file') {
+      const list = (st.files || []).map((x) => x.a), a = list.find((x) => (x.id || x.path || x.name) === v);
+      if (a) previewFile(a, list); return;
+    }
     else if (k === 'act') {
       // the same as the Inbox: a mention or comment opens the task on that comment (highlighted), a review opens Review Requests
       if (el.dataset.nid && db.notifications.some((n) => n.id === el.dataset.nid)) return openNotif(el.dataset.nid);

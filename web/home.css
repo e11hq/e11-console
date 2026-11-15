@@ -626,3 +626,19 @@ html.mac-chrome .hm-hrow i svg { width: 9px; height: 9px; }
 html.mac-chrome .hm-rev { margin-top: 10px; }
 html.mac-chrome .hm .hm-lh b { font-weight: 900 !important; color: var(--mc-fg); }
 html.mac-chrome .hm-rev small { font-size: smaller; }
+/* ===== Haris 2026-11-15 15:28 ===== */
+/* Home fills the window: both columns run down to its bottom, the last card of each stretching (as the mock-ups) */
+html.mac-chrome .hm { min-height: 100%; box-sizing: border-box; }
+html.mac-chrome .hm-grid { flex: 1; }
+/* every green ring fills from 0 once as the page shows (My CD reviews, On-time streak — as Team goals achieved) */
+html.mac-chrome .hm-arc.hm-grow { animation: hm-ring 1.1s cubic-bezier(.22, .8, .3, 1) both paused; }
+html.mac-chrome.e11-shown .hm-arc.hm-grow { animation-play-state: running; }
+@media (prefers-reduced-motion: reduce) { html.mac-chrome .hm-arc.hm-grow { animation: none; } }
+/* On-time streak as Team goals achieved: the ring drawn on a 36 box (the same thickness and number size as the goal's 76) */
+html.mac-chrome .hm-streak .hm-gr circle { stroke-width: 4.26; }
+html.mac-chrome .hm-streak .hm-gr text { font-size: 8.5px; font-weight: 600; }
+html.mac-chrome .hm-streak .hm-hlist { display: flex; flex-direction: column; }
+html.mac-chrome .hm-streak .hm-hrow { color: var(--mc-fg); }
+html.mac-chrome .hm-streak .hm-hrow i { background: var(--mc-green); color: #fff; }
+html.mac-chrome .hm-streak .hm-hrow i.late { background: var(--mc-red); }
+html.mac-chrome .hm-streak .hm-hrow em { color: var(--mc-dim); opacity: 1; }

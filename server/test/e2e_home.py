@@ -146,6 +146,13 @@ async def main():
                 check(await pg.locator('.sr-dlg').count() == 1 if ok else 'left To Do' in (await pg.locator('#toast-root').inner_text()) or await pg.locator('#toast-root .toast').count() > 0, 'Submit files for review opens the submit dialog (or explains why not yet)')
                 await pg.keyboard.press('Escape'); await pg.wait_for_timeout(200)
                 if await pg.locator('.sr-dlg').count(): await E("document.querySelector('#overlay-root').innerHTML=''")
+            # a latest file opens in the viewer, not the task (Haris 2026-11-15 15:28)
+            th = pg.locator('.hm-thumb').first
+            if await th.count():
+                await th.click(); await pg.wait_for_timeout(500)
+                vw = await E("[document.body.classList.contains('pv-open'), !!ui.taskId]")
+                check(vw == [True, False], f'a latest file opens in the viewer {vw}')
+                await pg.keyboard.press('Escape'); await pg.wait_for_timeout(300)
             # open task from a pipeline row
             await pg.locator('.hm-lane-list [data-task]').first.click(); await pg.wait_for_timeout(400)
             check(await E("!!ui.taskId"), 'clicking a task opens it')
