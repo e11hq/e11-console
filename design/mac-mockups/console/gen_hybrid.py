@@ -86,11 +86,12 @@ def board(look, page='lead'):
     def tb(inner, w=None):
         return (f'<span style="height: 30px; {"width: 30px;" if not w else ""} padding: 0 {10 if w else 0}px; border-radius: 15px; background: {t["glass"]}; box-shadow: inset 0 0 0 0.5px {t["glassLine"]}; '
                 f'display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px">{inner}</span>')
+    searching = look == 'light' and page == 'lead'
     toolbar = (f'<div style="position: absolute; left: 260px; right: 0; top: 0; height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 16px; z-index: 2">'
                f'<span style="font-size: 15px; font-weight: 700">Home</span>'
                f'<span style="margin-left: auto"></span>'
                               + tb(sym('bubble', t['fg']) + 'Talk <span style="min-width: 18px; height: 18px; border-radius: 9px; background: #ff3b30; color: #fff; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; box-sizing: border-box">5</span>', w=1)
-               + f'<span style="width: 220px; height: 30px; border-radius: 15px; background: {t["field"]}; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; box-sizing: border-box; font-size: 13px; color: {t["dim"]}">{sym("search", t["dim"])}Search tasks<span style="margin-left: auto; font-size: 11px">⌘K</span></span>'
+               + f'<span style="width: 220px; height: 30px; border-radius: 15px; background: {t["field"]}; {"box-shadow: 0 0 0 3px color-mix(in srgb, " + A + " 45%, transparent);" if searching else ""} display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; box-sizing: border-box; font-size: 13px; color: {t["dim"]}">{sym("search", t["dim"])}{"<span style=" + chr(34) + "color:" + t["fg"] + chr(34) + ">maya</span>" if searching else "Search tasks"}<span style="margin-left: auto; font-size: 11px">⌘K</span></span>'
                + f'<svg viewBox="0 0 297.5 132.0" style="height: 18px; width: auto; margin-left: 6px; flex: none" aria-hidden="true"><path fill="{"#fff" if look == "dark" else "#000"}" fill-rule="evenodd" d="{MARK}"/></svg>'
                + '</div>')
     # the website's Home (an Admin's: layout A, home.js viewLead), restyled for the Mac (inside the web view)
@@ -110,18 +111,27 @@ def board(look, page='lead'):
     seg = ''.join(f'<span style="padding: 3px 10px; border-radius: 6px; font-size: 12px; {"background:" + t["win"] + "; box-shadow: 0 0.5px 2px rgba(0,0,0,0.25); font-weight: 600;" if on else ""}">{l} <span style="color: {red if l == "Overdue" else t["dim"]}">{n}</span></span>'
                   for l, n, on in [('Overdue', 2, False), ('Today', 3, False), ('This week', 9, True), ('All open', 24, False)])
     seg = f'<span style="display: inline-flex; padding: 2px; border-radius: 8px; background: {t["field"]}">{seg}</span><span style="margin-left: auto; font-size: 12px; color: {A}">See All</span>'
-    def row(i, c, name, sub, cm, fl, avs, st, sc):
-        bg = t['row'] if i % 2 else 'transparent'
-        return (f'<div style="display: grid; grid-template-columns: 10px 1fr 70px 76px 96px; gap: 12px; align-items: center; height: 44px; padding: 0 10px; border-radius: 7px; background: {bg}">'
+    def row(i, c, name, sub, cm, fl, avs, st, sc, cd=None, tag=None, late=False):
+        # as the iPhone's task rows (Haris 10:41): the CD chip after the client line, the Urgent / P1 tag, an overdue row's faint red
+        bg = (f'rgba(229,72,77,{0.10 if look == "dark" else 0.06})' if late else (t['row'] if i % 2 else 'transparent'))
+        yel = '#ffd60a' if look == 'dark' else '#b98900'
+        cdc = (f' <span style="display: inline-flex; align-items: center; gap: 3px; height: 16px; padding: 0 6px; border-radius: 4px; font-size: 10.5px; font-weight: 700; vertical-align: 1px; color: {yel}; background: color-mix(in srgb, {yel} 16%, transparent)">{"✓ " if cd[1] else ""}{cd[0]}</span>') if cd else ''
+        tg = ''
+        if tag:
+            u = tag == 'Urgent'
+            tc = ('#ff9494' if look == 'dark' else '#d9363e') if u else t['dim']
+            tb = 'rgba(229,72,77,0.16)' if u else t['field']
+            tg = f'<span style="margin-left: 8px; font-size: 11.5px; font-weight: 700; padding: 1px 7px; border-radius: 5px; color: {tc}; background: {tb}; vertical-align: 1px">{tag}</span>'
+        return (f'<div style="display: grid; grid-template-columns: 10px 1fr 70px 76px 96px; gap: 12px; align-items: center; height: 46px; padding: 0 10px; border-radius: 7px; background: {bg}">'
                 f'<span style="width: 9px; height: 9px; border-radius: 3px; background: {c}"></span>'
-                f'<span style="min-width: 0"><div style="font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{name}</div><div style="font-size: 11px; color: {t["dim"]}">{sub}</div></span>'
+                f'<span style="min-width: 0"><div style="font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{name}{tg}</div><div style="font-size: 11px; color: {t["dim"]}; white-space: nowrap">{sub}{cdc}</div></span>'
                 f'<span style="font-size: 11px; color: {t["dim"]}">💬 {cm} · 📎 {fl}</span><span style="display: flex">{avs}</span><span>{pill(st, sc)}</span></div>')
     N, K, P = '#0E3E8C', '#C8102E', '#3E7D44'
-    rows = (row(0, N, 'Winter Drive Campaign – Key Visual', f'Northline Motors · by Sam Rivera · due <span style="color: {t["fg"]}">Today</span>', 6, 4, av('JL', '#E67E22') + av('MK', '#16A085', ml=-6), 'In Review', yellow)
+    rows = (row(0, N, 'Winter Drive Campaign – Key Visual', f'Northline Motors · by Sam Rivera · due <span style="color: {t["fg"]}">Today</span>', 6, 4, av('JL', '#E67E22') + av('MK', '#16A085', ml=-6), 'In Review', yellow, cd=('CD', False), tag='Urgent')
             + row(1, N, 'Launch socials — 6 posts', f'Northline Motors · due <span style="color: {t["fg"]}">Today</span>', 3, 2, av('RT', '#8E44AD'), 'In Progress', orange)
             + row(2, K, 'December content plan', f'Kestrel Foods · by Dana Cole · due <span style="color: {t["fg"]}">Today</span>', 1, 0, av('MK', '#16A085'), 'To Do', t['dim'])
-            + row(3, P, 'Website — homepage copy', f'Pinecrest · due <span style="color: {red}">Thu, Nov 12</span>', 9, 3, av('JL', '#E67E22'), 'In Progress', orange)
-            + row(4, K, 'Menu photography retouch', 'Kestrel Foods · due Mon, Nov 16', 2, 12, av('AB', '#2980B9') + av('RT', '#8E44AD', ml=-6), 'In Progress', orange)
+            + row(3, P, 'Website — homepage copy', f'Pinecrest · due <span style="color: {red}">Thu, Nov 12</span>', 9, 3, av('JL', '#E67E22'), 'In Progress', orange, tag='P1', late=True)
+            + row(4, K, 'Menu photography retouch', 'Kestrel Foods · due Mon, Nov 16', 2, 12, av('AB', '#2980B9') + av('RT', '#8E44AD', ml=-6), 'In Progress', orange, cd=('CD', True))
             + row(5, N, 'Dealer event invitation', 'Northline Motors · by Sam Rivera · due Wed, Nov 18', 0, 1, av('AB', '#2980B9'), 'To Do', t['dim'])
             + f'<div style="font-size: 12px; color: {t["dim"]}; padding: 8px 10px 0">+3 more · See all</div>')
     vals = [1, 3, 2, 4, 3, 0, 0, 4, 5, 3, 6, 4, 1, 2, 0]
@@ -239,6 +249,19 @@ def board(look, page='lead'):
                    f'<div style="display: grid; grid-template-columns: 1fr 330px; gap: 14px; align-items: stretch; flex: 1; min-height: 0">'
                    f'<div style="display: flex; flex-direction: column; gap: 14px; min-width: 0">{upnext}{pipeline}{week}{macts}</div>'
                    f'<div style="display: flex; flex-direction: column; gap: 14px">{rev}{amends}{files}{streak}</div></div></div>')
+    # search (Haris 10:41): people too, and where each was found — as the iPhone's
+    def sr(lead, title, sub, found=''):
+        f = f'<div style="font-size: 11px; color: {t["dim"]}; margin-top: 1px">{found}</div>' if found else ''
+        return f'<div style="display: flex; gap: 10px; align-items: center; padding: 6px 10px; margin: 0 6px; border-radius: 7px">{lead}<div style="min-width: 0; flex: 1"><div style="font-size: 13px">{title}</div><div style="font-size: 11px; color: {t["dim"]}">{sub}</div>{f}</div></div>'
+    sh = lambda x: f'<div style="padding: 8px 16px 3px; font-size: 11px; font-weight: 600; color: {t["dim"]}">{x}</div>'
+    mark = lambda x: f'<mark style="background: rgba(255,214,10,0.45); color: inherit; border-radius: 2px; padding: 0 1px">{x}</mark>'
+    stico = lambda c: f'<span style="width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center"><span style="width: 14px; height: 14px; border-radius: 7px; box-shadow: inset 0 0 0 2px {c}"></span></span>'
+    search_pop = (f'<div style="position: absolute; right: 74px; top: 46px; width: 360px; padding: 4px 0 8px; border-radius: 12px; background: rgba(250,250,252,0.98); box-shadow: 0 0 0 0.5px {t["glassLine"]}, 0 14px 40px rgba(0,0,0,0.22); z-index: 9">'
+                  + sh('People') + sr(av('MK', '#16A085', 26), mark('Maya') + ' Kent', 'Production · 4 open tasks')
+                  + sh('Tasks') + sr(stico(orange), 'Menu photography retouch', 'Kestrel Foods · due Mon, Nov 16', f'Found in: assigned to {mark("Maya")} Kent')
+                  + sr(stico(t['dim']), 'December content plan', 'Kestrel Foods · due Today', f'Found in a comment: “{mark("Maya")} will send the second draft…”')
+                  + sr(stico(yellow), 'Brand guidelines v2', 'Pinecrest · In Review', f'Found in a file: Guidelines-{mark("Maya")}-notes.pdf')
+                  + f'<div style="margin: 6px 16px 0; padding-top: 7px; border-top: 0.5px solid {t["line"]}; font-size: 12px; color: {A}">See all results for “maya”</div></div>') if searching else ''
     # a right-click menu: Apple's own, the website's choices
     menu = (f'<div style="position: absolute; left: 560px; top: 372px; width: 220px; padding: 5px 0; border-radius: 10px; background: {"rgba(40,40,44,0.96)" if look == "dark" else "rgba(250,250,252,0.97)"}; '
             f'box-shadow: 0 0 0 0.5px {t["glassLine"]}, 0 12px 36px rgba(0,0,0,0.3); z-index: 9; font-size: 13px">'
@@ -246,7 +269,7 @@ def board(look, page='lead'):
                       for i, x in enumerate(['Open Task', '-', 'Status  ›', 'Mark Complete', 'Due Date…', '-', 'Attach Files…', 'Copy Link', '-', 'Trash']))
             + '</div>') if look == 'dark' and page == 'lead' else ''
     body = (f'<div style="width: 1440px; height: {H}px; background: {t["desk"]}; position: relative; overflow: hidden; font-family: -apple-system, \'SF Pro Text\', \'Helvetica Neue\', Inter, sans-serif; color: {t["fg"]}">'
-            f'<div style="position: absolute; inset: 0; background: {t["win"]}; border-radius: 14px; overflow: hidden">{side}{toolbar}{content}{menu}</div></div>')
+            f'<div style="position: absolute; inset: 0; background: {t["win"]}; border-radius: 14px; overflow: hidden">{side}{toolbar}{content}{menu}{search_pop}</div></div>')
     return f'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>E11 Console for Mac — Home ({page}, {look})</title><script src="./support.js"></script></head>
 <body><x-dc><helmet><style>body{{margin:0}}</style></helmet>
