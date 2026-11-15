@@ -286,18 +286,33 @@ def board(look, page='lead'):
             a = f'<span style="font-size: 11.5px; padding: 3px 9px; border-radius: 6px; background: {t["glass"]}; box-shadow: inset 0 0 0 0.5px {t["glassLine"]}">{act}</span>' if act else ''
             return (f'<div style="display: flex; align-items: center; gap: 10px; padding: 8px 6px; border-top: 0.5px solid {t["line"]}">{av(ini, c, 28)}'
                     f'<div style="flex: 1; min-width: 0"><div style="font-size: 13px; font-weight: 600">{name}</div><div style="font-size: 11.5px; color: {t["dim"]}; white-space: nowrap">{items} · AED {amt}</div></div>{pill(state, pc)}{a}</div>')
-        fin = card(extra='display: flex; flex-direction: column; min-height: 0', inner=h2('Finance · November', segx(['Claims', 'Expenses'], 'Claims'))
+        # the iPhone's five, on the Mac (Haris 11:04): the month (the last 12) · Paid On… with a date · ••• Mark All HR Approved /
+        # Set All Paid On… · a claim right-clicked: HR Approved / Paid On… · Need HR approval and the rest as their own groups, See All
+        monthbtn = (f'<span style="display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: 6px; font-size: 12.5px; '
+                    f'background: {t["glass"]}; box-shadow: inset 0 0 0 0.5px {t["glassLine"]}">November <span style="font-size: 9px; color: {t["dim"]}">⌃⌄</span></span>')
+        more = (f'<span style="width: 24px; height: 24px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; letter-spacing: 1px; '
+                f'background: {t["glass"]}; box-shadow: inset 0 0 0 0.5px {t["glassLine"]}">•••</span>')
+        grp = lambda title, n, see=True: f'<div style="display: flex; align-items: baseline; gap: 6px; margin: 10px 0 2px; font-size: 11.5px; font-weight: 600; color: {t["dim"]}">{title} <span style="font-weight: 400">{n}</span>' + (f'<span style="margin-left: auto; font-weight: 400; color: {A}">See All</span>' if see else '') + '</div>'
+        fin = card(extra='display: flex; flex-direction: column; min-height: 0', inner=
+            f'<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px"><span style="font-size: 15px; font-weight: 700">Finance</span>{monthbtn}<span style="margin-left: auto"></span>{segx(["Claims", "Expenses"], "Claims").replace("margin-left: auto; ", "")}{more}</div>'
             + f'<div style="display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin: 2px 0 8px"><span style="width: 50%; background: {sub_c}"></span><span style="width: 25%; background: {ok_c}"></span><span style="width: 25%; background: {paid_c}"></span></div>'
-            + f'<div style="display: flex; gap: 12px; font-size: 12px; color: {t["dim"]}; margin-bottom: 6px"><span><b style="color: {sub_c}">2</b> submitted</span><span><b style="color: {ok_c}">1</b> HR approved</span><span><b style="color: {paid_c}">1</b> paid</span><span style="margin-left: auto; color: {t["fg"]}; font-weight: 600">AED  3,140.00</span></div>'
-            + crow('AB', '#2980B9', 'Ana Brooks', '3 items', '420.00', 'Paid') + crow('JL', '#E67E22', 'Jamie Lowe', '5 items', '1,260.00', 'Submitted', 'HR approve')
-            + crow('MK', '#16A085', 'Maya Kent', '2 items', '310.00', 'HR approved', 'Mark paid') + crow('RT', '#8E44AD', 'Rui Tan', '4 items', '1,150.00', 'Submitted', 'HR approve')
+            + f'<div style="display: flex; gap: 12px; font-size: 12px; color: {t["dim"]}"><span><b style="color: {sub_c}">2</b> submitted</span><span><b style="color: {ok_c}">1</b> HR approved</span><span><b style="color: {paid_c}">1</b> paid</span><span style="margin-left: auto; color: {t["fg"]}; font-weight: 600">AED 3,140.00</span></div>'
+            + grp('Need HR approval', 2) + crow('JL', '#E67E22', 'Jamie Lowe', '5 items', '1,260.00', 'Submitted', 'HR approve') + crow('RT', '#8E44AD', 'Rui Tan', '4 items', '1,150.00', 'Submitted', 'HR approve')
+            + grp('HR approved and paid', 2) + crow('MK', '#16A085', 'Maya Kent', '2 items', '310.00', 'HR approved', 'Paid On…') + crow('AB', '#2980B9', 'Ana Brooks', '3 items · paid 12 Nov', '420.00', 'Paid')
             + f'<div style="margin-top: auto; padding-top: 10px; border-top: 0.5px solid {t["line"]}; display: flex; gap: 8px">{btn("Open Dashboard")}{btn("All reimbursements")}</div>')
+        def omenu(x, y, items, w=210):
+            return (f'<div style="position: absolute; left: {x}px; top: {y}px; width: {w}px; padding: 5px 0; border-radius: 10px; background: {"rgba(40,40,44,0.96)" if look == "dark" else "rgba(250,250,252,0.98)"}; '
+                    f'box-shadow: 0 0 0 0.5px {t["glassLine"]}, 0 12px 36px rgba(0,0,0,0.3); z-index: 9; font-size: 13px">'
+                    + ''.join(f'<div style="padding: 4px 12px; margin: 0 5px; border-radius: 5px; {"background:" + A + "; color: #fff;" if i == 0 else ""}">{it}</div>' if it != '-' else f'<div style="height: 0.5px; background: {t["line"]}; margin: 4px 10px"></div>' for i, it in enumerate(items)) + '</div>')
+        # dark: ••• open; light: a claim right-clicked
+        office_menu = (omenu(1186, 296, ['Mark All HR Approved', 'Set All Paid On…']) if look == 'dark'
+                       else omenu(1150, 452, ['Open Claim', '-', 'HR Approved', 'Paid On…', '-', 'Share PDF']))
         # (the Office Admin's search: in the toolbar, where everyone's is — Haris 11:02)
         osearch = f'<span style="width: 360px; height: 32px; border-radius: 9px; background: {t["field"]}; display: inline-flex; align-items: center; gap: 7px; padding: 0 11px; box-sizing: border-box; font-size: 13px; white-space: nowrap; color: {t["dim"]}">{sym("search", t["dim"])}Search Client Assets — e.g. “northline logo svg”</span>'
         content = (f'<div style="position: absolute; left: 260px; right: 0; top: 52px; bottom: 0; background: {t["content"]}; border-top: 0.5px solid {t["line"]}; padding: 20px 24px 8px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; overflow: hidden">'
                    f'<div style="display: flex; align-items: flex-end"><div><div style="font-size: 12px; color: {t["dim"]}">Saturday, November 14 · Office Admin</div><div style="font-size: 26px; font-weight: 700; letter-spacing: -0.3px">Good evening, Nadine</div></div>'
                    '</div>'
-                   f'<div style="display: flex; gap: 12px">{tile(3, "Clients", "in Client Assets", "#8b7cf6")}{tile(3, "Unread", "in your Inbox", red)}{tile(17, "Team members", "Open Team page", A)}{tile(2, "Claims to approve", "November", orange)}</div>'
+                   f'<div style="display: flex; gap: 12px">{tile(3, "Clients", "in Client Assets", "#8b7cf6")}{tile(3, "Unread", "in your Inbox", red)}{tile(17, "Team members", "Open Team page", A)}{tile(2, "Claims to approve", "November · opens Claims", orange)}</div>'
                    f'<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; flex: 1; min-height: 0">{assets}{inbox}{fin}</div></div>')
     # search (Haris 10:41): people too, and where each was found — as the iPhone's
     def sr(lead, title, sub, found=''):
@@ -319,7 +334,7 @@ def board(look, page='lead'):
                       for i, x in enumerate(['Open Task', '-', 'Status  ›', 'Mark Complete', 'Due Date…', '-', 'Attach Files…', 'Copy Link', '-', 'Trash']))
             + '</div>') if look == 'dark' and page == 'lead' else ''
     body = (f'<div style="width: 1440px; height: {H}px; background: {t["desk"]}; position: relative; overflow: hidden; font-family: -apple-system, \'SF Pro Text\', \'Helvetica Neue\', Inter, sans-serif; color: {t["fg"]}">'
-            f'<div style="position: absolute; inset: 0; background: {t["win"]}; border-radius: 14px; overflow: hidden">{side}{toolbar}{content}{menu}{search_pop}</div></div>')
+            f'<div style="position: absolute; inset: 0; background: {t["win"]}; border-radius: 14px; overflow: hidden">{side}{toolbar}{content}{menu}{search_pop}{office_menu if page == "office" else ""}</div></div>')
     return f'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>E11 Console for Mac — Home ({page}, {look})</title><script src="./support.js"></script></head>
 <body><x-dc><helmet><style>body{{margin:0}}</style></helmet>
