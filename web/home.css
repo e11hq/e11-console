@@ -323,7 +323,7 @@ html.mac-chrome :is(.oh, .hm) .btn.sm { height: 28px; padding: 0 12px; border-ra
 html.mac-chrome .hm-stats { gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)) 330px; }
 html.mac-chrome .hm-stat { gap: 12px; padding: 14px 16px; }
 /* the top cards pointed at: the Talk button's own hover — its grey laid over the card (Haris 2026-11-15 14:40) */
-html.mac-chrome :is(.hm-stat, .oh-stat):hover { background: linear-gradient(var(--mc-sel), var(--mc-sel)), var(--mc-card); }
+html.mac-chrome :is(.hm-stat, .oh-stat):hover { background: linear-gradient(var(--mc-sel), var(--mc-sel)), var(--mc-content); }   /* (the Talk button's own: its grey on the window's colour — 15:06) */
 html.mac-chrome .hm-ic { width: 36px; height: 36px; border-radius: 10px; }
 html.mac-chrome .hm-ic svg { width: 16px; height: 16px; }
 html.mac-chrome .hm-ic.blue { background: color-mix(in srgb, var(--mc-blue) 18%, transparent); color: var(--mc-blue); }
@@ -590,3 +590,15 @@ html.mac-chrome .hm-lane.on { background: var(--mc-field); box-shadow: inset 0 0
 html.mac-chrome .hm-mini { padding: 4px 8px; border-radius: 3px; border-top: 0; border-right: 0; border-bottom: 0; background: var(--mc-card); }
 html.mac-chrome .hm-slot { background: transparent; box-shadow: inset 0 0 0 .5px var(--mc-line); border: 0; border-radius: 9px; }
 html.mac-chrome .hm-slot.today { box-shadow: inset 0 0 0 1.5px var(--mc-blue); }
+/* ===== pills as the iPhone app's (Haris 2026-11-15 15:06: "keep the status and every other colored pill colors same as ios
+   app"): a status solid in its own colour with white words; the CD chip solid in its colour, white; Urgent red on a soft red;
+   P1–P3 the label colour on Apple's fill; a Task Update its colour on 16% of it ===== */
+html.mac-chrome .hm .status-pill { background: var(--sc) !important; color: #fff !important; }
+html.mac-chrome .hm-cd, html.mac-chrome[data-theme="light"] .hm-cd { background: var(--c); color: #fff; }
+html.mac-chrome .hm-tag { color: var(--mc-label); background: var(--mc-field); }
+html.mac-chrome .hm-tag.urgent, html.mac-chrome[data-theme="light"] .hm-tag.urgent { color: var(--mc-ired); background: color-mix(in srgb, var(--mc-ired) 15%, transparent); }
+html.mac-chrome { --mc-ired: #ff453a; } html.mac-chrome[data-theme="light"] { --mc-ired: #ff3b30; }
+html.mac-chrome .hm-pill { background: color-mix(in srgb, currentColor 16%, transparent); }
+/* E11 Day / + New task: fully round, as the search and Talk (15:06) */
+html.mac-chrome .hm-btn { border-radius: 14px; }
+

@@ -615,7 +615,8 @@ const NativeSide = (() => {
     const app = document.getElementById('app');
     if (!app || app.classList.contains('locked') || typeof currentUserId === 'undefined' || !currentUserId || !document.getElementById('me-chip')) return { on: false };
     // (not over the start-up screen: it comes as that fades)
-    const sp = document.getElementById('splash'); if (sp && !sp.classList.contains('out')) return { on: false };
+    // (the Mac app's own startup screen: the sidebar is made behind it as soon as it can be — Haris 2026-11-15 15:06)
+    const sp = document.getElementById('splash'); if (sp && !sp.classList.contains('out') && !document.documentElement.classList.contains('native-splash')) return { on: false };
     const items = [];
     let lib = false;
     $$('#sidebar .nav-heading, #sidebar .nav-item').forEach((el) => {
