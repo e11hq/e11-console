@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-# The smoother text, beside today's (Haris 2026-11-15 10:46): the same Home, only the page's text changed (the sidebar,
+# The smoother text — CHOSEN for every Mac page (Haris 2026-11-15 10:49: "i love the smoothest one"): the same Home, only the page's text changed (the sidebar,
 # locked, untouched) — Apple's own spacing (no hand-set letter-spacing), semibold not bold, softer text in dark, a little
 # more room between lines, the Mac's own font smoothing.
 import os, re
 P = os.path.join(os.path.dirname(__file__), 'project')
-def smooth(src, look):
+def smooth(src, look, h=1300):
     i = src.index('position: absolute; left: 260px; right: 0; top: 52px')
     i = src.rfind('<div', 0, i)
     head, body = src[:i], src[i:]
@@ -14,9 +14,11 @@ def smooth(src, look):
     body = body.replace('#98989d' if look == 'dark' else '#6e6e73', dim)
     body = body.replace('position: absolute; left: 260px; right: 0; top: 52px;',
                         f'position: absolute; left: 260px; right: 0; top: 52px; color: {fg}; line-height: 1.3; -webkit-font-smoothing: auto; font-family: system-ui, -apple-system, \'SF Pro Text\', sans-serif;', 1)
-    out = (head + body).replace('height: 1250px; background:', 'height: 1300px; background:', 1).replace('"height":1250', '"height":1300')
-    return out.replace('<title>E11 Console for Mac — Home (lead, ', '<title>E11 Console for Mac — Home, smoother text (')
-for f, look in [('Hybrid', 'dark'), ('HybridLight', 'light')]:
-    s = open(os.path.join(P, f + '.dc.html')).read()
-    open(os.path.join(P, f + 'Smooth.dc.html'), 'w').write(smooth(s, look))
+    out = (head + body).replace('height: 1250px; background:', f'height: {h}px; background:', 1).replace('"height":1250', f'"height":{h}')
+    return out
+# run after gen_hybrid.py: every board gets it
+for f, look, h in [('Hybrid', 'dark', 1300), ('HybridLight', 'light', 1300), ('Member', 'dark', 1230), ('MemberLight', 'light', 1230)]:
+    pth = os.path.join(P, f + '.dc.html')
+    s = open(pth).read()
+    if '-webkit-font-smoothing: auto' not in s: open(pth, 'w').write(smooth(s, look, h))
 print('ok')
