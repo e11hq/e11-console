@@ -688,4 +688,6 @@ html.mac-chrome .hm-bar:hover, html.mac-chrome .hm-bar.future:hover { background
 .hm-bar:nth-last-child(-n+5) .hm-tip { left: auto; right: 0; transform: translate(0, -6px); }
 /* On-time streak's rows: when the card is shorter than its rows, they scroll inside it (Apple's scroll bar) instead of
    fading off at the bottom (Haris 2026-11-15 16:18) */
-html.mac-chrome .hm-streak .hm-hlist { overflow-y: auto; overflow-x: hidden; -webkit-mask-image: none; mask-image: none; gap: 0; }
+html.mac-chrome .hm-streak .hm-hlist { overflow-y: auto; overflow-x: hidden; gap: 0; }
+/* (the soft fade at the bottom kept, as before — the rows scroll under it; Haris 16:28: "now it's a sharp cut") */
+html.mac-chrome .hm-streak .hm-hlist { -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 26px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 26px), transparent); padding-bottom: 18px; }
