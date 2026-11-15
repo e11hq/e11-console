@@ -207,17 +207,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     window.contentView!.addSubview(side.edgeHot, positioned: .above, relativeTo: web)
     window.contentView!.addSubview(side, positioned: .above, relativeTo: side.edgeHot)
     window.contentView!.addSubview(side.topRow, positioned: .above, relativeTo: side)
-    if !AT_LOGIN && MacSplash.available {
-      let sp = MacSplash(frame: window.contentView!.bounds)
-      sp.autoresizingMask = [.width, .height]
-      sp.onSkip = { [weak self] in self?.endSplash(fast: true) }
-      window.contentView!.addSubview(sp, positioned: .above, relativeTo: side.topRow)
-      splash = sp
-      // as long as the iPhone's when the page is ready by then (Haris 2026-11-15 15:06); still loading, it waits for the page
-      // with Apple's spinner and "Starting up" under the icon (15:11) — never held for good: a page that isn't E11's (a
-      // sign-in page) lets it go as it loads (didFinish), and after 30 s it goes anyway
-      DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in self?.endSplash() }
-    }
+    if !AT_LOGIN { showSplash() }
     #if APPSTORE
     reviewLink.frame = NSRect(x: 0, y: 14, width: window.contentView!.bounds.width, height: 30)
     reviewLink.autoresizingMask = [.width]
@@ -317,6 +307,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   // the page went elsewhere (signed out, another site): no sidebar until the E11 page sends it again
   func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
     if side.on { side.apply(["on": false]) }
+    if !AT_LOGIN && window?.isVisible == true { showSplash() }
   }
 
   /* ---------- the page's own boxes and windows ---------- */
@@ -371,6 +362,20 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   @objc func toReview() { setServer("review") }
   func setServer(_ k: String) { defaults.set(k, forKey: "e11_server"); reviewLink.isHidden = true; loadHome(); buildMenu() }
   @objc func pickServer(_ sender: NSMenuItem) { setServer(sender.representedObject as? String ?? "live") }
+  // the startup screen over everything — at the start, and again whenever the page loads afresh (an update, a reload: the
+  // website's own sidebar showed for a moment — Haris 2026-11-15 15:12)
+  func showSplash() {
+    guard splash == nil, MacSplash.available, let cv = window?.contentView else { return }
+    let sp = MacSplash(frame: cv.bounds)
+    sp.autoresizingMask = [.width, .height]
+    sp.onSkip = { [weak self] in self?.endSplash(fast: true) }
+    cv.addSubview(sp, positioned: .above, relativeTo: side.topRow)
+    splash = sp; splashHello = false
+    // as long as the iPhone's when the page is ready by then (Haris 2026-11-15 15:06); still loading, it waits for the page
+    // with Apple's spinner and "Starting up" under the icon (15:11) — never held for good: a page that isn't E11's (a
+    // sign-in page) lets it go as it loads (didFinish), and after 30 s it goes anyway
+    DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self, weak sp] in if let sp = sp, self?.splash === sp { self?.endSplash() } }
+  }
   func endSplash(fast: Bool = false) {
     guard let sp = splash else { return }
     sp.ready = true
