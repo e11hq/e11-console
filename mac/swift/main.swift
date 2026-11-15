@@ -612,7 +612,17 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
         pv.open(in: cv)
         done(["ok": true])
       }
-    case "previewSet": preview?.set(a); done(["ok": true])
+    case "previewSet":
+      // (where the file now on show has its thumbnail on the page — the preview flies back into it: Haris 2026-11-15)
+      if let id = a["fromId"] as? String {
+        var r: NSRect?
+        if let f = a["from"] as? [String: Any], let x = (f["x"] as? NSNumber)?.doubleValue, let y = (f["y"] as? NSNumber)?.doubleValue,
+           let w = (f["w"] as? NSNumber)?.doubleValue, let h = (f["h"] as? NSNumber)?.doubleValue {
+          let z = Double(web.pageZoom); r = NSRect(x: x * z, y: y * z, width: w * z, height: h * z)
+        }
+        preview?.setFrom(r, id: id)
+      }
+      preview?.set(a); done(["ok": true])
     case "appInfo":
       done(["ok": true, "server": SERVER, "shell": SHELL_VERSION, "native": "swift",
             "version": info["CFBundleShortVersionString"] as? String ?? "3.0.0", "touchID": defaults.bool(forKey: LOCK_KEY),

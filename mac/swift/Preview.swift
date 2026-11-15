@@ -131,7 +131,7 @@ final class MacPreview: NSView {
   override var isFlipped: Bool { true }
   override var acceptsFirstResponder: Bool { true }
   private var files: [[String: Any]], at: Int
-  private let from: NSRect?, openedAt: Int
+  private var from: NSRect?, openedAt: Int   // (openedAt: the file `from` is the thumbnail of — moved on as the page says where the one on show sits)
   var event: (([String: Any]) -> Void)?
   var onGone: (() -> Void)?
   private let back = NSView(), stage = NSView()
@@ -382,6 +382,12 @@ final class MacPreview: NSView {
     DispatchQueue.main.asyncAfter(deadline: .now() + 2) { NSAnimationContext.runAnimationGroup { c in c.duration = 0.3; self.toastL.animator().alphaValue = 0 } }
   }
 
+  // the page says where the file now on show has its own thumbnail (Haris 2026-11-15: back into the file moved to with Next) —
+  // or nil, when it has none on screen: then it fades
+  func setFrom(_ r: NSRect?, id: String) {
+    guard (cur["id"] as? String) == id else { return }
+    from = r; openedAt = r == nil ? -1 : at
+  }
   /* ---------- moving, keys, the pointer ---------- */
   private func go(_ i: Int) { guard i >= 0, i < files.count, i != at else { return }; at = i; show(); wake() }
   private func move(_ d: Int) { go(at + d) }
