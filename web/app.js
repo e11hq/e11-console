@@ -4944,7 +4944,7 @@ const MacBar = (() => {
     document.addEventListener('input', (e) => { if (e.target && e.target.id === 'search') paint(); }, true);
     paint();
   }
-  if (Host.isMacApp) setTimeout(() => NativeMac.call('appInfo').then((r) => { shell = Number(r && r.shell) || 0; if (on()) start(); }).catch(() => {}), 0);
+  if (Host.isMacApp) setTimeout(() => NativeMac.call('appInfo').then((r) => { shell = Number(r && r.shell) || 0; if (r && r.toolbar) document.documentElement.classList.add('mac-tb'); if (on()) start(); }).catch(() => {}), 0);
   window.__e11Bar = (a) => {
     a = a || {};
     if (a.talk) return TalkButton.open();

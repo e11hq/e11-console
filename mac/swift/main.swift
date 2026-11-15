@@ -83,6 +83,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   let LIGHTS_X: CGFloat = 20, BAR_H: CGFloat = 48
   let side = Sidebar()
   let bar = PageBar()   // (Apple's search field and Talk button over the page's top strip — Mac page by page, Haris 2026-11-15)
+  let tools = MainToolbar()   // (TRIAL B)
   // the window buttons' row: the page's own 48px top strip, or the native sidebar's top row
   var barH: CGFloat { side.on ? Sidebar.INSET * 2 + Sidebar.TOP : BAR_H }
 
@@ -193,9 +194,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     side.frame = NSRect(x: Sidebar.INSET, y: Sidebar.INSET, width: Sidebar.WIDE, height: window.contentView!.bounds.height - Sidebar.INSET * 2)
     side.autoresizingMask = [.height]
     window.contentView!.addSubview(side, positioned: .above, relativeTo: web)
-    bar.host = self
-    bar.isHidden = true
-    window.contentView!.addSubview(bar, positioned: .above, relativeTo: web)
+    // TRIAL B: Apple's own toolbar (NSToolbar) instead of PageBar — to see what it does to the sidebar's top row
+    tools.host = self
+    window.toolbar = tools.tb
+    if #available(macOS 11.0, *) { window.toolbarStyle = .unified }
     #if APPSTORE
     reviewLink.frame = NSRect(x: 0, y: 14, width: window.contentView!.bounds.width, height: 30)
     reviewLink.autoresizingMask = [.width]
@@ -218,6 +220,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   // The page draws its own 48px top strip; the close / minimise / full-screen buttons are centred in it
   // (like Electron's trafficLightPosition: the title-bar container grows, the buttons move).
   func placeLights() {
+    if window?.toolbar != nil { return }   // (TRIAL B: Apple's toolbar places the window's buttons itself)
     guard let w = window, !w.styleMask.contains(.fullScreen),
           let close = w.standardWindowButton(.closeButton), let mini = w.standardWindowButton(.miniaturizeButton),
           let zoom = w.standardWindowButton(.zoomButton), let bar = close.superview, let container = bar.superview else { return }
@@ -486,7 +489,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       done(["ok": true])
     case "zoomWindow": window.performZoom(nil); done(["ok": true])
     // the page's top strip: where its search and Talk sit (the page's own hidden there), the count, the words (shell 13)
-    case "pageBar": bar.apply(a, zoom: web.pageZoom, height: window.contentView?.bounds.height ?? 0); if lockView != nil { bar.isHidden = true }; done(["ok": true])
+    case "pageBar": tools.apply(a); done(["ok": true])
     // a right-click: the page's options as Apple's own menu at the pointer; the reply is the one picked (shell 13)
     case "menu": PageMenu.show(a, in: web, zoom: web.pageZoom, done)
     case "shareInfo": DispatchQueue.global(qos: .userInitiated).async { let r = self.shareInfo(a); DispatchQueue.main.async { done(r) } }
@@ -513,7 +516,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     case "appInfo":
       done(["ok": true, "server": SERVER, "shell": SHELL_VERSION, "native": "swift",
             "version": info["CFBundleShortVersionString"] as? String ?? "3.0.0", "touchID": defaults.bool(forKey: LOCK_KEY),
-            "glass": FileManager.default.fileExists(atPath: Bundle.main.bundlePath + "/Contents/Resources/Assets.car"), "store": IS_STORE, "apns": IS_STORE, "sidebar": true])
+            "glass": FileManager.default.fileExists(atPath: Bundle.main.bundlePath + "/Contents/Resources/Assets.car"), "store": IS_STORE, "apns": IS_STORE, "sidebar": true, "toolbar": true])
     default: done(["ok": false, "error": "Unknown command " + cmd])
     }
   }
@@ -1290,4 +1293,99 @@ enum PageMenu {
     // (the item's action comes as the menu closes: answer once it has)
     DispatchQueue.main.async { done(picker.picked.map { ["ok": true, "i": $0] } ?? ["ok": true]) }
   }
+}
+
+/* ---------- TRIAL B: Apple's own toolbar — Talk, the search field, the E11 mark ---------- */
+final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
+  weak var host: App?
+  let tb = NSToolbar(identifier: "E11Main")
+  static let TALK = NSToolbarItem.Identifier("talk"), SEARCH = NSToolbarItem.Identifier("search"), MARK = NSToolbarItem.Identifier("mark")
+  let talk = NSButton()
+  let badge = NSTextField(labelWithString: "")
+  let field = NSSearchField()
+  private var sent = ""
+  override init() {
+    super.init()
+    tb.delegate = self
+    tb.displayMode = .iconOnly
+    tb.allowsUserCustomization = false
+    talk.title = "Talk"
+    if #available(macOS 11.0, *) { talk.image = NSImage(systemSymbolName: "bubble.left", accessibilityDescription: "E11 Talk") }
+    talk.imagePosition = .imageLeading
+    talk.bezelStyle = .texturedRounded
+    talk.target = self; talk.action = #selector(openTalk)
+    badge.font = .systemFont(ofSize: 11, weight: .semibold); badge.textColor = .white; badge.alignment = .center
+    badge.wantsLayer = true; badge.layer?.backgroundColor = NSColor.systemRed.cgColor; badge.layer?.cornerRadius = 8; badge.isHidden = true
+    talk.addSubview(badge)
+    field.delegate = self
+    field.sendsSearchStringImmediately = true
+    field.target = self; field.action = #selector(searched)
+    if let c = field.cell as? NSSearchFieldCell { c.placeholderString = "Search tasks" }
+  }
+  func toolbarDefaultItemIdentifiers(_ t: NSToolbar) -> [NSToolbarItem.Identifier] { [.flexibleSpace, MainToolbar.TALK, MainToolbar.SEARCH, MainToolbar.MARK] }
+  func toolbarAllowedItemIdentifiers(_ t: NSToolbar) -> [NSToolbarItem.Identifier] { toolbarDefaultItemIdentifiers(t) }
+  func toolbar(_ t: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+    switch id {
+    case MainToolbar.TALK:
+      let it = NSToolbarItem(itemIdentifier: id); it.view = talk; it.label = "Talk"; return it
+    case MainToolbar.SEARCH:
+      if #available(macOS 11.0, *) {
+        let it = NSSearchToolbarItem(itemIdentifier: id)
+        it.searchField = field
+        it.preferredWidthForSearchField = 220
+        return it
+      }
+      let it = NSToolbarItem(itemIdentifier: id); it.view = field; return it
+    case MainToolbar.MARK:
+      let it = NSToolbarItem(itemIdentifier: id)
+      let iv = NSImageView(image: MainToolbar.mark())
+      iv.frame = NSRect(x: 0, y: 0, width: 40, height: 18)
+      it.view = iv; it.label = "E11"
+      return it
+    default: return nil
+    }
+  }
+  // the E11 mark (the page's own drawing), in the label colour so it follows light / dark
+  static func mark() -> NSImage {
+    let img = NSImage(size: NSSize(width: 40, height: 18), flipped: true) { r in
+      let path = NSBezierPath()
+      let d = "M274.8 108.1 L274.2 108.8 L274.4 130.5 L275.2 131.2 L296.8 131.1 L297.4 130.2 L297.2 108.5 L296.6 108.0Z M212.8 2.0 L211.6 3.2 L211.9 24.5 L218.6 25.2 L224.8 28.0 L229.2 32.2 L231.4 36.0 L232.6 40.0 L232.8 130.6 L233.4 131.9 L254.8 131.9 L255.9 130.4 L255.9 43.5 L254.9 35.5 L253.2 29.8 L250.0 22.6 L247.8 19.2 L242.4 13.1 L237.6 9.2 L232.4 6.2 L225.0 3.5 L219.0 2.2Z M149.8 2.0 L148.6 3.2 L148.9 24.5 L155.6 25.2 L161.8 28.0 L166.2 32.2 L168.4 36.0 L169.6 40.0 L169.8 130.6 L170.4 131.9 L191.8 131.9 L192.9 130.4 L192.9 43.5 L191.9 35.5 L190.2 29.8 L187.0 22.6 L184.8 19.2 L179.4 13.1 L174.6 9.2 L169.4 6.2 L162.0 3.5 L156.0 2.2Z M11.6 8.8 L7.8 12.8 L3.9 18.6 L1.4 24.8 L0.0 31.5 L0.0 98.4 L1.1 104.1 L2.8 108.9 L5.4 113.8 L8.4 117.9 L13.5 122.8 L17.9 125.6 L23.2 128.0 L31.5 129.9 L129.2 129.8 L129.9 128.9 L129.9 107.9 L128.9 106.8 L34.1 106.8 L30.5 105.9 L27.1 103.8 L24.6 100.9 L23.0 96.1 L22.9 71.5 L23.6 70.4 L105.8 70.1 L106.5 69.2 L106.6 48.4 L105.8 47.0 L24.1 47.0 L22.9 45.9 L22.9 34.6 L23.6 31.1 L25.6 27.6 L28.9 24.8 L34.1 23.1 L128.9 23.1 L129.9 22.0 L129.8 0.6 L128.9 0.0 L31.5 0.0 L27.5 0.6 L20.1 3.1 L17.0 4.8Z"
+      let s = r.height / 132.0
+      var cmd: Character = "M"; var nums: [CGFloat] = []
+      func flush() { while nums.count >= 2 { let p = NSPoint(x: nums[0] * s, y: nums[1] * s); if cmd == "M" { path.move(to: p); cmd = "L" } else { path.line(to: p) }; nums.removeFirst(2) } }
+      var tok = ""
+      for ch in d {
+        if ch == "M" || ch == "L" || ch == "Z" { if !tok.isEmpty { nums.append(CGFloat(Double(tok) ?? 0)); tok = "" }; flush(); if ch == "Z" { path.close() } else { cmd = ch } }
+        else if ch == " " { if !tok.isEmpty { nums.append(CGFloat(Double(tok) ?? 0)); tok = "" } }
+        else { tok.append(ch) }
+      }
+      if !tok.isEmpty { nums.append(CGFloat(Double(tok) ?? 0)) }; flush()
+      path.windingRule = .evenOdd
+      NSColor.labelColor.setFill(); path.fill()
+      return true
+    }
+    return img
+  }
+  func apply(_ a: [String: Any]) {
+    if let sd = a["search"] as? [String: Any] {
+      if let p = sd["place"] as? String, let c = field.cell as? NSSearchFieldCell, c.placeholderString != p { c.placeholderString = p }
+      let q = sd["q"] as? String ?? ""
+      if field.stringValue != q, field.currentEditor() == nil { field.stringValue = q; sent = q }
+    }
+    if (a["focus"] as? Bool) == true, let w = field.window { w.makeFirstResponder(field) }
+    let n = ((a["talk"] as? [String: Any])?["n"] as? NSNumber)?.intValue ?? 0
+    badge.isHidden = n <= 0
+    badge.stringValue = n > 99 ? "99+" : "\(n)"
+    talk.title = n > 0 ? "Talk      " : "Talk"
+    talk.sizeToFit()
+    badge.frame = NSRect(x: talk.bounds.width - 26, y: (talk.bounds.height - 16) / 2, width: 20, height: 16)
+  }
+  @objc func searched() {
+    let q = field.stringValue
+    if q == sent { return }
+    sent = q
+    host?.pageJS("window.__e11Bar && window.__e11Bar(\(jsonString(["q": q])))")
+  }
+  func controlTextDidChange(_ n: Notification) { searched() }
+  @objc func openTalk() { host?.pageJS("window.__e11Bar && window.__e11Bar({talk: true})") }
 }

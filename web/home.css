@@ -461,3 +461,4 @@ html.mac-chrome #tb-talk i[hidden] { display: none; }
 #tb-talk { display: none; } html.mac-chrome #tb-talk { display: inline-flex; }
 /* the Mac app 13+: Apple's search field and Talk button lie over the page's (kept in place, hidden — app.js MacBar) */
 html.mac-bar13 #topbar .search, html.mac-bar13 #tb-talk { visibility: hidden; }
+html.mac-tb #topbar .topbar-right { visibility: hidden; }   /* (TRIAL B: Apple's toolbar has them) */
