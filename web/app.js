@@ -1140,12 +1140,11 @@ async function whatsNewDialog(auto) {
   $('[data-r="1"]', root).addEventListener('click', close);
   $('.scrim', root).addEventListener('click', (e) => { if (e.target.classList.contains('scrim')) close(); });
 }
-// After a reload into a new version, show its notes once
+// What's new never comes up by itself any more — not after a reload, not after an update (Haris 2026-11-15 17:23); it's
+// there when asked for (the update bar's and the menu's What's new). The version is still noted for anything that wants it.
 function maybeShowWhatsNew() {
   if (!Host.isServer || !Sync.version) return;
-  let seen = null;
-  try { seen = localStorage.getItem('e11-seen-version'); localStorage.setItem('e11-seen-version', Sync.version); } catch (e) { return; }
-  if (seen && seen !== Sync.version) setTimeout(() => whatsNewDialog(true), 1200);
+  try { localStorage.setItem('e11-seen-version', Sync.version); } catch (e) { /* storage off */ }
 }
 // Admin page: version, available update, update now, roll back
 function viewUpdates() {
