@@ -19,7 +19,7 @@ import ServiceManagement
 
 // Version of this Mac app's native part. Raise it when a change here needs everyone to reinstall: the web app
 // then shows a required-update banner in older Mac apps. (The earlier script app was 1–6.)
-let SHELL_VERSION = 13   // 13: Apple's menu on a right-click (command menu), the sidebar edge to edge (room 252 / 100) · 12: the sidebar is the Mac's own (glass on macOS 26; Sidebar.swift; command sidebar / window.__e11Side) · 10: fast office use (shared-folder copies, office-network uploads and downloads) · 11: office-network downloads show their progress
+let SHELL_VERSION = 13   // 13: Apple's menu on a right-click (command menu), the sidebar as Claude's — edge to edge, hidden completely or shown over the page on hover (room 252 / 0) · 12: the sidebar is the Mac's own (glass on macOS 26; Sidebar.swift; command sidebar / window.__e11Side) · 10: fast office use (shared-folder copies, office-network uploads and downloads) · 11: office-network downloads show their progress
 
 let info = Bundle.main.infoDictionary ?? [:]
 let env = ProcessInfo.processInfo.environment
@@ -192,7 +192,12 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     side.host = self
     side.frame = NSRect(x: 0, y: 0, width: Sidebar.INSET + Sidebar.WIDE, height: window.contentView!.bounds.height)   // (edge to edge)
     side.autoresizingMask = [.height]
-    window.contentView!.addSubview(side, positioned: .above, relativeTo: web)
+    // (hidden: the sidebar button and ‹ › over the page's top-left, the window's left edge that shows it; under it)
+    side.hiddenRow.isHidden = true; side.edgeHot.isHidden = true
+    side.hiddenRow.autoresizingMask = [.minYMargin]; side.edgeHot.autoresizingMask = [.height]
+    window.contentView!.addSubview(side.hiddenRow, positioned: .above, relativeTo: web)
+    window.contentView!.addSubview(side.edgeHot, positioned: .above, relativeTo: side.hiddenRow)
+    window.contentView!.addSubview(side, positioned: .above, relativeTo: side.edgeHot)
     #if APPSTORE
     reviewLink.frame = NSRect(x: 0, y: 14, width: window.contentView!.bounds.width, height: 30)
     reviewLink.autoresizingMask = [.width]
@@ -226,7 +231,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     let y = ((BAR_H - bh) / 2).rounded()
     // (the collapsed strip: centred on it — at the usual place the buttons ran over its edge, Haris 2026-10-31)
     let span = 2 * gap + zoom.frame.width
-    let x0 = side.on && side.compact ? (Sidebar.INSET + (side.width - span) / 2).rounded() : LIGHTS_X
+    let x0 = LIGHTS_X
     for (i, b) in [close, mini, zoom].enumerated() { b.setFrameOrigin(NSPoint(x: x0 + CGFloat(i) * gap, y: y)) }
   }
   // Closing the window keeps the app running in the background (like Slack): still connected, notifications and the
@@ -256,17 +261,23 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   // layouts at sizes that used to show two columns (Haris, 2026-10-30)
   func sideLayoutChanged(animated: Bool) {
     guard let cv = window?.contentView, let web = web else { return }
-    let sf = NSRect(x: 0, y: 0, width: Sidebar.INSET + side.width, height: cv.bounds.height)   // (edge to edge — Haris 2026-11-15)
+    // (edge to edge; hidden: slid off the window's left edge — Haris 2026-11-15)
+    let w = Sidebar.INSET + side.width, H = cv.bounds.height
+    let shownF = NSRect(x: 0, y: 0, width: w, height: H), goneF = shownF.offsetBy(dx: -w, dy: 0)
     web.frame = cv.bounds
     placeLights()
+    side.hiddenRow.frame = NSRect(x: SideTopRow.X, y: H - Sidebar.INSET - (Sidebar.TOP + SideTopRow.H) / 2, width: SideTopRow.W, height: SideTopRow.H)
+    side.edgeHot.frame = NSRect(x: 0, y: 0, width: 5, height: H)
+    let show = side.shown
     if animated {
-      NSAnimationContext.runAnimationGroup { c in
+      if show && side.isHidden { side.frame = goneF; side.isHidden = false }
+      NSAnimationContext.runAnimationGroup({ c in
         c.duration = 0.22
         c.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         c.allowsImplicitAnimation = true
-        self.side.animator().frame = sf
-      }
-    } else { side.frame = sf }
+        self.side.animator().frame = show ? shownF : goneF
+      }, completionHandler: { if !self.side.shown { self.side.isHidden = true } })
+    } else { side.frame = show ? shownF : goneF; side.isHidden = !show }
   }
   @objc func toggleSidebar(_ s: Any?) {
     if side.on { sideCall(["kind": "collapse"], nil) } else { pageJS("(function(){ var b = document.querySelector('[data-action=\"toggle-sidebar\"]'); if (b) b.click(); })()") }
@@ -475,7 +486,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       window.backgroundColor = light ? .white : NSColor(srgbRed: 0.047, green: 0.051, blue: 0.059, alpha: 1)
       placeLights()
       done(["ok": true])
-    case "sidebar": side.apply(a); if lockView != nil { side.isHidden = true }; done(["ok": true, "overlay": true, "room": Sidebar.INSET + Sidebar.WIDE, "slim": Sidebar.INSET + Sidebar.SLIM])
+    case "sidebar": side.apply(a); if lockView != nil { side.isHidden = true }; done(["ok": true, "overlay": true, "room": Sidebar.INSET + Sidebar.WIDE, "slim": 0])
     case "setIcon": done(setIcon(a))
     case "dragWindow":
       if let ev = NSApp.currentEvent { window.performDrag(with: ev) }
@@ -744,7 +755,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     cv.addSubview(v, positioned: .above, relativeTo: nil)
     lockView = v
     web.isHidden = true
-    side.isHidden = true
+    side.isHidden = true; side.hiddenRow.isHidden = true; side.edgeHot.isHidden = true
     window.makeFirstResponder(b)
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.unlock() }
   }
@@ -759,7 +770,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   func unlocked() {
     lockView?.removeFromSuperview(); lockView = nil
     web.isHidden = false
-    side.isHidden = !side.on
+    side.isHidden = !side.shown; side.hiddenRow.isHidden = !(side.on && side.hiddenMode); side.edgeHot.isHidden = side.hiddenRow.isHidden
     window.makeFirstResponder(web)
     lastActive = Date()
   }
@@ -961,8 +972,16 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
           self.selftest["sidebarCollapsed"] = c
           self.web.evaluateJavaScript("getComputedStyle(document.getElementById('app')).paddingLeft") { r, _ in self.selftest["pageCollapsed"] = r as? String ?? "" }
           self.snapWindow("-collapsed") {
-            self.sideCall(["kind": "collapse"], nil)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { done() }
+            // hidden, the pointer on the sidebar button: shown over the page
+            self.side.peek(true)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+              self.selftest["sidebarPeek"] = self.side.snapshot()
+              self.snapWindow("-peek") {
+                self.side.peek(false)
+                self.sideCall(["kind": "collapse"], nil)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { done() }
+              }
+            }
           }
         }
       }
@@ -983,7 +1002,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
           si.draw(in: self.side.frame)
         }
         // what lies over the page: the window's title-bar row (its buttons)
-        for v in [self.window.standardWindowButton(.closeButton)?.superview?.superview] {
+        for v in [self.side.hiddenRow as NSView?, self.window.standardWindowButton(.closeButton)?.superview?.superview] {
           guard let v = v, !v.isHidden, v.bounds.width > 0, let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) else { continue }
           v.cacheDisplay(in: v.bounds, to: rep)
           let vi = NSImage(size: v.bounds.size); vi.addRepresentation(rep)

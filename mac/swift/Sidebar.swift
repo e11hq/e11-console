@@ -1,8 +1,10 @@
-// E11 Console for Mac — the sidebar as the Mac's own (Mac app 12, Haris 2026-10-30): a floating glass panel like
-// Finder's on macOS 26 (Liquid Glass; older macOS: the see-through sidebar material), drawn here from what the page
-// sends (command "sidebar": its rows, counts, clients, profile, Synced line), so anything the page adds to its own
-// sidebar shows here without a new Mac app. Clicks go back to the page (window.__e11Side). Collapsed, it's a slim
-// strip of icons, like the page's own collapsed sidebar. The page hides its own sidebar while this one shows.
+// E11 Console for Mac — the sidebar as the Mac's own (Mac app 12, Haris 2026-10-30), drawn here from what the page sends
+// (command "sidebar": its rows, counts, clients, profile, Synced line), so anything the page adds to its own sidebar shows
+// here without a new Mac app. Clicks go back to the page (window.__e11Side). The page hides its own sidebar meanwhile.
+// Mac app 13 — as Claude's (Haris 2026-11-15 13:20–13:30, mock-ups S1–S4 approved): edge to edge; its top row the window's
+// buttons, the sidebar button, ‹ › and light / dark as two buttons (no New task); the sidebar button hides it completely
+// (the button and ‹ › stay over the page's top-left), and with the pointer on that button or the window's left edge it
+// shows over the page until the pointer leaves; clicked, it's shown again. Shown at first, then as each person left it.
 import Cocoa
 
 // colours that follow the window's light / dark look
@@ -77,33 +79,81 @@ class SideHit: FlippedView {
   override func rightMouseDown(with e: NSEvent) { if let m = onMenu { m(e) } else { super.rightMouseDown(with: e) } }
 }
 
-// a round glass-like button in the sidebar's top row (light / dark, New task, collapse)
-final class SideButton: SideHit {
+// a plain button of the top row (the sidebar button, ‹ ›): Apple's rounded hover, no border
+final class SideIcon: SideHit {
   let img = NSImageView()
-  init(_ symbol: String, _ tip: String) {
-    super.init(frame: NSRect(x: 0, y: 0, width: 30, height: 30))
+  var onHover: ((Bool) -> Void)?
+  var enabled = true { didSet { img.alphaValue = enabled ? 1 : 0.35 } }
+  init(_ image: NSImage?, _ tip: String) {
+    super.init(frame: NSRect(x: 0, y: 0, width: 28, height: 28))
     toolTip = tip
     img.imageScaling = .scaleNone
     img.contentTintColor = .secondaryLabelColor
+    img.image = image
     addSubview(img)
-    set(symbol)
   }
   required init?(coder: NSCoder) { nil }
-  func set(_ symbol: String) { img.image = sideSymbol(symbol, 13.5, .medium) }
   override func layout() { super.layout(); img.frame = bounds }
+  override func mouseEntered(with e: NSEvent) { super.mouseEntered(with: e); onHover?(true) }
+  override func mouseExited(with e: NSEvent) { super.mouseExited(with: e); onHover?(false) }
+  override func mouseUp(with e: NSEvent) { if enabled { super.mouseUp(with: e) } else { pressed = false } }
   override func draw(_ r: NSRect) {
-    let p = NSBezierPath(ovalIn: bounds.insetBy(dx: 0.5, dy: 0.5))
-    SIDE_BTN.setFill(); p.fill()
-    if pressed { SIDE_SEL.setFill(); p.fill() } else if hovering { SIDE_HOVER.setFill(); p.fill() }
-    SIDE_BTN_EDGE.setStroke(); p.lineWidth = 0.5; p.stroke()
+    guard enabled, hovering || pressed else { return }
+    (pressed ? SIDE_SEL : SIDE_HOVER).setFill(); NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill()
   }
+  // Claude's sidebar button: a rounded box with a short bar near its left (template: it follows light / dark)
+  static let sidebarImage: NSImage = {
+    let i = NSImage(size: NSSize(width: 20, height: 16), flipped: true) { _ in
+      NSColor.black.setStroke()
+      let box = NSBezierPath(roundedRect: NSRect(x: 1.75, y: 1.75, width: 16.5, height: 12.5), xRadius: 3.5, yRadius: 3.5); box.lineWidth = 1.5; box.stroke()
+      let bar = NSBezierPath(); bar.move(to: NSPoint(x: 6.5, y: 5.6)); bar.line(to: NSPoint(x: 6.5, y: 10.4)); bar.lineWidth = 1.5; bar.lineCapStyle = .round; bar.stroke()
+      return true
+    }
+    i.isTemplate = true
+    return i
+  }()
+}
+
+// the sidebar button and ‹ › — at the top of the shown sidebar, and over the page's top-left while it's hidden
+final class SideTopRow: FlippedView {
+  static let X: CGFloat = 84, W: CGFloat = 92, H: CGFloat = 28   // (from the window's left edge, after its buttons)
+  let toggle = SideIcon(SideIcon.sidebarImage, "Hide sidebar")
+  let back = SideIcon(sideSymbol("chevron.left", 12, .medium), "Back (⌘[)")
+  let fwd = SideIcon(sideSymbol("chevron.right", 12, .medium), "Forward (⌘])")
+  override init(frame: NSRect) {
+    super.init(frame: frame)
+    toggle.img.contentTintColor = .labelColor
+    [toggle, back, fwd].forEach { addSubview($0) }
+  }
+  required init?(coder: NSCoder) { nil }
+  override func layout() {
+    super.layout()
+    toggle.frame = NSRect(x: 0, y: 0, width: 28, height: 28)
+    back.frame = NSRect(x: 38, y: 0, width: 22, height: 28)
+    fwd.frame = NSRect(x: 62, y: 0, width: 22, height: 28)
+  }
+  func set(back b: Bool, fwd f: Bool, hidden: Bool) {
+    back.enabled = b; fwd.enabled = f
+    toggle.toolTip = hidden ? "Show sidebar" : "Hide sidebar"
+  }
+}
+
+// the window's left edge while the sidebar is hidden: the pointer there shows it
+final class SideEdge: NSView {
+  var onEnter: (() -> Void)?
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas()
+    trackingAreas.forEach { removeTrackingArea($0) }
+    addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil))
+  }
+  override func mouseEntered(with e: NSEvent) { onEnter?() }
 }
 
 // one row: an icon / colour dot / logo, the name and a count (red badge for what needs attention)
 final class SideRow: SideHit {
   let icon = NSImageView(), title = sideLabel(13.5), count = sideLabel(12.5, .regular, .tertiaryLabelColor)
   let badge = FlippedView(), badgeText = sideLabel(11, .semibold, .white)
-  var dot: NSColor?, logo: NSImage?, selected = false, compact = false, hot = false
+  var dot: NSColor?, logo: NSImage?, selected = false, hot = false
   // drag to reorder (clients, Admins: the page says which rows can be dragged)
   var key = "", canDrag = false
   var lifted = false { didSet { if lifted != oldValue { needsDisplay = true; shadowed(lifted) } } }
@@ -138,21 +188,18 @@ final class SideRow: SideHit {
     [icon, title, count, badge].forEach { addSubview($0) }
   }
   required init?(coder: NSCoder) { nil }
-  func set(_ e: [String: Any], compact c: Bool) {
-    compact = c
+  func set(_ e: [String: Any]) {
     let name = e["title"] as? String ?? ""
     title.stringValue = name
     selected = (e["sel"] as? Bool) == true
     title.font = .systemFont(ofSize: 13.5, weight: selected ? .semibold : .regular)
     dot = sideColor(e["c"]); logo = sideImage(e["logo"])
-    icon.image = dot == nil && logo == nil ? sideSymbol(e["ic"] as? String ?? "", c ? 16 : 14) : nil
+    icon.image = dot == nil && logo == nil ? sideSymbol(e["ic"] as? String ?? "", 14) : nil
     let n = e["n"] as? String ?? ""
     hot = (e["hot"] as? Bool) == true && !n.isEmpty
     count.stringValue = hot ? "" : n
     badgeText.stringValue = n
-    badge.isHidden = !hot || c
-    title.isHidden = c; count.isHidden = c
-    toolTip = c ? name + (n.isEmpty ? "" : " (\(n))") : nil
+    badge.isHidden = !hot
     key = e["k"] as? String ?? ""
     canDrag = (e["drag"] as? Bool) == true
     needsLayout = true; needsDisplay = true
@@ -160,10 +207,6 @@ final class SideRow: SideHit {
   override func layout() {
     super.layout()
     let h = bounds.height, w = bounds.width
-    if compact {
-      icon.frame = bounds
-      return
-    }
     icon.frame = NSRect(x: 7, y: 0, width: 22, height: h)
     var right = w - 9
     if !badge.isHidden {
@@ -186,35 +229,32 @@ final class SideRow: SideHit {
     if lifted {
       // (picked up: a solid card of the panel's own colour, so it reads above the others)
       dynColor(NSColor(white: 0.97, alpha: 1), NSColor(white: 0.22, alpha: 1)).setFill()
-      NSBezierPath(roundedRect: bounds, xRadius: compact ? 10 : 9, yRadius: compact ? 10 : 9).fill()
+      NSBezierPath(roundedRect: bounds, xRadius: 9, yRadius: 9).fill()
     }
     if selected || hovering || pressed {
       let fill: NSColor = pressed ? SIDE_SEL : selected ? SIDE_SEL : SIDE_HOVER
-      fill.setFill(); NSBezierPath(roundedRect: bounds, xRadius: compact ? 10 : 9, yRadius: compact ? 10 : 9).fill()
+      fill.setFill(); NSBezierPath(roundedRect: bounds, xRadius: 9, yRadius: 9).fill()
     }
-    let cx: CGFloat = compact ? bounds.midX : 18, cy = bounds.midY
+    let cx: CGFloat = 18, cy = bounds.midY
     if let l = logo {
-      let s: CGFloat = compact ? 20 : 18
+      let s: CGFloat = 18
       let rect = NSRect(x: cx - s / 2, y: cy - s / 2, width: s, height: s)
       NSGraphicsContext.saveGraphicsState()
       NSBezierPath(roundedRect: rect, xRadius: 4.5, yRadius: 4.5).addClip()
       l.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
       NSGraphicsContext.restoreGraphicsState()
     } else if let d = dot {
-      let s: CGFloat = compact ? 12 : 10
+      let s: CGFloat = 10
       d.setFill(); NSBezierPath(ovalIn: NSRect(x: cx - s / 2, y: cy - s / 2, width: s, height: s)).fill()
     }
-    // collapsed: a small red dot where the red count would be
-    if compact && hot { SIDE_RED.setFill(); NSBezierPath(ovalIn: NSRect(x: bounds.width - 15, y: 6, width: 7, height: 7)).fill() }
   }
 }
 
-// a heading ("Clients", "Library") with an optional + ; collapsed: a short line
+// a heading ("Clients", "Library") with an optional +
 final class SideHead: FlippedView {
   let title = sideLabel(11, .semibold, .secondaryLabelColor)
   let add = SideHit()
   let plus = NSImageView()
-  var compact = false
   override init(frame: NSRect) {
     super.init(frame: frame)
     plus.imageScaling = .scaleNone; plus.contentTintColor = .secondaryLabelColor; plus.image = sideSymbol("plus", 11, .semibold)
@@ -224,15 +264,10 @@ final class SideHead: FlippedView {
   required init?(coder: NSCoder) { nil }
   override func layout() {
     super.layout()
-    title.isHidden = compact
     title.sizeToFit()
     title.frame = NSRect(x: 9, y: bounds.height - title.frame.height - 4, width: bounds.width - 40, height: title.frame.height)
     add.frame = NSRect(x: bounds.width - 26, y: bounds.height - 24, width: 22, height: 22)
     plus.frame = add.bounds
-  }
-  override func draw(_ r: NSRect) {
-    guard compact else { return }
-    SIDE_LINE.setFill(); NSRect(x: (bounds.width - 28) / 2, y: bounds.midY, width: 28, height: 0.5).fill()
   }
 }
 
@@ -243,17 +278,16 @@ final class SideLine: FlippedView { override func draw(_ r: NSRect) { SIDE_LINE.
 final class SideMe: SideHit {
   let name = sideLabel(13, .semibold), role = sideLabel(11.5, .regular, .secondaryLabelColor)
   let chev = NSImageView()
-  var photo: NSImage?, initials = "", color = NSColor.systemRed, compact = false
+  var photo: NSImage?, initials = "", color = NSColor.systemRed
   override init(frame: NSRect) {
     super.init(frame: frame)
     chev.imageScaling = .scaleNone; chev.contentTintColor = .tertiaryLabelColor; chev.image = sideSymbol("chev", 10, .semibold)
     [name, role, chev].forEach { addSubview($0) }
   }
   required init?(coder: NSCoder) { nil }
-  var avatarRect: NSRect { compact ? NSRect(x: (bounds.width - 30) / 2, y: (bounds.height - 30) / 2, width: 30, height: 30) : NSRect(x: 8, y: (bounds.height - 30) / 2, width: 30, height: 30) }
+  var avatarRect: NSRect { NSRect(x: 8, y: (bounds.height - 30) / 2, width: 30, height: 30) }
   override func layout() {
     super.layout()
-    [name, role, chev].forEach { $0.isHidden = compact }
     let x = avatarRect.maxX + 10, w = bounds.width - x - 26
     name.sizeToFit(); role.sizeToFit()
     let total = name.frame.height + role.frame.height
@@ -292,17 +326,21 @@ protocol SidebarHost: AnyObject {
 }
 
 final class Sidebar: NSView {
-  static let WIDE: CGFloat = 244, SLIM: CGFloat = 92, INSET: CGFloat = 8, TOP: CGFloat = 44
+  static let WIDE: CGFloat = 244, INSET: CGFloat = 8, TOP: CGFloat = 44
   weak var host: SidebarHost?
   var on = false
-  var compact = false
+  var hiddenMode = false          // (the page's "collapsed": hidden completely)
+  private(set) var peeking = false
+  var shown: Bool { on && (!hiddenMode || peeking) }
+  let row = SideTopRow(), hiddenRow = SideTopRow(), edgeHot = SideEdge()
+  let themeSeg = NSSegmentedControl()
+  private var peekArmed = true, peekEnd: DispatchWorkItem?
   private(set) var model: [String: Any] = [:]
   let inner = SideInner()
   private var backdrop: NSView!
   private let edge = NSBox()   // (the line between the sidebar and the page)
   let scroll = NSScrollView()
   let list = FlippedView()
-  let themeBtn = SideButton("moon", "Switch to light mode"), newBtn = SideButton("compose", "New task (⌘N)"), sideBtn = SideButton("sidebar", "Collapse sidebar")
   let footLine = SideLine()
   let me = SideMe()
   let syncDot = FlippedView(), syncText = sideLabel(11.5, .regular, .secondaryLabelColor), copy = sideLabel(11, .regular, .tertiaryLabelColor)
@@ -338,12 +376,27 @@ final class Sidebar: NSView {
     scroll.layer?.mask = fade
     scroll.contentView.postsBoundsChangedNotifications = true
     NotificationCenter.default.addObserver(self, selector: #selector(scrolled), name: NSView.boundsDidChangeNotification, object: scroll.contentView)
-    [scroll, themeBtn, newBtn, sideBtn, footLine, me, sync, copy].forEach { inner.addSubview($0) }
+    [scroll, row, themeSeg, footLine, me, sync, copy].forEach { inner.addSubview($0) }
+    // light / dark: Apple's two-button control (as Claude's pair)
+    themeSeg.segmentCount = 2
+    themeSeg.setImage(sideSymbol("sun", 12.5), forSegment: 0); themeSeg.setImage(sideSymbol("moon", 12.5), forSegment: 1)
+    themeSeg.setToolTip("Light", forSegment: 0); themeSeg.setToolTip("Dark", forSegment: 1)
+    themeSeg.trackingMode = .selectOne
+    themeSeg.controlSize = .small
+    themeSeg.target = self; themeSeg.action = #selector(pickTheme)
+    for r in [row, hiddenRow] {
+      r.toggle.onClick = { [weak self] in self?.host?.sideCall(["kind": "collapse"], nil) }
+      r.back.onClick = { [weak self] in self?.host?.sideCall(["kind": "back"], nil) }
+      r.fwd.onClick = { [weak self] in self?.host?.sideCall(["kind": "fwd"], nil) }
+    }
+    // hidden: the pointer on the sidebar button (once it has left it after hiding) or the left edge shows it over the page
+    hiddenRow.toggle.onHover = { [weak self] inside in
+      guard let self = self else { return }
+      if inside { if self.peekArmed { self.peek(true) } } else { self.peekArmed = true }
+    }
+    edgeHot.onEnter = { [weak self] in self?.peek(true) }
     sync.addSubview(syncDot); sync.addSubview(syncText)
     syncDot.wantsLayer = true; syncDot.layer?.cornerRadius = 3.5
-    themeBtn.onClick = { [weak self] in self?.host?.sideCall(["kind": "theme"], nil) }
-    newBtn.onClick = { [weak self] in self?.host?.sideCall(["kind": "new"], nil) }
-    sideBtn.onClick = { [weak self] in self?.host?.sideCall(["kind": "collapse"], nil) }
     me.onClick = { [weak self] in self?.openMenu("me", from: self?.me, at: nil) }
     me.onMenu = { [weak self] e in self?.openMenu("me", from: self?.me, at: e) }
     sync.onClick = { [weak self] in self?.host?.sideCall(["kind": "sync"], nil) }
@@ -352,24 +405,49 @@ final class Sidebar: NSView {
   required init?(coder: NSCoder) { nil }
 
 
-  var width: CGFloat { compact ? Sidebar.SLIM : Sidebar.WIDE }
-  // where the page starts (the window's left edge to the page): the sidebar, edge to edge
-  var pageX: CGFloat { on ? Sidebar.INSET + width : 0 }
+  var width: CGFloat { Sidebar.WIDE }
+  // where the page starts (the window's left edge to the page): beside the sidebar when it's shown, else the edge
+  var pageX: CGFloat { on && !hiddenMode ? Sidebar.INSET + width : 0 }
+  @objc func pickTheme() { host?.sideCall(["kind": "theme", "mode": themeSeg.selectedSegment == 0 ? "light" : "dark"], nil) }
+
+  /* ---------- hidden: shown over the page while the pointer is on it ---------- */
+  func peek(_ on: Bool) {
+    peekEnd?.cancel(); peekEnd = nil
+    guard self.on, hiddenMode, on != peeking else { return }
+    peeking = on
+    layer?.shadowColor = NSColor.black.cgColor
+    layer?.shadowOpacity = on ? 0.22 : 0
+    layer?.shadowRadius = on ? 20 : 0
+    layer?.shadowOffset = CGSize(width: 6, height: 0)
+    host?.sideLayoutChanged(animated: true)
+  }
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas()
+    trackingAreas.forEach { removeTrackingArea($0) }
+    addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil))
+  }
+  override func mouseEntered(with e: NSEvent) { peekEnd?.cancel(); peekEnd = nil }
+  override func mouseExited(with e: NSEvent) {
+    guard peeking else { return }
+    let w = DispatchWorkItem { [weak self] in self?.peek(false) }
+    peekEnd = w
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: w)
+  }
 
   /* ---------- the page's model ---------- */
   func apply(_ m: [String: Any]) {
     if drag != nil { pendingModel = m; return }   // (after the drag)
-    let wasOn = on, wasCompact = compact
+    let wasOn = on, wasHidden = hiddenMode
     model = m
     on = (m["on"] as? Bool) == true
-    compact = (m["collapsed"] as? Bool) == true
-    isHidden = !on
-    guard on else { if wasOn { host?.sideLayoutChanged(animated: false) }; return }
-    // (the same sun / moon / automatic picture and words as the page's own button)
-    themeBtn.set(m["themeIc"] as? String ?? "sun")
-    themeBtn.toolTip = m["themeTip"] as? String
-    newBtn.isHidden = (m["create"] as? Bool) == false
-    sideBtn.toolTip = compact ? "Expand sidebar" : "Collapse sidebar"
+    hiddenMode = (m["collapsed"] as? Bool) == true
+    if !hiddenMode { peeking = false; layer?.shadowOpacity = 0 }
+    if hiddenMode && !wasHidden { peekArmed = false; peeking = false }   // (just hidden with the pointer on the button: not shown again until it leaves)
+    hiddenRow.isHidden = !(on && hiddenMode); edgeHot.isHidden = hiddenRow.isHidden
+    guard on else { isHidden = true; if wasOn { host?.sideLayoutChanged(animated: false) }; return }
+    themeSeg.selectedSegment = (m["light"] as? Bool) == true ? 0 : 1
+    let b = (m["back"] as? Bool) == true, f = (m["fwd"] as? Bool) == true
+    row.set(back: b, fwd: f, hidden: hiddenMode); hiddenRow.set(back: b, fwd: f, hidden: hiddenMode)
     buildRows()
     let me0 = m["me"] as? [String: Any] ?? [:]
     me.name.stringValue = me0["name"] as? String ?? ""
@@ -377,15 +455,14 @@ final class Sidebar: NSView {
     me.photo = sideImage(me0["photo"])
     me.initials = me0["initials"] as? String ?? ""
     me.color = sideColor(me0["color"]) ?? .systemRed
-    me.compact = compact
-    me.toolTip = compact ? me.name.stringValue : "Profile, team and sign out"
+    me.toolTip = "Profile, team and sign out"
     me.needsLayout = true; me.needsDisplay = true
     let s = m["sync"] as? [String: Any] ?? [:]
     syncText.stringValue = s["text"] as? String ?? ""
     syncDot.layer?.backgroundColor = (sideColor(s["rgb"]) ?? .systemGreen).cgColor
     sync.toolTip = s["tip"] as? String
     copy.stringValue = m["copy"] as? String ?? ""
-    if !wasOn || wasCompact != compact { host?.sideLayoutChanged(animated: wasOn) }
+    if !wasOn || wasHidden != hiddenMode { host?.sideLayoutChanged(animated: wasOn) }
     needsLayout = true
     inner.needsLayout = true
   }
@@ -397,15 +474,14 @@ final class Sidebar: NSView {
       if (e["t"] as? String) == "h" {
         let h = SideHead()
         h.title.stringValue = (e["title"] as? String ?? "")
-        h.compact = compact
         let add = e["add"] as? String
-        h.add.isHidden = add == nil || compact
+        h.add.isHidden = add == nil
         h.add.toolTip = e["addTip"] as? String
         if let k = add { h.add.onClick = { [weak self] in self?.host?.sideCall(["kind": "go", "key": k], nil) } }
         rows.append(h)
       } else {
         let r = SideRow()
-        r.set(e, compact: compact)
+        r.set(e)
         let k = e["k"] as? String ?? ""
         r.onClick = { [weak self] in self?.host?.sideCall(["kind": "go", "key": k], nil) }
         r.onDrag = { [weak self] row, ev, phase in self?.dragRow(row, ev, phase) }
@@ -425,12 +501,11 @@ final class Sidebar: NSView {
   }
   private var mid: Range<Int> = 0..<0
   private func rowHeight(_ v: NSView, first: Bool) -> CGFloat {
-    if v is SideHead { return compact ? 17 : (first ? 22 : 30) }
-    return compact ? 38 : 30
+    if v is SideHead { return first ? 22 : 30 }
+    return 30
   }
   private func place(_ v: NSView, _ y: CGFloat, _ W: CGFloat) {
-    v.frame = v is SideHead ? NSRect(x: 10, y: y, width: W - 20, height: v.frame.height)
-      : compact ? NSRect(x: (W - 44) / 2, y: y, width: 44, height: 36) : NSRect(x: 10, y: y, width: W - 20, height: 30)
+    v.frame = v is SideHead ? NSRect(x: 10, y: y, width: W - 20, height: v.frame.height) : NSRect(x: 10, y: y, width: W - 20, height: 30)
     v.needsLayout = true
   }
 
@@ -441,24 +516,17 @@ final class Sidebar: NSView {
     inner.frame = NSRect(x: Sidebar.INSET, y: Sidebar.INSET, width: max(0, bounds.width - Sidebar.INSET), height: max(0, bounds.height - Sidebar.INSET * 2))
     edge.frame = NSRect(x: bounds.width - 1, y: 0, width: 1, height: bounds.height)
     let W = inner.bounds.width, H = inner.bounds.height
-    // top row: the window buttons sit at its left (placed by the app); ours on the right — collapsed: under them
-    var y: CGFloat
-    if compact {
-      var by = Sidebar.TOP + 2
-      for b in [sideBtn, newBtn, themeBtn] where !b.isHidden { b.frame = NSRect(x: (W - 30) / 2, y: by, width: 30, height: 30); by += 38 }
-      y = by + 2
-    } else {
-      var bx = W - 10 - 30
-      for b in [sideBtn, newBtn, themeBtn] where !b.isHidden { b.frame = NSRect(x: bx, y: (Sidebar.TOP - 30) / 2, width: 30, height: 30); bx -= 36 }
-      y = Sidebar.TOP + 8
-    }
+    // top row: the window's buttons at its left (placed by the app), then the sidebar button and ‹ ›; light / dark at its right
+    row.frame = NSRect(x: SideTopRow.X - Sidebar.INSET, y: (Sidebar.TOP - SideTopRow.H) / 2, width: SideTopRow.W, height: SideTopRow.H)
+    themeSeg.sizeToFit()
+    themeSeg.frame = NSRect(x: W - 10 - themeSeg.frame.width, y: (Sidebar.TOP - themeSeg.frame.height) / 2, width: themeSeg.frame.width, height: themeSeg.frame.height)
+    let y = Sidebar.TOP + 8
     // the footer
-    let footH: CGFloat = compact ? 52 : 92
+    let footH: CGFloat = 92
     let footY = H - footH
-    footLine.frame = NSRect(x: compact ? (W - 28) / 2 : 19, y: footY, width: compact ? 28 : W - 38, height: 0.5)
-    me.frame = compact ? NSRect(x: (W - 44) / 2, y: footY + 8, width: 44, height: 40) : NSRect(x: 10, y: footY + 8, width: W - 20, height: 42)
-    sync.isHidden = compact; copy.isHidden = compact
-    if !compact {
+    footLine.frame = NSRect(x: 19, y: footY, width: W - 38, height: 0.5)
+    me.frame = NSRect(x: 10, y: footY + 8, width: W - 20, height: 42)
+    do {
       sync.frame = NSRect(x: 10, y: me.frame.maxY + 2, width: W - 20, height: 18)
       syncDot.frame = NSRect(x: 11, y: 5.5, width: 7, height: 7)
       syncText.sizeToFit()
@@ -634,7 +702,7 @@ final class Sidebar: NSView {
     let heads = rows.compactMap { ($0 as? SideHead)?.title.stringValue }
     let hot = rows.compactMap { $0 as? SideRow }.filter { !$0.badge.isHidden }.map { $0.badgeText.stringValue }
     let glass = false   // (edge to edge: Apple's sidebar material, not a floating glass panel)
-    return ["on": on, "compact": compact, "width": frame.width, "x": frame.minX, "rows": names, "heads": heads, "hot": hot,
+    return ["on": on, "hidden": hiddenMode, "shown": shown, "width": frame.width, "x": frame.minX, "rows": names, "heads": heads, "hot": hot,
             "me": me.name.stringValue, "sync": syncText.stringValue, "copy": copy.stringValue, "glass": glass]
   }
 }

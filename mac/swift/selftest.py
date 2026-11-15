@@ -117,7 +117,9 @@ try:
     check(abs((sb.get('width') or 0) - 252) < 1 and (sb.get('webW') or 0) >= 1000, f"the sidebar floats over the page, which stays the window's width {sb.get('webW')} {sb.get('width')}")
     check(res.get('pageSidebar') == 'true none 252px', f"the page's own sidebar is hidden, its content starts beside the native one {res.get('pageSidebar')}")
     check('Sign out' in (res.get('sideMenu') or []), f"the profile menu comes as the Mac's own menu {res.get('sideMenu')}")
-    check(sc.get('compact') is True and abs((sc.get('width') or 0) - 100) < 1 and res.get('pageCollapsed') == '100px', f"collapsed: a strip of icons, the page beside it {sc} {res.get('pageCollapsed')}")
+    check(sc.get('hidden') is True and sc.get('shown') is False and res.get('pageCollapsed') == '0px', f"hidden: gone completely, the page the whole window wide {sc} {res.get('pageCollapsed')}")
+    pk = res.get('sidebarPeek') or {}
+    check(pk.get('hidden') is True and pk.get('shown') is True and abs((pk.get('x') or 0)) < 1, f"hidden, the pointer on its button: shown over the page {pk}")
     print('note glass (macOS 26):', sb.get('glass'))
     lights = res.get('lights') or {}
     check(abs(lights.get('x', 0) - 20) < 1, f'window buttons placed in the page’s top row {lights}')
