@@ -213,9 +213,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       sp.onSkip = { [weak self] in self?.endSplash(fast: true) }
       window.contentView!.addSubview(sp, positioned: .above, relativeTo: side.topRow)
       splash = sp
-      // as long as the iPhone's, never longer (Haris 2026-11-15 15:06: "it should stay the same duration as iphone app"): it
-      // goes once its icon has finished, the page and the sidebar made behind it meanwhile
-      DispatchQueue.main.async { [weak self] in self?.endSplash() }
+      // as long as the iPhone's when the page is ready by then (Haris 2026-11-15 15:06); still loading, it waits for the page
+      // with Apple's spinner and "Starting up" under the icon (15:11) — never held for good: a page that isn't E11's (a
+      // sign-in page) lets it go as it loads (didFinish), and after 30 s it goes anyway
+      DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in self?.endSplash() }
     }
     #if APPSTORE
     reviewLink.frame = NSRect(x: 0, y: 14, width: window.contentView!.bounds.width, height: 30)

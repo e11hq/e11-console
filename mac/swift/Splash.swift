@@ -21,6 +21,8 @@ final class MacSplash: NSView {
   private let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
   var iconTime: Double { reduce ? 0.3 : 2.15 }
   private let icon = CALayer()
+  // still loading once the icon has finished (Haris 2026-11-15 15:11): Apple's small spinner and "Starting up" under it
+  private let spinner = NSProgressIndicator(), startingL = NSTextField(labelWithString: "Starting up"), waitRow = NSView()
   private var files: [CALayer] = []
   private let unit: CGFloat = 132.0 / 824.0          // the icon's picture: 824 units across = 132 pt
   private var canvas: CGFloat { 1024 * unit }        // each piece's picture: 100 units more all round (shadows)
@@ -30,6 +32,12 @@ final class MacSplash: NSView {
     wantsLayer = true
     layer?.addSublayer(icon)
     buildIcon()
+    spinner.style = .spinning; spinner.controlSize = .small; spinner.isDisplayedWhenStopped = false
+    startingL.font = .systemFont(ofSize: 12); startingL.textColor = .secondaryLabelColor; startingL.alignment = .center
+    waitRow.addSubview(spinner); waitRow.addSubview(startingL)
+    waitRow.wantsLayer = true; waitRow.alphaValue = 0; waitRow.isHidden = true
+    addSubview(waitRow)
+    DispatchQueue.main.asyncAfter(deadline: .now() + iconTime) { [weak self] in self?.showWaiting() }
     setAccessibilityLabel("E11 Console is opening")
   }
   required init?(coder: NSCoder) { nil }
@@ -52,6 +60,12 @@ final class MacSplash: NSView {
     icon.bounds = CGRect(x: 0, y: 0, width: canvas, height: canvas)
     icon.position = CGPoint(x: bounds.midX.rounded(), y: bounds.midY.rounded())
     CATransaction.commit()
+    // (under the icon: its picture is 132 pt high)
+    startingL.sizeToFit()
+    let rowH: CGFloat = 16 + 10 + startingL.frame.height
+    waitRow.frame = NSRect(x: 0, y: (bounds.midY - 66 - 28 - rowH).rounded(), width: bounds.width, height: rowH)
+    spinner.frame = NSRect(x: (bounds.width - 16) / 2, y: rowH - 16, width: 16, height: 16)
+    startingL.frame = NSRect(x: 0, y: 0, width: bounds.width, height: startingL.frame.height)
   }
   // a click: skip, once the page is there to show
   override func mouseUp(with e: NSEvent) { if ready && !leaving { onSkip?() } }
@@ -119,6 +133,11 @@ final class MacSplash: NSView {
     l.add(g, forKey: "sp")
   }
 
+  private func showWaiting() {
+    guard !ready, !leaving else { return }
+    waitRow.isHidden = false; spinner.startAnimation(nil)
+    NSAnimationContext.runAnimationGroup { c in c.duration = 0.25; self.waitRow.animator().alphaValue = 1 }
+  }
   // how long until it has gone, if it's told to go now (the icon finishes first, then a 0.45 s fade)
   func goneIn(fast: Bool = false) -> Double { (fast ? 0 : max(0, iconTime - (CACurrentMediaTime() - t0))) + (fast ? 0.2 : 0.45) }
   func leave(fast: Bool = false, then: @escaping () -> Void) {
@@ -127,6 +146,7 @@ final class MacSplash: NSView {
     DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
       guard let self = self, !self.leaving else { return }
       self.leaving = true
+      self.spinner.stopAnimation(nil)
       NSAnimationContext.runAnimationGroup({ c in
         c.duration = fast ? 0.2 : 0.45
         c.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
