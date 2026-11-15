@@ -3357,9 +3357,13 @@ final class MessageBar: UIView, UITextViewDelegate {
     // (editing, as the design: our blue, the pencil, the old words in grey; ✓ in place of send)
     let wasEditing = self.editing
     self.editing = editing && r != nil
-    editIcon.isHidden = !self.editing
-    replyBar.backgroundColor = self.editing ? Look.accent : ink; replyName.textColor = self.editing ? Look.accent : ink
-    replyText.textColor = self.editing ? .secondaryLabel : .label
+    // (going away it keeps its look too — its name's colour, its bar, the pencil — while it slides down behind the box: ✕
+    //  turned a client's green name blue on its way out, the cancelled reply taking the default colour — Haris 2026-11-15)
+    if on {
+      editIcon.isHidden = !self.editing
+      replyBar.backgroundColor = self.editing ? Look.accent : ink; replyName.textColor = self.editing ? Look.accent : ink
+      replyText.textColor = self.editing ? .secondaryLabel : .label
+    }
     replyX.accessibilityLabel = self.editing ? "Stop editing" : "Cancel the reply"
     if wasEditing != self.editing {
       var c = sendB.configuration
