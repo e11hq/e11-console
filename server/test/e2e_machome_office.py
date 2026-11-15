@@ -107,6 +107,10 @@ async def main():
                     vis2 = await E("[...document.querySelectorAll('.ohm-grid img')].map((i) => getComputedStyle(i).opacity)")
                     check(vis2 and all(v == '1' for v in vis2), f'...and every kept one shows {vis2}')
                     check(not [u for u in reqs if any(u.split('?')[0] == x.split('?')[0] for x in shownNow)], f'...none of them loaded again {len(reqs)} requests')
+                    # a video has its cover and ▶ (Haris 18:21: MP4s had no picture) — the cover made by the server when it had none
+                    vids = await E("(() => { const fs = []; db.clients && 0; return [...document.querySelectorAll('.ohm-grid .hm-thumb')].filter((t) => t.querySelector('.ohm-play')).map((t) => [!!t.querySelector('img'), (t.querySelector('img') || {}).naturalWidth || 0]); })()")
+                    print('VIDS', vids)
+                    check(all(v[0] for v in vids), f'a video shows its cover with ▶ {vids}')
                     # a client picked keeps the row where it was slid to
                     await E("document.getElementById('ohm-chips').scrollLeft = 80")
                     await pg.locator('.ohm .ohm-chip').nth(2).click(); await pg.wait_for_timeout(300)

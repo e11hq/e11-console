@@ -158,9 +158,11 @@ const OfficeHome = (() => {
     st.thumbs = shown;
     const freshOf = (id) => fresh.filter(({ c }) => c.id === id).length;
     const thumb = ({ c, f, a }) => {
-      const img = fileKind(a) === 'image' && Host.isNative ? `<img src="${imgUrl(a, 320)}" alt="" loading="lazy">` : '';
-      return `<div class="hm-thumb" data-oh="thumb" data-v="${esc(a.id)}" data-file="${a.id}" data-client="${c.id}" data-folder="${f.id}" title="${esc(a.name)} · ${esc(c.name)} › ${esc(folderPath(c, f))}" style="--pc:${esc(projColorOfClient(c))}">${img}<span class="hm-kind">${esc(extOf(a.name))}</span><span class="hm-fname">${esc(a.name)}</span></div>`;
+      const u = picOf(a), video = fileKind(a) === 'video';
+      const img = u ? `<img src="${u}" alt="">` : '';
+      return `<div class="hm-thumb" data-oh="thumb" data-v="${esc(a.id)}" data-file="${a.id}" data-client="${c.id}" data-folder="${f.id}" title="${esc(a.name)} · ${esc(c.name)} › ${esc(folderPath(c, f))}" style="--pc:${esc(projColorOfClient(c))}">${img}${video ? '<span class="ohm-play" aria-hidden="true"></span>' : ''}<span class="hm-kind">${esc(extOf(a.name))}</span><span class="hm-fname">${esc(a.name)}</span></div>`;
     };
+    warmPics(chipClients);
     const assetsCard = `<section class="hm-card ohm-assets">
         <div class="hm-h"><h2>${q ? 'Found in Client Assets' : 'Latest in Client Assets'}</h2><a class="hm-a" data-nav="clients">Open Client Assets</a></div>
         <div class="ohm-chips" id="ohm-chips">${[['all', 'All clients', fresh.length]].concat(chipClients.map((c) => [c.id, c.name, freshOf(c.id)])).map(([id, l, n]) => `<button type="button" class="ohm-chip ${st.client === id ? 'on' : ''}" data-oh="client" data-v="${id}">${esc(l)}<i>${n}</i></button>`).join('')}</div>
@@ -219,25 +221,54 @@ const OfficeHome = (() => {
   // into the new page); one gone from show — a client picked and back — is kept here by its address and put back the same way,
   // never loaded again. A picture still loading waits unseen and fades in (the class only while waiting: a kept one shows).
   const picKeep = new Map();
+  // a file's small picture: a photo its own (320 wide), a video its cover (the one made when it came in, else made now by
+  // the server — Haris 18:21: MP4s had none), a PDF or design file its first page when the server has one
+  function picOf(a) {
+    if (!Host.isNative) return '';
+    const k = fileKind(a);
+    if (k === 'image') return imgUrl(a, 320);
+    if (a.thumb) return posterUrl(a);
+    if (k === 'video' && a.path) return '/api/fthumb?path=' + encodeURIComponent(a.path) + '&id=' + encodeURIComponent(a.id || '');
+    return '';
+  }
+  // every client's latest pictures fetched once, ahead, and kept (decoded) by their address: a client picked shows its
+  // pictures at once, and one picked again never loads them a second time — even one still on its way is the same picture
+  // carried on, never started again (Haris 18:21: some pictures still loaded again)
+  let warmed = '';
+  function warmPics(list) {
+    const key = list.map((c) => c.id).join(',');
+    if (warmed === key) return; warmed = key;
+    setTimeout(() => {
+      const all = allFiles();
+      for (const c of list) all.filter((x) => x.c.id === c.id).slice(0, 8).forEach(({ a }) => {
+        const u = picOf(a); if (!u) return;
+        const abs = new URL(u, location.href).href;
+        if (picKeep.has(abs)) return;
+        const im = new Image(); im.decoding = 'async'; im.alt = ''; im.src = u; picKeep.set(abs, im);
+      });
+      while (picKeep.size > 200) picKeep.delete(picKeep.keys().next().value);
+    }, 400);
+  }
   function keepThumbs() {
     const r = $('#ohm-chips'); if (r && st.chipX) r.scrollLeft = st.chipX;
     const grid = $('.ohm .ohm-grid');
     if (!grid) return;
     grid.querySelectorAll('.hm-thumb img').forEach((im) => {
       const old = picKeep.get(im.src);
-      if (old && old !== im && !old.isConnected && old.complete && old.naturalWidth) {
+      // (the kept one put in its place — loaded, or still loading: carried on, not started again)
+      if (old && old !== im && !old.isConnected) {
         [...old.attributes].forEach((x) => { if (x.name !== 'src' && !im.hasAttribute(x.name)) old.removeAttribute(x.name); });
         [...im.attributes].forEach((x) => { if (x.name !== 'src') old.setAttribute(x.name, x.value); });
         im.replaceWith(old); im = old;
       }
+      picKeep.delete(im.src); picKeep.set(im.src, im);
       if (!(im.complete && im.naturalWidth)) {
         im.classList.add('wait');
-        const done = () => { im.classList.remove('wait'); if (im.naturalWidth) picKeep.set(im.src, im); };
+        const done = () => { im.classList.remove('wait'); if (!im.naturalWidth) im.remove(); };   // (no picture after all: the colour)
         im.addEventListener('load', done, { once: true }); im.addEventListener('error', done, { once: true });
-      } else { picKeep.delete(im.src); picKeep.set(im.src, im); }
+      }
     });
-    while (picKeep.size > 120) picKeep.delete(picKeep.keys().next().value);
-    if (Host.isNative) hydrateThumbs(grid);
+    while (picKeep.size > 200) picKeep.delete(picKeep.keys().next().value);
   }
   function view() {
     setTimeout(barSearch, 0);
