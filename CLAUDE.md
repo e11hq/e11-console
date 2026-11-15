@@ -378,6 +378,13 @@ the same function the website / server already has (no new server acts unless th
 **Remind Haris before any Mac app work starts (Haris 2026-11-10 18:34):** the Mac App Store app needs a build for
 content skeleton links (files…/p/<id> — the handler is in mac/swift/main.swift on main, commit 4815aab; the server
 1.9.30 already tells Apple /p/ is the apps'): until it's out, a skeleton link on a Mac with the app may not open there.
+**E11 Console for Mac — the sidebar SAVED and LOCKED exactly as it is (Haris 2026-11-15 09:31: "I dont want to mess it up,
+sidebar will remain exactly as now. In mac app"; 09:35 "Alright save the sidebar"):** mac/swift/Sidebar.swift and the page's
+NativeSide (web/app.js) as on main 0442ce5, branch `locked/mac-sidebar-0442ce5` (never moved or deleted) — the floating glass
+panel, its top row (the window's buttons; light / dark · New task · collapse), the page's rows and counts, Clients, Library at
+the bottom, you, Synced, © E11 Agency. The Mac app's look-native work (project doc `claude/mac-console-hybrid.md`: Apple's
+toolbar beside it, the page inside restyled) never touches it. Nothing changes in its look, behaviour or code without telling
+Haris first and his yes.
 **The Terminal-installed Mac app — put aside (Haris 2026-11-10 18:38: "discard the terminal app for now"):** releases don't
 build it (release.yml's mac job off, commit d10cfe1); the installer keeps its last stored build. Its build was failing since
 2026-11-09 (pendingFileLink declared only in the App Store app's part). Back only when Haris says.
