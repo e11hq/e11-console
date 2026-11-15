@@ -385,9 +385,10 @@ panel, its top row (the window's buttons; light / dark · New task · collapse),
 the bottom, you, Synced, © E11 Agency. The Mac app's look-native work (project doc `claude/mac-console-hybrid.md`: Apple's
 toolbar beside it, the page inside restyled) never touches it. Nothing changes in its look, behaviour or code without telling
 Haris first and his yes.
-**The Terminal-installed Mac app — put aside (Haris 2026-11-10 18:38: "discard the terminal app for now"):** releases don't
-build it (release.yml's mac job off, commit d10cfe1); the installer keeps its last stored build. Its build was failing since
-2026-11-09 (pendingFileLink declared only in the App Store app's part). Back only when Haris says.
+**The Terminal-installed Mac app — DISCONTINUED (Haris 2026-11-15 13:31 "discontinue the terminal app"; 13:35):** "Get the Mac
+app" and the old app's update banner send people to the Mac App Store; the server's /install answers only a server on the
+machine itself — mac.yml's build and self-test on Haris's Mac stay as a **private test rig** for trial pictures (mac-trial-*
+branches), never installed by anyone. (Its build had failed since 2026-11-09 — pendingFileLink, fixed on the Mac 13 branch.)
 **The website out of the iPhone app — STARTED (Haris 2026-11-11 08:07: "remove the website completely and only cloudflare
 signing will be the only website left"; 08:15 answers):** the iPhone app only — the website stays on the server for the Mac
 app (the website in a window) and browsers. In the app the only web pages left: Cloudflare's sign-in / sign-out, and App
