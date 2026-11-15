@@ -168,13 +168,17 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     let pan = UIPanGestureRecognizer(target: self, action: #selector(drag(_:))); pan.delegate = self
     view.addGestureRecognizer(pan)
   }
-  // (a strip shorter than the screen sits in its middle — Haris 2026-11-15: the pictures weren't centred)
+  // (the one on show always in the strip's middle, as Photos — Haris 2026-11-15: room at both ends, so the first and the
+  //  last can come to the middle too)
   private func centreStrip() {
-    let row = stripRow.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).width + 28
-    let pad = max(0, (strip.bounds.width - row) / 2)
+    let pad = max(0, strip.bounds.width / 2 - 27)
     guard abs(strip.contentInset.left - pad) > 0.5 else { return }
     strip.contentInset = UIEdgeInsets(top: 0, left: pad, bottom: 0, right: pad)
-    if row <= strip.bounds.width { strip.contentOffset = CGPoint(x: -pad, y: 0) }
+    if stripPlaced { placeStrip(animated: false) }
+  }
+  private func placeStrip(animated: Bool) {
+    guard let b = stripRow.arrangedSubviews[safe: at] else { return }
+    strip.setContentOffset(CGPoint(x: stripRow.frame.minX + b.frame.midX - strip.bounds.width / 2, y: 0), animated: animated)
   }
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
@@ -253,9 +257,7 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     guard let b = stripRow.arrangedSubviews[safe: at] else { return }
     if !stripPlaced { view.layoutIfNeeded() } else { strip.layoutIfNeeded() }
     centreStrip()
-    let maxX = max(0, strip.contentSize.width - strip.bounds.width)
-    let x = maxX == 0 ? -strip.contentInset.left : min(maxX, max(0, b.frame.midX - strip.bounds.width / 2))
-    strip.setContentOffset(CGPoint(x: x, y: 0), animated: stripPlaced)
+    placeStrip(animated: stripPlaced)
     stripPlaced = true
   }
   private var stripPlaced = false
