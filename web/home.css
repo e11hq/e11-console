@@ -453,3 +453,9 @@ html.mac-chrome :is(.hm-act, .hm-ag, .hm-am, .oh-row[data-action="open-notif"]):
 html.mac-chrome :is(.hm-act, .hm-ag, .hm-am, .oh-row[data-action="open-notif"]):hover + *::before { opacity: 0; }
 html.mac-chrome .oh-claim:hover { background: none; }
 html.mac-chrome .oh-card .oh-scroll { padding: 0 16px 8px; }
+html.mac-chrome #tb-talk { height: 28px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 14px; background: var(--mc-glass); box-shadow: inset 0 0 0 .5px var(--mc-glass-line); color: var(--mc-fg); font: 13px -apple-system, system-ui, sans-serif; cursor: default; }
+html.mac-chrome #tb-talk:hover { background: var(--mc-sel); }
+html.mac-chrome #tb-talk .ic, html.mac-chrome #tb-talk svg { width: 14px; height: 14px; }
+html.mac-chrome #tb-talk i { min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: #ff3b30; color: #fff; font: 600 11px -apple-system, system-ui, sans-serif; font-style: normal; display: inline-flex; align-items: center; justify-content: center; }
+html.mac-chrome #tb-talk i[hidden] { display: none; }
+#tb-talk { display: none; } html.mac-chrome #tb-talk { display: inline-flex; }

@@ -21,6 +21,7 @@ window.webkit = { messageHandlers: { e11: { postMessage(raw) {
   if (m.cmd === 'readLocalChunk') res = { ok: true, b64: btoa(FILE.slice(m.args.offset, m.args.offset + m.args.length)) };
   if (m.cmd === 'saveFile') { const s = window.__native.saved[m.args.token] = window.__native.saved[m.args.token] || { name: m.args.name, size: 0, open: m.args.open }; s.size += atob(m.args.b64).length; s.done = m.args.done; }
   if (m.cmd === 'badge') window.__native.badge = m.args.n;
+  if (m.cmd === 'openURL') window.__native.opened = m.args.url;
   setTimeout(() => window.__e11NativeReply(m.id, res), 5);
 } } } };
 """ % FAKE_FILE
@@ -45,6 +46,11 @@ async def main():
         await pg.goto('/'); await pg.wait_for_timeout(700); await pg.mouse.click(1390, 890); await pg.wait_for_timeout(1500)
         E = pg.evaluate
         check(await E("Host.isMacApp && Host.isServer"), 'page knows it is inside the Mac app')
+        # Talk in the top bar (Haris 2026-11-15): your unread count; a click opens E11 Talk's App Store page
+        await E("TalkButton.set(3)")
+        check(await E("document.querySelector('#topbar #tb-talk i').textContent") == '3', 'Talk in the top bar with the unread count')
+        await pg.evaluate("document.getElementById('tb-talk').click()"); await pg.wait_for_timeout(100)
+        check(await E("window.__native.opened") == 'https://apps.apple.com/app/id6831289909', 'Talk opens E11 Talk on the App Store')
         await E("()=>{const p=createProject('Ford',COLORS[0]); createTask({projectId:p.id, sectionId:p.sections[0].id, title:'Mac upload'}); commit()}")
         await pg.wait_for_timeout(500)
         tid = await E("db.tasks.find(t=>t.title==='Mac upload').id")

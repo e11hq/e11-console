@@ -2847,7 +2847,8 @@ const Sync = (() => {
     lastHeard = Date.now();
     es = new EventSource(`/api/events?since=${rev}&client=${encodeURIComponent(clientId)}`);
     ['hello', 'changes', 'version', 'resync', 'ping', 'appicon'].forEach((ev) => es.addEventListener(ev, () => { lastHeard = Date.now(); }));
-    es.addEventListener('hello', (e) => { setOnline(true); const m = JSON.parse(e.data); checkVersion(m.version); if (m.appIcon) AppIcon.sync(m.appIcon); if (changes().length) push(); });
+    es.addEventListener('hello', (e) => { setOnline(true); const m = JSON.parse(e.data); checkVersion(m.version); if (m.appIcon) AppIcon.sync(m.appIcon); if (m.talkUnread != null) TalkButton.set(m.talkUnread); if (changes().length) push(); });
+    es.addEventListener('talkUnread', (e) => { try { TalkButton.set(JSON.parse(e.data).n); } catch (x) { /* fine */ } });
     es.addEventListener('appicon', (e) => { AppIcon.sync(JSON.parse(e.data)); if (ui.view === 'profile') renderContent(); });
     es.addEventListener('changes', (e) => {
       const m = JSON.parse(e.data);
@@ -4871,6 +4872,35 @@ const Unsent = (() => {
     // anything unsent that would be lost (the browser's own "Leave site?" box)
     any: () => Object.keys(ui.commentUp).length > 0,
   };
+})();
+
+/* ================= Talk in the Mac app's top bar (Haris 2026-11-15 12:14 "add it now"; 12:16: the App Store page) =========
+   Your E11 Talk unread count, live from the server (the stream's hello and talkUnread, as the iPhone's Talk button); a click
+   opens E11 Talk's App Store page until E11 Talk for Mac is out. The Mac app only — browsers and the iPhone untouched. */
+const TalkButton = (() => {
+  let n = 0;
+  const STORE = 'https://apps.apple.com/app/id6831289909';
+  function el() {
+    if (!Host.isMacApp || window.E11_REVIEW) return null;
+    let b = document.getElementById('tb-talk');
+    if (!b) {
+      const right = document.querySelector('#topbar .topbar-right'); if (!right) return null;
+      b = document.createElement('button');
+      b.id = 'tb-talk'; b.type = 'button'; b.title = 'Open E11 Talk';
+      b.innerHTML = `${icon('chat')}<span>Talk</span><i hidden></i>`;
+      b.addEventListener('click', (e) => { e.stopPropagation(); NativeMac.call('openURL', { url: STORE }).catch(() => {}); });
+      right.insertBefore(b, right.firstChild);
+    }
+    return b;
+  }
+  function set(v) {
+    n = Math.max(0, Number(v) || 0);
+    const b = el(); if (!b) return;
+    const i = b.querySelector('i');
+    i.textContent = n > 99 ? '99+' : String(n); i.hidden = !n;
+    b.title = n ? `Open E11 Talk — ${n} unread` : 'Open E11 Talk';
+  }
+  return { set, paint: () => set(n) };
 })();
 
 /* ================= Overlays ================= */
