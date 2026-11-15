@@ -83,6 +83,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   var selftest: [String: Any] = [:]
   let LIGHTS_X: CGFloat = 20, BAR_H: CGFloat = 48
   let side = Sidebar()
+  var preview: MacPreview?   // (a file open in the app's own preview — Preview.swift)
   var splash: MacSplash?   // (the startup screen, the app's own — Splash.swift)
   var splashHello = false
   // the window buttons' row: the page's own 48px top strip, or the native sidebar's top row
@@ -584,10 +585,34 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       }
       side.edgeHot.isHidden = on || !(side.on && side.hiddenMode)
       done(["ok": true])
+    // a file opened (the page's Viewer, as the iPhone app's: the files of its group, which one, and where its thumbnail
+    // is on the page): the app's own preview over the whole window (Haris 2026-11-15 16:06, boards P1–P3)
+    case "preview":
+      guard let cv = window?.contentView, let files = a["files"] as? [[String: Any]], !files.isEmpty else { return done(["ok": false]) }
+      preview?.removeFromSuperview()
+      var from: NSRect?
+      if let r = a["from"] as? [String: Any], let x = (r["x"] as? NSNumber)?.doubleValue, let y = (r["y"] as? NSNumber)?.doubleValue,
+         let w = (r["w"] as? NSNumber)?.doubleValue, let h = (r["h"] as? NSNumber)?.doubleValue {
+        let z = Double(web.pageZoom)
+        from = NSRect(x: x * z, y: y * z, width: w * z, height: h * z)
+      }
+      MacLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) {
+        let pv = MacPreview(files: files, at: (a["at"] as? NSNumber)?.intValue ?? 0, from: from)
+        pv.event = { [weak self] e in self?.pageJS("window.__e11Preview && window.__e11Preview(\(jsonString(e)))") }
+        pv.onGone = { [weak self, weak pv] in
+          guard let self = self else { return }
+          if self.preview === pv { self.preview = nil }
+          self.window?.makeFirstResponder(self.web)
+        }
+        self.preview = pv
+        pv.open(in: cv)
+        done(["ok": true])
+      }
+    case "previewSet": preview?.set(a); done(["ok": true])
     case "appInfo":
       done(["ok": true, "server": SERVER, "shell": SHELL_VERSION, "native": "swift",
             "version": info["CFBundleShortVersionString"] as? String ?? "3.0.0", "touchID": defaults.bool(forKey: LOCK_KEY),
-            "glass": FileManager.default.fileExists(atPath: Bundle.main.bundlePath + "/Contents/Resources/Assets.car"), "store": IS_STORE, "apns": IS_STORE, "sidebar": true])
+            "glass": FileManager.default.fileExists(atPath: Bundle.main.bundlePath + "/Contents/Resources/Assets.car"), "store": IS_STORE, "apns": IS_STORE, "sidebar": true, "preview": true])
     default: done(["ok": false, "error": "Unknown command " + cmd])
     }
   }
