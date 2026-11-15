@@ -491,7 +491,7 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     guard at < files.count, let id = files[at]["id"] as? String else { return }
     event(["ev": ev, "id": id])
   }
-  // the one showing: wider, with a thin white edge — Talk's strip (Haris 2026-11-15)
+  // the one showing: a thin white edge — Talk's strip (Haris 2026-11-15)
   static func paintPick(_ c: UICollectionViewCell, _ on: Bool, animated: Bool) {
     let inner = c.contentView.viewWithTag(77)
     inner?.layer.borderColor = UIColor.white.cgColor
@@ -515,8 +515,7 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     if strip.numberOfItems(inSection: 0) != files.count { strip.reloadData() }
     for c in strip.visibleCells { if let ip = strip.indexPath(for: c) { PreviewVC.paintPick(c, ip.item == at, animated: true) } }
     if files.count > 1 {
-      // (the one showing 40 wide, the others 26 — Talk's; the strip's widths glide, then it centres on it)
-      UIView.animate(withDuration: 0.2) { self.strip.collectionViewLayout.invalidateLayout(); self.strip.layoutIfNeeded() }
+      // (all the same width, the one showing only its white edge — as Talk's shows on the phone, Haris 2026-11-15)
       strip.scrollToItem(at: IndexPath(item: at, section: 0), at: .centeredHorizontally, animated: true)
     }
     event(["ev": "at", "id": f["id"] as? String ?? ""])
@@ -616,7 +615,7 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     if let tap = (pager.gestureRecognizers ?? []).first(where: { $0 is UITapGestureRecognizer && ($0 as! UITapGestureRecognizer).numberOfTapsRequired == 1 }) as? UITapGestureRecognizer, let dbl = c.doubleTapGesture { tap.require(toFail: dbl) }
     return c
   }
-  func collectionView(_ cv: UICollectionView, layout: UICollectionViewLayout, sizeForItemAt ip: IndexPath) -> CGSize { cv === strip ? CGSize(width: ip.item == at ? 40 : 26, height: 36) : view.bounds.size }
+  func collectionView(_ cv: UICollectionView, layout: UICollectionViewLayout, sizeForItemAt ip: IndexPath) -> CGSize { cv === strip ? CGSize(width: 26, height: 36) : view.bounds.size }
   func collectionView(_ cv: UICollectionView, didSelectItemAt ip: IndexPath) {
     guard cv === strip, ip.item != at else { return }
     at = ip.item
