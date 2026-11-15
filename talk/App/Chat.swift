@@ -2852,10 +2852,14 @@ final class MessageBar: UIView, UITextViewDelegate {
   // (the keyboard put away: next time the box opens on the letters, the button back to the smiley)
   func textViewDidEndEditing(_ t: UITextView) { if !box.swapping, box.emoji { box.emoji = false; setSmiley() } }
   // the box's button: the smiley, or the keyboard while the emojis are up (WhatsApp's), crossfading
+  // the smiley: Apple's outline face.smiling as the Mac draws it (regular, 15 pt), kept as our template picture —
+  // the iPhone's newer system draws that symbol as a solid face (Haris 2026-11-15); Apple's own symbol if it's missing
+  static let smile: UIImage? = UIImage(named: "TalkSmile")?.withRenderingMode(.alwaysTemplate)
+    ?? UIImage(systemName: "face.smiling", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .regular))
   private func setSmiley() {
     let name = box.emoji ? "keyboard" : "face.smiling"
     UIView.transition(with: smiley, duration: 0.15, options: .transitionCrossDissolve) {
-      self.smiley.setImage(UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .regular)), for: .normal)
+      self.smiley.setImage(self.box.emoji ? UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .regular)) : MessageBar.smile, for: .normal)
     }
     smiley.accessibilityLabel = box.emoji ? "Keyboard" : "Emoji"
   }
@@ -2924,7 +2928,7 @@ final class MessageBar: UIView, UITextViewDelegate {
     sendB.configuration = sc
     mic.accessibilityLabel = "Hold to record a voice message"; sendB.accessibilityLabel = "Send"
     [mic, sendB].forEach { addSubview($0) }
-    smiley.setImage(sym("face.smiling", 15, .regular), for: .normal); smiley.tintColor = .label; smiley.accessibilityLabel = "Emoji"
+    smiley.setImage(MessageBar.smile, for: .normal); smiley.tintColor = .label; smiley.accessibilityLabel = "Emoji"
     smiley.addAction(UIAction { [weak self] _ in
       guard let self = self else { return }
       if !self.box.emoji, self.box.isFirstResponder, let now = self.box.shown, now.primaryLanguage != "emoji" { self.box.typing = now }
