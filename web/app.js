@@ -4868,7 +4868,7 @@ const TalkButton = (() => {
       const right = document.querySelector('#topbar .topbar-right'); if (!right) return null;
       b = document.createElement('button');
       b.id = 'tb-talk'; b.type = 'button'; b.title = 'Open E11 Talk';
-      b.innerHTML = `${icon('chat')}<span>Talk</span><i hidden></i>`;
+      b.innerHTML = `<span class="tb-bubble" aria-hidden="true"></span><span>Talk</span><i hidden></i>`;   // (E11 Talk's own bubble, as the iPhone's bar — 17:30)
       b.addEventListener('click', (e) => { e.stopPropagation(); open(); });
       right.insertBefore(b, right.firstChild);
     }
