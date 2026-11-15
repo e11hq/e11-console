@@ -92,7 +92,7 @@ try:
     mr = res.get('menuReopen') or {}
     check(mr.get('item') is True and mr.get('visible') is True, f"closed, the Window menu's 'E11 Console ⌘0' brings the window back (App Review, guideline 4) {mr}")
     check(res.get('loginOn') is True and res.get('loginOff') is True, 'Open at Login turns on and off')
-    check(ai.get('shell') == 12 and ai.get('sidebar') is True and ai.get('glass') is True and ai.get('native') == 'swift' and ai.get('server') == BASE, f'appInfo {ai}')
+    check(ai.get('shell') == 13 and ai.get('sidebar') is True and ai.get('glass') is True and ai.get('native') == 'swift' and ai.get('server') == BASE, f'appInfo {ai}')
     for k in ['badge', 'badgeOff', 'notify', 'light', 'dark', 'save1', 'save2']:
         check((c.get(k) or {}).get('ok') is True, f'{k} answered ok: {c.get(k)}')
     check(res.get('saved') == 'hello mac', 'a download saved in pieces into Downloads: ' + repr(res.get('saved')))
