@@ -4918,21 +4918,6 @@ const MacBar = (() => {
   return { on, menu };
 })();
 
-/* ================= The Mac app: scroll bars only while scrolling (Haris 2026-11-15 16:33) =================
-   Whatever scrolls is marked for a moment (home.css shows its thin bar only then), as the Mac's own overlay scroll bars. */
-const MacScroll = (() => {
-  if (typeof Host === 'undefined' || !Host.isMacApp) return {};
-  const timers = new WeakMap();
-  document.addEventListener('scroll', (e) => {
-    const el = e.target === document ? document.documentElement : e.target;
-    if (!el || !el.classList) return;
-    el.classList.add('mac-scrolling');
-    clearTimeout(timers.get(el));
-    timers.set(el, setTimeout(() => el.classList.remove('mac-scrolling'), 900));
-  }, true);
-  return {};
-})();
-
 /* ================= The Mac app 13+: Apple's SF Symbols for the page's icons (Haris 2026-11-15 13:59) =================
    Page by page — Home first (and the top bar, the window's own): each icon, by its name (data-i), shows as the SF Symbol
    the Mac draws for it (command symbols → pictures used as masks, so they take the text's colour). Kept on this Mac, so
