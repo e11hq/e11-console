@@ -668,3 +668,6 @@ html.mac-chrome .hm-nbtns .hm-btn.text { flex: none; }
 /* My pipeline's rows a little apart, as Home's task rows: two overdue rows each keep their own rounded tint */
 html.mac-chrome .hm-lrow + .hm-lrow { margin-top: 4px; }
 
+/* My pipeline's rows as tall as the mock-up's (7 above and below, 32 a row), 2 apart so two overdue tints stay separate */
+html.mac-chrome .hm-lrow { padding: 7px 10px; }
+html.mac-chrome .hm-lrow + .hm-lrow { margin-top: 2px; }
