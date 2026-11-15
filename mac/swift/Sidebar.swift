@@ -299,6 +299,7 @@ final class Sidebar: NSView {
   private(set) var model: [String: Any] = [:]
   let inner = SideInner()
   private var backdrop: NSView!
+  private let edge = NSBox()   // (the line between the sidebar and the page)
   let scroll = NSScrollView()
   let list = FlippedView()
   let themeBtn = SideButton("moon", "Switch to light mode"), newBtn = SideButton("compose", "New task (⌘N)"), sideBtn = SideButton("sidebar", "Collapse sidebar")
@@ -315,19 +316,16 @@ final class Sidebar: NSView {
   override init(frame: NSRect) {
     super.init(frame: frame)
     wantsLayer = true
-    if #available(macOS 26.0, *) {
-      let g = NSGlassEffectView()
-      g.cornerRadius = 18
-      g.contentView = inner
-      backdrop = g
-    } else {
-      let v = NSVisualEffectView()
-      v.material = .sidebar; v.blendingMode = .behindWindow; v.state = .followsWindowActiveState
-      v.maskImage = Sidebar.roundMask(18)
-      v.addSubview(inner)
-      backdrop = v
-    }
+    // edge to edge (Haris 2026-11-15 13:06 / 13:08: "can we make the whole sidebar edge to edge so its not floating on top"):
+    // Apple's sidebar material from the window's top, left and bottom edges to a thin line beside the page — what's in it
+    // stays exactly where it was (8 in from those edges), so nothing inside moves
+    let v = NSVisualEffectView()
+    v.material = .sidebar; v.blendingMode = .behindWindow; v.state = .followsWindowActiveState
+    v.addSubview(inner)
+    backdrop = v
     addSubview(backdrop)
+    edge.boxType = .separator
+    addSubview(edge)
     scroll.drawsBackground = false
     scroll.hasVerticalScroller = true
     scroll.autohidesScrollers = true
@@ -353,19 +351,10 @@ final class Sidebar: NSView {
   }
   required init?(coder: NSCoder) { nil }
 
-  static func roundMask(_ r: CGFloat) -> NSImage {
-    let d = r * 2 + 1
-    let img = NSImage(size: NSSize(width: d, height: d), flipped: false) { rect in
-      NSColor.black.setFill(); NSBezierPath(roundedRect: rect, xRadius: r, yRadius: r).fill(); return true
-    }
-    img.capInsets = NSEdgeInsets(top: r, left: r, bottom: r, right: r)
-    img.resizingMode = .stretch
-    return img
-  }
 
   var width: CGFloat { compact ? Sidebar.SLIM : Sidebar.WIDE }
-  // where the page starts (the window's left edge to the page): the panel, with the same room on both sides
-  var pageX: CGFloat { on ? Sidebar.INSET * 2 + width : 0 }
+  // where the page starts (the window's left edge to the page): the sidebar, edge to edge
+  var pageX: CGFloat { on ? Sidebar.INSET + width : 0 }
 
   /* ---------- the page's model ---------- */
   func apply(_ m: [String: Any]) {
@@ -449,8 +438,9 @@ final class Sidebar: NSView {
   override func layout() {
     super.layout()
     backdrop.frame = bounds
-    inner.frame = backdrop.bounds
-    let W = bounds.width, H = bounds.height
+    inner.frame = NSRect(x: Sidebar.INSET, y: Sidebar.INSET, width: max(0, bounds.width - Sidebar.INSET), height: max(0, bounds.height - Sidebar.INSET * 2))
+    edge.frame = NSRect(x: bounds.width - 1, y: 0, width: 1, height: bounds.height)
+    let W = inner.bounds.width, H = inner.bounds.height
     // top row: the window buttons sit at its left (placed by the app); ours on the right — collapsed: under them
     var y: CGFloat
     if compact {
@@ -643,8 +633,7 @@ final class Sidebar: NSView {
     let names = rows.compactMap { ($0 as? SideRow)?.title.stringValue }
     let heads = rows.compactMap { ($0 as? SideHead)?.title.stringValue }
     let hot = rows.compactMap { $0 as? SideRow }.filter { !$0.badge.isHidden }.map { $0.badgeText.stringValue }
-    var glass = false
-    if #available(macOS 26.0, *) { glass = backdrop is NSGlassEffectView }
+    let glass = false   // (edge to edge: Apple's sidebar material, not a floating glass panel)
     return ["on": on, "compact": compact, "width": frame.width, "x": frame.minX, "rows": names, "heads": heads, "hot": hot,
             "me": me.name.stringValue, "sync": syncText.stringValue, "copy": copy.stringValue, "glass": glass]
   }
