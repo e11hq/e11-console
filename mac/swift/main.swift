@@ -84,7 +84,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   let LIGHTS_X: CGFloat = 20, BAR_H: CGFloat = 48
   let side = Sidebar()
   // the window buttons' row: the page's own 48px top strip, or the native sidebar's top row
-  var barH: CGFloat { side.on ? Sidebar.INSET * 2 + Sidebar.TOP : BAR_H }
+  var barH: CGFloat { side.on ? Sidebar.BAR : BAR_H }
 
   /* ---------- start ---------- */
   func applicationWillFinishLaunching(_ n: Notification) {
@@ -267,7 +267,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     let shownF = NSRect(x: 0, y: 0, width: w, height: H), goneF = shownF.offsetBy(dx: -14, dy: 0)
     web.frame = cv.bounds
     placeLights()
-    side.topRow.frame = NSRect(x: SideTopRow.X, y: H - Sidebar.INSET - (Sidebar.TOP + SideTopRow.H) / 2, width: SideTopRow.W, height: SideTopRow.H)
+    side.topRow.frame = NSRect(x: SideTopRow.X, y: H - (Sidebar.BAR + SideTopRow.H) / 2, width: SideTopRow.W, height: SideTopRow.H)
     side.edgeHot.frame = NSRect(x: 0, y: 0, width: 5, height: H)
     let show = side.shown
     if animated {

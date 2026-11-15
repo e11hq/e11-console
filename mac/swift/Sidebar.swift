@@ -375,6 +375,9 @@ protocol SidebarHost: AnyObject {
 
 final class Sidebar: NSView {
   static let WIDE: CGFloat = 244, INSET: CGFloat = 8, TOP: CGFloat = 44
+  // the page's top bar (48 in the Mac app): the window's buttons, the sidebar button, ‹ › and light / dark centred on it, in one line
+  // with the page's title (Haris 2026-11-15 14:22: "the sidebar icons are not aligned to the title bar")
+  static let BAR: CGFloat = 48
   weak var host: SidebarHost?
   var on = false
   var hiddenMode = false          // (the page's "collapsed": hidden completely)
@@ -558,7 +561,7 @@ final class Sidebar: NSView {
     edge.frame = NSRect(x: bounds.width - 1, y: 0, width: 1, height: bounds.height)
     let W = inner.bounds.width, H = inner.bounds.height
     // top row: the window's buttons, the sidebar button and ‹ › (the window's own, over the sidebar); light / dark at its right
-    themePair.frame = NSRect(x: W - 10 - SideThemePair.W, y: (Sidebar.TOP - SideThemePair.H) / 2, width: SideThemePair.W, height: SideThemePair.H)
+    themePair.frame = NSRect(x: W - 10 - SideThemePair.W, y: Sidebar.BAR / 2 - Sidebar.INSET - SideThemePair.H / 2, width: SideThemePair.W, height: SideThemePair.H)
     let y = Sidebar.TOP + 8
     // the footer
     let footH: CGFloat = 92
