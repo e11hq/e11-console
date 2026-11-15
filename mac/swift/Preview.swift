@@ -442,16 +442,16 @@ final class MacPreview: NSView {
       guard let self = self, !flown else { return }
       flown = true
       guard let im = im else { NSAnimationContext.runAnimationGroup { c in c.duration = 0.25; self.stage.animator().alphaValue = 1 }; return finish() }
-      let fly = NSImageView(frame: r); fly.image = im; fly.imageScaling = .scaleProportionallyUpOrDown; fly.wantsLayer = true
+      // (as Photos / E11 Talk: the picture cut to the thumbnail's own shape and corners at first, opening out to the whole
+      //  picture as it grows — one layer filling its frame, its frame and corners moved by Core Animation; Haris 16:36:
+      //  "the coming in from the thumbnail is not looking native")
+      let fly = PvFly(im, frame: r, radius: 9)
       self.addSubview(fly)
       finish()
-      NSAnimationContext.runAnimationGroup({ c in
-        c.duration = 0.32; c.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.8, 0.2, 1); c.allowsImplicitAnimation = true
-        fly.animator().frame = self.fit(im.size, in: target)
-      }, completionHandler: {
+      fly.move(to: self.fit(im.size, in: target), radius: 0, duration: 0.38, timing: CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1)) {
         self.stage.alphaValue = 1
-        NSAnimationContext.runAnimationGroup({ c in c.duration = 0.12; fly.animator().alphaValue = 0 }, completionHandler: { fly.removeFromSuperview() })
-      })
+        fly.removeFromSuperview()
+      }
     }
     // (the full picture when it arrives within a moment — the thumbnail, small and cut square, came out blurred and cropped,
     //  16:23 — else the thumbnail)
@@ -475,14 +475,16 @@ final class MacPreview: NSView {
       guard let self = self else { return }
       self.removeFromSuperview(); self.event?(["ev": "closed"]); self.onGone?()
     }
-    if at == openedAt, let r = from, r.width > 4, let im = img {
-      let fly = NSImageView(frame: fit(im.size, in: stage.frame)); fly.image = im; fly.imageScaling = .scaleProportionallyUpOrDown
+    // back into its thumbnail — from exactly where the picture is on screen (not zoomed), closing to the thumbnail's own
+    // shape and corners, so nothing jumps at either end (16:36: "going out it jerks because of the size of the image")
+    if at == openedAt, let r = from, r.width > 4, let z = content as? PvZoom, z.magnification <= 1.01, let im = img {
+      let start = convert(fit(im.size, in: z.bounds), from: z)
+      let fly = PvFly(im, frame: start, radius: 0)
       addSubview(fly); stage.alphaValue = 0
-      NSAnimationContext.runAnimationGroup({ c in
-        c.duration = 0.28; c.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.8, 0.2, 1); c.allowsImplicitAnimation = true
-        fly.animator().frame = r
-        self.back.animator().alphaValue = 0; self.chrome.forEach { $0.animator().alphaValue = 0 }
-      }, completionHandler: gone)
+      NSAnimationContext.runAnimationGroup { c in
+        c.duration = 0.3; self.back.animator().alphaValue = 0; self.chrome.forEach { $0.animator().alphaValue = 0 }
+      }
+      fly.move(to: r, radius: 9, duration: 0.32, timing: CAMediaTimingFunction(controlPoints: 0.3, 0.7, 0.2, 1)) { gone() }
     } else {
       NSAnimationContext.runAnimationGroup({ c in c.duration = 0.22; self.animator().alphaValue = 0 }, completionHandler: gone)
     }
@@ -504,4 +506,31 @@ final class PvShade: NSView {
   required init?(coder: NSCoder) { nil }
   override func layout() { super.layout(); CATransaction.begin(); CATransaction.setDisableActions(true); g.frame = bounds; CATransaction.commit() }
   override func hitTest(_ p: NSPoint) -> NSView? { nil }
+}
+
+/* the picture flying out of its thumbnail and back: one layer showing the picture cut to fill its frame (as the thumbnail
+   shows it), so as its frame goes from the thumbnail's square to the picture's own shape the cut opens out — Core
+   Animation moving its bounds, place and corners together, in one timing */
+final class PvFly: NSView {
+  override var isFlipped: Bool { true }
+  init(_ im: NSImage, frame: NSRect, radius: CGFloat) {
+    super.init(frame: frame)
+    wantsLayer = true
+    layerContentsRedrawPolicy = .never
+    if layer == nil { layer = CALayer() }
+    if let l = layer {
+      l.contents = im.cgImage(forProposedRect: nil, context: nil, hints: nil) ?? im
+      l.contentsGravity = .resizeAspectFill
+      l.masksToBounds = true
+      l.cornerRadius = radius
+    }
+  }
+  required init?(coder: NSCoder) { nil }
+  func move(to r: NSRect, radius: CGFloat, duration: Double, timing: CAMediaTimingFunction, done: @escaping () -> Void) {
+    NSAnimationContext.runAnimationGroup({ c in
+      c.duration = duration; c.timingFunction = timing; c.allowsImplicitAnimation = true
+      self.animator().frame = r
+      self.layer?.cornerRadius = radius
+    }, completionHandler: done)
+  }
 }
