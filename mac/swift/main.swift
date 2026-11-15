@@ -1196,7 +1196,27 @@ final class PageBar: NSView, NSSearchFieldDelegate {
     badge.wantsLayer = true
     badge.layer?.backgroundColor = NSColor.systemRed.cgColor
     badge.isHidden = true
-    addSubview(talk); addSubview(search); talk.addSubview(badge)
+    talk.addSubview(badge)
+    // macOS 26: each in Apple's own glass, as the toolbar's items are (Haris 2026-11-15 12:54) — the sidebar untouched
+    if #available(macOS 26.0, *) {
+      talk.isBordered = false
+      search.isBezeled = false; search.drawsBackground = false; search.focusRingType = .none
+      let tg = NSGlassEffectView(), sg = NSGlassEffectView()
+      tg.contentView = talk; sg.contentView = search
+      talkBox = tg; searchBox = sg
+    } else {
+      talkBox = talk; searchBox = search
+    }
+    addSubview(talkBox); addSubview(searchBox)
+  }
+  private var talkBox = NSView(), searchBox = NSView()
+  // (a control's place: its glass, which holds it, or the control itself before macOS 26)
+  private func place(_ box: NSView, _ control: NSView, _ r: NSRect) {
+    box.frame = r
+    if box !== control {
+      control.frame = box.bounds.insetBy(dx: control === search ? 6 : 2, dy: 0)
+      if #available(macOS 26.0, *), let g = box as? NSGlassEffectView { g.cornerRadius = r.height / 2 }
+    }
   }
   required init?(coder: NSCoder) { fatalError() }
   // {show, search: {x, y, w, h, place, q}, talk: {x, y, w, h, n} | null, focus} — places in the page's CSS pixels
@@ -1213,14 +1233,14 @@ final class PageBar: NSView, NSSearchFieldDelegate {
     let sr = rect(sd)
     if let td = a["talk"] as? [String: Any] { all = all.union(rect(td)) }
     frame = all.insetBy(dx: 0, dy: -4)
-    search.frame = NSRect(x: sr.minX - frame.minX, y: (frame.height - 28) / 2, width: sr.width, height: 28)
+    place(searchBox, search, NSRect(x: sr.minX - frame.minX, y: (frame.height - 30) / 2, width: sr.width, height: 30))
     if let p = sd["place"] as? String, let c = search.cell as? NSSearchFieldCell, c.placeholderString != p { c.placeholderString = p }
     let q = sd["q"] as? String ?? ""
     if search.stringValue != q, window?.firstResponder !== search.currentEditor() { search.stringValue = q; sent = q }
     if let td = a["talk"] as? [String: Any] {
       let tr = rect(td)
-      talk.isHidden = false
-      talk.frame = NSRect(x: tr.minX - frame.minX, y: (frame.height - 28) / 2, width: tr.width, height: 28)
+      talkBox.isHidden = false
+      place(talkBox, talk, NSRect(x: tr.minX - frame.minX, y: (frame.height - 30) / 2, width: tr.width, height: 30))
       let n = (td["n"] as? NSNumber)?.intValue ?? 0
       badge.isHidden = n <= 0
       badge.stringValue = n > 99 ? "99+" : "\(n)"
@@ -1228,7 +1248,7 @@ final class PageBar: NSView, NSSearchFieldDelegate {
       badge.frame = NSRect(x: talk.bounds.width - bw - 8, y: (talk.bounds.height - 18) / 2, width: bw, height: 18)
       badge.layer?.cornerRadius = 9
       talk.toolTip = n > 0 ? "Open E11 Talk — \(n) unread" : "Open E11 Talk"
-    } else { talk.isHidden = true }
+    } else { talkBox.isHidden = true }
     isHidden = false
   }
   @objc func searched() {
