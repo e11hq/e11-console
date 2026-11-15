@@ -10,6 +10,28 @@ import AudioToolbox
    page of its own (sliding in like the task page); coming back, that card pulses as WhatsApp's do. Away from the
    bottom a round glass ↓ shows; comments arriving meanwhile make it a "N new comments ↓" pill. Writing still goes
    through the comment box (CommentBar) and the comments screen behind it until step 3. */
+/* To a far end of a long list, Claude's way (Haris 2026-11-15, his recording of Claude's app): never a long scroll through
+   everything — the list put a screen away from where it's going, under a quick crossfade from how it looked, then the last
+   screen glides there smoothly (Apple's own scroll animation). Near enough already: just the glide. `to` is asked again
+   after the jump: rows coming into view take their real heights, and the end moves with them. */
+extension UIScrollView {
+  func glide(_ to: () -> CGFloat) {
+    layoutIfNeeded()
+    let y0 = to(), d = y0 - contentOffset.y, h = bounds.height
+    guard abs(d) > h * 1.5, let host = superview else { setContentOffset(CGPoint(x: contentOffset.x, y: y0), animated: true); return }
+    let shot = snapshotView(afterScreenUpdates: false)
+    UIView.performWithoutAnimation {
+      setContentOffset(CGPoint(x: contentOffset.x, y: y0 - (d > 0 ? h : -h)), animated: false)
+      layoutIfNeeded()
+    }
+    if let s = shot {
+      s.frame = frame; host.insertSubview(s, aboveSubview: self)
+      UIView.animate(withDuration: 0.2, delay: 0, options: [.curveEaseOut], animations: { s.alpha = 0 }, completion: { _ in s.removeFromSuperview() })
+    }
+    setContentOffset(CGPoint(x: contentOffset.x, y: to()), animated: true)
+  }
+}
+
 final class FeedLoader {
   static let shared = FeedLoader()
   var cookies: (@escaping (String) -> Void) -> Void = { $0("") }
@@ -504,9 +526,12 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
   func isAtEnd() -> Bool { scroll.contentOffset.y + scroll.bounds.height >= scroll.contentSize.height + scroll.contentInset.bottom - 80 }
   func toEnd(animated: Bool) {
     layoutIfNeeded(); scroll.layoutIfNeeded()
-    let end = max(-scroll.contentInset.top, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height)
-    scroll.setContentOffset(CGPoint(x: 0, y: end), animated: animated)
+    let end = { max(-self.scroll.contentInset.top, self.scroll.contentSize.height + self.scroll.contentInset.bottom - self.scroll.bounds.height) }
+    if animated { scroll.glide(end); return }   // (far away: Claude's way — Haris 2026-11-15)
+    scroll.setContentOffset(CGPoint(x: 0, y: end()), animated: false)
   }
+  // a tap on the top of the screen (the clock / the notch): to the first comment Claude's way, not a long scroll through all
+  func scrollViewShouldScrollToTop(_ s: UIScrollView) -> Bool { s.glide { -s.adjustedContentInset.top }; return false }
   func scrollViewWillBeginDragging(_ s: UIScrollView) { keepId = nil; focusId = nil }   // (moved by the finger: it's theirs again)
   func scrollViewDidScroll(_ s: UIScrollView) {
     if isAtEnd() { if pendingNew > 0 || jump.alpha > 0 { pendingNew = 0; seenIds = Set(order) }; paintJump(newCount: 0) }
