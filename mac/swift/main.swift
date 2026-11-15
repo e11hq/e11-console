@@ -271,15 +271,25 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     side.edgeHot.frame = NSRect(x: 0, y: 0, width: 5, height: H)
     let show = side.shown
     if animated {
-      if show && side.isHidden { side.frame = goneF; side.alphaValue = 0; side.isHidden = false }
-      NSAnimationContext.runAnimationGroup({ c in
-        c.duration = show ? 0.2 : 0.16
-        c.timingFunction = CAMediaTimingFunction(name: show ? .easeOut : .easeIn)
-        c.allowsImplicitAnimation = true
-        self.side.animator().frame = show ? shownF : goneF
-        self.side.animator().alphaValue = show ? 1 : 0
-      }, completionHandler: { if !self.side.shown { self.side.isHidden = true; self.side.frame = shownF; self.side.alphaValue = 1 } })
+      // (coming in on hover: the same short slide and fade as going — its start set and drawn first, then moved, so it
+      // doesn't just appear — Haris 2026-11-15 14:39)
+      if show && side.isHidden {
+        side.frame = goneF; side.alphaValue = 0; side.isHidden = false
+        side.layoutSubtreeIfNeeded(); side.displayIfNeeded()
+        DispatchQueue.main.async { self.slideSide(show: self.side.shown, shownF, goneF) }
+        return
+      }
+      slideSide(show: show, shownF, goneF)
     } else { side.frame = shownF; side.alphaValue = 1; side.isHidden = !show }
+  }
+  private func slideSide(show: Bool, _ shownF: NSRect, _ goneF: NSRect) {
+    NSAnimationContext.runAnimationGroup({ c in
+      c.duration = show ? 0.2 : 0.16
+      c.timingFunction = CAMediaTimingFunction(name: show ? .easeOut : .easeIn)
+      c.allowsImplicitAnimation = true
+      self.side.animator().frame = show ? shownF : goneF
+      self.side.animator().alphaValue = show ? 1 : 0
+    }, completionHandler: { if !self.side.shown { self.side.isHidden = true; self.side.frame = shownF; self.side.alphaValue = 1 } })
   }
   @objc func toggleSidebar(_ s: Any?) {
     if side.on { sideCall(["kind": "collapse"], nil) } else { pageJS("(function(){ var b = document.querySelector('[data-action=\"toggle-sidebar\"]'); if (b) b.click(); })()") }
