@@ -811,6 +811,18 @@ export function createServer(cfg) {
       if (p.startsWith('/install')) return json(res, 404, { ok: false, error: 'Not on the App Review copy' });
     }
 
+    // Sign out — this browser / this Mac only (Haris 2026-11-15). Cloudflare's own sign-out (/cdn-cgi/access/logout) ends the
+    // person's sign-in on every device within half a minute, so the page comes here instead: this browser's Cloudflare
+    // sign-in for this site is cleared, and Cloudflare sends it on to our own sign-in page (its shared sign-in at the team's
+    // address is kept short in Cloudflare's settings, so it doesn't sign the browser straight back in). The iPhone app
+    // forgets its own (Boot.signOutNative). Signing out everywhere stays where it belongs: a password set with a code,
+    // someone removed from the team (signin.js).
+    if (p === '/sign-out' && !review) {
+      const gone = (n) => `${n}=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Secure; HttpOnly; SameSite=None`;
+      res.writeHead(303, { Location: '/', 'Set-Cookie': [gone('CF_Authorization'), gone('CF_AppSession')], 'Cache-Control': 'no-store' });
+      return res.end();
+    }
+
     // Mac app installer (no sign-in: these files hold no data — Cloudflare lets /install through)
     // New installs get the icon the owner chose
     if (p === '/install/AppIcon.png' && appIcon.info().custom) {

@@ -9654,7 +9654,9 @@ async function resetSampleData() {
     setTimeout(() => location.reload(), 900);
   } catch (e) { toast('Could not start fresh: ' + e.message); }
 }
-const signOutUrl = () => (window.E11_REVIEW ? '/review/sign-out' : '/cdn-cgi/access/logout');
+// (this browser / this Mac only — never Cloudflare's /cdn-cgi/access/logout, which signs the person out on every device:
+//  Haris 2026-11-15; the server's /sign-out)
+const signOutUrl = () => (window.E11_REVIEW ? '/review/sign-out' : '/sign-out');
 function signOut() {
   flushEdit();
   if (Host.isServer) { Sync.push(); setTimeout(() => { location.href = signOutUrl(); }, 300); return; }

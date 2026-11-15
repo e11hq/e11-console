@@ -836,7 +836,7 @@ const Phone = (() => {
       case 'open-project': go('project', id); break;
       case 'task-more': taskMore(); break;
       case 'sample': resetSampleData(); break;
-      case 'sign-out': dialog({ title: 'Sign out?', body: window.E11_REVIEW ? 'You’ll need the App Review password to sign in again.' : 'You’ll need the code from your email to sign in again.', okText: 'Sign out' }).then((ok) => { if (ok) signOut(); }); break;
+      case 'sign-out': dialog({ title: 'Sign out?', body: window.E11_REVIEW ? 'You’ll need the App Review password to sign in again.' : 'You’ll need your password to sign in again.', okText: 'Sign out' }).then((ok) => { if (ok) signOut(); }); break;
       default: break;
     }
   }, true);
@@ -3405,7 +3405,7 @@ const NativeMe = (() => {
         case 'viewAs': ViewAs.pick(); return;
         case 'backToMe': ViewAs.back(); return;
         case 'sample': resetSampleData(); return;
-        case 'signOut': dialog({ title: 'Sign out?', body: window.E11_REVIEW ? 'You’ll need the App Review password to sign in again.' : 'You’ll need the code from your email to sign in again.', okText: 'Sign out', danger: true }).then((ok) => { if (ok) signOut(); }); return;
+        case 'signOut': dialog({ title: 'Sign out?', body: window.E11_REVIEW ? 'You’ll need the App Review password to sign in again.' : 'You’ll need your password to sign in again.', okText: 'Sign out', danger: true }).then((ok) => { if (ok) signOut(); }); return;
         case 'team': wantTeam = !!ev.on; sync(); return;
         // Overview's taps: a file's preview; "All" — Client Assets, Claims, Expenses
         // Overview's 🔍: every client's files, the same search as Client Assets (Haris 2026-11-04)
