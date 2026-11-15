@@ -154,7 +154,12 @@ const Home = (() => {
     const lateOn = (d) => d < today && mine.some((t) => !t.done && t.due === d);
 
     // checklist items still to do on tasks I created
-    const items = open.flatMap((t) => (t.checklist || []).map((c) => ({ t, c }))).sort((a, b) => Number(a.c.done) - Number(b.c.done)).slice(0, 5);
+    // every checklist item on the open tasks, counted all together (Haris 2026-11-15 15:28): open ones first as Home opens, and
+    // the order then kept until Home is left — a ticked one stays where it is, struck through, instead of jumping away
+    const allItems = open.flatMap((t) => (t.checklist || []).map((c) => ({ t, c })));
+    if (!st.clOrder) st.clOrder = new Map();
+    allItems.filter((x) => !st.clOrder.has(x.c.id)).sort((a, b) => Number(a.c.done) - Number(b.c.done)).forEach((x) => st.clOrder.set(x.c.id, st.clOrder.size));
+    const items = allItems.sort((a, b) => st.clOrder.get(a.c.id) - st.clOrder.get(b.c.id));
     const itemsDone = items.filter((x) => x.c.done).length;
 
     // projects: an AM sees the projects their tasks are in, an Admin sees them all
@@ -242,7 +247,7 @@ const Home = (() => {
           ${projCard}
           <section class="hm-card">
             <div class="hm-h"><h2>Checklist</h2><span class="hm-mute">${items.length ? `${itemsDone} of ${items.length} done` : ''}</span></div>
-            ${items.length ? items.map(({ t, c }) => `<div class="hm-cl"><button type="button" class="hm-chk ${c.done ? 'on' : ''}" data-hm="cl" data-task-id="${t.id}" data-v="${c.id}" aria-label="Done">${tick}</button><span class="hm-main" data-task="${t.id}"><b class="${c.done ? 'struck' : ''}">${esc(c.text)}</b><span class="hm-sub">${title(t)}</span></span></div>`).join('') : `<div class="hm-empty">Checklist items on ${admin ? 'the team’s tasks' : 'the tasks you created'} show up here.</div>`}
+            ${items.length ? '<div class="hm-cl-list">' + items.map(({ t, c }) => `<div class="hm-cl"><button type="button" class="hm-chk ${c.done ? 'on' : ''}" data-hm="cl" data-task-id="${t.id}" data-v="${c.id}" aria-label="Done">${tick}</button><span class="hm-main" data-task="${t.id}"><b class="${c.done ? 'struck' : ''}">${esc(c.text)}</b><span class="hm-sub">${title(t)}</span></span></div>`).join('') + '</div>' : `<div class="hm-empty">Checklist items on ${admin ? 'the team’s tasks' : 'the tasks you created'} show up here.</div>`}
           </section>
           ${Host.isMacApp ? '' : `<section class="hm-hero">
             <h2>Team on time</h2>
@@ -400,6 +405,8 @@ const Home = (() => {
     </div>`;
   }
 
+  // Home left: the checklist's order is worked out afresh the next time
+  function left() { st.clOrder = null; }
   function view() {
     if (Host.isNative) setTimeout(() => hydrateThumbs($('#content')), 0);
     return Work.lead() ? viewLead() : viewMember();
@@ -467,5 +474,5 @@ const Home = (() => {
     if (el && typeof taskContextMenu === 'function') taskContextMenu(e, el.dataset.task);
   });
 
-  return { view, st };
+  return { view, st, left };
 })();

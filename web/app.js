@@ -5373,6 +5373,7 @@ function go(view, projectId = null) {
   if (isOffice() && !OFFICE_VIEWS.has(view) && !Fin.owns(view)) { view = 'home'; projectId = null; }
   if (view === 'calendar' && calendarRetired()) view = Plans.canSee() ? 'plans' : 'home';   // (content plans replace it)
   PageHistory.mark();
+  if (view !== 'home' && typeof Home !== 'undefined' && Home.left) Home.left();   // (Home's checklist keeps its order only while you're on it)
   if (view === 'clients') { ui.caQ = ''; ui.caScope = null; }
   // The Inbox always opens on its unread tab (Primary on computers, Unread on phones)
   if (view === 'inbox') { ui.inboxTab = 'primary'; if (typeof Phone !== 'undefined' && Phone.resetInbox) Phone.resetInbox(); }
