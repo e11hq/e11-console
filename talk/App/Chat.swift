@@ -57,7 +57,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private var kb: CGFloat = 0
   private var replying: Msg? { didSet {
     let mine = replying?.by == Talk.shared.me?.id
-    bar.setReply(replying.map { (mine ? "You" : Talk.shared.name($0.by), Talk.preview($0)) }, editing: false, ink: replying.map { mine ? Look.accent : Look.person($0.by) } ?? Look.accent)
+    bar.setReply(replying.map { (mine ? "You" : Talk.shared.name($0.by), Talk.preview($0)) }, editing: false, ink: replying.map { mine ? Look.accent : Look.nameInk($0.by) } ?? Look.accent)
   } }
   private var editingMsg: Msg?
   private var previewURL: URL?
@@ -2297,7 +2297,7 @@ final class BubbleCell: UITableViewCell {
     nameL.isHidden = !showName || (isPhoto && !framed && !headed); roleL.isHidden = nameL.isHidden || role.isEmpty
     photoName.isHidden = !(showName && isPhoto && !framed && !headed); photoRole.isHidden = photoName.isHidden || role.isEmpty; diag.isHidden = photoName.isHidden
     for (n, r) in [(nameL, roleL), (photoName, photoRole)] {
-      n.text = p?.name ?? "Someone"; n.textColor = Look.person(m.by)
+      n.text = p?.name ?? "Someone"; n.textColor = Look.nameInk(m.by)
       r.text = role; r.font = .systemFont(ofSize: 12, weight: client ? .semibold : .regular)
     }
     roleL.textColor = client ? Look.clientInk : Look.roleInk; photoRole.textColor = client ? Look.clientInk : UIColor(white: 0.9, alpha: 1)
@@ -2308,8 +2308,8 @@ final class BubbleCell: UITableViewCell {
     //  4 in: 15 inside 19; Haris 2026-11-12)
     quoteWrap.reach(nameL.isHidden && fwdL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
     if let r = m.reply {
-      quoteBar.backgroundColor = Look.person(r.by)
-      quoteName.text = r.by == T.me?.id ? "You" : T.name(r.by); quoteName.textColor = mine ? .white : Look.person(r.by)
+      quoteBar.backgroundColor = Look.nameInk(r.by)
+      quoteName.text = r.by == T.me?.id ? "You" : T.name(r.by); quoteName.textColor = mine ? .white : Look.nameInk(r.by)
       let cam = r.kind == "photo" || r.kind == "video"
       let qt = NSMutableAttributedString()
       // (the kind's symbol in the quote's own words' colour — it was a faint grey, hard to see on the blue — and the emoji
@@ -2399,7 +2399,7 @@ final class BubbleCell: UITableViewCell {
         guard let n = T.people[id]?.name, !n.isEmpty else { continue }
         var from = txt.startIndex
         while let r = txt.range(of: "@" + n, range: from..<txt.endIndex) {
-          a.addAttributes([.font: UIFont.systemFont(ofSize: 17, weight: .semibold), .foregroundColor: mine ? UIColor.white : Look.person(id)], range: NSRange(r, in: txt))
+          a.addAttributes([.font: UIFont.systemFont(ofSize: 17, weight: .semibold), .foregroundColor: mine ? UIColor.white : Look.nameInk(id)], range: NSRange(r, in: txt))
           from = r.upperBound
         }
       }

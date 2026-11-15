@@ -648,7 +648,7 @@ enum Look {
   static let field = dyn(0x2B2B2B, 0xFFFFFF)         // the message box
   static let dayChip = dyn(0x1C1C1E, 0xFFFFFF)       // "Today", "Yesterday"
   static let downBtn = dyn(0x2C2C2E, 0xFFFFFF)       // the scroll-down button
-  static let clientInk = dyn(0xFFB340, 0xD97A00)     // "Client can see this group", a client's "Client"
+  static let clientInk = dyn(0xE2B676, 0xA8692A)     // "Client can see this group", a client's "Client" — a soft amber, not the loud orange (Haris 2026-11-15)
   static let roleInk = UIColor.systemGray
   static let linkInk = dyn(0x6FB6FF, 0x007AFF)        // a link in someone else's message            // a role under a name (#8E8E93)
   static let mineTime = UIColor { $0.userInterfaceStyle == .dark ? rgb(0xA9C3E6) : UIColor.white.withAlphaComponent(0.8) }
@@ -656,6 +656,18 @@ enum Look {
   static let readTick = dyn(0x6FF2FF, 0xA8FFF4)
   // a person's colour: their initials' colour in E11 Console (Haris 2026-11-11), else one picked from their id
   static func person(_ id: String) -> UIColor { hex(Talk.shared.people[id]?.color) ?? color(for: id) }
+  // a person's colour for words — a name over a bubble, the reply strip and the quoted reply, an @mention: the same hue as
+  // their picture, softened into a calm palette (pastel in dark, deep and muted in light), never the loud system colours
+  // (Haris 2026-11-15: "dont include these shocking colors on names, have a nice color palettes")
+  static func nameInk(_ id: String) -> UIColor {
+    let base = person(id)
+    return UIColor { tc in
+      var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+      base.resolvedColor(with: tc).getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+      return tc.userInterfaceStyle == .dark ? UIColor(hue: h, saturation: min(s, 0.42), brightness: 0.86, alpha: 1)
+                                            : UIColor(hue: h, saturation: min(s, 0.55), brightness: 0.48, alpha: 1)
+    }
+  }
   static func hex(_ s: String?) -> UIColor? {
     guard var h = s?.trimmingCharacters(in: .whitespaces), h.hasPrefix("#") else { return nil }
     h.removeFirst(); if h.count == 3 { h = h.map { "\($0)\($0)" }.joined() }
