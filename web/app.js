@@ -4888,7 +4888,7 @@ const TalkButton = (() => {
       b = document.createElement('button');
       b.id = 'tb-talk'; b.type = 'button'; b.title = 'Open E11 Talk';
       b.innerHTML = `${icon('chat')}<span>Talk</span><i hidden></i>`;
-      b.addEventListener('click', (e) => { e.stopPropagation(); NativeMac.call('openURL', { url: STORE }).catch(() => {}); });
+      b.addEventListener('click', (e) => { e.stopPropagation(); open(); });
       right.insertBefore(b, right.firstChild);
     }
     return b;
@@ -4899,8 +4899,84 @@ const TalkButton = (() => {
     const i = b.querySelector('i');
     i.textContent = n > 99 ? '99+' : String(n); i.hidden = !n;
     b.title = n ? `Open E11 Talk — ${n} unread` : 'Open E11 Talk';
+    if (typeof MacBar !== 'undefined') MacBar.paint();
   }
-  return { set, paint: () => set(n) };
+  const open = () => NativeMac.call('openURL', { url: STORE }).catch(() => {});
+  return { set, open, n: () => n, paint: () => set(n) };
+})();
+
+/* ================= The Mac app 13+: Apple's search field and Talk button, Apple's menu on a right-click =================
+   The page keeps its top strip; its search box and Talk button stay in place but hidden, and the Mac lays Apple's own
+   over them (command pageBar: their places, the words, the count; hidden while something covers the strip). Typing there
+   searches the page (window.__e11Bar), ⌘K puts the cursor there. A right-click's options go to the Mac as Apple's menu
+   (command menu). Mac page by page, part 2 (Haris 2026-11-15). Older Mac apps and browsers: the page's own, as before. */
+const MacBar = (() => {
+  let shell = 0, sent = '', raf = 0;
+  const on = () => shell >= 13;
+  const box = (el) => { const r = el.getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }; };
+  function state() {
+    const s = document.querySelector('#topbar .search'), inp = document.getElementById('search');
+    const app = document.getElementById('app');
+    let show = !!s && !!inp && !!app && s.offsetParent !== null && !app.classList.contains('locked');
+    let r = null;
+    if (show) {
+      r = box(s);
+      // (a task opened full or a dialog over the strip there: then the Mac's go too)
+      const el = r.w ? document.elementFromPoint(r.x + r.w / 2, r.y + r.h / 2) : null;
+      show = !!el && !el.closest('#detail, .scrim, .dialog, #overlay-root > *, .menu');
+    }
+    const t = document.getElementById('tb-talk');
+    return { show, search: r ? { ...r, place: inp.placeholder, q: inp.value } : null,
+      talk: show && t && t.offsetParent !== null ? { ...box(t), n: TalkButton.n() } : null };
+  }
+  function send(extra) {
+    if (!on()) return;
+    const st = state(), k = JSON.stringify(st);
+    if (k === sent && !extra) return;
+    sent = k;
+    NativeMac.call('pageBar', { ...st, ...(extra || {}) }).catch(() => {});
+  }
+  const paint = () => { if (!on() || raf) return; raf = requestAnimationFrame(() => { raf = 0; send(); }); };
+  function start() {
+    document.documentElement.classList.add('mac-bar13');
+    new MutationObserver(paint).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'style', 'hidden', 'placeholder'] });
+    addEventListener('resize', paint);
+    document.addEventListener('input', (e) => { if (e.target && e.target.id === 'search') paint(); }, true);
+    paint();
+  }
+  if (Host.isMacApp) setTimeout(() => NativeMac.call('appInfo').then((r) => { shell = Number(r && r.shell) || 0; if (on()) start(); }).catch(() => {}), 0);
+  window.__e11Bar = (a) => {
+    a = a || {};
+    if (a.talk) return TalkButton.open();
+    if (typeof a.q === 'string') {
+      const inp = document.getElementById('search'); if (!inp || inp.value === a.q) return;
+      inp.value = a.q; inp.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  };
+  // ⌘K: the cursor in Apple's field
+  const focus = () => send({ focus: true });
+  // the options as Apple's menu: plain ones, and the drawn ones (a status with its colour, the current one ticked)
+  function menu(pt, items) {
+    const list = [];
+    items.forEach((it, i) => {
+      if (!it || it.skip) return;
+      if (it === '-') { list.push({ sep: 1 }); return; }
+      if (typeof it.run !== 'function') return;
+      if (it.html) {
+        const d = document.createElement('div'); d.innerHTML = it.html;
+        const m = d.querySelector('.mi') || d, sw = d.querySelector('.sw');
+        list.push({ i, label: m.textContent.replace(/\s+/g, ' ').trim(), color: sw ? sw.style.background || sw.style.backgroundColor : '', on: m.classList.contains('cur'), off: m.classList.contains('mi-locked') });
+        return;
+      }
+      list.push({ i, label: it.label, icon: it.icon || '', danger: !!it.danger });
+    });
+    NativeMac.call('menu', { x: Math.round(pt.x), y: Math.round(pt.y), list }).then((r) => {
+      const it = r && r.i != null ? items[+r.i] : null;
+      if (it && typeof it.run === 'function') it.run();
+    }).catch(() => {});
+    return {};
+  }
+  return { on, paint, focus, menu };
 })();
 
 /* ================= Overlays ================= */
@@ -4918,6 +4994,7 @@ function detailScroller() {
 }
 function showMenu(anchor, items, opts = {}) {
   if (typeof NativeSide !== 'undefined' && NativeSide.capturing()) return NativeSide.take(items);   // (the Mac app shows it as its own menu)
+  if (anchor && anchor.__pt && typeof MacBar !== 'undefined' && MacBar.on()) return MacBar.menu(anchor.__pt, items);   // (a right-click: Apple's menu, Mac app 13)
   closeMenus();
   // iPhone app 11+: a menu marked native (plain options only) opens as iOS's own sheet
   if (opts.native && NativeSheet.fits(opts.native)) { Haptic.light(); return NativeSheet.open(anchor, items, opts); }   // (the same light knock as the page's own sheets)
@@ -5977,7 +6054,7 @@ function statusMenu(anchor, t = task(ui.taskId)) {
 /* ---- A task row right-clicked (Mac page by page, Haris 2026-11-15 10:33 / 10:36): the iPhone's choices, one list for the
    Mac app and browsers — Open Task · Status › · Mark Complete · Due Date… · Attach Files… · Copy Link · Trash. Drawn by the
    page for now; the Mac app's own menu comes with its next update. A normal click is unchanged. ---- */
-const atPoint = (x, y) => ({ getBoundingClientRect: () => ({ left: x, right: x, top: y, bottom: y, width: 0, height: 0 }) });
+const atPoint = (x, y) => ({ __pt: { x, y }, getBoundingClientRect: () => ({ left: x, right: x, top: y, bottom: y, width: 0, height: 0 }) });
 function taskContextMenu(e, id) {
   const t = task(id);
   if (!t || (typeof Phone !== 'undefined' && Phone.on)) return false;
@@ -6589,7 +6666,7 @@ document.addEventListener('click', async (e) => {
       }
       case 'my-part': { const t = task(ui.taskId); setMyPart(t, actEl.dataset.v === '1'); return; }
       case 'reopen-part': { e.stopPropagation(); const t = task(ui.taskId); const u = id; showMenu(actEl, [{ label: `Reopen ${fullName(userById(u)).split(' ')[0]}’s part`, icon: 'reply', run: () => reopenPart(t, u) }], { native: true }); return; }
-      case 'focus-search': { const sr = $('#search'); sr.focus(); sr.select(); return; }
+      case 'focus-search': { if (MacBar.on()) return MacBar.focus(); const sr = $('#search'); sr.focus(); sr.select(); return; }
       case 'cd-menu': e.stopPropagation(); toast('CD Status sets itself'); return;
       case 'submit-review': e.stopPropagation(); submitDialog(task(ui.taskId)); return;
       case 'withdraw-review': e.stopPropagation(); withdrawReview(task(ui.taskId)); return;
@@ -6997,7 +7074,7 @@ document.addEventListener('keydown', (e) => {
 
   if (mod && e.key.toLowerCase() === 'f' && $('#ca-q')) { e.preventDefault(); $('#ca-q').focus(); $('#ca-q').select(); return; }
   if (mod && e.key.toLowerCase() === 'k' && isOffice()) { e.preventDefault(); return; }
-  if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); const s = $('#search'); s.focus(); s.select(); return; }
+  if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); if (MacBar.on()) return MacBar.focus(); const s = $('#search'); s.focus(); s.select(); return; }
   if (mod && e.key.toLowerCase() === 'n') { e.preventDefault(); if (e.shiftKey) { if (isSuper()) newProjectFlow(); else denied(); } else if (can('createTask')) newTaskInContext(); else denied(); return; }
   if (e.key === 'Escape') {
     if ($('.lightbox') || $('.fv')) { $('#overlay-root').innerHTML = ''; return; }

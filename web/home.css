@@ -459,3 +459,5 @@ html.mac-chrome #tb-talk .ic, html.mac-chrome #tb-talk svg { width: 14px; height
 html.mac-chrome #tb-talk i { min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: #ff3b30; color: #fff; font: 600 11px -apple-system, system-ui, sans-serif; font-style: normal; display: inline-flex; align-items: center; justify-content: center; }
 html.mac-chrome #tb-talk i[hidden] { display: none; }
 #tb-talk { display: none; } html.mac-chrome #tb-talk { display: inline-flex; }
+/* the Mac app 13+: Apple's search field and Talk button lie over the page's (kept in place, hidden — app.js MacBar) */
+html.mac-bar13 #topbar .search, html.mac-bar13 #tb-talk { visibility: hidden; }
