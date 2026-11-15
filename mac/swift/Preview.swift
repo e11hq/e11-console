@@ -38,15 +38,35 @@ enum MacLoad {
   static func image(_ s: String?, _ done: @escaping (NSImage?) -> Void) { data(s) { d in done(d.flatMap { NSImage(data: $0) }) } }
 }
 
-/* ---------- Apple's glass: a capsule of the HUD material, its words / symbol white ---------- */
+/* ---------- Apple's glass: Liquid Glass on macOS 26 (NSGlassEffectView — Haris 2026-11-15 16:23: "the buttons are not
+   glass"), the HUD material before it ---------- */
+func pvGlass() -> NSView {
+  #if compiler(>=6.2)
+  if #available(macOS 26.0, *) { let g = NSGlassEffectView(); g.appearance = NSAppearance(named: .darkAqua); return g }
+  #endif
+  let f = NSVisualEffectView(); f.material = .hudWindow; f.blendingMode = .withinWindow; f.state = .active; f.appearance = NSAppearance(named: .vibrantDark)
+  f.wantsLayer = true; f.layer?.masksToBounds = true
+  return f
+}
+func pvRound(_ v: NSView, _ r: CGFloat) {
+  #if compiler(>=6.2)
+  if #available(macOS 26.0, *), let g = v as? NSGlassEffectView { g.cornerRadius = r; return }
+  #endif
+  v.layer?.cornerRadius = r
+}
+// what sits on a glass: the glass's own content view (Liquid Glass), or simply inside it
+func pvPut(_ v: NSView, in g: NSView) {
+  #if compiler(>=6.2)
+  if #available(macOS 26.0, *), let gl = g as? NSGlassEffectView { gl.contentView = v; return }
+  #endif
+  g.addSubview(v)
+}
 final class PvButton: NSView {
-  let fx = NSVisualEffectView(), label = NSTextField(labelWithString: ""), icon = NSImageView()
+  let fx = pvGlass(), label = NSTextField(labelWithString: ""), icon = NSImageView()
   var onClick: (() -> Void)?
-  private var hover = false { didSet { fx.alphaValue = hover ? 1 : 0.85 } }
+  private var hover = false { didSet { alphaValue = hover ? 1 : 0.92 } }
   init(symbol: String, title: String? = nil, tip: String) {
     super.init(frame: .zero)
-    fx.material = .hudWindow; fx.blendingMode = .withinWindow; fx.state = .active; fx.appearance = NSAppearance(named: .vibrantDark)
-    fx.wantsLayer = true; fx.layer?.masksToBounds = true; fx.alphaValue = 0.85
     addSubview(fx)
     icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)?.withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
     icon.contentTintColor = .white; icon.imageScaling = .scaleNone
@@ -59,7 +79,7 @@ final class PvButton: NSView {
   var fit: CGFloat { label.isHidden ? 34 : 14 + 16 + 7 + ceil(label.intrinsicContentSize.width) + 14 }
   override func layout() {
     super.layout()
-    fx.frame = bounds; fx.layer?.cornerRadius = bounds.height / 2
+    fx.frame = bounds; pvRound(fx, bounds.height / 2)
     if label.isHidden { icon.frame = bounds } else {
       icon.frame = NSRect(x: 14, y: 0, width: 16, height: bounds.height)
       let s = label.intrinsicContentSize
@@ -123,30 +143,29 @@ final class MacPreview: NSView {
   private let moreB = PvButton(symbol: "ellipsis", tip: "More")
   private let closeB = PvButton(symbol: "xmark", tip: "Close (Esc)")
   private let prevB = PvButton(symbol: "chevron.left", tip: "Previous (←)"), nextB = PvButton(symbol: "chevron.right", tip: "Next (→)")
-  private let stripFx = NSVisualEffectView(), strip = NSView(), hint = NSTextField(labelWithString: "")
+  private let stripFx = pvGlass(), strip = NSView(), hint = NSTextField(labelWithString: "")
   private var thumbs: [NSImageView] = []
-  private let pageL = NSTextField(labelWithString: ""), pageFx = NSVisualEffectView()
+  private let pageL = NSTextField(labelWithString: ""), pageFx = pvGlass()
+  // (as E11 Talk's viewer: the file the whole window, a soft shade at the top and the foot under the words and buttons)
+  private let topShade = PvShade(top: true), footShade = PvShade(top: false)
   private let toastL = NSTextField(labelWithString: "")
   private var pages: [String: ([String], String?)] = [:]
   private var chromeOn = true, hideT: Timer?, leaving = false
-  private var chrome: [NSView] { [name, meta, copyB, dlB, moreB, closeB, prevB, nextB, stripFx, hint, pageFx] }
+  private var chrome: [NSView] { [topShade, footShade, name, meta, copyB, dlB, moreB, closeB, prevB, nextB, stripFx, hint, pageFx] }
 
   init(files: [[String: Any]], at: Int, from: NSRect?) {
     self.files = files; self.at = max(0, min(at, files.count - 1)); self.from = from; self.openedAt = self.at
     super.init(frame: .zero)
     wantsLayer = true
     back.wantsLayer = true; back.layer?.backgroundColor = NSColor.black.cgColor
-    addSubview(back); addSubview(stage)
+    addSubview(back); addSubview(stage); addSubview(topShade); addSubview(footShade)
     for (l, size, w, c) in [(name, 13.0, NSFont.Weight.semibold, NSColor(white: 0.96, alpha: 1)), (meta, 11.5, .regular, NSColor(white: 0.92, alpha: 0.6)), (hint, 11, .regular, NSColor(white: 0.92, alpha: 0.6))] {
       l.font = .systemFont(ofSize: CGFloat(size), weight: w); l.textColor = c; l.alignment = .center; l.lineBreakMode = .byTruncatingMiddle; addSubview(l)
     }
-    for f in [stripFx, pageFx] {
-      f.material = .hudWindow; f.blendingMode = .withinWindow; f.state = .active; f.appearance = NSAppearance(named: .vibrantDark)
-      f.wantsLayer = true; f.layer?.masksToBounds = true
-    }
-    stripFx.layer?.cornerRadius = 14; pageFx.layer?.cornerRadius = 12
-    stripFx.addSubview(strip); addSubview(stripFx)
-    pageL.font = .systemFont(ofSize: 12); pageL.textColor = .white; pageFx.addSubview(pageL); pageFx.isHidden = true; addSubview(pageFx)
+    pvRound(stripFx, 14); pvRound(pageFx, 12)
+    pvPut(strip, in: stripFx); addSubview(stripFx)
+    pageL.font = .systemFont(ofSize: 12); pageL.textColor = .white
+    let pageBox = NSView(); pageBox.addSubview(pageL); pvPut(pageBox, in: pageFx); pageFx.isHidden = true; addSubview(pageFx)
     toastL.font = .systemFont(ofSize: 13, weight: .medium); toastL.textColor = .white; toastL.alignment = .center
     toastL.wantsLayer = true; toastL.drawsBackground = true; toastL.backgroundColor = NSColor(white: 0.12, alpha: 0.9); toastL.layer?.cornerRadius = 15; toastL.layer?.masksToBounds = true
     toastL.alphaValue = 0; addSubview(toastL)
@@ -178,12 +197,15 @@ final class MacPreview: NSView {
   private var stageRect: NSRect {
     let k = cur["kind"] as? String ?? ""
     if k == "pdf" || k == "pages" || k == "text" { return NSRect(x: 0, y: 64, width: bounds.width, height: max(0, bounds.height - 64 - 112)) }
+    if k == "image" || k == "video" { return bounds }   // (edge to edge — the words and buttons over it on their shades, 16:23)
     return NSRect(x: 120, y: 80, width: max(0, bounds.width - 240), height: max(0, bounds.height - 80 - 140))
   }
   override func layout() {
     super.layout()
     back.frame = bounds
     stage.frame = stageRect
+    topShade.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 120)
+    footShade.frame = NSRect(x: 0, y: bounds.height - 190, width: bounds.width, height: 190)
     content?.frame = stage.bounds
     name.frame = NSRect(x: 240, y: 13, width: max(0, bounds.width - 480), height: 18)
     meta.frame = NSRect(x: 240, y: 32, width: max(0, bounds.width - 480), height: 16)
@@ -197,6 +219,7 @@ final class MacPreview: NSView {
     hint.frame = NSRect(x: 0, y: bounds.height - 22 - 14, width: bounds.width, height: 14)
     let ps = pageL.intrinsicContentSize
     pageFx.frame = NSRect(x: bounds.width - 24 - ps.width - 20, y: (bounds.height - 26) / 2, width: ps.width + 20, height: 26)
+    pageL.superview?.frame = pageFx.bounds
     pageL.frame = NSRect(x: 10, y: (26 - ps.height) / 2, width: ps.width + 2, height: ps.height)
     let ts = toastL.intrinsicContentSize
     toastL.frame = NSRect(x: (bounds.width - ts.width - 40) / 2, y: stripFx.frame.minY - 50, width: ts.width + 40, height: 30)
@@ -414,8 +437,10 @@ final class MacPreview: NSView {
       NSAnimationContext.runAnimationGroup { c in c.duration = 0.25; self.stage.animator().alphaValue = 1 }
       return finish()
     }
-    MacLoad.image(t) { [weak self] im in
-      guard let self = self else { return }
+    var flown = false
+    let fly0: (NSImage?) -> Void = { [weak self] im in
+      guard let self = self, !flown else { return }
+      flown = true
       guard let im = im else { NSAnimationContext.runAnimationGroup { c in c.duration = 0.25; self.stage.animator().alphaValue = 1 }; return finish() }
       let fly = NSImageView(frame: r); fly.image = im; fly.imageScaling = .scaleProportionallyUpOrDown; fly.wantsLayer = true
       self.addSubview(fly)
@@ -428,6 +453,12 @@ final class MacPreview: NSView {
         NSAnimationContext.runAnimationGroup({ c in c.duration = 0.12; fly.animator().alphaValue = 0 }, completionHandler: { fly.removeFromSuperview() })
       })
     }
+    // (the full picture when it arrives within a moment — the thumbnail, small and cut square, came out blurred and cropped,
+    //  16:23 — else the thumbnail)
+    if (cur["kind"] as? String) == "image" {
+      MacLoad.image(cur["src"] as? String) { im in if let im = im { fly0(im) } }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { MacLoad.image(t) { im in fly0(im) } }
+    } else { MacLoad.image(t) { im in fly0(im) } }
   }
   private func fit(_ s: NSSize, in r: NSRect) -> NSRect {
     guard s.width > 0, s.height > 0 else { return r }
@@ -456,4 +487,21 @@ final class MacPreview: NSView {
       NSAnimationContext.runAnimationGroup({ c in c.duration = 0.22; self.animator().alphaValue = 0 }, completionHandler: gone)
     }
   }
+}
+
+/* a soft black shade at the top or the foot, under the words and buttons (as E11 Talk's viewer) */
+final class PvShade: NSView {
+  private let g = CAGradientLayer()
+  init(top: Bool) {
+    super.init(frame: .zero)
+    wantsLayer = true
+    g.colors = [NSColor(white: 0, alpha: 0.62).cgColor, NSColor(white: 0, alpha: 0.28).cgColor, NSColor(white: 0, alpha: 0).cgColor]
+    g.locations = [0, 0.5, 1]
+    // (the view is in a flipped parent, its layer not flipped: y 1 is its top)
+    g.startPoint = CGPoint(x: 0.5, y: top ? 1 : 0); g.endPoint = CGPoint(x: 0.5, y: top ? 0 : 1)
+    layer?.addSublayer(g)
+  }
+  required init?(coder: NSCoder) { nil }
+  override func layout() { super.layout(); CATransaction.begin(); CATransaction.setDisableActions(true); g.frame = bounds; CATransaction.commit() }
+  override func hitTest(_ p: NSPoint) -> NSView? { nil }
 }
