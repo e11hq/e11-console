@@ -68,6 +68,7 @@ const OfficeHome = (() => {
   }
 
   function view() {
+    setTimeout(barSearch, 0);
     const u = me();
     const h = new Date().getHours();
     const part = Occasions.greeting(todayStr()) || (h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening');
@@ -186,6 +187,21 @@ const OfficeHome = (() => {
       ]);
     }
   });
+  // the Mac app: their search is the bar's (Search Client Assets — Haris 2026-11-15 11:02), not the box on their Home
+  const macBar = () => document.documentElement.classList.contains('mac-chrome');
+  function barSearch() {
+    const s = document.getElementById('search');
+    if (!s || !macBar() || !isOffice()) return;
+    s.placeholder = 'Search Client Assets';
+    if (s.value !== st.q && document.activeElement !== s) s.value = st.q;
+  }
+  document.addEventListener('input', (e) => {
+    if (e.target.id !== 'search' || !macBar() || typeof isOffice !== 'function' || !isOffice()) return;
+    e.stopImmediatePropagation();
+    st.q = e.target.value; st.sel = null;
+    if (ui.view !== 'home') { go('home'); return; }
+    const box = $('#oh-files'); if (box) box.innerHTML = filesHTML();
+  }, true);
   document.addEventListener('input', (e) => {
     if (e.target.id !== 'oh-q') return;
     st.q = e.target.value; st.sel = null;
