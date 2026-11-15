@@ -104,6 +104,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     w.rootViewController = APPLE_TABS ? AppleTabs(nav: AppleNav(rootViewController: Main.shared)) : APPLE_NAV ? AppleNav(rootViewController: Main.shared) : Main.shared
     w.makeKeyAndVisible()
     window = w
+    TouchSpot.watch(w)   // (where a file was tapped: the preview flies out of it — Haris 2026-11-15)
     if let u = connectionOptions.urlContexts.first?.url { Main.shared.openLink(u) }   // (started by a widget tap)
     // (started by a file link tapped elsewhere — files.e11hq.com/f/…, iPhone's universal links)
     if let a = connectionOptions.userActivities.first(where: { $0.activityType == NSUserActivityTypeBrowsingWeb }), let u = a.webpageURL { Main.shared.openLink(u) }

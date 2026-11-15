@@ -5,6 +5,7 @@
 // pull down to close. The page sends the files (absolute addresses on the server) and does Copy / Download / ⋯ itself
 // (window.__e11Preview); files are fetched with the app's own sign-in (its cookies).
 import UIKit
+import UIKit.UIGestureRecognizerSubclass
 import AVKit
 import WebKit
 import CryptoKit
@@ -104,6 +105,11 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
     zoomer.addGestureRecognizer(dbl)
   }
   required init?(coder: NSCoder) { fatalError() }
+  // the picture on show and where it sits on the screen (the preview flies back from it)
+  var shownPicture: (UIImage, CGRect)? {
+    guard mode == "image", !imageView.isHidden, let img = imageView.image, img.size.width > 0, img.size.height > 0 else { return nil }
+    return (img, imageView.convert(AVMakeRect(aspectRatio: img.size, insideRect: imageView.bounds), to: nil))
+  }
   var doubleTapGesture: UITapGestureRecognizer? { zoomer.gestureRecognizers?.compactMap { $0 as? UITapGestureRecognizer }.first { $0.numberOfTapsRequired == 2 } }
 
   func show(_ f: [String: Any]) {
@@ -275,6 +281,14 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
   private let name = UILabel(), details = UILabel()
   private let copyB = UIButton(type: .system), dlB = UIButton(type: .system)
   final class Shade: UIView { override class var layerClass: AnyClass { CAGradientLayer.self } }
+  // the picture the file was opened from (its own small picture on the page): the preview flies out of it and back into it
+  weak var source: UIImageView?
+  private var openedAt = -1
+  var flies: Bool {
+    guard let s = source, s.window != nil, s.image != nil, at < files.count else { return false }
+    let k = files[at]["kind"] as? String ?? ""
+    return k == "image" || (k == "video" && !((files[at]["cover"] as? String) ?? "").isEmpty)
+  }
   private let toast = UILabel()
   private var barsHidden = false
   private var closed = false
@@ -378,6 +392,25 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     footShade.frame = CGRect(x: 0, y: -30, width: view.bounds.width, height: view.bounds.height - bottomBar.frame.minY + 30)
     toast.layoutMargins = UIEdgeInsets(top: 0, left: 16, bottom: 0, right: 16)
   }
+  // opening: the picture flies from where it was tapped to its place, the black and the buttons coming in with it, the page
+  // fading in over it once it has landed (E11 Talk's "Opening a photo" — Haris 2026-11-15)
+  override func viewWillAppear(_ a: Bool) {
+    super.viewWillAppear(a)
+    guard flies, let src = source, let img = src.image else { return }
+    openedAt = at
+    view.layoutIfNeeded()
+    let fly = UIImageView(image: img); fly.contentMode = .scaleAspectFill; fly.clipsToBounds = true
+    fly.layer.cornerRadius = src.layer.cornerRadius; fly.layer.cornerCurve = src.layer.cornerCurve
+    fly.frame = src.convert(src.bounds, to: nil)
+    view.insertSubview(fly, aboveSubview: pager)
+    pager.alpha = 0; topBar.alpha = 0; bottomBar.alpha = 0; view.backgroundColor = .clear; src.alpha = 0
+    let to = AVMakeRect(aspectRatio: img.size, insideRect: view.bounds)
+    UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.88, initialSpringVelocity: 0) {
+      fly.frame = to; fly.layer.cornerRadius = 0; self.view.backgroundColor = .black; self.topBar.alpha = 1; self.bottomBar.alpha = 1
+    } completion: { _ in
+      UIView.animate(withDuration: 0.18, animations: { self.pager.alpha = 1 }) { _ in fly.removeFromSuperview(); src.alpha = 1 }
+    }
+  }
   private var placed = false
   override func viewWillLayoutSubviews() {
     super.viewWillLayoutSubviews()
@@ -446,6 +479,21 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     guard !closed else { return }
     closed = true
     event(["ev": "closed"])
+    // (the one it was opened on, its picture there: back into the picture it came out of — the black and the buttons going
+    //  with it; else the fade as before)
+    if at == openedAt, let src = source, src.window != nil, let (pic, from) = current?.shownPicture {
+      let fly = UIImageView(image: pic); fly.contentMode = .scaleAspectFill; fly.clipsToBounds = true; fly.layer.cornerCurve = src.layer.cornerCurve
+      fly.frame = from
+      view.insertSubview(fly, aboveSubview: pager); pager.alpha = 0; src.alpha = 0
+      let to = src.convert(src.bounds, to: nil), radius = src.layer.cornerRadius
+      UIView.animate(withDuration: 0.32, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0) {
+        fly.frame = to; fly.layer.cornerRadius = radius; self.view.backgroundColor = .clear; self.topBar.alpha = 0; self.bottomBar.alpha = 0; self.toast.alpha = 0
+      } completion: { _ in
+        src.alpha = 1
+        if let p = self.presentingViewController { p.dismiss(animated: false) } else { self.dismiss(animated: false) }
+      }
+      return
+    }
     if let p = presentingViewController { p.dismiss(animated: true) } else { dismiss(animated: true) }
   }
 
@@ -621,5 +669,41 @@ enum MediaKeep {
     var total = items.reduce(0) { $0 + $1.1 }
     items.sort { $0.2 < $1.2 }
     while total > 2_000_000_000, let first = items.first { try? fm.removeItem(at: first.0); total -= first.1; items.removeFirst() }
+  }
+}
+
+
+/* Where the last finger came down, anywhere in the app (a recogniser that only looks and never takes the touch — it fails at
+   once): the file preview flies out of the picture that was tapped, as E11 Talk's (Haris 2026-11-15). */
+final class TouchSpot: UIGestureRecognizer {
+  private static weak var view: UIView?
+  private static var point: CGPoint = .zero, at = Date.distantPast
+  static func watch(_ w: UIWindow) {
+    let g = TouchSpot(target: nil, action: nil); g.cancelsTouchesInView = false; g.delaysTouchesBegan = false; g.delaysTouchesEnded = false
+    w.addGestureRecognizer(g)
+  }
+  override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+    if let t = touches.first { TouchSpot.view = t.view; TouchSpot.point = t.location(in: nil); TouchSpot.at = Date() }
+    state = .failed
+  }
+  override func canPrevent(_ g: UIGestureRecognizer) -> Bool { false }
+  override func canBePrevented(by g: UIGestureRecognizer) -> Bool { false }
+  // the picture under the last touch (a moment ago): the touched view's own, one inside it under the finger, or one a few
+  // steps up that holds the finger's spot
+  static func picture() -> UIImageView? {
+    guard Date().timeIntervalSince(at) < 3, let v = view, v.window != nil else { return nil }
+    func good(_ x: UIView) -> UIImageView? {
+      guard let iv = x as? UIImageView, iv.image != nil, !iv.isHidden, iv.alpha > 0.01, iv.bounds.width > 8 else { return nil }
+      return iv.convert(iv.bounds, to: nil).contains(point) ? iv : nil
+    }
+    func inside(_ x: UIView, _ depth: Int) -> UIImageView? {
+      if let iv = good(x) { return iv }
+      guard depth > 0 else { return nil }
+      for c in x.subviews.reversed() { if let iv = inside(c, depth - 1) { return iv } }
+      return nil
+    }
+    var x: UIView? = v
+    for _ in 0..<4 { guard let y = x else { break }; if let iv = inside(y, 4) { return iv }; x = y.superview }
+    return nil
   }
 }

@@ -682,7 +682,9 @@ extension Main {
       self.composeIfMade?.text.resignFirstResponder()
       let vc = PreviewVC(["files": files.map { Main.previewItem($0) }, "at": i]) { [weak self] ev in self?.previewEvent(ev, files) }
       self.previewVC = vc
-      host.present(vc, animated: true)
+      // (out of the picture that was tapped, as E11 Talk's — Haris 2026-11-15; no picture there: the fade as before)
+      vc.source = TouchSpot.picture()
+      host.present(vc, animated: !vc.flies)
     }
   }
   // Copy, as the website's: the file itself isn't copied — the app remembers which file it is, and pasting it into a
