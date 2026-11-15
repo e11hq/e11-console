@@ -3357,7 +3357,7 @@ final class MessageBar: UIView, UITextViewDelegate {
         let r = text.range(of: "@" + name, range: NSRange(location: from, length: text.length - from))
         if r.location == NSNotFound { break }
         ts.addAttribute(.foregroundColor, value: UIColor.secondaryLabel, range: NSRange(location: r.location, length: 1))
-        ts.addAttributes([.foregroundColor: Look.mention, .font: UIFont.systemFont(ofSize: 17, weight: .medium)], range: NSRange(location: r.location + 1, length: r.length - 1))
+        ts.addAttributes([.foregroundColor: Look.mention, .font: UIFont.systemFont(ofSize: 17, weight: .semibold)], range: NSRange(location: r.location + 1, length: r.length - 1))
         from = r.location + r.length
       }
     }
