@@ -67,8 +67,138 @@ const OfficeHome = (() => {
     return grp('Need HR approval', claims.filter((c) => c.state === 'submitted')) + grp('HR approved and paid', claims.filter((c) => c.state !== 'submitted'));
   }
 
+  /* ---------- The Mac app: the Office Admin's Home in the team's Home style (Haris 2026-11-15 17:46, mock-up O1 A approved:
+     "E11 Console for Mac") — Home's own pieces (.hm): the date and greeting with + Add claim, three cards on top (the third the
+     right column's width), Claims as Team's tasks (its tabs and counts beside the title, See all, rows tinted in turn),
+     Latest in Client Assets as pictures (one sliding row of clients fading at its right), and on the right the month's claims
+     as Team goals achieved (its ring growing from 0 once the page shows — the rule), the Inbox and Team today. ---------- */
+  const shownFor = () => (window.__e11ShownAt ? Date.now() - window.__e11ShownAt : 0);
+  const sv = (k, d) => `<span class="hm-ic-s" data-i="oh-${k}"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg></span>`;
+  const MI = {
+    claim: 'M8 2.2a5.8 5.8 0 1 0 0 11.6A5.8 5.8 0 0 0 8 2.2zM9.9 5.9C9.5 5.3 8.8 5 8 5c-1.1 0-1.9.6-1.9 1.4 0 1.9 3.9 1.1 3.9 3.1 0 .9-.9 1.5-2 1.5-.9 0-1.6-.4-2-1M8 4v1M8 11v1',
+    tray: 'M2.5 9.5 4.3 4h7.4l1.8 5.5V12a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1zM2.5 9.5h3l.8 1.6h3.4l.8-1.6h3',
+    folder: 'M2.2 4.6c0-.7.5-1.2 1.2-1.2h2.8l1.4 1.5h4.9c.7 0 1.2.5 1.2 1.2v5.6c0 .7-.5 1.2-1.2 1.2H3.4c-.7 0-1.2-.5-1.2-1.2z',
+    team: 'M6 7.4a2.2 2.2 0 1 0 0-4.4 2.2 2.2 0 0 0 0 4.4zM2 13c0-2.2 1.8-3.8 4-3.8s4 1.6 4 3.8M11 3.2a2 2 0 0 1 0 4M12.2 9.4c1.1.4 1.8 1.4 1.8 2.6',
+  };
+  const hello = () => {
+    const h = new Date().getHours(), g = Occasions.greeting(todayStr()) || (h < 5 ? 'Good evening' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening');
+    return Occasions.alone(g) ? g : `${g}, ${firstName(me().id)}`;
+  };
+  function macView() {
+    const u = me();
+    const today = todayStr();
+    const hasFin = fin();
+    const AED = (n) => 'AED ' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const AED0 = (n) => 'AED ' + Math.round(Number(n) || 0).toLocaleString('en-US');
+    const m = Claims.claimMonth();
+    const claims = hasFin ? Claims.all().filter((c) => c.month === m && ['submitted', 'approved', 'paid'].includes(c.state)).sort((a, b) => String(b.submittedAt || '').localeCompare(String(a.submittedAt || ''))) : [];
+    const cnt = (s) => claims.filter((c) => c.state === s).length;
+    const waiting = claims.filter((c) => c.state === 'submitted');
+    const notes = myNotifs().slice().sort((a, b) => b.at.localeCompare(a.at));
+    const unreadN = notes.filter((n) => !n.read);
+    const nClaim = unreadN.filter((n) => /^claim/.test(n.kind)).length, nFile = unreadN.filter((n) => n.kind === 'asset').length, nOther = unreadN.length - nClaim - nFile;
+    const unreadNote = unreadN.length ? [nClaim && `${nClaim} claim${nClaim === 1 ? '' : 's'}`, nFile && `${nFile} file${nFile === 1 ? '' : 's'}`, nOther && `${nOther} update${nOther === 1 ? '' : 's'}`].filter(Boolean).join(', ') : 'all caught up';
+    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+    const files = allFiles();
+    const fresh = files.filter(({ a }) => String(a.addedAt || '') >= weekAgo);
+    const team = db.users.filter((x) => x.active !== false);
+    const card = (cls, ic, l, n, note, noteCls, act) => `<button type="button" class="hm-stat" data-oh="${act}"><span class="hm-ic ${cls}">${sv(ic, MI[ic])}</span><span><span class="hm-sl">${esc(l)}</span><span class="hm-sn"><b>${n}</b><span class="${noteCls}">${esc(note)}</span></span></span></button>`;
+
+    // Claims, as Team's tasks
+    const TABS = [['submitted', 'Need HR approval'], ['approved', 'HR approved'], ['paid', 'Paid'], ['all', 'All']];
+    if (!st.claimTab) st.claimTab = waiting.length ? 'submitted' : 'all';
+    const inTab = claims.filter((c) => st.claimTab === 'all' || c.state === st.claimTab);
+    const claimRows = inTab.slice(0, 6);
+    const ago = (iso) => { if (!iso) return ''; const d = ymd(new Date(iso)); return d === today ? 'today' : d === addDays(today, -1) ? 'yesterday' : fmtDay(d); };
+    const claimRow = (c) => {
+      const n = Claims.itemsOf(c);
+      const act = finAdmin() && c.state === 'submitted' ? ['approve', 'HR Approve'] : finAdmin() && c.state === 'approved' ? ['paid', 'Paid On…'] : null;
+      const sub = c.state === 'paid' && c.paidOn ? `paid ${esc(fmtDay(c.paidOn))}` : c.state === 'approved' ? 'HR approved' : `submitted ${esc(ago(c.submittedAt))}`;
+      return `<div class="hm-row ohm-claim" data-claim-row="${c.id}" data-oh="claim" data-id="${c.id}">${avatarHTML(c.userId, 30)}
+          <span class="hm-main"><span class="hm-t">${esc(fullName(userById(c.userId)))}</span><span class="hm-sub">${n} item${n === 1 ? '' : 's'} · ${sub}</span></span>
+          <span class="ohm-amt">${AED(Claims.totalOf(c))}</span>
+          ${act ? `<button type="button" class="hm-btn ohm-act" data-oh="${act[0]}" data-id="${c.id}">${act[1]}</button>` : `<span class="ohm-state ${c.state}">${esc(CLAIM_PILL[c.state][0])}</span>`}</div>`;
+    };
+    const claimsCard = hasFin ? `<section class="hm-card">
+        <div class="hm-h"><div class="hm-hl"><h2>Claims</h2><span class="hm-seg">${TABS.map(([k, l]) => { const n = k === 'all' ? claims.length : cnt(k); return `<button type="button" class="hm-tab ${st.claimTab === k ? 'on' : ''} ${k === 'submitted' && n ? 'amber' : ''}" data-oh="claim-tab" data-v="${k}">${l}<i>${n}</i></button>`; }).join('')}</span></div><a class="hm-a" data-oh="see-all">See all</a></div>
+        ${claimRows.length ? claimRows.map(claimRow).join('') + (inTab.length > claimRows.length ? `<button type="button" class="hm-more-btn" data-oh="see-all">+${inTab.length - claimRows.length} more · See all</button>` : '')
+          : `<div class="hm-empty">${st.claimTab === 'submitted' ? 'Nothing waiting for HR approval.' : st.claimTab === 'all' ? `No claims submitted yet for ${esc(monthName(m))}.` : `None ${st.claimTab === 'paid' ? 'paid' : 'HR approved'} yet this month.`}</div>`}
+      </section>` : '';
+
+    // Latest in Client Assets: pictures; clients on one sliding row, newest first, each with its files this week
+    const newest = new Map();
+    files.forEach(({ c, a }) => { if (!newest.has(c.id)) newest.set(c.id, a.addedAt || ''); });
+    const chipClients = clientsSorted().slice().sort((x, y) => String(newest.get(y.id) || '').localeCompare(String(newest.get(x.id) || '')));
+    if (st.client !== 'all' && !chipClients.some((c) => c.id === st.client)) st.client = 'all';
+    const q = st.q.trim();
+    let shown;
+    if (q) { const scope = st.client === 'all' ? null : chipClients.find((c) => c.id === st.client); shown = caSearch(q, scope || null).files.sort((x, y) => String(y.a.addedAt || '').localeCompare(String(x.a.addedAt || ''))).slice(0, 24); }
+    else shown = files.filter(({ c }) => st.client === 'all' || c.id === st.client).slice(0, 8);
+    st.thumbs = shown;
+    const freshOf = (id) => fresh.filter(({ c }) => c.id === id).length;
+    const thumb = ({ c, f, a }) => {
+      const img = fileKind(a) === 'image' && Host.isNative ? `<img src="${imgUrl(a, 320)}" alt="" loading="lazy">` : '';
+      return `<div class="hm-thumb" data-oh="thumb" data-v="${esc(a.id)}" data-file="${a.id}" data-client="${c.id}" data-folder="${f.id}" title="${esc(a.name)} · ${esc(c.name)} › ${esc(folderPath(c, f))}" style="--pc:${esc(projColorOfClient(c))}">${img}<span class="hm-kind">${esc(extOf(a.name))}</span><span class="hm-fname">${esc(a.name)}</span></div>`;
+    };
+    const assetsCard = `<section class="hm-card ohm-assets">
+        <div class="hm-h"><h2>${q ? 'Found in Client Assets' : 'Latest in Client Assets'}</h2><a class="hm-a" data-nav="clients">Open Client Assets</a></div>
+        <div class="ohm-chips" id="ohm-chips">${[['all', 'All clients', fresh.length]].concat(chipClients.map((c) => [c.id, c.name, freshOf(c.id)])).map(([id, l, n]) => `<button type="button" class="ohm-chip ${st.client === id ? 'on' : ''}" data-oh="client" data-v="${id}">${esc(l)}<i>${n}</i></button>`).join('')}</div>
+        ${shown.length ? `<div class="hm-files ohm-grid">${shown.map(thumb).join('')}</div>` : `<div class="hm-empty">${q ? 'No files match — try a client, a folder or a file type like “pdf”.' : 'Files added to Client Assets show up here.'}</div>`}
+      </section>`;
+
+    // the month's claims, as Team goals achieved: paid so far of everything claimed, its ring growing from 0 once
+    const total = claims.reduce((s, c) => s + Claims.totalOf(c), 0), paid = claims.filter((c) => c.state === 'paid').reduce((s, c) => s + Claims.totalOf(c), 0);
+    const p = total ? paid / total : 0, R = 30, C = 2 * Math.PI * R, e = shownFor();
+    const seg = (s) => (claims.length ? (cnt(s) / claims.length) * 100 : 0);
+    const monthCard = hasFin ? `<section class="hm-card hm-goal ohm-month" data-oh="claims-open">
+        <h2>${esc(monthName(m))}’s claims</h2>
+        <div class="hm-gr"><svg viewBox="0 0 76 76" width="76" height="76" aria-hidden="true"><circle cx="38" cy="38" r="${R}" class="hm-ring-bg"/>${p > 0 ? `<circle cx="38" cy="38" r="${R}" class="hm-ring${e < 1200 ? ' hm-grow' : ''}" style="--c:${C.toFixed(1)};stroke-dasharray:${C.toFixed(1)};stroke-dashoffset:${(C * (1 - p)).toFixed(1)};${e > 0 && e < 1200 ? `animation-delay:-${e}ms` : ''}" transform="rotate(-90 38 38)"/>` : ''}<text x="38" y="43" text-anchor="middle">${claims.length ? Math.round(p * 100) + '%' : '–'}</text></svg>
+          <div><b>Paid so far</b><span class="ohm-of">${AED0(paid)} of ${AED0(total)}</span>${waiting.length ? `<span class="warn">${waiting.length} waiting for HR approval</span>` : claims.length ? '<span class="ok">nothing waiting</span>' : '<span class="ohm-of">no claims yet</span>'}</div></div>
+        <div class="ohm-bar"><i class="sub" style="width:${seg('submitted')}%"></i><i class="ok" style="width:${seg('approved')}%"></i><i class="paid" style="width:${seg('paid')}%"></i></div>
+        <div class="ohm-legend"><span><b class="sub">${cnt('submitted')}</b> submitted</span><span><b class="ok">${cnt('approved')}</b> HR approved</span><span><b class="paid">${cnt('paid')}</b> paid</span></div>
+      </section>` : '';
+
+    // Inbox: the latest, unread first look (bold, the dot)
+    const inboxRows = notes.slice(0, 6);
+    const inboxCard = `<section class="hm-card ohm-inbox">
+        <div class="hm-h"><h2>Inbox</h2><a class="hm-a" data-nav="inbox">Open Inbox</a></div>
+        ${inboxRows.length ? inboxRows.map((n) => `<div class="hm-act ${n.read ? 'read' : 'unread'}" data-action="open-notif" data-id="${n.id}">${avatarHTML(n.from, 30)}<span class="hm-act-txt">${notifMsg(n, null)}</span><span class="hm-when">${esc(timeAgo(n.at))}</span>${n.read ? '' : '<i class="ohm-dot"></i>'}</div>`).join('') : '<div class="hm-empty">All caught up.</div>'}
+      </section>`;
+
+    // Team today: out of office, and birthdays today and this week
+    const inDays = (md) => { if (!/^\d{2}-\d{2}$/.test(String(md || ''))) return null; for (let i = 0; i < 7; i++) { const d = addDays(today, i); if (d.slice(5) === md) return i; } return null; };
+    const people = [];
+    team.forEach((x) => { const a = awayDay(x); if (a) people.push({ x, k: 0, note: `Out of office · back ${awayLabel(a).split(' ')[0]}`, cls: 'away' }); });
+    team.forEach((x) => { const i = inDays(x.bday); if (i != null) people.push({ x, k: 1 + i, note: i === 0 ? 'Birthday today 🎂' : `Birthday ${parseYmd(addDays(today, i)).toLocaleDateString('en-US', { weekday: 'short' })}`, cls: i === 0 ? 'bday' : '' }); });
+    people.sort((a, b) => a.k - b.k);
+    const teamCard = `<section class="hm-card ohm-team">
+        <div class="hm-h"><h2>Team today</h2><a class="hm-a ohm-dim" data-oh="team">${team.length} people</a></div>
+        ${people.length ? people.slice(0, 6).map(({ x, note, cls }) => `<div class="ohm-person" data-oh="team">${avatarHTML(x.id, 26)}<span class="ohm-pn">${esc(fullName(x))}</span><span class="ohm-pnote ${cls}">${esc(note)}</span></div>`).join('') : '<div class="hm-empty">Everyone’s in today.</div>'}
+      </section>`;
+
+    const canAdd = !isFinUser(u) && u.active !== false;
+    return `<div class="hm hm-lead ohm">
+      <header class="hm-head"><div><div class="hm-date">${esc(new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }))} · Office Admin</div><h1>${esc(hello())}</h1></div>
+        <div class="hm-btns">${canAdd ? '<button type="button" class="hm-btn primary" data-oh="add-claim">+ Add claim</button>' : ''}</div></header>
+      <section class="hm-stats">
+        ${hasFin ? card('orange', 'claim', 'Claims to approve', waiting.length, waiting.length ? `${AED0(waiting.reduce((s, c) => s + Claims.totalOf(c), 0))} waiting` : 'none waiting', waiting.length ? 'orange' : 'ok', 'claims') : card('blue', 'team', 'Team members', team.length, 'Open Team page', 'ohm-n', 'team')}
+        ${card('red', 'tray', 'Unread in your Inbox', unreadN.length, unreadNote, 'ohm-n', 'inbox')}
+        ${card('blue', 'folder', 'New in Client Assets', fresh.length, 'this week', 'ok', 'assets')}
+      </section>
+      <div class="hm-grid">
+        <div class="hm-col">${claimsCard}${assetsCard}</div>
+        <aside class="hm-col">${monthCard}${inboxCard}${teamCard}</aside>
+      </div>
+    </div>`;
+  }
+
   function view() {
     setTimeout(barSearch, 0);
+    if (Host.isMacApp) {
+      // the clients' row stays where it was slid to, and the pictures load as Home's
+      setTimeout(() => { const r = $('#ohm-chips'); if (r && st.chipX) r.scrollLeft = st.chipX; if (Host.isNative) hydrateThumbs($('#content')); }, 0);
+      return macView();
+    }
     const u = me();
     const h = new Date().getHours();
     const part = Occasions.greeting(todayStr()) || (h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening');
@@ -133,12 +263,20 @@ const OfficeHome = (() => {
   const redraw = () => { if (ui.view === 'home' && isOffice()) renderContent(); };
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-oh]');
-    if (!b || !b.closest('.oh')) return;
+    if (!b || !b.closest('.oh, .ohm')) return;
     e.stopPropagation();
     const k = b.dataset.oh, v = b.dataset.v;
+    // the Mac app's Home (macView)
+    if (k === 'claim-tab') { st.claimTab = v; return redraw(); }
+    if (k === 'add-claim') return Claims.newClaim(Claims.claimMonth());
+    if (k === 'inbox') return go('inbox');
+    if (k === 'assets') { st.client = 'all'; return go('clients'); }
+    if (k === 'claims-open') { Claims.st.finMonth = Claims.claimMonth(); return go('fin-reimb'); }
+    if (k === 'thumb') { const list = (st.thumbs || []).map((x) => x.a), a = list.find((x) => x.id === v); if (a) previewFile(a, list); return; }
+    if (k === 'claim' && e.target.closest('[data-oh="approve"], [data-oh="paid"]')) return;
     if (k === 'file') { if (e.target.closest('.oh-fbtns')) return; st.sel = st.sel === b.dataset.id ? null : b.dataset.id; $('#oh-files').innerHTML = filesHTML(); return; }
     if (k === 'open-folder') return openClient(b.dataset.client, b.dataset.folder);
-    if (k === 'client') { st.client = v; st.sel = null; return redraw(); }
+    if (k === 'client') { st.client = v; st.sel = null; const r = $('#ohm-chips'); st.chipX = r ? r.scrollLeft : 0; return redraw(); }
     if (k === 'seg') { st[b.dataset.key] = v; return redraw(); }
     if (k === 'focus') { st.focus = st.focus === v ? null : v; if (v === 'inbox') st.ibTab = null; if (v === 'fin') st.finTab = 'claims'; return redraw(); }
     if (k === 'team') return go('team');
@@ -162,7 +300,7 @@ const OfficeHome = (() => {
   });
   // right-click: a claim — Open Claim · HR Approved · Paid On… · Share PDF; a file — Open Folder · Download (the iPhone's)
   document.addEventListener('contextmenu', (e) => {
-    if (!e.target.closest || !e.target.closest('.oh') || (typeof Phone !== 'undefined' && Phone.on)) return;
+    if (!e.target.closest || !e.target.closest('.oh, .ohm') || (typeof Phone !== 'undefined' && Phone.on)) return;
     const at = atPoint(e.clientX, e.clientY);
     const cr = e.target.closest('[data-claim-row]');
     if (cr) {
@@ -200,6 +338,7 @@ const OfficeHome = (() => {
     e.stopImmediatePropagation();
     st.q = e.target.value; st.sel = null;
     if (ui.view !== 'home') { go('home'); return; }
+    if (Host.isMacApp) return redraw();
     const box = $('#oh-files'); if (box) box.innerHTML = filesHTML();
   }, true);
   document.addEventListener('input', (e) => {

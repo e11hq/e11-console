@@ -4988,8 +4988,9 @@ const MacSF = (() => {
     'hm-flag': 'flag.fill', 'hm-cal': 'calendar', 'hm-doc': 'doc', 'search': 'magnifyingglass', 'chat': 'bubble.left', 'folder': 'folder',
     'download': 'arrow.down.circle', 'more': 'ellipsis', 'chev': 'chevron.up.chevron.down', 'check': 'checkmark.circle', 'clock': 'clock',
     'hm-tick': 'checkmark', 'hm-bang': 'exclamationmark',   // (On-time streak's small round marks — 15:42)
+    'oh-claim': 'dollarsign.circle', 'oh-tray': 'tray', 'oh-folder': 'folder', 'oh-team': 'person.2',   // (the Office Admin's Home cards)
   };
-  const KEY = 'e11-sf-2';
+  const KEY = 'e11-sf-3';
   function css(images) {
     return Object.entries(MAP).filter(([, n]) => images[n]).map(([k, n]) =>
       `html.mac-sf ${SCOPE} [data-i="${k}"]{background-color:currentColor;-webkit-mask:url(${images[n]}) center/contain no-repeat;mask:url(${images[n]}) center/contain no-repeat}`
