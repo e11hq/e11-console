@@ -418,13 +418,21 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
     guard let id = c.identifier as? String else { return }
     animator.addCompletion { [weak self] in self?.navigationController?.pushViewController(ChatVC(group: id), animated: true) }
   }
+  // what a swipe does, done once the row has slid back into place (Apple's own end of the swipe)
+  private var afterSwipe: (() -> Void)?
+  func tableView(_ tv: UITableView, didEndEditingRowAt ip: IndexPath?) {
+    guard let f = afterSwipe else { return }
+    afterSwipe = nil; f()
+  }
   // swiping a group right: Unread / Read (WhatsApp's — Haris 2026-11-13), Apple's own swipe
   func tableView(_ tv: UITableView, leadingSwipeActionsConfigurationForRowAt ip: IndexPath) -> UISwipeActionsConfiguration? {
     let gid: String? = { switch data.itemIdentifier(for: ip) { case .group(let id)?, .ghit(let id)?: return id; default: return nil } }()
     guard let id = gid, Talk.shared.groups[id] != nil else { return nil }
     let T = Talk.shared, isUnread = T.unread(id) > 0
-    let a = UIContextualAction(style: .normal, title: isUnread ? "Read" : "Unread") { _, _, done in
-      if isUnread { T.markRead(id) } else { T.markUnread(id) }
+    // (done first, and the change once Apple's swipe has slid back — didEndEditingRowAt: marked at once, the row was set
+    //  again while it was still sliding back and jumped into place, the dot and the counts blinking — Haris 2026-11-15)
+    let a = UIContextualAction(style: .normal, title: isUnread ? "Read" : "Unread") { [weak self] _, _, done in
+      self?.afterSwipe = { if isUnread { T.markRead(id) } else { T.markUnread(id) } }
       done(true)
     }
     a.image = UIImage(systemName: isUnread ? "envelope.open.fill" : "envelope.badge.fill"); a.backgroundColor = Look.accent
