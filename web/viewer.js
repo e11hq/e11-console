@@ -24,6 +24,19 @@ const Viewer = (() => {
       const r = el.getBoundingClientRect();
       return r.width > 4 ? { x: r.left, y: r.top, w: r.width, h: r.height } : null;
     };
+    // (the thumbnail of a file on the page — its own picture, on screen: the Mac's preview flies back into the one on show,
+    //  not only the one it opened from — Haris 2026-11-15)
+    const thumbOf = (a) => {
+      const id = CSS.escape(String(a.id || ''));
+      if (!id) return null;
+      const els = [...document.querySelectorAll(`[data-file="${id}"], [data-v="${id}"], [data-id="${id}"], [data-att="${id}"], [data-pv="${id}"]`)];
+      for (const el of els) {
+        const pic = el.tagName === 'IMG' ? el : el.querySelector('img') || el;
+        const r = pic.getBoundingClientRect();
+        if (r.width > 4 && r.height > 4 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth && getComputedStyle(pic).visibility !== 'hidden') return { x: r.left, y: r.top, w: r.width, h: r.height };
+      }
+      return null;
+    };
     const abs = (u) => (u ? new URL(u, location.href).href : '');
     function fileOf(a) {
       const kind = fileKind(a), ext = fileExt(a.name) || 'file';
@@ -44,7 +57,7 @@ const Viewer = (() => {
       if (!ev) return;
       const a = ev.id ? byId(ev.id) : null;
       switch (ev.ev) {
-        case 'at': if (a) { at = list.indexOf(a); ui.previewAtt = a; } break;
+        case 'at': if (a) { at = list.indexOf(a); ui.previewAtt = a; if (mac) set({ fromId: a.id, from: thumbOf(a) }); } break;
         case 'pages':
           if (!a) break;
           Host.call('pdfPages', { id: a.id, path: a.path }).then((r) => {

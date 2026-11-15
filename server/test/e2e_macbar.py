@@ -75,6 +75,10 @@ async def main():
                 await pg.wait_for_timeout(300)
                 pv = await E("window.__native.preview && [window.__native.preview.files.length, window.__native.preview.at, !!window.__native.preview.files[0].kind, document.body.classList.contains('pv-open')]")
                 check(pv is not None and pv[1] == 1 and pv[2] and pv[3] is False, f'a file opened: the Mac app\u2019s own preview, not the page\u2019s {pv}')
+                # moved to another file (Next): the page tells the Mac where that file's own thumbnail is, to fly back into it
+                await E("window.__native.calls.length = 0; (() => { const t = db.tasks.find((x) => x.id === window.__pvT); window.__e11Preview({ ev: 'at', id: t.attachments[0].id }); })()")
+                await pg.wait_for_timeout(100)
+                check(await E("window.__native.calls.includes('previewSet')"), 'Next in the preview: the page says where that file’s own thumbnail is')
                 await E("window.__e11Preview({ ev: 'closed' })")
                 # scroll bars: WebKit's hidden, a thin overlay bar while a list scrolls, gone a moment after (17:19)
                 await E("(() => { const l = document.querySelector('.hm-cl-list') || document.getElementById('content'); l.scrollTop = 40; l.dispatchEvent(new Event('scroll')); })()")
