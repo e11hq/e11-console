@@ -215,11 +215,31 @@ const OfficeHome = (() => {
     </div>`;
   }
 
+  // the Mac app's pictures, each kept by its file and what it shows: the same one drawn again is the node already on show
+  // (its picture decoded, no reload, no blink); a new one's picture fades in once it has loaded
+  const thumbKeep = new Map();
+  function keepThumbs() {
+    const r = $('#ohm-chips'); if (r && st.chipX) r.scrollLeft = st.chipX;
+    const grid = $('.ohm .ohm-grid');
+    const next = new Map();
+    if (grid) [...grid.children].forEach((el) => {
+      const key = el.outerHTML, old = thumbKeep.get(key);
+      if (old && old !== el) { el.replaceWith(old); next.set(key, old); return; }
+      next.set(key, el);
+      const img = el.querySelector('img');
+      if (img) { if (img.complete && img.naturalWidth) img.classList.add('in'); else img.addEventListener('load', () => img.classList.add('in'), { once: true }); }
+    });
+    // (kept for the ones gone from show too — a client picked and back finds them; the latest 120, the oldest let go)
+    next.forEach((v, k) => { thumbKeep.delete(k); thumbKeep.set(k, v); });
+    while (thumbKeep.size > 120) thumbKeep.delete(thumbKeep.keys().next().value);
+    if (Host.isNative && grid) hydrateThumbs(grid);
+  }
   function view() {
     setTimeout(barSearch, 0);
     if (Host.isMacApp) {
-      // the clients' row stays where it was slid to, and the pictures load as Home's
-      setTimeout(() => { const r = $('#ohm-chips'); if (r && st.chipX) r.scrollLeft = st.chipX; if (Host.isNative) hydrateThumbs($('#content')); }, 0);
+      // drawn again (a client picked, a search, a live change): before the next frame, the pictures already on show are kept
+      // as they are — never loaded again (Haris 18:13) — only a new one fades in; the clients' row stays where it was slid to
+      queueMicrotask(keepThumbs);
       return macView();
     }
     const u = me();
