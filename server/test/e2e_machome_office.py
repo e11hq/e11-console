@@ -60,6 +60,21 @@ async def main():
                     check(not t[0] and t[1], 'the dirham sign, no "AED"')
                     check('-apple-system' in t[2], f'SF Pro (the system font) {t[2]}')
                     check(t[4] == ['oh-claim', 'oh-tray', 'oh-folder'] and await E("['oh-claim','oh-tray','oh-folder','oh-sub','oh-expense','oh-reimb'].every((k) => MacSF.MAP[k])"), f'the symbols are Apple’s SF Symbols {t[4]}')
+                    # the head steady whatever the total (Haris 18:06): the tabs and See all at the same place for every tab
+                    spots = []
+                    for k in ('all', 'sub', 'expense', 'reimb'):
+                        await pg.locator(f'.ohm .ohm-exp [data-oh="exp-tab"][data-v="{k}"]').click(); await pg.wait_for_timeout(200)
+                        spots.append(await E("(() => { const r = (s) => { const b = document.querySelector(s).getBoundingClientRect(); return [Math.round(b.left), Math.round(b.top)]; }; return [r('.ohm-exp .hm-seg'), r('.ohm-exp .hm-a'), document.querySelector('.ohm-exp .ohm-sum-t b').textContent]; })()"))
+                    check(len({json.dumps(x[:2]) for x in spots}) == 1, f'Expenses: the tabs and See all never move with the total {spots}')
+                    await E("document.querySelector('.ohm-exp .ohm-sum-t b').textContent = '\u20C31,250,000.00'"); await pg.wait_for_timeout(50)
+                    big = await E("(() => { const b = document.querySelector('.ohm-exp .hm-a').getBoundingClientRect(), c = document.querySelector('.ohm-exp').getBoundingClientRect(), t = document.querySelector('.ohm-exp .ohm-sum-t').getBoundingClientRect(); return [Math.round(b.left), Math.round(b.top), t.right <= c.right]; })()")
+                    check(big[:2] == spots[-1][1] and big[2], f'...the total at the foot: a seven-figure one fits, the head never moves {big}')
+                    # ...and at every window width down to the Mac app's smallest (960): the head on one line inside its card
+                    for w in (1440, 1280, 1180, 1100, 960):
+                        await pg.set_viewport_size({'width': w, 'height': 900}); await pg.wait_for_timeout(250)
+                        fit = await E("(() => { const c = document.querySelector('.ohm-exp'), h = c.querySelector('.hm-h'), a = c.querySelector('.hm-a').getBoundingClientRect(), s = c.querySelector('.hm-seg').getBoundingClientRect(), cb = c.getBoundingClientRect(); return [Math.round(cb.width), a.right <= cb.right - 10 && s.right <= cb.right - 10, h.scrollWidth <= h.clientWidth + 1]; })()")
+                        check(fit[1] and fit[2], f'Expenses’ head on one line inside its card at {w} wide {fit}')
+                    await pg.set_viewport_size({'width': 1440, 'height': 900}); await pg.wait_for_timeout(250)
                     await pg.locator('.ohm .ohm-exp .hm-tab', has_text='Subscriptions').click(); await pg.wait_for_timeout(300)
                     check(await E("document.querySelector('.ohm-exp .hm-tab.on').dataset.v") == 'sub', 'an Expenses tab picked')
                     # a tab picked; the ring rule (grows from 0 once the page shows)

@@ -752,10 +752,25 @@ html.mac-chrome .ohm-pn { flex: 1; min-width: 0; white-space: nowrap; overflow: 
 html.mac-chrome .ohm-pnote { font-size: 12px; color: var(--mc-dim); white-space: nowrap; }
 html.mac-chrome .ohm-pnote.away { color: var(--mc-orange); } html.mac-chrome .ohm-pnote.bday { color: var(--mc-blue); }
 /* Expenses (below Claims): the kind as Home's small coloured square, the month's total beside See all */
-html.mac-chrome .ohm-exp .hm-h .ohm-total { margin-left: auto; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
 html.mac-chrome .ohm-k { width: 30px; height: 30px; border-radius: 8px; }
 html.mac-chrome .ohm-k.sub { background: color-mix(in srgb, var(--mc-blue) 18%, transparent); color: var(--mc-blue); }
 html.mac-chrome .ohm-k.expense { background: color-mix(in srgb, var(--mc-orange) 18%, transparent); color: var(--mc-orange); }
 html.mac-chrome .ohm-k.reimb { background: color-mix(in srgb, #bf5af2 18%, transparent); color: #bf5af2; }
 html.mac-chrome[data-theme="light"] .ohm-k.reimb { color: #af52de; }
 html.mac-chrome .ohm-x:not([data-oh]) { cursor: default; }
+/* (a narrow window: the card too narrow for one line — by its width only: the title and See all on the first line, the tabs on their own line under it, sliding sideways if they still don't fit) */
+html.mac-chrome .ohm-exp { container-type: inline-size; }
+@container (max-width: 600px) {
+  html.mac-chrome .ohm-exp .hm-h { flex-wrap: wrap; row-gap: 8px; }
+  html.mac-chrome .ohm-exp .hm-hl { display: contents; }
+  html.mac-chrome .ohm-exp .hm-hl h2 { order: 0; }
+  html.mac-chrome .ohm-exp .hm-h .hm-a { order: 2; margin-left: auto; }
+  html.mac-chrome .ohm-exp .hm-seg { order: 3; max-width: 100%; overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; }
+  html.mac-chrome .ohm-exp .hm-seg::-webkit-scrollbar { display: none; }
+  html.mac-chrome .ohm-exp .hm-tab { flex: none; white-space: nowrap; }
+}
+/* Expenses' total at the foot, under the amounts (Haris 18:07) — the head as Claims', never moving with an amount */
+html.mac-chrome .ohm-sum { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; padding: 10px 18px 2px 10px; border-top: .5px solid var(--mc-line); }
+html.mac-chrome .ohm-more { border: 0; background: none; padding: 0; font: inherit; font-size: 12px; color: var(--mc-blue); cursor: pointer; }
+html.mac-chrome .ohm-sum-t { display: inline-flex; align-items: baseline; gap: 10px; font-size: 12px; color: var(--mc-dim); white-space: nowrap; }
+html.mac-chrome .ohm-sum-t b { font-size: 13px; font-weight: 600; color: var(--mc-fg); font-variant-numeric: tabular-nums; }

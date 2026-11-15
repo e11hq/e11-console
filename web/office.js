@@ -139,10 +139,10 @@ const OfficeHome = (() => {
     const expIn = exp.filter((x) => st.expTab === 'all' || x.kind === st.expTab), expRows = expIn.slice(0, 5);
     st.expRows = expIn;
     const expCard = hasFin ? `<section class="hm-card ohm-exp">
-        <div class="hm-h"><div class="hm-hl"><h2>Expenses</h2><span class="hm-seg">${EK.map(([k, l]) => `<button type="button" class="hm-tab ${st.expTab === k ? 'on' : ''}" data-oh="exp-tab" data-v="${k}">${l}<i>${k === 'all' ? exp.length : exp.filter((x) => x.kind === k).length}</i></button>`).join('')}</span></div><span class="ohm-total">${AED(expIn.reduce((a, x) => a + x.amount, 0))}</span><a class="hm-a" data-oh="exp-all">See all</a></div>
+        <div class="hm-h"><div class="hm-hl"><h2>Expenses</h2><span class="hm-seg">${EK.map(([k, l]) => `<button type="button" class="hm-tab ${st.expTab === k ? 'on' : ''}" data-oh="exp-tab" data-v="${k}">${l}<i>${k === 'all' ? exp.length : exp.filter((x) => x.kind === k).length}</i></button>`).join('')}</span></div><a class="hm-a" data-oh="exp-all">See all</a></div>
         ${expRows.length ? expRows.map((x) => `<div class="hm-row ohm-claim ohm-x" ${x.invoice ? `data-oh="exp-inv" data-v="${esc(x.id)}"` : ''}><span class="hm-ic ohm-k ${x.kind}">${sv(x.kind, MI[x.kind])}</span>
             <span class="hm-main"><span class="hm-t">${esc(x.name)}</span><span class="hm-sub">${EKL[x.kind] || ''} · ${esc(fmtDay(x.date))}${x.invoice ? '' : ' · no invoice yet'}</span></span>
-            <span class="ohm-amt">${AED(x.amount)}</span></div>`).join('') + (expIn.length > expRows.length ? `<button type="button" class="hm-more-btn" data-oh="exp-all">+${expIn.length - expRows.length} more · See all</button>` : '')
+            <span class="ohm-amt">${AED(x.amount)}</span></div>`).join('') + `<div class="ohm-sum">${expIn.length > expRows.length ? `<button type="button" class="ohm-more" data-oh="exp-all">+${expIn.length - expRows.length} more · See all</button>` : '<span></span>'}<span class="ohm-sum-t">Total in ${esc(monthName(tm))}<b>${AED(expIn.reduce((a, x) => a + x.amount, 0))}</b></span></div>`
           : `<div class="hm-empty">No ${st.expTab === 'all' ? 'expenses' : EK.find(([k]) => k === st.expTab)[1].toLowerCase()} in ${esc(monthName(tm))} yet.</div>`}
       </section>` : '';
 
