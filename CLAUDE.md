@@ -635,6 +635,12 @@ code without telling Haris first and his yes.
 **E11 CONSOLE iPhone 1.2.0 — APPROVED and RELEASED on the App Store (Haris 2026-11-15 09:35 approved; released 09:46, all 175
 countries, public):** build 1736, commit b3fe45a, branch `approved/appstore-ios-1.2.0-build-1736` (never moved or deleted). The next
 update is **1.2.1** (Haris 09:41): sign out on this device only. The macOS 1.0 still Waiting for Review.
+**THE iPHONE APP — STABLE, LOCKED: 1.2.1 build 1741 (Haris, 2026-11-15 10:21: "lock the ios apps for talk/console"):** commit
+a736a4a, branches `stable/ios-1741` and `locked/ios-app-1741` (never moved or deleted; 1736's and earlier stay as history). 1741 =
+1736 + signing out on this iPhone only (its own sign-in forgotten — never Cloudflare's sign-out, which signed the person out on every
+device) + the sign-out alert "You'll need your password to sign in again". With server 1.9.60 (the website / Mac: /sign-out) and
+Cloudflare's global session at 15 minutes. Quick build, signed and kept; TestFlight only on Haris's yes. E11 Talk stays locked at
+144 (its latest). Nothing changes in its look, behaviour or code without telling Haris first and his yes.
 **E11 TALK — STABLE, LOCKED, the App Store release candidate: 1.0.0 build 123 (Haris, 2026-11-14 13:08: "Lock the talk app as
 stable app store release candidate"):** commit 5f06b6a on talk-chat-1, branches `stable/talk-123`, `locked/talk-123` and
 `candidate/appstore-talk-1.0.0-build-123` (never moved or deleted; 120's and 109's stay as history). 123 = 120 + the photo
