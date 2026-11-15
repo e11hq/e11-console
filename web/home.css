@@ -515,4 +515,78 @@ html.mac-chrome .av-stack > :not(:last-child) {
   mask: radial-gradient(circle at calc(var(--s, 24px) * 1.5 - 6px) 50%, transparent calc(var(--s, 24px) / 2 + 2px), #000 calc(var(--s, 24px) / 2 + 2.5px)); }
 html.mac-chrome .av-stack .av-done .av { outline: 2px solid var(--mc-green); outline-offset: -2px; }
 html.mac-chrome .av-stack .av-done i { display: none; }
+/* ===== checked against the mock-up, H1 / H2 (Haris 2026-11-15 14:58: "font sizes … exactly as the mockup, and all colors …
+   exactly same"): what differed, set to the mock-up's own values ===== */
+html.mac-chrome { --mc-label: #f5f5f7; --mc-bardim: #98989d; }
+html.mac-chrome[data-theme="light"] { --mc-label: #1d1d1f; --mc-bardim: #6e6e73; }
+/* the top bar: the title 15 bold and Talk in the label colour; the search's words and ⌘K in the bar's grey */
+html.mac-chrome #topbar .page-title { font-weight: 700; color: var(--mc-label); }
+html.mac-chrome #tb-talk { color: var(--mc-label); }
+html.mac-chrome #topbar .search input::placeholder, html.mac-chrome #topbar .search .ic, html.mac-chrome #topbar .search kbd { color: var(--mc-bardim); }
+/* + New task: medium, not semibold */
+html.mac-chrome :is(.hm, .oh) .hm-btn.primary { font-weight: 500; }
+/* a row's "due Today": 11.5, the label colour; the CD chip's yellow as the mock-up's in light too */
+html.mac-chrome .hm-sub .due { font-size: 11.5px; }
+html.mac-chrome .hm-sub .due.today { color: var(--mc-label); }
+html.mac-chrome[data-theme="light"] .hm-cd { color: var(--mc-yellow); }
+/* faces: semibold initials at 0.4 of their size — 24 on a task row, 22 in Schedule, 32 in Recent activity, 30 in the goal */
+html.mac-chrome :is(.hm, .oh) .av { font-weight: 600; }
+html.mac-chrome .hm-who .av-stack { --s: 24px !important; }
+html.mac-chrome .hm-who .av { width: 24px !important; height: 24px !important; font-size: 9px !important; }
+html.mac-chrome .hm-ag .av { font-size: 8px !important; }
+html.mac-chrome .hm-act > .av { font-size: 12px !important; }
+/* the numbers' change beside them: regular; the big number's words 12 */
+html.mac-chrome .hm-delta { font-weight: 400; }
+html.mac-chrome .hm-big span { font-size: 12px; }
+/* Recent activity: the name bold, what they did and the task 13 */
+html.mac-chrome .hm .hm-act-txt b { font-weight: 700 !important; }
+html.mac-chrome .hm-act-txt .hm-mute, html.mac-chrome .hm-act-txt .hm-link { font-size: 13px; }
+/* a card's grey words at its top right (Monday, the clients' count, 1 of 4 done): 12; Schedule's day letters regular */
+html.mac-chrome .hm-mute { font-size: 12px; }
+html.mac-chrome .hm-day { font-weight: 400; }
+/* the other Home (Production, Social and everyone else), checked against H3 / H4 the same way */
+html.mac-chrome .hm-next { background: var(--mc-card); color: var(--mc-fg); padding: 14px 16px; grid-template-columns: minmax(0, 1fr) 260px; gap: 22px; }
+html.mac-chrome :root[data-theme] .hm-next, html.mac-chrome .hm-next { background: var(--mc-card) !important; }
+html.mac-chrome .hm-next h2 { margin: 10px 0 4px; font-size: 22px; font-weight: 600; color: var(--mc-fg); }
+html.mac-chrome .hm-chips { gap: 6px; }
+html.mac-chrome .hm-pill { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 10px; color: var(--mc-dim); background: color-mix(in srgb, currentColor 15%, transparent); }
+html.mac-chrome .hm-pill.acc { background: var(--mc-blue); color: #fff; }
+html.mac-chrome .hm-pill.red { color: var(--mc-red); }
+html.mac-chrome .hm-pill.amber { color: var(--mc-orange); }
+html.mac-chrome .hm-card .hm-pill.red.solid { min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; background: var(--mc-red); color: #fff; margin-left: auto; }
+html.mac-chrome .hm-nsub { font-size: 12.5px; color: var(--mc-dim); }
+html.mac-chrome .hm-next .hm-btn.ghost { background: var(--mc-glass); box-shadow: inset 0 0 0 .5px var(--mc-glass-line); color: var(--mc-fg); }
+html.mac-chrome .hm-next .hm-btn.text { background: none; box-shadow: none; color: var(--mc-blue); padding: 0 6px; }
+html.mac-chrome .hm-next .hm-btn.text small { color: var(--mc-dim); }
+html.mac-chrome .hm-ncl { background: none; padding: 0; border-radius: 0; font-size: 12.5px; }
+html.mac-chrome .hm-ncl-h { font-size: 12.5px; color: var(--mc-dim); }
+html.mac-chrome .hm-prog { height: 4px; border-radius: 2px; background: var(--mc-line); margin: 7px 0 3px; }
+html.mac-chrome .hm-prog i { background: var(--mc-blue); border-radius: 2px; }
+html.mac-chrome .hm-sub-i { font-size: 12.5px; color: var(--mc-fg); padding: 3.5px 0; gap: 8px; }
+html.mac-chrome .hm-sub-i.on { color: var(--mc-dim); }
+html.mac-chrome .hm-box { width: 16px; height: 16px; border-radius: 4px; border: 0; box-shadow: inset 0 0 0 1px var(--mc-ter); background: none; }
+html.mac-chrome .hm-sub-i.on .hm-box { background: var(--mc-blue); box-shadow: none; color: #fff; }
+html.mac-chrome .hm-ncl-more { color: var(--mc-dim); }
+html.mac-chrome .hm-note { font-size: 12px; color: var(--mc-dim); }
+html.mac-chrome .hm-lh b { color: var(--mc-fg); font-weight: 900; }
+html.mac-chrome :is(.hm, .oh) .hm-mini { font-size: 12px; font-weight: 400; }
+html.mac-chrome .hm-lrow { font-size: 13px; padding: 7px 4px; border-top: .5px solid var(--mc-line); }
+html.mac-chrome .hm-lrow .hm-sub, html.mac-chrome .hm-lrow .due { font-size: 12px; }
+html.mac-chrome .hm-cal-d { font-size: 11.5px; font-weight: 600; color: var(--mc-dim); }
+html.mac-chrome .hm-post { font-size: 11.5px; font-weight: 400; padding: 6px 8px; border-radius: 4px; background: var(--mc-field); border-top: 0; border-right: 0; border-bottom: 0; color: var(--mc-fg); }
+html.mac-chrome .hm-post span { font-size: 10.5px; font-weight: 400; color: var(--mc-dim); }
+html.mac-chrome .hm-rev > div:last-child { font-size: 12.5px; line-height: 1.6; }
+html.mac-chrome .hm .hm-rev b { font-weight: 700 !important; }
+html.mac-chrome .hm-rev small { color: var(--mc-dim); }
+html.mac-chrome .hm-am > b { font-size: 13px; }
+html.mac-chrome .hm-am-n > span:last-child { background: none; padding: 0; font-size: 12.5px; color: var(--mc-dim); }
 
+html.mac-chrome .hm-rev text { font-weight: 700; }
+html.mac-chrome .hm-hrow, html.mac-chrome .hm-hrow em { font-size: 12px; }
+html.mac-chrome .hm-hrow em { opacity: .8; }
+/* My pipeline's lanes: outlined, the one picked filled with a blue edge; My week's days outlined (the mock-up's) */
+html.mac-chrome .hm-lane { background: transparent; box-shadow: inset 0 0 0 .5px var(--mc-line); border: 0; }
+html.mac-chrome .hm-lane.on { background: var(--mc-field); box-shadow: inset 0 0 0 1.5px var(--mc-blue); }
+html.mac-chrome .hm-mini { padding: 4px 8px; border-radius: 3px; border-top: 0; border-right: 0; border-bottom: 0; background: var(--mc-card); }
+html.mac-chrome .hm-slot { background: transparent; box-shadow: inset 0 0 0 .5px var(--mc-line); border: 0; border-radius: 9px; }
+html.mac-chrome .hm-slot.today { box-shadow: inset 0 0 0 1.5px var(--mc-blue); }
