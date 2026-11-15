@@ -194,7 +194,6 @@ const OfficeHome = (() => {
     if (!s || !macBar() || !isOffice()) return;
     s.placeholder = 'Search Client Assets';
     if (s.value !== st.q && document.activeElement !== s) s.value = st.q;
-    if (typeof MacBar !== 'undefined') MacBar.paint();
   }
   document.addEventListener('input', (e) => {
     if (e.target.id !== 'search' || !macBar() || typeof isOffice !== 'function' || !isOffice()) return;

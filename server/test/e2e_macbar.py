@@ -1,6 +1,5 @@
-"""The Mac app 13+: Apple's search field and Talk button over the page's top strip (command pageBar), typing there
-searches the page, ⌘K puts the cursor there, a right-click's options go to the Mac as Apple's menu (command menu);
-older Mac apps keep the page's own (Mac page by page, part 2 — Haris 2026-11-15)."""
+"""The Mac app 13+: a right-click's options go to the Mac as Apple's menu (command menu); the top bar stays the page's own;
+older Mac apps keep the page's own menu (Mac page by page, part 2 — Haris 2026-11-15)."""
 import asyncio, os, subprocess, tempfile, time, urllib.request, json
 from playwright.async_api import async_playwright
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -44,19 +43,7 @@ async def main():
                     check(await pg.locator('.menu .mi').count() > 0 and await E("window.__native.menu") is None, '...and the page’s own menu')
                     check(not errs, f'no page errors (12) {errs[:2]}')
                     await ctx.close(); continue
-                bar = await E("window.__native.bar")
-                check(bar and bar['show'] and bar['search']['w'] > 100 and bar['search']['place'] == 'Search tasks', f'the page sends where its search sits {bar and bar["search"]}')
-                check(await E("getComputedStyle(document.querySelector('#topbar .search')).visibility") == 'hidden', 'the page’s own search hidden under Apple’s')
-                await E("TalkButton.set(4)"); await pg.wait_for_timeout(200)
-                bar = await E("window.__native.bar")
-                check(bar['talk'] and bar['talk']['n'] == 4, 'Talk’s place and count go to the Mac')
-                await E("window.__e11Bar({q: 'festive'})"); await pg.wait_for_timeout(300)
-                check(await E("ui.search") == 'festive', 'typing in Apple’s field searches the page')
-                await E("window.__e11Bar({q: ''})"); await pg.wait_for_timeout(300)
-                await pg.keyboard.press('Meta+k'); await pg.wait_for_timeout(200)
-                check((await E("window.__native.bar")).get('focus') is True, '⌘K puts the cursor in Apple’s field')
-                await E("window.__e11Bar({talk: true})"); await pg.wait_for_timeout(100)
-                check(await E("window.__native.opened") == 'https://apps.apple.com/app/id6831289909', 'Apple’s Talk button opens E11 Talk on the App Store')
+                check(await E("getComputedStyle(document.querySelector('#topbar .search')).visibility") == 'visible' and await E("window.__native.bar") is None, 'the top bar stays the page\u2019s own (Talk and search)')
                 # a task opened full covers the strip: Apple's controls go
                 tid = await E("document.querySelector('.hm-lead .hm-row').dataset.task")
                 await E("window.__native.menu = null; window.__native.pick = null")
