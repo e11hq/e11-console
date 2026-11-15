@@ -87,7 +87,7 @@ async def main():
         p2 = await ctx2.new_page(); await p2.goto('/'); await p2.wait_for_timeout(700); await p2.mouse.click(1390, 890); await p2.wait_for_timeout(1200)
         await p2.click('#me-chip'); await p2.wait_for_timeout(200)
         await p2.click('.menu :text("Get the Mac app")'); await p2.wait_for_timeout(300)
-        check(f'curl -fsSL {BASE}/install | bash' in await p2.locator('.mac-cmd code').inner_text(), 'Get the Mac app shows the one-line install command')
+        check(await p2.locator('.mac-dlg a[href*="apps.apple.com/app/e11-console"]').count() == 1 and await p2.locator('.mac-cmd').count() == 0, 'Get the Mac app: the Mac App Store, no Terminal command (Haris 2026-11-15)')
         await p2.screenshot(path=os.path.join(SHOTS, 'e2e_macdialog.png'))
         check(not errs, 'no page errors ' + str(errs))
         await b.close()

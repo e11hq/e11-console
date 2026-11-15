@@ -357,7 +357,7 @@ html.mac-chrome .hm-delta { padding: 0; background: none !important; font-size: 
 html.mac-chrome .hm-delta.good { color: var(--mc-green); } html.mac-chrome .hm-delta.bad { color: var(--mc-red); }
 html.mac-chrome .hm-bar { background: color-mix(in srgb, var(--mc-blue) 55%, transparent); border-radius: 2px; }
 html.mac-chrome .hm-bar.future { background: var(--mc-line); }
-html.mac-chrome .hm-peak span { width: 20px; height: 20px; background: var(--mc-win); color: var(--mc-blue); box-shadow: 0 0 0 .5px var(--mc-line), 0 2px 6px rgba(0, 0, 0, .2); }
+html.mac-chrome .hm-peak span { background: var(--mc-win); color: var(--mc-blue); box-shadow: 0 0 0 .5px var(--mc-line), 0 2px 6px rgba(0, 0, 0, .2); }
 html.mac-chrome .hm-peak em { color: var(--mc-dim); font-size: 10px; }
 html.mac-chrome .hm-ticks { font-size: 10.5px; color: var(--mc-dim); }
 /* activity, schedule, clients, checklist */
@@ -462,3 +462,12 @@ html.mac-chrome #tb-talk i { min-width: 18px; height: 18px; padding: 0 5px; box-
 html.mac-chrome #tb-talk i[hidden] { display: none; }
 #tb-talk { display: none; } html.mac-chrome #tb-talk { display: inline-flex; }
 @media (max-width: 1100px) { html.mac-chrome .hm-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }   /* (one column of boxes under them) */
+/* (Haris 2026-11-15 13:37) task rows a little apart; a client under the pointer: the rounded highlight with room round it, not
+   cut at the box's edge; Busiest day: a bigger mark, its flag filled and centred */
+html.mac-chrome .hm-row + .hm-row { margin-top: 4px; }
+html.mac-chrome .hm-projs { margin: 6px -8px 0; padding: 0 8px; gap: 2px; }
+html.mac-chrome .hm-proj { margin: 0 -8px; padding: 6px 8px; border-radius: 8px; }
+html.mac-chrome .hm-proj:hover { background: var(--mc-sel); }
+html.mac-chrome .hm-peak span { width: 28px; height: 28px; }
+html.mac-chrome .hm-peak svg { width: 14px; height: 14px; transform: translateX(1px); }
+html.mac-chrome .hm-peak svg path { fill: currentColor; }

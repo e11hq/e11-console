@@ -824,6 +824,9 @@ export function createServer(cfg) {
     }
 
     // Mac app installer (no sign-in: these files hold no data — Cloudflare lets /install through)
+    // the Terminal-installed Mac app is discontinued (Haris 2026-11-15 13:31 / 13:35): its installer only for a server on
+    // this machine — the Mac app's self-test on Haris's Mac (the private test rig) — never on the live or test site
+    if (p.startsWith('/install') && !/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(String(req.headers.host || ''))) return json(res, 404, { ok: false, error: 'E11 Console for Mac comes from the Mac App Store' });
     // New installs get the icon the owner chose
     if (p === '/install/AppIcon.png' && appIcon.info().custom) {
       res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-cache' });

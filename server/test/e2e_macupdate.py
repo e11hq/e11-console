@@ -1,5 +1,5 @@
 """Required Mac app update: an older Mac app (no or lower `shell` in appInfo) shows a banner that can't be
-dismissed; Update now saves and opens a .terminal file that runs the installer for this server.
+dismissed; since 2026-11-15 it sends them to the Mac App Store (the Terminal-installed app is discontinued).
 An up-to-date Mac app and a normal browser show nothing."""
 import asyncio, base64, os, plistlib, re, subprocess, tempfile, time, urllib.request
 from playwright.async_api import async_playwright
@@ -40,30 +40,17 @@ async def main():
         check(await pg.locator('#mac-update').count() == 1, 'older Mac app shows the required-update banner')
         check(await pg.locator('#mac-update [aria-label*="lose"], #mac-update .x, #mac-update [data-action*="dismiss"]').count() == 0, 'banner has no close button')
         await pg.screenshot(path=os.path.join(tempfile.gettempdir(), 'macupdate_banner.png'))
+        check('Mac App Store' in await pg.locator('#mac-update').inner_text(), 'the banner says the Mac app is now on the Mac App Store (the Terminal app is discontinued — Haris 2026-11-15)')
         await pg.click('#mac-update [data-action="mac-update"]'); await pg.wait_for_timeout(500)
-        saved = await pg.evaluate('window.__saved')
-        check(len(saved) == 1 and saved[0]['name'].endswith('.terminal') and saved[0]['open'] and saved[0]['done'], 'Update now saves and opens a .terminal file')
-        pl = plistlib.loads(base64.b64decode(saved[0]['b64']))
-        cmd = pl['CommandString']
-        check(f'curl -fsSL {BASE}/install | bash' in cmd, f'it runs this server’s installer: {cmd[:90]}…')
-        check(pl['RunCommandAsShell'] is False and pl['shellExitAction'] == 1, 'runs inside a shell and the window closes when it finishes cleanly')
-        syn = subprocess.run(['bash', '-n', '-c', cmd], capture_output=True, text=True)
-        check(syn.returncode == 0, f'the command is valid shell {syn.stderr}')
-        fake = tempfile.mkdtemp(); open(os.path.join(fake, 'osascript'), 'w').write('#!/bin/sh\nfor a in "$@"; do printf "[%s]" "$a"; done\n'); os.chmod(os.path.join(fake, 'osascript'), 0o755)
-        inner = re.search(r'(/bin/sh -c ".*?") </dev/null', cmd).group(1).replace('sleep 2; ', '')
-        check("perl -MPOSIX -e 'setsid(); exec @ARGV'" in cmd and '&); exit 0;' in cmd, 'the helper runs in its own session, not as a job of the window’s shell')
-        ran = subprocess.run(['bash', '-c', inner], capture_output=True, text=True, env={**os.environ, 'PATH': fake + ':' + os.environ['PATH']}).stdout
-        check('[close (every window whose name contains "E11 Console update")]' in ran and '[if (count of windows) is 0 then quit]' in ran, f'afterwards it closes the update window by its title, then quits Terminal if nothing else is open: {ran}')
-        check("\\033]0;E11 Console update" in cmd, 'the update window is titled so it can be found')
-        check('Terminal is updating' in await pg.locator('#mac-update').inner_text(), 'banner says the update is under way')
+        check(await pg.locator('.mac-dlg a[href*="apps.apple.com/app/e11-console"]').count() == 1 and not await pg.evaluate('window.__saved'), 'Get it opens the App Store dialog — no Terminal update')
         check(not errs, f'no page errors {errs}')
         await ctx.close()
         # up-to-date Mac app and plain browser: no banner
         ctx, pg, errs = await open_app(bridge(SHELL))
         check(await pg.locator('#mac-update').count() == 0, f'up-to-date Mac app (shell {SHELL}) shows nothing')
         await pg.click('#me-chip'); await pg.wait_for_timeout(300)
-        await pg.locator('.menu .mi', has_text='Update Mac app').click(); await pg.wait_for_timeout(500)
-        check(len(await pg.evaluate('window.__saved')) == 1, 'profile menu → Update Mac app runs the update any time'); await ctx.close()
+        await pg.locator('.menu .mi', has_text='Get the App Store app').click(); await pg.wait_for_timeout(500)
+        check(await pg.locator('.mac-dlg').count() == 1, 'profile menu → Get the App Store app'); await ctx.close()
         ctx, pg, errs = await open_app(None)
         check(await pg.locator('#mac-update').count() == 0, 'a normal browser shows nothing'); await ctx.close()
         await b.close()

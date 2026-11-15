@@ -342,7 +342,7 @@ const Fin = (() => {
       { label: 'My profile', icon: 'user', run: () => go('profile') },
       ...addItems(),
       ...(Host.isServer ? ['-', { label: 'What’s new', icon: 'info', run: () => whatsNewDialog(false) }] : []),
-      ...(Host.isMacApp && !MacUpdate.store() ? [{ label: 'Update Mac app', icon: 'download', run: () => MacUpdate.run() }] : []),
+      ...(Host.isMacApp && !MacUpdate.store() ? [{ label: 'Get the App Store app', icon: 'download', run: macAppDialog }] : []),
       '-',
       { label: 'Sign out', icon: 'logout', run: signOut },
     ], { native: true });

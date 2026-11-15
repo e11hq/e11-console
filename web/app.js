@@ -1041,46 +1041,8 @@ const MacUpdate = (() => {
     need = shell < required;
     paint();
   }
-  const xml = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  function terminalFile() {
-    // After a clean install the shell exits and Terminal closes this window by itself (shellExitAction 1).
-    // A helper started completely apart from the window (its own session, via perl's setsid, so the shell
-    // has no job to wait for and Terminal sees nothing running in the window) closes the window by its
-    // title if it's still there, then quits Terminal when no windows are left. A failed install keeps
-    // the window open with the error.
-    const TITLE = 'E11 Console update';
-    const closer = `sleep 2; osascript -e 'tell application "Terminal"' -e 'close (every window whose name contains "${TITLE}")' -e 'if (count of windows) is 0 then quit' -e 'end tell'`;
-    const detached = `(perl -MPOSIX -e 'setsid(); exec @ARGV' /bin/sh -c ${JSON.stringify(closer)} </dev/null >/dev/null 2>&1 &)`;
-    const cmd = `printf '\\033]0;${TITLE}\\007'; clear; echo "Updating E11 Console… this takes about 10 seconds."; curl -fsSL ${location.origin}/install | bash && { ${detached}; exit 0; }`;
-    return `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CommandString</key><string>${xml(cmd)}</string>
-  <key>RunCommandAsShell</key><false/>
-  <key>shellExitAction</key><integer>1</integer>
-  <key>name</key><string>E11 Console update</string>
-  <key>type</key><string>Window Settings</string>
-  <key>ProfileCurrentVersion</key><real>2.07</real>
-</dict>
-</plist>`;
-  }
-  async function run() {
-    const el = document.getElementById('mac-update');
-    if (el) el.classList.add('busy');
-    const btn = el && el.querySelector('button');
-    if (btn) { btn.disabled = true; btn.textContent = 'Updating…'; }
-    try {
-      const b64 = btoa(unescape(encodeURIComponent(terminalFile())));
-      await NativeMac.call('saveFile', { token: 'upd-' + Date.now(), name: 'Update E11 Console.terminal', b64, open: true, done: true });
-      if (el) el.querySelector('.mu-txt span').textContent = 'Terminal is updating the app — it will close and reopen by itself in a few seconds.';
-      else toast('Updating — the app reopens itself', null, 8000);
-      setTimeout(() => { if (btn) { btn.disabled = false; btn.textContent = 'Try again'; } }, 30000);
-    } catch (e) {
-      if (btn) { btn.disabled = false; btn.textContent = 'Try again'; }
-      toast('Couldn’t start the update: ' + e.message);
-    }
-  }
+  // the Terminal-installed app is discontinued (Haris 2026-11-15): its update is the Mac App Store app
+  const run = () => macAppDialog();
   function paint() {
     let el = document.getElementById('mac-update');
     if (!need) { if (el) el.remove(); document.body.classList.remove('mac-upd'); return; }
@@ -1089,12 +1051,12 @@ const MacUpdate = (() => {
     el.id = 'mac-update';
     el.setAttribute('role', 'alert');
     el.innerHTML = `<span class="mu-ic">${icon('shield')}</span>
-      <div class="mu-txt"><b>Important update for the Mac app</b><span>A required update keeps E11 Console secure and working properly. It takes about 10 seconds — the app closes and reopens by itself.</span></div>
-      <button class="btn primary" data-action="mac-update">${icon('download')}Update now</button>`;
+      <div class="mu-txt"><b>E11 Console for Mac is now on the Mac App Store</b><span>This app is no longer updated — get the App Store one and sign in with your work email.</span></div>
+      <button class="btn primary" data-action="mac-update">${icon('download')}Get it</button>`;
     document.body.appendChild(el);
     document.body.classList.add('mac-upd');
   }
-  // the Mac App Store app updates through the App Store: no Terminal update for it (asked once, at start)
+  // the Mac App Store app: nothing to offer (asked once, at start)
   let store = false;
   if (Host.isMacApp) setTimeout(() => { NativeMac.call('appInfo').then((r) => { store = !!(r && r.store); }).catch(() => {}); }, 0);
   return { check, run, store: () => store };
@@ -1104,28 +1066,19 @@ const FINDER_LABEL = Host.isServer ? 'Download' : 'Show in Finder';
 
 
 /* ================= Mac app installer ================= */
+// E11 Console for Mac comes from the Mac App Store (Haris 2026-11-15 13:31: "discontinue the terminal app")
+const MAC_STORE = 'https://apps.apple.com/app/e11-console/id6827691302';
 function macAppDialog() {
-  const cmd = `curl -fsSL ${location.origin}/install | bash`;
   const root = $('#overlay-root');
   root.innerHTML = `<div class="scrim"><div class="dialog mac-dlg">
     <div class="wn-kick">${icon('download')}E11 Console for Mac</div>
-    <h2>Install the Mac app</h2>
-    <p>Your own E11 Console app with a Dock icon, notifications and the Mac file picker. It always shows the latest version, so you only install it once.</p>
-    <ol class="mac-steps">
-      <li>Open <b>Terminal</b> (press <kbd>⌘</kbd> <kbd>Space</kbd>, type <b>Terminal</b>, press <kbd>Return</kbd>).</li>
-      <li>Copy this line, paste it into Terminal and press <kbd>Return</kbd>:
-        <div class="mac-cmd"><code>${esc(cmd)}</code><button class="btn sm" data-copy-cmd>${icon('copy')}Copy</button></div></li>
-      <li>After about 20 seconds E11 Console opens — sign in with your work email. It’s now in your Applications folder; drag it to the Dock to keep it there.</li>
-    </ol>
-    <div class="actions"><button class="btn primary" data-r="1">Done</button></div>
+    <h2>Get the Mac app</h2>
+    <p>E11 Console for Mac comes from the Mac App Store: a Dock icon, notifications and the Mac file picker, and the App Store keeps it up to date. Sign in with your work email.</p>
+    <div class="actions"><button class="btn" data-r="0">Close</button><a class="btn primary" href="${MAC_STORE}" target="_blank" rel="noopener" data-r="1">${icon('open')}Open the App Store</a></div>
   </div></div>`;
   const close = () => { root.innerHTML = ''; };
-  $('[data-r="1"]', root).addEventListener('click', close);
-  $('[data-copy-cmd]', root).addEventListener('click', (e) => {
-    try { navigator.clipboard.writeText(cmd).then(() => toast('Copied — paste in Terminal')); }
-    catch (err) { const ta = document.createElement('textarea'); ta.value = cmd; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('Copied — paste in Terminal'); }
-    e.currentTarget.innerHTML = `${icon('check')}Copied`;
-  });
+  $('[data-r="0"]', root).addEventListener('click', close);
+  $('[data-r="1"]', root).addEventListener('click', (e) => { if (Host.isMacApp) { e.preventDefault(); NativeMac.call('openURL', { url: MAC_STORE }).catch(() => {}); } close(); });
   $('.scrim', root).addEventListener('click', (e) => { if (e.target.classList.contains('scrim')) close(); });
 }
 
@@ -9659,7 +9612,7 @@ function meMenu(anchor) {
     ...(Host.isServer && AppIcon.isOwner() ? [{ label: 'App updates', icon: 'download', run: () => go('updates') }] : []),
     ...(Host.isServer ? [{ label: 'What’s new', icon: 'info', run: () => whatsNewDialog(false) }] : []),
     ...(Host.isServer && !Host.isMacApp ? [{ label: 'Get the Mac app', icon: 'download', run: macAppDialog }] : []),
-    ...(Host.isMacApp && !MacUpdate.store() ? [{ label: 'Update Mac app', icon: 'download', run: () => MacUpdate.run() }] : []),
+    ...(Host.isMacApp && !MacUpdate.store() ? [{ label: 'Get the App Store app', icon: 'download', run: macAppDialog }] : []),
     ...(isTestCopy() && (AppIcon.isOwner ? AppIcon.isOwner() : isAdm(me())) && !(typeof ViewAs !== 'undefined' && ViewAs.viewing()) ? [{ label: 'Start fresh with sample data…', icon: 'trash', run: resetSampleData }] : []),
     ...(typeof ViewAs !== 'undefined' && ViewAs.available() ? [{ label: ViewAs.viewing() ? 'View as someone else…' : 'View as… (test site)', icon: 'users', run: ViewAs.pick }, ...(ViewAs.viewing() ? [{ label: 'Back to me', icon: 'reply', run: ViewAs.back }] : [])] : []),
     ...Fin.addItems(),
