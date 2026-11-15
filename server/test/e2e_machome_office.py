@@ -30,7 +30,7 @@ async def main():
             for look in ('dark', 'light'):
                 ctx = await b.new_context(viewport={'width': 1440, 'height': 900}, base_url=BASE, color_scheme=look)
                 await ctx.add_cookies([{'name': 'e11_dev_email', 'value': OA, 'url': BASE}])
-                await ctx.add_init_script('window.__shell = 13;' + BRIDGE + 'window.__e11NativeSplash = true;')
+                await ctx.add_init_script('window.__shell = 13;' + BRIDGE + 'window.__e11NativeSplash = true;' + (''))
                 pg = await ctx.new_page(); errs = []; pg.on('pageerror', lambda e: errs.append(str(e)))
                 await pg.goto('/'); await pg.wait_for_timeout(3500); E = pg.evaluate
                 if look == 'light': await E("document.documentElement.dataset.theme = 'light'; document.documentElement.classList.remove('mac-sf')")
@@ -88,18 +88,24 @@ async def main():
                         await pg.locator('.ohm .ohm-grid .hm-thumb').first.click(); await pg.wait_for_timeout(500)
                         check(await E("!!(window.__native.preview || document.querySelector('.viewer, .vw, #viewer'))"), 'a picture opens in the preview')
                         await pg.keyboard.press('Escape'); await pg.wait_for_timeout(300)
+                    # the pictures show (Haris 18:37: they had stopped showing) — scrolled to, every one loaded and fully visible
+                    await E("document.querySelector('.ohm-grid').scrollIntoView()"); await pg.wait_for_timeout(1500)
+                    vis = await E("[...document.querySelectorAll('.ohm-grid img')].map((i) => [i.className, i.complete, i.naturalWidth, getComputedStyle(i).opacity])")
+                    check(vis and all(v[3] == '1' for v in vis), f'the pictures show {vis[:3]}')
                     # the pictures never load again as a client is picked and back (Haris 18:13): the same nodes, no new requests
                     await pg.wait_for_timeout(800)
-                    await E("document.querySelectorAll('.ohm-grid .hm-thumb').forEach((t, i) => { t.__tag = 'k' + i; })")
+                    await E("document.querySelectorAll('.ohm-grid img').forEach((t, i) => { t.__tag = 'k' + i; })")
                     reqs = []; pg.on('request', lambda r: reqs.append(r.url) if '/__file/' in r.url else None)
                     await pg.locator('.ohm .ohm-chip').nth(1).click(); await pg.wait_for_timeout(500)
                     await pg.locator('.ohm .ohm-chip').nth(0).click(); await pg.wait_for_timeout(500)
-                    kept = await E("[...document.querySelectorAll('.ohm-grid .hm-thumb')].map((t) => t.__tag || null)")
+                    kept = await E("[...document.querySelectorAll('.ohm-grid img')].map((t) => t.__tag || null)")
                     check(all(kept) and len(kept) > 0, f'the pictures already on show are kept as a client is picked and back {kept}')
                     await E("renderContent()"); await pg.wait_for_timeout(300)
-                    kept2 = await E("[...document.querySelectorAll('.ohm-grid .hm-thumb')].map((t) => t.__tag || null)")
+                    kept2 = await E("[...document.querySelectorAll('.ohm-grid img')].map((t) => t.__tag || null)")
                     check(all(kept2), '...and when the page is drawn again (a live change)')
                     shownNow = await E("[...document.querySelectorAll('.ohm-grid img')].map((i) => i.src)")
+                    vis2 = await E("[...document.querySelectorAll('.ohm-grid img')].map((i) => getComputedStyle(i).opacity)")
+                    check(vis2 and all(v == '1' for v in vis2), f'...and every kept one shows {vis2}')
                     check(not [u for u in reqs if any(u.split('?')[0] == x.split('?')[0] for x in shownNow)], f'...none of them loaded again {len(reqs)} requests')
                     # a client picked keeps the row where it was slid to
                     await E("document.getElementById('ohm-chips').scrollLeft = 80")

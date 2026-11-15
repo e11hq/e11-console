@@ -215,24 +215,29 @@ const OfficeHome = (() => {
     </div>`;
   }
 
-  // the Mac app's pictures, each kept by its file and what it shows: the same one drawn again is the node already on show
-  // (its picture decoded, no reload, no blink); a new one's picture fades in once it has loaded
-  const thumbKeep = new Map();
+  // the Mac app's pictures (Haris 18:13 / 18:37): one already on show is kept by renderContent itself (the loaded picture moved
+  // into the new page); one gone from show — a client picked and back — is kept here by its address and put back the same way,
+  // never loaded again. A picture still loading waits unseen and fades in (the class only while waiting: a kept one shows).
+  const picKeep = new Map();
   function keepThumbs() {
     const r = $('#ohm-chips'); if (r && st.chipX) r.scrollLeft = st.chipX;
     const grid = $('.ohm .ohm-grid');
-    const next = new Map();
-    if (grid) [...grid.children].forEach((el) => {
-      const key = el.outerHTML, old = thumbKeep.get(key);
-      if (old && old !== el) { el.replaceWith(old); next.set(key, old); return; }
-      next.set(key, el);
-      const img = el.querySelector('img');
-      if (img) { if (img.complete && img.naturalWidth) img.classList.add('in'); else img.addEventListener('load', () => img.classList.add('in'), { once: true }); }
+    if (!grid) return;
+    grid.querySelectorAll('.hm-thumb img').forEach((im) => {
+      const old = picKeep.get(im.src);
+      if (old && old !== im && !old.isConnected && old.complete && old.naturalWidth) {
+        [...old.attributes].forEach((x) => { if (x.name !== 'src' && !im.hasAttribute(x.name)) old.removeAttribute(x.name); });
+        [...im.attributes].forEach((x) => { if (x.name !== 'src') old.setAttribute(x.name, x.value); });
+        im.replaceWith(old); im = old;
+      }
+      if (!(im.complete && im.naturalWidth)) {
+        im.classList.add('wait');
+        const done = () => { im.classList.remove('wait'); if (im.naturalWidth) picKeep.set(im.src, im); };
+        im.addEventListener('load', done, { once: true }); im.addEventListener('error', done, { once: true });
+      } else { picKeep.delete(im.src); picKeep.set(im.src, im); }
     });
-    // (kept for the ones gone from show too — a client picked and back finds them; the latest 120, the oldest let go)
-    next.forEach((v, k) => { thumbKeep.delete(k); thumbKeep.set(k, v); });
-    while (thumbKeep.size > 120) thumbKeep.delete(thumbKeep.keys().next().value);
-    if (Host.isNative && grid) hydrateThumbs(grid);
+    while (picKeep.size > 120) picKeep.delete(picKeep.keys().next().value);
+    if (Host.isNative) hydrateThumbs(grid);
   }
   function view() {
     setTimeout(barSearch, 0);
