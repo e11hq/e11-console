@@ -313,7 +313,9 @@ html.mac-chrome .hm-btn { height: 28px; padding: 0 12px; border-radius: 7px; fon
 html.mac-chrome .hm-btn.primary { background: var(--mc-blue); box-shadow: none; color: #fff; font-weight: 500; }
 html.mac-chrome :is(.oh, .hm) .btn.sm { height: 28px; padding: 0 12px; border-radius: 7px; font-size: 13px; border: 0; background: var(--mc-glass); box-shadow: inset 0 0 0 .5px var(--mc-glass-line); color: var(--mc-fg); }
 /* the three numbers */
-html.mac-chrome .hm-stats { gap: 12px; }
+/* the three numbers lined up with the boxes under them (Haris 2026-11-15 13:13): the first two share the left column, the
+   third is as wide as the right one */
+html.mac-chrome .hm-stats { gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)) 330px; }
 html.mac-chrome .hm-stat { gap: 12px; padding: 14px 16px; }
 html.mac-chrome .hm-ic { width: 36px; height: 36px; border-radius: 10px; }
 html.mac-chrome .hm-ic svg { width: 16px; height: 16px; }
@@ -459,3 +461,4 @@ html.mac-chrome #tb-talk .ic, html.mac-chrome #tb-talk svg { width: 14px; height
 html.mac-chrome #tb-talk i { min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: #ff3b30; color: #fff; font: 600 11px -apple-system, system-ui, sans-serif; font-style: normal; display: inline-flex; align-items: center; justify-content: center; }
 html.mac-chrome #tb-talk i[hidden] { display: none; }
 #tb-talk { display: none; } html.mac-chrome #tb-talk { display: inline-flex; }
+@media (max-width: 1100px) { html.mac-chrome .hm-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }   /* (one column of boxes under them) */

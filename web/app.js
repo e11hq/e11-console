@@ -4943,6 +4943,17 @@ const MacBar = (() => {
   return { on, menu };
 })();
 
+/* The Mac app: no Reload / Back menu on a right-click where nothing of ours is (Haris 2026-11-15 13:13) — the page's own
+   menus (a task, a claim, a file…) and the Mac's own menu on typed words, a selection and links stay. Browsers untouched. */
+document.addEventListener('contextmenu', (e) => {
+  if (!Host.isMacApp || e.defaultPrevented) return;
+  const t = e.target;
+  if (t.closest && t.closest('input, textarea, [contenteditable="true"], a[href], img, video')) return;
+  const sel = window.getSelection && String(window.getSelection());
+  if (sel && sel.trim()) return;
+  e.preventDefault();
+});
+
 /* ================= Overlays ================= */
 function closeMenus() { $$('.menu:not(.ph-out)').forEach((m) => { if (typeof SheetMotion !== 'undefined' && SheetMotion.out(m)) return; m.remove(); }); }   // (iPhone app: a sheet slides away)
 

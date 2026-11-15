@@ -46,6 +46,10 @@ async def main():
         await pg.goto('/'); await pg.wait_for_timeout(700); await pg.mouse.click(1390, 890); await pg.wait_for_timeout(1500)
         E = pg.evaluate
         check(await E("Host.isMacApp && Host.isServer"), 'page knows it is inside the Mac app')
+        # no Reload / Back menu on a right-click where nothing of ours is; typed words keep the Mac's own (Haris 2026-11-15)
+        pd = await E("(() => { const e = new MouseEvent('contextmenu', { bubbles: true, cancelable: true }); document.getElementById('content').dispatchEvent(e); return e.defaultPrevented; })()")
+        ti = await E("(() => { const e = new MouseEvent('contextmenu', { bubbles: true, cancelable: true }); document.getElementById('search').dispatchEvent(e); return e.defaultPrevented; })()")
+        check(pd is True and ti is False, f'right-click: no Reload / Back menu on the page, the Mac\u2019s own in a text box ({pd}, {ti})')
         # Talk in the top bar (Haris 2026-11-15): your unread count; a click opens E11 Talk's App Store page
         await E("TalkButton.set(3)")
         check(await E("document.querySelector('#topbar #tb-talk i').textContent") == '3', 'Talk in the top bar with the unread count')
