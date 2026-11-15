@@ -675,15 +675,15 @@ enum MediaKeep {
 
 /* Where the last finger came down, anywhere in the app (a recogniser that only looks and never takes the touch — it fails at
    once): the file preview flies out of the picture that was tapped, as E11 Talk's (Haris 2026-11-15). */
-final class TouchSpot: UIGestureRecognizer {
+final class FileTouch: UIGestureRecognizer {
   private static weak var view: UIView?
   private static var point: CGPoint = .zero, at = Date.distantPast
   static func watch(_ w: UIWindow) {
-    let g = TouchSpot(target: nil, action: nil); g.cancelsTouchesInView = false; g.delaysTouchesBegan = false; g.delaysTouchesEnded = false
+    let g = FileTouch(target: nil, action: nil); g.cancelsTouchesInView = false; g.delaysTouchesBegan = false; g.delaysTouchesEnded = false
     w.addGestureRecognizer(g)
   }
   override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
-    if let t = touches.first { TouchSpot.view = t.view; TouchSpot.point = t.location(in: nil); TouchSpot.at = Date() }
+    if let t = touches.first { FileTouch.view = t.view; FileTouch.point = t.location(in: nil); FileTouch.at = Date() }
     state = .failed
   }
   override func canPrevent(_ g: UIGestureRecognizer) -> Bool { false }
