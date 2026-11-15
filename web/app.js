@@ -10059,8 +10059,11 @@ const Splash = (() => {
   }
   const retried = () => new Promise((r) => { retryResolve = r; });
   // Data is in: tick the rows one by one, then fade into the app
+  // the page on show (the startup screen gone): what grows once as the app opens starts now (Home's goal ring and the
+  // clients' lines — Haris 2026-11-15 14:18: "animate after the page is loaded")
+  const shown = () => { if (window.__e11ShownAt) return; window.__e11ShownAt = Date.now(); document.documentElement.classList.add('e11-shown'); };
   async function finish() {
-    if (!el || gone) return;
+    if (!el || gone) { shown(); return; }
     const v = values();
     const bar = el.querySelector('.sp-bar i'), n = document.getElementById('sp-n');
     if (v) {
@@ -10089,7 +10092,7 @@ const Splash = (() => {
     el.classList.add('out');
     if (typeof NativeSide !== 'undefined') NativeSide.paint();   // (the Mac app's own sidebar comes as it fades)
     document.getElementById('app').classList.add('enter');
-    setTimeout(() => { el.remove(); document.documentElement.style.backgroundColor = ''; document.getElementById('app').classList.remove('enter'); }, 500);
+    setTimeout(() => { el.remove(); document.documentElement.style.backgroundColor = ''; document.getElementById('app').classList.remove('enter'); shown(); }, 500);
   }
   init();
   return { finish, remember, status, retried };

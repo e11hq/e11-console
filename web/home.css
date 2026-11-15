@@ -156,7 +156,8 @@
 .hm-pbar { display: block; height: 4px; border-radius: 3px; background: var(--hover); margin-top: 5px; overflow: hidden; }
 .hm-pbar i { display: block; height: 100%; border-radius: 3px; }
 .hm-pbar i { background: linear-gradient(90deg, var(--pc), color-mix(in srgb, var(--pc) 68%, #fff)); transform-origin: left center; }
-.hm-pbar i.hm-grow { animation: hm-grow .8s cubic-bezier(.22, .8, .3, 1) both; }
+.hm-pbar i.hm-grow { animation: hm-grow .8s cubic-bezier(.22, .8, .3, 1) both paused; }
+html.e11-shown :is(.hm-pbar i, .hm-ring).hm-grow { animation-play-state: running; }
 @keyframes hm-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @media (prefers-reduced-motion: reduce) { .hm-pbar i.hm-grow { animation: none; } }
 
@@ -399,7 +400,8 @@ html.mac-chrome .hm-gr circle { fill: none; stroke-width: 9; }
 html.mac-chrome .hm-ring-bg { stroke: var(--mc-field); }
 html.mac-chrome .hm-ring { stroke: var(--mc-green, #30d158); stroke-linecap: round; }
 html.mac-chrome[data-theme="light"] .hm-ring { stroke: #28a745; }
-html.mac-chrome .hm-ring.hm-grow { animation: hm-ring 1.1s cubic-bezier(.22, .8, .3, 1) both; }
+html.mac-chrome .hm-ring.hm-grow { animation: hm-ring 1.1s cubic-bezier(.22, .8, .3, 1) both paused; }
+html.mac-chrome.e11-shown .hm-ring.hm-grow { animation-play-state: running; }
 @keyframes hm-ring { from { stroke-dashoffset: var(--c); } }
 @media (prefers-reduced-motion: reduce) { html.mac-chrome .hm-ring.hm-grow { animation: none; } }
 html.mac-chrome .hm-gr text { font-size: 15px; font-weight: 600; fill: var(--mc-fg); }
