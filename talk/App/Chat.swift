@@ -2862,6 +2862,9 @@ final class MessageBar: UIView, UITextViewDelegate {
   private let place = UILabel()
   var placeholder = "Message" { didSet { place.text = placeholder } }
   private let replyV = UIView(), replyName = UILabel(), replyText = UILabel(), replyX = UIButton(type: .system), replyBar = UIView()
+  // (the strip's room above the box: it clips the strip, so the strip slides up out from behind the box's row and back down
+  //  behind it — WhatsApp's, Haris 2026-11-15)
+  private let replyClip = UIView()
   // (editing: the pencil before "Edit message", and send turns into ✓ — the design's board 34)
   private let editIcon = UIImageView(image: UIImage(systemName: "pencil", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)))
   private(set) var editing = false
@@ -2996,21 +2999,24 @@ final class MessageBar: UIView, UITextViewDelegate {
     replyX.addAction(UIAction { [weak self] _ in self?.onCancelReply?() }, for: .touchUpInside)
     editIcon.tintColor = Look.accent; editIcon.contentMode = .center; editIcon.isHidden = true
     [replyBar, editIcon, replyName, replyText, replyX].forEach { replyV.addSubview($0) }
-    replyV.isHidden = true; addSubview(replyV)
+    replyV.isHidden = true; replyClip.clipsToBounds = true; replyClip.addSubview(replyV); addSubview(replyClip)
     textChanged()
   }
   required init?(coder: NSCoder) { fatalError() }
   // (the bar stays above the home indicator when the keyboard is down)
   private var mentionH: CGFloat { mentionBox.isHidden ? 0 : CGFloat(mentionV.arrangedSubviews.count) * 52 }
   override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: (locked ? 83 : boxH + 13) + (replyOn ? 52 : 0)) }
-  private var replyOn = false   // (the reply / edit strip's room — the strip itself fades in and out)
+  private var replyOn = false   // (the reply / edit strip's room — the strip slides up into it from behind the box, and back)
   override func layoutSubviews() {
     super.layoutSubviews()
     defer { onLayout?() }
     let W = bounds.width, mh = mentionH, top: CGFloat = replyOn ? 52 : 0
     blur.frame = CGRect(x: 0, y: 0, width: W, height: bounds.height + 420)   // (down behind the home line and the keyboard)
     mentionBox.frame = CGRect(x: 0, y: -mh, width: W, height: mh); mentionV.frame = mentionBox.bounds
-    replyV.frame = CGRect(x: 0, y: replyOn ? 0 : -52, width: W, height: 52)   // (going: it stays where it was on the screen, fading, as the bar shrinks under it)
+    // (the room grows with the bar's top as the bar grows, the strip at its top: the strip rises with the bar's top out from
+    //  behind the box's row, which stays where it is; going, the other way round — sliding down behind it, no fade)
+    replyClip.frame = CGRect(x: 0, y: 0, width: W, height: top)
+    replyV.frame = CGRect(x: 0, y: 0, width: W, height: 52)
     replyBar.frame = CGRect(x: 0, y: 0, width: 4, height: 52)
     let tx: CGFloat = editing ? 40 : 12
     editIcon.frame = CGRect(x: 10, y: 12, width: 24, height: 28)
@@ -3362,15 +3368,16 @@ final class MessageBar: UIView, UITextViewDelegate {
     }
     if wasEditing && !self.editing && !box.text.isEmpty { box.text = ""; textChanged() }
     invalidateIntrinsicContentSize(); setNeedsLayout()
-    // the strip coming or going: it fades while the whole bar grows or shrinks as one, the chat above gliding — the page
-    // laid out inside the animation (✕ dropped the box and brought it back: the bar's insides moved before the bar itself —
-    // Haris 2026-11-14)
+    // the strip coming or going: it slides up out from behind the box's row as the whole bar grows, and back down behind it
+    // as the bar shrinks — no fade (WhatsApp's, Haris 2026-11-15); the bar grows or shrinks as one, the chat above gliding —
+    // the page laid out inside the animation (✕ dropped the box and brought it back: the bar's insides moved before the bar
+    // itself — Haris 2026-11-14)
     guard changed else { return }
-    guard window != nil, let host = superview else { replyV.isHidden = !on; replyV.alpha = 1; return }
-    if on { replyV.alpha = 0; replyV.isHidden = false }
+    guard window != nil, let host = superview else { replyV.isHidden = !on; return }
+    if on { replyV.isHidden = false }
     UIView.animate(withDuration: 0.25, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
-      self.replyV.alpha = on ? 1 : 0; host.layoutIfNeeded()
-    } completion: { _ in if !self.replyOn { self.replyV.isHidden = true; self.replyV.alpha = 1 } }
+      host.layoutIfNeeded()
+    } completion: { _ in if !self.replyOn { self.replyV.isHidden = true } }
   }
 }
 
