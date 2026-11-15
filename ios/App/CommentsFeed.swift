@@ -1152,6 +1152,7 @@ final class CommentCell: UIView {
     let v = TapImage(); v.contentMode = .scaleAspectFill; v.clipsToBounds = true; v.layer.cornerRadius = 12; v.layer.cornerCurve = .continuous
     v.onTap = open
     v.menu = menu
+    FileTouch.mark(v, f)
     v.backgroundColor = .tertiarySystemFill
     v.translatesAutoresizingMaskIntoConstraints = false
     v.heightAnchor.constraint(equalTo: v.widthAnchor).isActive = true

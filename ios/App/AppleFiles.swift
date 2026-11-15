@@ -99,7 +99,7 @@ final class FileTile: UIView {
     sig = s; info = f; isFolder = true; isClient = false; self.lines = lines; id = f["id"] as? String ?? ""; logoOn = nil
     // (its colour drawn into the picture, as a file's picture: a tint goes grey while a sheet is up over the page — Apple
     //  greys tinted controls then, and a folder is content, not a control: Haris 2026-11-10 15:25)
-    pic.contentMode = .scaleToFill; pic.tintColor = nil
+    pic.contentMode = .scaleToFill; pic.tintColor = nil; FileTouch.mark(pic, [:])
     // (a picture's colour is fixed when it's made — set again for the phone's look, as Apple can't switch it by itself)
     pic.followLook("folder") { [weak pic] tc in pic?.image = FileTile.folderImage.withTintColor(col.resolvedColor(with: tc), renderingMode: .alwaysOriginal) }; pic.backgroundColor = .clear; pic.layer.cornerRadius = 0; pic.layer.borderWidth = 0
     badge.isHidden = true; picPath = nil
@@ -120,6 +120,7 @@ final class FileTile: UIView {
     name.text = nm; name.numberOfLines = lines
     sub.text = sizeText
     pic.image = nil; pic.layer.cornerRadius = 6; pic.clipsToBounds = true
+    FileTouch.mark(pic, f)
     pic.layer.borderWidth = 1 / UIScreen.main.scale
     pic.followLook("line") { [weak self] tc in self?.pic.layer.setBorder(.separator, tc) }
     let (bg, fg) = FileTile.colours(ext)
@@ -146,7 +147,7 @@ final class FileTile: UIView {
   func client(_ c: [String: Any]) {
     let s = "c|\(c["name"] ?? "")|\(c["sub"] ?? "")|\(c["logo"] ?? "")|\(valSig(c["rgb"]))"
     guard s != sig else { return }
-    sig = s; info = c; isFolder = false; isClient = true; lines = 1; id = c["id"] as? String ?? ""
+    sig = s; info = c; isFolder = false; isClient = true; lines = 1; id = c["id"] as? String ?? ""; FileTouch.mark(pic, [:])
     let p = c["logo"] as? String
     // (its logo already on it — the same one: kept as it is. Set again, it went back to its colour and name and faded into
     //  the logo once more — every tile flashing as All Client Assets came back: Haris's recording, 2026-11-11)

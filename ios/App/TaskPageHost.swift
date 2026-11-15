@@ -659,6 +659,7 @@ extension Main {
       self.previewVC = vc
       // (out of the picture that was tapped, as E11 Talk's — Haris 2026-11-15; no picture there: the fade as before)
       vc.source = FileTouch.picture()
+      vc.keys = files.map { FileTouch.key($0) }
       host.present(vc, animated: !vc.flies)
     }
   }

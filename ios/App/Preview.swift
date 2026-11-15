@@ -353,6 +353,8 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
   final class Shade: UIView { override class var layerClass: AnyClass { CAGradientLayer.self } }
   // the picture the file was opened from (its own small picture on the page): the preview flies out of it and back into it
   weak var source: UIImageView?
+  // (each file's mark, in the preview's order — FileTouch.key)
+  var keys: [String] = []
   private var openedAt = -1
   var flies: Bool {
     guard let s = source, s.window != nil, s.image != nil, at < files.count else { return false }
@@ -592,7 +594,7 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     // (the one it was opened on, its picture there: back into the picture it came out of — the black and the buttons going
     //  with it; else the fade as before)
     // (swiped to another file: back into that file's own picture on the page when it's there — Haris 2026-11-15)
-    let back: UIImageView? = at == openedAt ? source : source.flatMap { FileTouch.sibling(of: $0, count: files.count, opened: openedAt, want: at) }
+    let back: UIImageView? = at == openedAt ? source : keys[safe: at].flatMap { FileTouch.marked($0, in: source?.window) }
     if openedAt >= 0, let src = back, src.window != nil, let (pic, from) = current?.shownPicture {
       let fly = UIImageView(image: pic); fly.contentMode = .scaleAspectFill; fly.clipsToBounds = true; fly.layer.cornerCurve = src.layer.cornerCurve
       fly.frame = from
@@ -772,35 +774,25 @@ final class FileTouch: UIGestureRecognizer {
   }
   override func canPrevent(_ g: UIGestureRecognizer) -> Bool { false }
   override func canBePrevented(by g: UIGestureRecognizer) -> Bool { false }
-  // the picture of another file in the same row or grid as the one opened: the pictures of the same size around it, read
-  // in order (top to bottom, then left to right) — only when they are exactly the files of the preview, in its order
-  static func sibling(of src: UIImageView, count: Int, opened: Int, want: Int) -> UIImageView? {
-    guard src.window != nil else { return nil }
-    let sz = src.bounds.size
-    func pics(_ root: UIView) -> [UIImageView] {
-      var out: [UIImageView] = []
-      func walk(_ v: UIView) {
-        if let iv = v as? UIImageView, iv.image != nil, !iv.isHidden, iv.window != nil,
-           abs(iv.bounds.width - sz.width) <= sz.width * 0.35, abs(iv.bounds.height - sz.height) <= sz.height * 0.35 { out.append(iv) }
-        v.subviews.forEach(walk)
-      }
-      walk(root); return out
+  // each file's own small picture on a page, marked with the file it shows (as E11 Talk's chat knows each message's
+  // picture): swiped to another file, the preview flies back into that file's picture by its mark — never guessed from
+  // the pictures' places (it guessed, and faded whenever the row or grid didn't hold exactly the preview's files)
+  private static var markKey = 0
+  static func key(_ f: [String: Any]) -> String {
+    for k in ["id", "file", "path"] { if let v = f[k] as? String, !v.isEmpty { return v } }
+    return ""
+  }
+  static func mark(_ iv: UIImageView, _ f: [String: Any]) { objc_setAssociatedObject(iv, &markKey, key(f), .OBJC_ASSOCIATION_COPY_NONATOMIC) }
+  static func marked(_ key: String, in w: UIWindow?) -> UIImageView? {
+    guard !key.isEmpty, let w = w else { return nil }
+    func walk(_ v: UIView) -> UIImageView? {
+      if v.isHidden || v.alpha < 0.01 { return nil }
+      if let iv = v as? UIImageView, iv.image != nil, (objc_getAssociatedObject(iv, &markKey) as? String) == key,
+         iv.convert(iv.bounds, to: nil).intersects(w.bounds) { return iv }
+      for c in v.subviews { if let x = walk(c) { return x } }
+      return nil
     }
-    var up: UIView? = src.superview
-    for _ in 0..<7 {
-      guard let r = up else { break }
-      let list = pics(r).sorted { a, b in
-        let fa = a.convert(a.bounds, to: nil), fb = b.convert(b.bounds, to: nil)
-        return abs(fa.minY - fb.minY) > 4 ? fa.minY < fb.minY : fa.minX < fb.minX
-      }
-      if list.count >= count {
-        guard list.count == count, list.firstIndex(of: src) == opened, want < list.count else { return nil }
-        let t = list[want], f = t.convert(t.bounds, to: nil)
-        return f.intersects(src.window!.bounds) ? t : nil
-      }
-      up = r.superview
-    }
-    return nil
+    return walk(w)
   }
   // the picture under the last touch (a moment ago): the touched view's own, one inside it under the finger, or one a few
   // steps up that holds the finger's spot
