@@ -97,7 +97,7 @@ def board(look, page='lead'):
                f'<span style="font-size: 15px; font-weight: 700">Home</span>'
                f'<span style="margin-left: auto"></span>'
                               + tb(sym('bubble', t['fg']) + 'Talk <span style="min-width: 18px; height: 18px; border-radius: 9px; background: #ff3b30; color: #fff; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; box-sizing: border-box">5</span>', w=1)
-               + ('' if page == 'office' else f'<span style="width: 220px; height: 30px; border-radius: 15px; background: {t["field"]}; {"box-shadow: 0 0 0 3px color-mix(in srgb, " + A + " 45%, transparent);" if searching else ""} display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; box-sizing: border-box; font-size: 13px; color: {t["dim"]}">{sym("search", t["dim"])}{"<span style=" + chr(34) + "color:" + t["fg"] + chr(34) + ">maya</span>" if searching else "Search tasks"}<span style="margin-left: auto; font-size: 11px">⌘K</span></span>')
+               + (f'<span style="width: {240 if page == "office" else 220}px; height: 30px; border-radius: 15px; background: {t["field"]}; {"box-shadow: 0 0 0 3px color-mix(in srgb, " + A + " 45%, transparent);" if searching else ""} display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; box-sizing: border-box; font-size: 13px; color: {t["dim"]}">{sym("search", t["dim"])}{"<span style=" + chr(34) + "color:" + t["fg"] + chr(34) + ">maya</span>" if searching else ("Search Client Assets" if page == "office" else "Search tasks")}<span style="margin-left: auto; font-size: 11px">⌘K</span></span>')
                + f'<svg viewBox="0 0 297.5 132.0" style="height: 18px; width: auto; margin-left: 6px; flex: none" aria-hidden="true"><path fill="{"#fff" if look == "dark" else "#000"}" fill-rule="evenodd" d="{MARK}"/></svg>'
                + '</div>')
     # the website's Home (an Admin's: layout A, home.js viewLead), restyled for the Mac (inside the web view)
@@ -292,10 +292,11 @@ def board(look, page='lead'):
             + crow('AB', '#2980B9', 'Ana Brooks', '3 items', '420.00', 'Paid') + crow('JL', '#E67E22', 'Jamie Lowe', '5 items', '1,260.00', 'Submitted', 'HR approve')
             + crow('MK', '#16A085', 'Maya Kent', '2 items', '310.00', 'HR approved', 'Mark paid') + crow('RT', '#8E44AD', 'Rui Tan', '4 items', '1,150.00', 'Submitted', 'HR approve')
             + f'<div style="margin-top: auto; padding-top: 10px; border-top: 0.5px solid {t["line"]}; display: flex; gap: 8px">{btn("Open Dashboard")}{btn("All reimbursements")}</div>')
+        # (the Office Admin's search: in the toolbar, where everyone's is — Haris 11:02)
         osearch = f'<span style="width: 360px; height: 32px; border-radius: 9px; background: {t["field"]}; display: inline-flex; align-items: center; gap: 7px; padding: 0 11px; box-sizing: border-box; font-size: 13px; white-space: nowrap; color: {t["dim"]}">{sym("search", t["dim"])}Search Client Assets — e.g. “northline logo svg”</span>'
         content = (f'<div style="position: absolute; left: 260px; right: 0; top: 52px; bottom: 0; background: {t["content"]}; border-top: 0.5px solid {t["line"]}; padding: 20px 24px 8px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; overflow: hidden">'
                    f'<div style="display: flex; align-items: flex-end"><div><div style="font-size: 12px; color: {t["dim"]}">Saturday, November 14 · Office Admin</div><div style="font-size: 26px; font-weight: 700; letter-spacing: -0.3px">Good evening, Nadine</div></div>'
-                   f'<div style="margin-left: auto">{osearch}</div></div>'
+                   '</div>'
                    f'<div style="display: flex; gap: 12px">{tile(3, "Clients", "in Client Assets", "#8b7cf6")}{tile(3, "Unread", "in your Inbox", red)}{tile(17, "Team members", "Open Team page", A)}{tile(2, "Claims to approve", "November", orange)}</div>'
                    f'<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; flex: 1; min-height: 0">{assets}{inbox}{fin}</div></div>')
     # search (Haris 10:41): people too, and where each was found — as the iPhone's
