@@ -19,7 +19,7 @@ import ServiceManagement
 
 // Version of this Mac app's native part. Raise it when a change here needs everyone to reinstall: the web app
 // then shows a required-update banner in older Mac apps. (The earlier script app was 1–6.)
-let SHELL_VERSION = 13   // 13: Apple's search field and Talk button in the page's top strip (PageBar), Apple's menu on a right-click (command menu) · 12: the sidebar is the Mac's own (glass on macOS 26; Sidebar.swift; command sidebar / window.__e11Side) · 10: fast office use (shared-folder copies, office-network uploads and downloads) · 11: office-network downloads show their progress
+let SHELL_VERSION = 13   // 13: Apple's menu on a right-click (command menu) · 12: the sidebar is the Mac's own (glass on macOS 26; Sidebar.swift; command sidebar / window.__e11Side) · 10: fast office use (shared-folder copies, office-network uploads and downloads) · 11: office-network downloads show their progress
 
 let info = Bundle.main.infoDictionary ?? [:]
 let env = ProcessInfo.processInfo.environment
@@ -83,7 +83,6 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   var selftest: [String: Any] = [:]
   let LIGHTS_X: CGFloat = 20, BAR_H: CGFloat = 48
   let side = Sidebar()
-  let bar = PageBar()   // (Apple's search field and Talk button over the page's top strip — Mac page by page, Haris 2026-11-15)
   // the window buttons' row: the page's own 48px top strip, or the native sidebar's top row
   var barH: CGFloat { side.on ? Sidebar.INSET * 2 + Sidebar.TOP : BAR_H }
 
@@ -194,9 +193,6 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     side.frame = NSRect(x: Sidebar.INSET, y: Sidebar.INSET, width: Sidebar.WIDE, height: window.contentView!.bounds.height - Sidebar.INSET * 2)
     side.autoresizingMask = [.height]
     window.contentView!.addSubview(side, positioned: .above, relativeTo: web)
-    bar.host = self
-    bar.isHidden = true
-    window.contentView!.addSubview(bar, positioned: .above, relativeTo: web)
     #if APPSTORE
     reviewLink.frame = NSRect(x: 0, y: 14, width: window.contentView!.bounds.width, height: 30)
     reviewLink.autoresizingMask = [.width]
@@ -485,8 +481,6 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       if let ev = NSApp.currentEvent { window.performDrag(with: ev) }
       done(["ok": true])
     case "zoomWindow": window.performZoom(nil); done(["ok": true])
-    // the page's top strip: where its search and Talk sit (the page's own hidden there), the count, the words (shell 13)
-    case "pageBar": bar.apply(a, zoom: web.pageZoom, height: window.contentView?.bounds.height ?? 0); if lockView != nil { bar.isHidden = true }; done(["ok": true])
     // a right-click: the page's options as Apple's own menu at the pointer; the reply is the one picked (shell 13)
     case "menu": PageMenu.show(a, in: web, zoom: web.pageZoom, done)
     case "shareInfo": DispatchQueue.global(qos: .userInitiated).async { let r = self.shareInfo(a); DispatchQueue.main.async { done(r) } }
@@ -751,7 +745,6 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     lockView = v
     web.isHidden = true
     side.isHidden = true
-    bar.isHidden = true
     window.makeFirstResponder(b)
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.unlock() }
   }
@@ -767,7 +760,6 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     lockView?.removeFromSuperview(); lockView = nil
     web.isHidden = false
     side.isHidden = !side.on
-    bar.isHidden = !bar.on
     window.makeFirstResponder(web)
     lastActive = Date()
   }
@@ -990,8 +982,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
           let si = NSImage(size: self.side.bounds.size); si.addRepresentation(rep)
           si.draw(in: self.side.frame)
         }
-        // what lies over the page: Apple's search and Talk (shell 13), and the window's title-bar row (its buttons, a toolbar)
-        for v in [self.bar as NSView?, self.window.standardWindowButton(.closeButton)?.superview?.superview] {
+        // what lies over the page: the window's title-bar row (its buttons)
+        for v in [self.window.standardWindowButton(.closeButton)?.superview?.superview] {
           guard let v = v, !v.isHidden, v.bounds.width > 0, let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) else { continue }
           v.cacheDisplay(in: v.bounds, to: rep)
           let vi = NSImage(size: v.bounds.size); vi.addRepresentation(rep)
@@ -1162,93 +1154,6 @@ let delegate = App()
 app.delegate = delegate
 app.setActivationPolicy(.regular)
 app.run()
-
-/* ---------- the page's top strip, Apple's way (Mac page by page — Haris 2026-11-15) ----------
-   The page keeps its top strip (its name, the E11 mark); Apple's own search field and a Talk button sit over it, where the
-   page's own would be (the page hides those and sends their places: command pageBar). Typing in the field searches the
-   page (window.__e11Bar); the page's ⌘K puts the cursor in it. Nothing here touches the sidebar. */
-final class PageBar: NSView, NSSearchFieldDelegate {
-  weak var host: App?
-  private(set) var on = false
-  let search = NSSearchField()
-  let talk = NSButton()
-  let badge = NSTextField(labelWithString: "")
-  private var sent = ""
-  override init(frame: NSRect) {
-    super.init(frame: frame)
-    search.delegate = self
-    search.sendsSearchStringImmediately = true
-    search.sendsWholeSearchString = false
-    search.target = self; search.action = #selector(searched)
-    search.focusRingType = .default
-    search.controlSize = .large
-    if let c = search.cell as? NSSearchFieldCell { c.placeholderString = "Search tasks" }
-    talk.title = "Talk"
-    if #available(macOS 11.0, *) { talk.image = NSImage(systemSymbolName: "bubble.left", accessibilityDescription: "E11 Talk") }
-    talk.imagePosition = .imageLeading
-    talk.controlSize = .large
-    talk.bezelStyle = .texturedRounded   // (Apple's toolbar button)
-    talk.target = self; talk.action = #selector(openTalk)
-    badge.font = .systemFont(ofSize: 11, weight: .semibold)
-    badge.textColor = .white
-    badge.alignment = .center
-    badge.drawsBackground = false
-    badge.wantsLayer = true
-    badge.layer?.backgroundColor = NSColor.systemRed.cgColor
-    badge.isHidden = true
-    addSubview(talk); addSubview(search); talk.addSubview(badge)
-  }
-  required init?(coder: NSCoder) { fatalError() }
-  // {show, search: {x, y, w, h, place, q}, talk: {x, y, w, h, n} | null, focus} — places in the page's CSS pixels
-  func apply(_ a: [String: Any], zoom: CGFloat, height: CGFloat) {
-    on = (a["show"] as? Bool) == true
-    if (a["focus"] as? Bool) == true, on { window?.makeFirstResponder(search); search.currentEditor()?.selectAll(nil) }
-    let num = { (v: Any?) -> CGFloat in CGFloat((v as? NSNumber)?.doubleValue ?? 0) }
-    func rect(_ d: [String: Any]) -> NSRect {   // (the page's top-left CSS pixels → this window's points, from the bottom)
-      let x = num(d["x"]) * zoom, y = num(d["y"]) * zoom, w = num(d["w"]) * zoom, h = num(d["h"]) * zoom
-      return NSRect(x: x, y: height - y - h, width: w, height: h)
-    }
-    guard on, let sd = a["search"] as? [String: Any] else { isHidden = true; return }
-    var all = rect(sd)
-    let sr = rect(sd)
-    if let td = a["talk"] as? [String: Any] { all = all.union(rect(td)) }
-    frame = all.insetBy(dx: 0, dy: -4)
-    search.frame = NSRect(x: sr.minX - frame.minX, y: (frame.height - 28) / 2, width: sr.width, height: 28)
-    if let p = sd["place"] as? String, let c = search.cell as? NSSearchFieldCell, c.placeholderString != p { c.placeholderString = p }
-    let q = sd["q"] as? String ?? ""
-    if search.stringValue != q, window?.firstResponder !== search.currentEditor() { search.stringValue = q; sent = q }
-    if let td = a["talk"] as? [String: Any] {
-      let tr = rect(td)
-      talk.isHidden = false
-      talk.frame = NSRect(x: tr.minX - frame.minX, y: (frame.height - 28) / 2, width: tr.width, height: 28)
-      let n = (td["n"] as? NSNumber)?.intValue ?? 0
-      badge.isHidden = n <= 0
-      badge.stringValue = n > 99 ? "99+" : "\(n)"
-      let bw = max(18, badge.intrinsicContentSize.width + 8)
-      badge.frame = NSRect(x: talk.bounds.width - bw - 8, y: (talk.bounds.height - 18) / 2, width: bw, height: 18)
-      badge.layer?.cornerRadius = 9
-      talk.toolTip = n > 0 ? "Open E11 Talk — \(n) unread" : "Open E11 Talk"
-    } else { talk.isHidden = true }
-    isHidden = false
-  }
-  @objc func searched() {
-    let q = search.stringValue
-    if q == sent { return }
-    sent = q
-    host?.pageJS("window.__e11Bar && window.__e11Bar(\(jsonString(["q": q])))")
-  }
-  func controlTextDidChange(_ n: Notification) { searched() }
-  // Esc in the field: cleared, back to the page
-  func control(_ control: NSControl, textView: NSTextView, doCommandBy sel: Selector) -> Bool {
-    if sel == #selector(NSResponder.cancelOperation(_:)) {
-      search.stringValue = ""; searched()
-      if let w = window, let web = host?.web { w.makeFirstResponder(web) }
-      return true
-    }
-    return false
-  }
-  @objc func openTalk() { host?.pageJS("window.__e11Bar && window.__e11Bar({talk: true})") }
-}
 
 /* ---------- a right-click: the page's options as Apple's own menu (command menu) ---------- */
 enum PageMenu {
