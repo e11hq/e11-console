@@ -2134,7 +2134,7 @@ function avatarHTML(id, size = 24, cls = '') {
 function avatarStack(ids, size = 20, max = 3, t = null) {
   if (!ids || !ids.length) return '';
   const shown = ids.slice(0, max).map((id) => (t && partDone(t, id) ? `<span class="av-done">${avatarHTML(id, size)}<i>${icon('check')}</i></span>` : avatarHTML(id, size))).join('');
-  return `<span class="av-stack">${shown}${ids.length > max ? `<span class="av more" style="width:${size}px;height:${size}px">+${ids.length - max}</span>` : ''}</span>`;
+  return `<span class="av-stack" style="--s:${size}px">${shown}${ids.length > max ? `<span class="av more" style="width:${size}px;height:${size}px">+${ids.length - max}</span>` : ''}</span>`;
 }
 // People who follow a task: its assignees and whoever created it (a subtask also notifies its parent's people)
 // Who a task's creator updates go to. An Account Manager who created a task in a client and is no longer that client's
@@ -9960,7 +9960,9 @@ const Splash = (() => {
   const el = document.getElementById('splash');
   let start = performance.now(), gone = false, skipResolve = null;
   const skipped = new Promise((r) => { skipResolve = r; });
-  const toApp = (a) => { if (Host.isIOSApp) NativeMac.call('splash', a).catch(() => {}); };
+  // (the Mac app 13+ draws its own startup screen — Haris 2026-11-15 14:43: told before the page runs; this one stays hidden)
+  const macOwn = !!window.__e11NativeSplash && Host.isMacApp;
+  const toApp = (a) => (Host.isIOSApp || macOwn ? NativeMac.call('splash', a).catch(() => null) : Promise.resolve(null));
   window.__e11SplashSkip = () => skipResolve();
   window.__e11SplashRetry = () => { if (retryResolve) retryResolve(); };
   // what the app needs for its next start: the look, the first name, the CD's row, and for the next three weeks each
@@ -10026,6 +10028,7 @@ const Splash = (() => {
     const skip = () => skipResolve();
     el.addEventListener('click', skip);
     // (the app's own copy: how long it has been showing, so the ticks come no later than they would here)
+    if (macOwn) NativeMac.call('splash', { hello: true }).catch(() => {});
     if (Host.isIOSApp) NativeMac.call('splash', { hello: true }).then((r) => { if (r && r.shown) { window.__e11NativeSplashOn = true; if (r.age > 0) start = Math.min(start, performance.now() - r.age); } }).catch(() => {});
     window.addEventListener('keydown', function k() { if (!gone) skip(); window.removeEventListener('keydown', k); });
   }
@@ -10065,6 +10068,19 @@ const Splash = (() => {
   // clients' lines — Haris 2026-11-15 14:18: "animate after the page is loaded")
   const shown = () => { if (window.__e11ShownAt) return; window.__e11ShownAt = Date.now(); document.documentElement.classList.add('e11-shown'); };
   async function finish() {
+    if (macOwn && !gone) {
+      // the Mac's own startup screen: the page and the sidebar made ready behind it now; it goes once its icon has
+      // finished, and what grows as the page shows starts as it has gone
+      gone = true;
+      try { const u = me(); remember({ name: u ? firstName(u.id) : '' }); } catch (e) { /* fine */ }
+      if (el) el.remove();
+      document.documentElement.style.backgroundColor = '';
+      if (typeof NativeSide !== 'undefined') NativeSide.paint();
+      await wait(120);
+      const r = await toApp({ out: true });
+      setTimeout(shown, Math.max(0, Math.round((r && r.goneIn) || 0) - 150));
+      return;
+    }
     if (!el || gone) { shown(); return; }
     const v = values();
     const bar = el.querySelector('.sp-bar i'), n = document.getElementById('sp-n');

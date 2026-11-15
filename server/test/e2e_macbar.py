@@ -17,6 +17,7 @@ window.webkit = { messageHandlers: { e11: { postMessage(raw) {
   if (m.cmd === 'pageBar') window.__native.bar = m.args;
   if (m.cmd === 'menu') { window.__native.menu = m.args; res = window.__native.pick == null ? { ok: true } : { ok: true, i: window.__native.pick }; }
   if (m.cmd === 'openURL') window.__native.opened = m.args.url;
+  if (m.cmd === 'splash') { (window.__native.splash = window.__native.splash || []).push(m.args); res = m.args.out ? { ok: true, shown: true, goneIn: 300 } : { ok: true, shown: true }; }
   if (m.cmd === 'sidebar') res = { ok: true, overlay: true, room: 252, slim: 0 };
   if (m.cmd === 'symbols') res = { ok: true, images: Object.fromEntries(m.args.names.map((n) => [n, 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='])) };
   setTimeout(() => window.__e11NativeReply(m.id, res), 5);
@@ -35,7 +36,7 @@ async def main():
             for shell in (13, 12):
                 ctx = await b.new_context(viewport={'width': 1400, 'height': 900}, base_url=BASE)
                 await ctx.add_cookies([{'name': 'e11_dev_email', 'value': ADMIN, 'url': BASE}])
-                await ctx.add_init_script(f'window.__shell = {shell};' + BRIDGE)
+                await ctx.add_init_script(f'window.__shell = {shell};' + BRIDGE + ("window.__e11NativeSplash = true;" if shell == 13 else ''))
                 pg = await ctx.new_page(); errs = []; pg.on('pageerror', lambda e: errs.append(str(e)))
                 await pg.goto('/'); await pg.wait_for_timeout(3500); E = pg.evaluate
                 await E("go('home')"); await pg.wait_for_timeout(500)
@@ -47,6 +48,9 @@ async def main():
                     check(not errs, f'no page errors (12) {errs[:2]}')
                     await ctx.close(); continue
                 check(await E("getComputedStyle(document.querySelector('#topbar .search')).visibility") == 'visible' and await E("window.__native.bar") is None, 'the top bar stays the page\u2019s own (Talk and search)')
+                # the Mac's own startup screen: the page's never shown, the page said hello and then out, the sidebar painted
+                sp = await E("[!!document.getElementById('splash') || !document.documentElement.classList.contains('native-splash'), (window.__native.splash || []).map((a) => Object.keys(a)[0]).filter((k) => k !== 'status'), window.__native.calls.includes('sidebar')]")
+                check(sp == [False, ['hello', 'out'], True], f'the startup screen is the Mac app\u2019s own; the page and sidebar ready behind it {sp}')
                 # Home (Haris 2026-11-15 14:08–14:12): opens on Today; Team goals achieved above Schedule, its ring filling once;
                 # the clients' lines growing once, their colour easing lighter to the right
                 hm = await E("(() => { const a = document.querySelector('.hm-lead aside'); return [document.querySelector('.hm-tab.on').dataset.v, a.firstElementChild.classList.contains('hm-goal'), !!a.querySelector('.hm-goal + .hm-card .hm-h h2') && a.querySelector('.hm-goal + .hm-card .hm-h h2').textContent, !!document.querySelector('.hm-hero'), getComputedStyle(document.querySelector('.hm-pbar i')).backgroundImage.startsWith('linear-gradient')]; })()")

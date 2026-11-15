@@ -28,6 +28,8 @@
 /* iPhone Home Screen app: the page always runs up under the time and battery (iOS picks dark or light text by itself),
    so pop-up overlays dim the whole screen. Never switch this while the app is open: iOS then resizes the page and
    leaves a dark band at the bottom with taps there not registering. */
+/* the Mac app draws its own startup screen (it sets __e11NativeSplash before anything runs): the page's stays hidden */
+if (window.__e11NativeSplash) document.documentElement.classList.add('native-splash');
 /* The startup colour straight away (remembered look, dark on a first start), so nothing dark shows around a light startup screen */
 try { var m = JSON.parse(localStorage.getItem('e11-splash') || '{}') || {}, h = new Date().getHours();
   var lt = m.themeMode === 'auto' ? (h >= 6 && h < 18) : m.themeMode === 'light'; /* dark unless picked; Automatic: by daylight, like the app */

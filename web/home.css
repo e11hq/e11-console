@@ -507,3 +507,12 @@ html.mac-chrome .hm-proj:hover { background: var(--mc-sel); }
 html.mac-chrome .hm-peak span { width: 28px; height: 28px; }
 html.mac-chrome .hm-peak svg { width: 14px; height: 14px; transform: translateX(1px); }
 html.mac-chrome .hm-peak svg path { fill: currentColor; }
+/* faces side by side (Mac app — Haris 2026-11-15 14:49): no dark ring — a see-through gap where the next face overlaps (the row's
+   own colour shows through), and a face whose part is done ringed in green instead of the small tick */
+html.mac-chrome .av-stack .av, html.mac-chrome .av-stack .av-done .av, html.mac-chrome .hm-goal .hm-avs .av { box-shadow: none; }
+html.mac-chrome .av-stack > :not(:last-child) {
+  -webkit-mask: radial-gradient(circle at calc(var(--s, 24px) * 1.5 - 6px) 50%, transparent calc(var(--s, 24px) / 2 + 2px), #000 calc(var(--s, 24px) / 2 + 2.5px));
+  mask: radial-gradient(circle at calc(var(--s, 24px) * 1.5 - 6px) 50%, transparent calc(var(--s, 24px) / 2 + 2px), #000 calc(var(--s, 24px) / 2 + 2.5px)); }
+html.mac-chrome .av-stack .av-done .av { outline: 2px solid var(--mc-green); outline-offset: -2px; }
+html.mac-chrome .av-stack .av-done i { display: none; }
+

@@ -1032,6 +1032,8 @@ button[disabled], .pn.taken { cursor: not-allowed; }
 .act-line > span:nth-child(2) { line-height: 1.5; }
 
 /* ---------- Startup screen: a checklist that ticks off what the app is loading ---------- */
+/* the Mac app draws its own startup screen (Haris 2026-11-15 14:43): the page's stays hidden behind it */
+html.native-splash #splash { display: none !important; }
 #splash {
   --sp-bg: #0c0d0f; --sp-card: #0f1013; --sp-line: #1d1f24; --sp-row: #16171b; --sp-text: #e9eaee; --sp-dim: #8b8e98; --sp-hint: #7d808a;
   --sp-track: #1d1f24; --sp-accent: #7c6cff; --sp-now: #16152a; --sp-now-ink: #c9c0ff; --sp-spin: #2c2f37;
