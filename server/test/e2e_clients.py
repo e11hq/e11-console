@@ -210,16 +210,17 @@ async def main():
             r = await E("""(() => {
               const cd = cdUserId(); const t0 = topTasks().find(t => t.projectId && !t.done && !idLocked(t) && t.createdBy !== cd && !(t.assignees || []).includes(cd));
               const fresh = createTask({ projectId: t0.projectId, sectionId: proj(t0.projectId).sections[0].id, title: 'CD rule test' }); fresh.needsCD = true;
-              setAssignee(fresh, cd, true); const blocked = !(fresh.assignees || []).includes(cd);
+              setAssignee(fresh, cd, true); const blocked = !(fresh.assignees || []).includes(cd), alone = !needsCD(fresh);
               const old = { ...t0 }; delete old.cdRule; delete old.lockedAt; old.id = 'old-x'; old.assignees = []; old.reviews = []; old.needsCD = true; db.tasks.push(old);
               setAssignee(old, cd, true); const oldOk = (old.assignees || []).includes(cd);
               const n = (k) => db.notifications.filter(x => x.to === cd && x.taskId === t0.id && x.kind === k).length;
               const a = n('status'), b = n('review');
               pushNotif(cd, t0, 'status', 'changed it on'); pushNotif(cd, t0, 'review', 'submitted files for your review on');
               db.tasks = db.tasks.filter(x => x.id !== 'old-x' && x.id !== fresh.id);
-              return { blocked, oldOk, status: n('status') - a, review: n('review') - b };
+              return { blocked, alone, oldOk, status: n('status') - a, review: n('review') - b };
             })()""")
-            check(r == {'blocked': True, 'oldOk': True, 'status': 0, 'review': 1}, f'CD review rule and the CD’s notifications {r}')
+            # (since 2026-11-08: the CD can be on a task that needs CD review — the CD alone switches review off by itself)
+            check(r == {'blocked': False, 'alone': True, 'oldOk': True, 'status': 0, 'review': 1}, f'CD review rule and the CD’s notifications {r}')
         # Edit client list: switch a client off, rename it (its Client Assets folder follows)
         await E("go('clientlist')"); await pg.wait_for_timeout(400)
         check(await pg.locator('.cl-row').count() >= 3, 'Edit client list shows the clients')
