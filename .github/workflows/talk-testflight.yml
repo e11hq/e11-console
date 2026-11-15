@@ -6,14 +6,30 @@ on:
       build:
         description: "The E11 Talk build number (e.g. 3)"
         required: true
+      where:
+        description: "mac (kept on Haris's Mac — the default) or github (kept as a GitHub Mac run's artifact)"
+        default: mac
 permissions:
   contents: write
+  actions: read
 jobs:
   send:
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: ${{ inputs.where == 'github' && 'macos-26' || fromJSON('["self-hosted","macOS","ARM64"]') }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: GitHub's Mac — the build kept as an artifact, and the newest Xcode
+        if: inputs.where == 'github'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD: ${{ github.event.inputs.build }}
+        run: |
+          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1); [ -n "$X" ] && sudo xcode-select -s "$X"
+          RUN=$(gh api "repos/${{ github.repository }}/actions/artifacts?name=talk-$BUILD" -q '.artifacts[0].workflow_run.id')
+          [ -n "$RUN" ] || { echo "No kept E11 Talk build $BUILD on GitHub"; exit 1; }
+          gh run download "$RUN" -n "talk-$BUILD" -D "$RUNNER_TEMP/kept"
+          mkdir -p "$HOME/e11-archives"; ditto -x -k "$RUNNER_TEMP/kept/talk-$BUILD.zip" "$RUNNER_TEMP/kept/x"
+          rm -rf "$HOME/e11-archives/talk-$BUILD"; mv "$RUNNER_TEMP/kept/x/E11Talk.xcarchive" "$HOME/e11-archives/talk-$BUILD"
       - name: Send the kept build to TestFlight
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}

@@ -8,6 +8,9 @@ on:
       mode:
         description: "build (built, checked, signed and kept — the default) or shots (the App Store screenshots: nothing signed or sent)"
         default: build
+      where:
+        description: "mac (Haris's Mac — the default) or github (GitHub's own Mac: the signed build kept as this run's artifact, sent from there)"
+        default: mac
 permissions:
   contents: write
 concurrency:
@@ -15,12 +18,16 @@ concurrency:
   cancel-in-progress: false
 jobs:
   talk:
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: ${{ inputs.where == 'github' && 'macos-26' || fromJSON('["self-hosted","macOS","ARM64"]') }}
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - name: Homebrew's tools on this Mac
         run: for d in /opt/homebrew/bin /usr/local/bin; do [ -d "$d" ] && echo "$d" >> "$GITHUB_PATH"; done; true
+      - name: GitHub's Mac — the newest Xcode on it
+        if: inputs.where == 'github'
+        run: |
+          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1); [ -n "$X" ] && sudo xcode-select -s "$X"; xcodebuild -version
       - name: Xcode project
         run: |
           command -v xcodegen >/dev/null || brew install xcodegen >/dev/null
@@ -92,8 +99,20 @@ jobs:
           BUILD=$GITHUB_RUN_NUMBER
           xcodebuild -project talk/E11Talk.xcodeproj -scheme E11Talk -configuration Release -destination 'generic/platform=iOS' \
             -archivePath build-talk/E11Talk.xcarchive DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CURRENT_PROJECT_VERSION="$BUILD" $AUTH archive 2>&1 | tee "$RUNNER_TEMP/talk-archive-full.log" | tail -30
-          mkdir -p "$HOME/e11-archives"; rm -rf "$HOME/e11-archives/talk-$BUILD"; mv build-talk/E11Talk.xcarchive "$HOME/e11-archives/talk-$BUILD"
+          if [ "${{ inputs.where }}" = "github" ]; then
+            # (GitHub's Mac is gone after the run: the archive kept as this run's artifact, talk-<number>)
+            ditto -c -k --keepParent build-talk/E11Talk.xcarchive "$RUNNER_TEMP/talk-$BUILD.zip"; echo "KEEP=$RUNNER_TEMP/talk-$BUILD.zip" >> "$GITHUB_ENV"
+          else
+            mkdir -p "$HOME/e11-archives"; rm -rf "$HOME/e11-archives/talk-$BUILD"; mv build-talk/E11Talk.xcarchive "$HOME/e11-archives/talk-$BUILD"
+          fi
           rm -f "$KEY"; echo "E11 Talk build $BUILD signed and kept — waiting for Haris before TestFlight"
+      - name: Keep the signed build (GitHub's Mac)
+        if: inputs.where == 'github' && inputs.mode != 'shots' && env.KEEP != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: talk-${{ github.run_number }}
+          path: ${{ env.KEEP }}
+          retention-days: 14
       - name: Results for checking from Claude's workspace
         if: always()
         env:
