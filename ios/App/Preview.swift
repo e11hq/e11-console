@@ -396,7 +396,7 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
   static func paintPick(_ c: UICollectionViewCell, _ on: Bool, animated: Bool) {
     let inner = c.contentView.viewWithTag(77)
     inner?.layer.borderColor = UIColor.white.cgColor
-    let go = { inner?.layer.borderWidth = on ? 1.5 : 0 }
+    let go: () -> Void = { inner?.layer.borderWidth = on ? 1.5 : 0 }
     if animated { UIView.animate(withDuration: 0.2, animations: go) } else { go() }
   }
   private func refreshBars() {
