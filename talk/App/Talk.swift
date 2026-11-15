@@ -874,19 +874,21 @@ enum LinkPrevMaker {
   enum Pick { case auto, given(Ready), none }
   // read while the words are still in the box: the title and site first, then the picture and the icon as each comes
   @discardableResult
-  static func read(_ url: URL, step: @escaping (Ready) -> Void) -> LPMetadataProvider {
+  static func read(_ url: URL, step: @escaping (Ready) -> Void, done: @escaping () -> Void = {}) -> LPMetadataProvider {
     let p = LPMetadataProvider(); p.timeout = 20
     p.startFetchingMetadata(for: url) { md, _ in
-      guard let md = md else { return }
+      guard let md = md else { DispatchQueue.main.async { done() }; return }
+      let all = DispatchGroup()
       let site = (md.url ?? url).host?.replacingOccurrences(of: "www.", with: "")
       var r = Ready(prev: Msg.LinkPrev(url: url.absoluteString, title: md.title, site: site, video: md.videoProvider != nil || md.remoteVideoURL != nil, img: nil, icon: nil), img: nil, icon: nil)
       DispatchQueue.main.async { step(r) }
       if let ip = md.iconProvider, ip.canLoadObject(ofClass: UIImage.self) {
-        ip.loadObject(ofClass: UIImage.self) { o, _ in let d = (o as? UIImage).flatMap { shrink($0, 64)?.pngData() }; DispatchQueue.main.async { if d != nil { r.icon = d; step(r) } } }
+        all.enter(); ip.loadObject(ofClass: UIImage.self) { o, _ in let d = (o as? UIImage).flatMap { shrink($0, 64)?.pngData() }; DispatchQueue.main.async { if d != nil { r.icon = d; step(r) }; all.leave() } }
       }
       if let ip = md.imageProvider, ip.canLoadObject(ofClass: UIImage.self) {
-        ip.loadObject(ofClass: UIImage.self) { o, _ in let d = (o as? UIImage).flatMap { shrink($0, 800)?.jpegData(compressionQuality: 0.75) }; DispatchQueue.main.async { if d != nil { r.img = d; step(r) } } }
+        all.enter(); ip.loadObject(ofClass: UIImage.self) { o, _ in let d = (o as? UIImage).flatMap { shrink($0, 800)?.jpegData(compressionQuality: 0.75) }; DispatchQueue.main.async { if d != nil { r.img = d; step(r) }; all.leave() } }
       }
+      all.notify(queue: .main) { done() }
     }
     return p
   }

@@ -23,11 +23,11 @@ for (look, bg, field, ink) in [("dark", NSColor.black, NSColor(white: 0.16, alph
   try! rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: CommandLine.arguments[1] + "/smiley-\(look).png"))
 }
 
-// Apple's outline smiley as the Mac draws it (face.smiling, regular, 15 pt), kept as Talk's own template picture (@2x, @3x)
+// Apple's outline smiley as the Mac draws it (face.smiling, regular, 18 pt — a little bigger, Haris 2026-11-15 23:39), kept as Talk's own template picture (@2x, @3x)
 // for the box — the iPhone's newer system draws the same symbol as a solid face (Haris 2026-11-15: "a regular in your
 // picture is good")
 for k in [2, 3] {
-  let cfg = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular).applying(NSImage.SymbolConfiguration(paletteColors: [.black]))
+  let cfg = NSImage.SymbolConfiguration(pointSize: 18, weight: .regular).applying(NSImage.SymbolConfiguration(paletteColors: [.black]))
   let img = NSImage(systemSymbolName: "face.smiling", accessibilityDescription: nil)!.withSymbolConfiguration(cfg)!
   let sz = img.size
   let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int((sz.width * CGFloat(k)).rounded(.up)), pixelsHigh: Int((sz.height * CGFloat(k)).rounded(.up)), bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!

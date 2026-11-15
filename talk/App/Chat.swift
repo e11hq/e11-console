@@ -2874,6 +2874,8 @@ final class MessageBar: UIView, UITextViewDelegate {
   //  Haris 2026-11-15: the link's mark and its site first, then its title, then its picture in the mark's place; ✕ sends
   //  it without; sent early, it goes with whatever was read)
   private let linkV = UIView(), linkPic = UIImageView(), linkTitle = UILabel(), linkSite = UILabel(), linkX = UIButton(type: .system)
+  // (while it's being read: a soft light sweeping across the strip, again and again, till all of it is in — WhatsApp's)
+  private let linkSheen = CAGradientLayer()
   private var linkOn = false, linkURL: URL?, linkReady: LinkPrevMaker.Ready?, linkProv: LPMetadataProvider?, linkOff = Set<String>(), linkWait: DispatchWorkItem?
   // (editing: the pencil before "Edit message", and send turns into ✓ — the design's board 34)
   private let editIcon = UIImageView(image: UIImage(systemName: "pencil", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)))
@@ -3019,6 +3021,8 @@ final class MessageBar: UIView, UITextViewDelegate {
     linkX.addAction(UIAction { [weak self] _ in guard let self = self, let u = self.linkURL else { return }; self.linkOff.insert(u.absoluteString); self.linkCheck() }, for: .touchUpInside)
     [linkPic, linkTitle, linkSite, linkX].forEach { linkV.addSubview($0) }
     replyClip.addSubview(linkV)
+    linkSheen.startPoint = CGPoint(x: 0, y: 0.5); linkSheen.endPoint = CGPoint(x: 1, y: 0.5); linkSheen.locations = [0, 0.5, 1]; linkSheen.opacity = 0
+    linkV.layer.addSublayer(linkSheen)
     textChanged()
   }
   required init?(coder: NSCoder) { fatalError() }
@@ -3041,6 +3045,7 @@ final class MessageBar: UIView, UITextViewDelegate {
     let lx: CGFloat = 68
     linkTitle.frame = CGRect(x: lx, y: 10, width: W - 52 - lx, height: 19); linkSite.frame = CGRect(x: lx, y: 31, width: W - 52 - lx, height: 17)
     linkX.frame = CGRect(x: W - 46, y: 10, width: 40, height: 40)
+    CATransaction.begin(); CATransaction.setDisableActions(true); linkSheen.frame = CGRect(x: 0, y: 0, width: 140, height: 60); CATransaction.commit()
     replyBar.frame = CGRect(x: 0, y: 0, width: 4, height: 52)
     let tx: CGFloat = editing ? 40 : 12
     editIcon.frame = CGRect(x: 10, y: 12, width: 24, height: 28)
@@ -3377,21 +3382,36 @@ final class MessageBar: UIView, UITextViewDelegate {
     guard let u = u else { setLinkOn(false); return }
     linkPic.image = UIImage(systemName: "link", withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .regular)); linkPic.contentMode = .center; linkPic.backgroundColor = .clear
     linkTitle.text = nil; linkSite.text = u.host?.replacingOccurrences(of: "www.", with: "")
-    setLinkOn(true)
+    setLinkOn(true); sheen(true)
     let w = DispatchWorkItem { [weak self] in
       guard let self = self, self.linkURL == u else { return }
-      self.linkProv = LinkPrevMaker.read(u) { [weak self] r in
+      self.linkProv = LinkPrevMaker.read(u, step: { [weak self] r in
         guard let self = self, self.linkURL == u else { return }
         self.linkReady = r
         UIView.transition(with: self.linkV, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction]) {
           self.linkTitle.text = r.prev.title; self.linkSite.text = r.prev.site ?? self.linkSite.text
           if let d = r.img ?? r.icon, let i = UIImage(data: d) { self.linkPic.image = i; self.linkPic.contentMode = .scaleAspectFill }
         }
-      }
+      }, done: { [weak self] in if let self = self, self.linkURL == u { self.sheen(false) } })
     }
     linkWait = w; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: w)
   }
+  private func sheen(_ on: Bool) {
+    if on {
+      let c = traitCollection.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.09) : UIColor.black.withAlphaComponent(0.05)
+      linkSheen.colors = [UIColor.clear.cgColor, c.cgColor, UIColor.clear.cgColor]
+      let a = CABasicAnimation(keyPath: "position.x"); a.fromValue = -70; a.toValue = max(bounds.width, 300) + 70
+      a.duration = 1.1; a.repeatCount = .infinity; a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+      linkSheen.add(a, forKey: "sweep"); linkSheen.opacity = 1
+    } else {
+      CATransaction.begin(); CATransaction.setCompletionBlock { [weak self] in if self?.linkSheen.opacity == 0 { self?.linkSheen.removeAnimation(forKey: "sweep") } }
+      let f = CABasicAnimation(keyPath: "opacity"); f.fromValue = linkSheen.presentation()?.opacity ?? 1; f.toValue = 0; f.duration = 0.3
+      linkSheen.add(f, forKey: "fade"); linkSheen.opacity = 0
+      CATransaction.commit()
+    }
+  }
   private func setLinkOn(_ on: Bool) {
+    if !on { sheen(false) }
     guard on != linkOn else { return }
     linkOn = on
     invalidateIntrinsicContentSize(); setNeedsLayout()
