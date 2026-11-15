@@ -84,8 +84,9 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
     cardPic.translatesAutoresizingMaskIntoConstraints = false
     cardPic.widthAnchor.constraint(equalToConstant: 240).isActive = true
     cardPic.heightAnchor.constraint(equalToConstant: 240).isActive = true
-    cardType.font = .systemFont(ofSize: 28, weight: .bold); cardType.textColor = .secondaryLabel
-    cardNote.font = .systemFont(ofSize: 15); cardNote.textColor = .secondaryLabel; cardNote.numberOfLines = 0; cardNote.textAlignment = .center
+    // (light words on the viewer's black — Talk's viewer is black in light and dark alike)
+    cardType.font = .systemFont(ofSize: 28, weight: .bold); cardType.textColor = UIColor(white: 1, alpha: 0.62)
+    cardNote.font = .systemFont(ofSize: 15); cardNote.textColor = UIColor(white: 1, alpha: 0.62); cardNote.numberOfLines = 0; cardNote.textAlignment = .center
     [cardPic, cardType, cardNote].forEach { cardStack.addArrangedSubview($0) }
     contentView.addSubview(cardStack)
     play.setImage(UIImage(systemName: "play.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 30, weight: .bold)), for: .normal)
@@ -94,10 +95,10 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
     play.layer.cornerRadius = 38
     play.addAction(UIAction { [weak self] _ in guard let self else { return }; self.onPlay?(self.file) }, for: .touchUpInside)
     contentView.addSubview(play)
-    textView.isEditable = false; textView.font = .monospacedSystemFont(ofSize: 13, weight: .regular); textView.backgroundColor = .clear
+    textView.isEditable = false; textView.font = .monospacedSystemFont(ofSize: 13, weight: .regular); textView.backgroundColor = .clear; textView.textColor = .white
     textView.textContainerInset = UIEdgeInsets(top: 110, left: 14, bottom: 200, right: 14)
     contentView.addSubview(textView)
-    contentView.addSubview(spinner)
+    spinner.color = .white; contentView.addSubview(spinner)
     let dbl = UITapGestureRecognizer(target: self, action: #selector(doubleTap(_:)))
     dbl.numberOfTapsRequired = 2
     zoomer.addGestureRecognizer(dbl)
@@ -266,10 +267,14 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
   private var pages: [String: ([String], String?)] = [:]
   private let pager: UICollectionView
   private let strip: UICollectionView
-  private let topBar = UIView(), bottomBar = UIView()
+  // (as E11 Talk's photo viewer — Haris 2026-11-15: "the preview same as Talk's, with glass buttons"): black, ‹ · the
+  //  file's name and its line · ••• at the top on a soft shade; the strip and Copy Link · Download as Apple's glass at the
+  //  foot on the same shade turned upside down; a tap hides and shows them)
+  private let topBar = UIView(), bottomBar = UIView(), topShade = Shade(), footShade = Shade()
   private let closeB = UIButton(type: .system), moreB = UIButton(type: .system)
-  private let count = UILabel(), name = UILabel(), details = UILabel()
+  private let name = UILabel(), details = UILabel()
   private let copyB = UIButton(type: .system), dlB = UIButton(type: .system)
+  final class Shade: UIView { override class var layerClass: AnyClass { CAGradientLayer.self } }
   private let toast = UILabel()
   private var barsHidden = false
   private var closed = false
@@ -281,18 +286,20 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     self.event = event
     let pl = UICollectionViewFlowLayout(); pl.scrollDirection = .horizontal; pl.minimumLineSpacing = 0
     pager = UICollectionView(frame: .zero, collectionViewLayout: pl)
-    let sl = UICollectionViewFlowLayout(); sl.scrollDirection = .horizontal; sl.minimumLineSpacing = 6; sl.itemSize = CGSize(width: 44, height: 44)
+    let sl = UICollectionViewFlowLayout(); sl.scrollDirection = .horizontal; sl.minimumLineSpacing = 3; sl.itemSize = CGSize(width: 26, height: 36)
     strip = UICollectionView(frame: .zero, collectionViewLayout: sl)
     super.init(nibName: nil, bundle: nil)
     modalPresentationStyle = .overFullScreen
     modalTransitionStyle = .crossDissolve
+    modalPresentationCapturesStatusBarAppearance = true
   }
   required init?(coder: NSCoder) { fatalError() }
   override var prefersStatusBarHidden: Bool { barsHidden }
+  override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
 
   override func viewDidLoad() {
     super.viewDidLoad()
-    view.backgroundColor = .systemBackground
+    view.backgroundColor = .black
     pager.backgroundColor = .clear
     pager.isPagingEnabled = true
     pager.showsHorizontalScrollIndicator = false
@@ -301,44 +308,40 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     pager.register(PreviewCell.self, forCellWithReuseIdentifier: PreviewCell.id)
     pager.frame = view.bounds; pager.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     view.addSubview(pager)
-    // the bars
-    for bar in [topBar, bottomBar] {
-      bar.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.88)
-      bar.translatesAutoresizingMaskIntoConstraints = false
-      view.addSubview(bar)
+    // the top: ‹ · the name and its line · ••• (Apple's own glass, as Talk's viewer; before iOS 26 the grey capsule)
+    func glass(_ b: UIButton, _ sym: String, _ label: String, size: CGFloat = 42, red: Bool = false) {
+      var c: UIButton.Configuration
+      if #available(iOS 26.0, *) { c = .glass() } else { c = .gray(); c.cornerStyle = .capsule; c.baseForegroundColor = .white; c.background.backgroundColor = UIColor(white: 0.16, alpha: 0.8) }
+      c.image = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: size > 44 ? 20 : 17, weight: size > 44 ? .regular : .semibold)); c.contentInsets = .zero
+      if red { c.baseForegroundColor = .systemRed }
+      b.configuration = c; b.accessibilityLabel = label; b.translatesAutoresizingMaskIntoConstraints = false
+      NSLayoutConstraint.activate([b.widthAnchor.constraint(equalToConstant: size), b.heightAnchor.constraint(equalToConstant: size)])
     }
-    func circle(_ b: UIButton, _ sym: String) {
-      b.setImage(UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)), for: .normal)
-      b.tintColor = .label; b.backgroundColor = .tertiarySystemFill; b.layer.cornerRadius = 20
-      b.translatesAutoresizingMaskIntoConstraints = false
-      b.widthAnchor.constraint(equalToConstant: 40).isActive = true; b.heightAnchor.constraint(equalToConstant: 40).isActive = true
-    }
-    circle(closeB, "xmark"); circle(moreB, "ellipsis")
+    glass(closeB, "chevron.left", "Back"); glass(moreB, "ellipsis", "More")
     closeB.addAction(UIAction { [weak self] _ in self?.close() }, for: .touchUpInside)
     moreB.addAction(UIAction { [weak self] _ in self?.send("more") }, for: .touchUpInside)
-    count.font = .systemFont(ofSize: 15, weight: .semibold); count.textColor = .secondaryLabel; count.translatesAutoresizingMaskIntoConstraints = false
-    [closeB, count, moreB].forEach { topBar.addSubview($0) }
-    name.font = .systemFont(ofSize: 15, weight: .semibold); name.lineBreakMode = .byTruncatingMiddle
-    details.font = .systemFont(ofSize: 12.5); details.textColor = .secondaryLabel
+    name.font = .systemFont(ofSize: 17, weight: .semibold); name.textColor = .white; name.textAlignment = .center; name.lineBreakMode = .byTruncatingMiddle
+    details.font = .systemFont(ofSize: 13); details.textColor = UIColor(white: 0.62, alpha: 1); details.textAlignment = .center
+    let names = UIStackView(arrangedSubviews: [name, details]); names.axis = .vertical; names.alignment = .center
+    [closeB, names, moreB].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; topBar.addSubview($0) }
+    // the foot: the strip · Copy Link and Download (Talk's Share / Delete places, each Apple's own glass)
     strip.backgroundColor = .clear; strip.showsHorizontalScrollIndicator = false
     strip.dataSource = self; strip.delegate = self
     strip.register(UICollectionViewCell.self, forCellWithReuseIdentifier: "th")
     strip.isHidden = files.count < 2
-    func pill(_ b: UIButton, _ sym: String, _ t: String) {
-      var c = UIButton.Configuration.gray()
-      c.image = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .medium)); c.imagePadding = 6
-      c.title = t; c.cornerStyle = .capsule; c.baseForegroundColor = .label
-      b.configuration = c
-      b.heightAnchor.constraint(equalToConstant: 44).isActive = true
-    }
-    pill(copyB, "link", "Copy link"); pill(dlB, "arrow.down.circle", "Download")
+    glass(copyB, "link", "Copy Link", size: 48); glass(dlB, "arrow.down.to.line", "Download", size: 48)
     copyB.addAction(UIAction { [weak self] _ in self?.send("copy") }, for: .touchUpInside)   // (its words when the link is on the clipboard)
     dlB.addAction(UIAction { [weak self] _ in self?.send("dl") }, for: .touchUpInside)
-    let btns = UIStackView(arrangedSubviews: [copyB, dlB]); btns.axis = .horizontal; btns.spacing = 10; btns.distribution = .fillEqually
-    let meta = UIStackView(arrangedSubviews: [name, details]); meta.axis = .vertical; meta.spacing = 2
-    let col = UIStackView(arrangedSubviews: [meta, strip, btns]); col.axis = .vertical; col.spacing = 12
-    col.translatesAutoresizingMaskIntoConstraints = false
-    bottomBar.addSubview(col)
+    let tools = UIStackView(arrangedSubviews: [copyB, dlB]); tools.axis = .horizontal; tools.distribution = .equalSpacing; tools.alignment = .center
+    [strip, tools].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; bottomBar.addSubview($0) }
+    for bar in [topBar, bottomBar] { bar.translatesAutoresizingMaskIntoConstraints = false; bar.clipsToBounds = false; view.addSubview(bar) }
+    // (the soft shades under the buttons, Talk's: coming and going with them)
+    let g0 = topShade.layer as! CAGradientLayer
+    g0.colors = [UIColor(white: 0, alpha: 0.5).cgColor, UIColor(white: 0, alpha: 0.18).cgColor, UIColor.clear.cgColor]; g0.locations = [0, 0.55, 1]
+    topShade.isUserInteractionEnabled = false; topBar.insertSubview(topShade, at: 0)
+    let g1 = footShade.layer as! CAGradientLayer
+    g1.colors = g0.colors?.reversed(); g1.locations = [0, 0.45, 1]
+    footShade.isUserInteractionEnabled = false; bottomBar.insertSubview(footShade, at: 0)
     toast.font = .systemFont(ofSize: 14, weight: .medium); toast.textColor = .white; toast.textAlignment = .center
     toast.backgroundColor = UIColor.black.withAlphaComponent(0.78); toast.layer.cornerRadius = 18; toast.clipsToBounds = true
     toast.alpha = 0; toast.numberOfLines = 2
@@ -346,18 +349,19 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     view.addSubview(toast)
     let g = view.safeAreaLayoutGuide
     NSLayoutConstraint.activate([
-      topBar.topAnchor.constraint(equalTo: view.topAnchor), topBar.leadingAnchor.constraint(equalTo: view.leadingAnchor), topBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-      topBar.bottomAnchor.constraint(equalTo: g.topAnchor, constant: 56),
-      closeB.leadingAnchor.constraint(equalTo: topBar.leadingAnchor, constant: 16), closeB.bottomAnchor.constraint(equalTo: topBar.bottomAnchor, constant: -8),
-      moreB.trailingAnchor.constraint(equalTo: topBar.trailingAnchor, constant: -16), moreB.centerYAnchor.constraint(equalTo: closeB.centerYAnchor),
-      count.centerXAnchor.constraint(equalTo: topBar.centerXAnchor), count.centerYAnchor.constraint(equalTo: closeB.centerYAnchor),
-      bottomBar.leadingAnchor.constraint(equalTo: view.leadingAnchor), bottomBar.trailingAnchor.constraint(equalTo: view.trailingAnchor), bottomBar.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-      col.topAnchor.constraint(equalTo: bottomBar.topAnchor, constant: 12), col.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor, constant: 16),
-      col.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor, constant: -16), col.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -8),
-      strip.heightAnchor.constraint(equalToConstant: 44),
+      topBar.topAnchor.constraint(equalTo: g.topAnchor), topBar.leadingAnchor.constraint(equalTo: view.leadingAnchor), topBar.trailingAnchor.constraint(equalTo: view.trailingAnchor), topBar.heightAnchor.constraint(equalToConstant: 58),
+      closeB.leadingAnchor.constraint(equalTo: topBar.leadingAnchor, constant: 16), closeB.centerYAnchor.constraint(equalTo: topBar.centerYAnchor),
+      moreB.trailingAnchor.constraint(equalTo: topBar.trailingAnchor, constant: -16), moreB.centerYAnchor.constraint(equalTo: topBar.centerYAnchor),
+      names.centerXAnchor.constraint(equalTo: topBar.centerXAnchor), names.centerYAnchor.constraint(equalTo: topBar.centerYAnchor),
+      names.leadingAnchor.constraint(greaterThanOrEqualTo: closeB.trailingAnchor, constant: 8), names.trailingAnchor.constraint(lessThanOrEqualTo: moreB.leadingAnchor, constant: -8),
+      bottomBar.leadingAnchor.constraint(equalTo: view.leadingAnchor), bottomBar.trailingAnchor.constraint(equalTo: view.trailingAnchor), bottomBar.bottomAnchor.constraint(equalTo: g.bottomAnchor),
+      strip.topAnchor.constraint(equalTo: bottomBar.topAnchor), strip.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor), strip.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor), strip.heightAnchor.constraint(equalToConstant: 40),
+      tools.topAnchor.constraint(equalTo: strip.bottomAnchor, constant: 10), tools.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor, constant: 34), tools.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor, constant: -34),
+      tools.heightAnchor.constraint(equalToConstant: 48), tools.bottomAnchor.constraint(equalTo: bottomBar.bottomAnchor, constant: -4),
       toast.centerXAnchor.constraint(equalTo: view.centerXAnchor), toast.bottomAnchor.constraint(equalTo: bottomBar.topAnchor, constant: -14),
       toast.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, constant: -48), toast.heightAnchor.constraint(greaterThanOrEqualToConstant: 36),
     ])
+    (strip.collectionViewLayout as? UICollectionViewFlowLayout)?.sectionInset = UIEdgeInsets(top: 2, left: 14, bottom: 2, right: 14)
     // tap: hide / show the bars; pull down: close
     let tap = UITapGestureRecognizer(target: self, action: #selector(toggleBars))
     tap.delegate = self
@@ -370,6 +374,8 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
     if let l = pager.collectionViewLayout as? UICollectionViewFlowLayout, l.itemSize != view.bounds.size { l.itemSize = view.bounds.size; l.invalidateLayout() }
+    topShade.frame = CGRect(x: 0, y: -topBar.frame.minY, width: view.bounds.width, height: topBar.frame.maxY + 30)
+    footShade.frame = CGRect(x: 0, y: -30, width: view.bounds.width, height: view.bounds.height - bottomBar.frame.minY + 30)
     toast.layoutMargins = UIEdgeInsets(top: 0, left: 16, bottom: 0, right: 16)
   }
   private var placed = false
@@ -386,25 +392,26 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     guard at < files.count, let id = files[at]["id"] as? String else { return }
     event(["ev": ev, "id": id])
   }
-  // the one showing: a ring round it with a gap between — clear on any picture, dark or light, as Photos' strip does
-  //  (a border right on the picture blended into dark ones — Haris, 2026-11-02)
+  // the one showing: wider, with a thin white edge — Talk's strip (Haris 2026-11-15)
   static func paintPick(_ c: UICollectionViewCell, _ on: Bool, animated: Bool) {
-    c.contentView.layer.borderWidth = 0
-    c.layer.cornerRadius = 10; c.followLook("border") { [weak c] tc in c?.layer.setBorder(.label, tc) }
     let inner = c.contentView.viewWithTag(77)
-    let go = { c.layer.borderWidth = on ? 2 : 0; inner?.transform = on ? CGAffineTransform(scaleX: 0.8, y: 0.8) : .identity; inner?.layer.cornerRadius = on ? 6 : 8 }
-    if animated { UIView.animate(withDuration: 0.25, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState], animations: go) } else { go() }
+    inner?.layer.borderColor = UIColor.white.cgColor
+    let go = { inner?.layer.borderWidth = on ? 1.5 : 0 }
+    if animated { UIView.animate(withDuration: 0.2, animations: go) } else { go() }
   }
   private func refreshBars() {
     guard at < files.count else { return }
     let f = files[at]
-    count.text = files.count > 1 ? "\(at + 1) of \(files.count)" : ""
     name.text = f["name"] as? String
     details.text = f["meta"] as? String
     // (only the frame moves to the one showing — the strip isn't drawn again: that emptied its pictures, Haris 2026-11-02)
     if strip.numberOfItems(inSection: 0) != files.count { strip.reloadData() }
     for c in strip.visibleCells { if let ip = strip.indexPath(for: c) { PreviewVC.paintPick(c, ip.item == at, animated: true) } }
-    if files.count > 1 { strip.scrollToItem(at: IndexPath(item: at, section: 0), at: .centeredHorizontally, animated: true) }
+    if files.count > 1 {
+      // (the one showing 40 wide, the others 26 — Talk's; the strip's widths glide, then it centres on it)
+      UIView.animate(withDuration: 0.2) { self.strip.collectionViewLayout.invalidateLayout(); self.strip.layoutIfNeeded() }
+      strip.scrollToItem(at: IndexPath(item: at, section: 0), at: .centeredHorizontally, animated: true)
+    }
     event(["ev": "at", "id": f["id"] as? String ?? ""])
   }
   func flash(_ s: String) {
@@ -455,12 +462,12 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
       //  view is placed by the strip, and shrinking it made the pictures jump: Haris 2026-11-02)
       c.contentView.clipsToBounds = false; c.contentView.backgroundColor = .clear; c.contentView.layer.cornerRadius = 0
       let inner = UIView(frame: c.contentView.bounds); inner.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-      inner.backgroundColor = .tertiarySystemFill; inner.layer.cornerRadius = 8; inner.clipsToBounds = true; inner.tag = 77
+      inner.backgroundColor = UIColor(white: 0.2, alpha: 1); inner.layer.cornerRadius = 4; inner.clipsToBounds = true; inner.tag = 77
       c.contentView.addSubview(inner)
       let iv = UIImageView(frame: inner.bounds); iv.contentMode = .scaleAspectFill; iv.autoresizingMask = [.flexibleWidth, .flexibleHeight]
       inner.addSubview(iv)
-      let l = UILabel(frame: inner.bounds); l.text = ((f["ext"] as? String) ?? "").uppercased(); l.font = .systemFont(ofSize: 10, weight: .bold)
-      l.textColor = .secondaryLabel; l.textAlignment = .center; l.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+      let l = UILabel(frame: inner.bounds); l.text = ((f["ext"] as? String) ?? "").uppercased(); l.font = .systemFont(ofSize: 7, weight: .bold)
+      l.textColor = UIColor(white: 1, alpha: 0.6); l.textAlignment = .center; l.autoresizingMask = [.flexibleWidth, .flexibleHeight]
       inner.addSubview(l)
       PreviewVC.paintPick(c, ip.item == at, animated: false)
       // (the cell remembers which file it's showing now: a picture already loaded comes back before the cell is on the
@@ -483,7 +490,7 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     if let tap = (pager.gestureRecognizers ?? []).first(where: { $0 is UITapGestureRecognizer && ($0 as! UITapGestureRecognizer).numberOfTapsRequired == 1 }) as? UITapGestureRecognizer, let dbl = c.doubleTapGesture { tap.require(toFail: dbl) }
     return c
   }
-  func collectionView(_ cv: UICollectionView, layout: UICollectionViewLayout, sizeForItemAt ip: IndexPath) -> CGSize { cv === strip ? CGSize(width: 44, height: 44) : view.bounds.size }
+  func collectionView(_ cv: UICollectionView, layout: UICollectionViewLayout, sizeForItemAt ip: IndexPath) -> CGSize { cv === strip ? CGSize(width: ip.item == at ? 40 : 26, height: 36) : view.bounds.size }
   func collectionView(_ cv: UICollectionView, didSelectItemAt ip: IndexPath) {
     guard cv === strip, ip.item != at else { return }
     at = ip.item
@@ -537,13 +544,13 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     case .changed:
       pager.transform = CGAffineTransform(translationX: 0, y: dy).scaledBy(x: 1 - min(0.15, dy / 2000), y: 1 - min(0.15, dy / 2000))
       let k = 1 - min(1, dy / 400)
-      view.backgroundColor = UIColor.systemBackground.withAlphaComponent(k)
+      view.backgroundColor = UIColor.black.withAlphaComponent(k)
       topBar.alpha = barsHidden ? 0 : k; bottomBar.alpha = barsHidden ? 0 : k
     case .ended, .cancelled:
       if dy > 120 || g.velocity(in: view).y > 900 { close(); return }
       UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0) {
         self.pager.transform = .identity
-        self.view.backgroundColor = .systemBackground
+        self.view.backgroundColor = .black
         self.topBar.alpha = self.barsHidden ? 0 : 1; self.bottomBar.alpha = self.barsHidden ? 0 : 1
       }
     default: break
