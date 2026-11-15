@@ -494,6 +494,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     case "zoomWindow": window.performZoom(nil); done(["ok": true])
     // a right-click: the page's options as Apple's own menu at the pointer; the reply is the one picked (shell 13)
     case "menu": PageMenu.show(a, in: web, zoom: web.pageZoom, done)
+    // Apple's SF Symbols for the page's icons (shell 13): each name drawn black on clear, as a picture the page uses as a mask
+    case "symbols": done(["ok": true, "images": PageMenu.symbols(a["names"] as? [String] ?? [], CGFloat((a["size"] as? NSNumber)?.doubleValue ?? 32))])
     case "shareInfo": DispatchQueue.global(qos: .userInitiated).async { let r = self.shareInfo(a); DispatchQueue.main.async { done(r) } }
     case "uploadLocal": done(uploadLocal(a))
     case "uploadStatus": done(uploadStatus(a))
@@ -1176,6 +1178,23 @@ app.run()
 
 /* ---------- a right-click: the page's options as Apple's own menu (command menu) ---------- */
 enum PageMenu {
+  // SF Symbols as PNG data URLs (at twice their size, for sharp edges), for command symbols
+  static func symbols(_ names: [String], _ size: CGFloat) -> [String: String] {
+    var out: [String: String] = [:]
+    guard #available(macOS 11.0, *) else { return out }
+    for n in names.prefix(80) where n.range(of: "^[a-z0-9.]{1,60}$", options: .regularExpression) != nil {
+      guard let img = NSImage(systemSymbolName: n, accessibilityDescription: nil)?.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: size, weight: .regular)) else { continue }
+      let w = Int(ceil(img.size.width * 2)), h = Int(ceil(img.size.height * 2))
+      guard w > 0, h > 0, let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: w, pixelsHigh: h, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { continue }
+      rep.size = img.size
+      NSGraphicsContext.saveGraphicsState()
+      NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+      img.draw(in: NSRect(origin: .zero, size: img.size))
+      NSGraphicsContext.restoreGraphicsState()
+      if let png = rep.representation(using: .png, properties: [:]) { out[n] = "data:image/png;base64," + png.base64EncodedString() }
+    }
+    return out
+  }
   final class Picker: NSObject { var picked: Int? = nil; @objc func pick(_ s: NSMenuItem) { picked = s.tag } }
   static let SYM = ["open": "arrow.up.forward.square", "chev-right": "chevron.right", "check": "checkmark.circle", "cal": "calendar",
                     "clip": "paperclip", "link": "link", "trash": "trash", "folder": "folder", "download": "arrow.down.circle",
