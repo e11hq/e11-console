@@ -1,6 +1,6 @@
 // The file preview on the iPhone app (18+, Haris 2026-10-30): today's preview — × · "3 of 8" · ⋯ at the top, the name
 // and details, the strip of files, Copy and Download at the bottom — drawn by iOS. Pictures zoom and swipe like Photos
-// (pinch, double-tap, iOS's own paging); videos and sounds play in Apple's own player; PDF / Word / Excel / PowerPoint
+// (pinch, double-tap, iOS's own paging); videos play in place (as E11 Talk's), sounds in Apple's own player; PDF / Word / Excel / PowerPoint
 // show the server's page pictures in a zoomable scroll; anything else shows its card, as today. Tap hides the bars;
 // pull down to close. The page sends the files (absolute addresses on the server) and does Copy / Download / ⋯ itself
 // (window.__e11Preview); files are fetched with the app's own sign-in (its cookies).
@@ -63,7 +63,16 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
   private let spinner = UIActivityIndicatorView(style: .large)
   private var file: [String: Any] = [:]
   private var token = 0
-  var onPlay: (([String: Any]) -> Void)?
+  var onPlay: (([String: Any]) -> Void)?   // (a sound: Apple's own player)
+  // a video plays here, in place, as E11 Talk's (Haris 2026-11-15: "it should play in the same preview as Talk"): the
+  // moment it's on show, Apple's player layer over its first picture, fading in once its first frame is there; the buttons
+  // step aside once it plays; ▶ once paused or ended, ⏸ while it plays and the buttons show
+  final class PlayerView: UIView { override class var layerClass: AnyClass { AVPlayerLayer.self }; var pl: AVPlayerLayer { layer as! AVPlayerLayer } }
+  private var player: AVPlayer?, playerView: PlayerView?, ready: NSKeyValueObservation?, rateObs: NSKeyValueObservation?, ended: NSObjectProtocol?
+  private var want = false, atEnd = false, held = false
+  var onPlaying: (() -> Void)?
+  var chrome = true { didSet { button(animated: true) } }
+  private var isVideo: Bool { (file["kind"] as? String) == "video" }
   var onPages: ((String) -> Void)?
   private var mode = ""   // image / pages / card / text
 
@@ -73,6 +82,7 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
     zoomer.minimumZoomScale = 1; zoomer.maximumZoomScale = 4
     zoomer.showsHorizontalScrollIndicator = false; zoomer.showsVerticalScrollIndicator = false
     zoomer.contentInsetAdjustmentBehavior = .never
+    if #available(iOS 26.0, *) { zoomer.topEdgeEffect.isHidden = true; zoomer.bottomEdgeEffect.isHidden = true; textView.topEdgeEffect.isHidden = true; textView.bottomEdgeEffect.isHidden = true }
     zoomer.frame = contentView.bounds; zoomer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     contentView.addSubview(zoomer)
     zoomer.addSubview(content)
@@ -94,7 +104,11 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
     play.tintColor = .white
     play.backgroundColor = UIColor.black.withAlphaComponent(0.45)
     play.layer.cornerRadius = 38
-    play.addAction(UIAction { [weak self] _ in guard let self else { return }; self.onPlay?(self.file) }, for: .touchUpInside)
+    play.addAction(UIAction { [weak self] _ in
+      guard let self else { return }
+      guard self.isVideo else { self.onPlay?(self.file); return }
+      if (self.player?.timeControlStatus ?? .paused) != .paused { self.want = false; self.held = true; self.player?.pause(); self.button(animated: true) } else { self.held = false; self.start() }
+    }, for: .touchUpInside)
     contentView.addSubview(play)
     textView.isEditable = false; textView.font = .monospacedSystemFont(ofSize: 13, weight: .regular); textView.backgroundColor = .clear; textView.textColor = .white
     textView.textContainerInset = UIEdgeInsets(top: 110, left: 14, bottom: 200, right: 14)
@@ -112,7 +126,54 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
   }
   var doubleTapGesture: UITapGestureRecognizer? { zoomer.gestureRecognizers?.compactMap { $0 as? UITapGestureRecognizer }.first { $0.numberOfTapsRequired == 2 } }
 
+  // on show: it plays (from the phone's copy when it's kept — MediaKeep — else streamed, signed in); off show: it pauses
+  func start() {
+    guard isVideo, let s = file["src"] as? String, let url0 = URL(string: s) else { return }
+    want = true
+    try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+    if let p = player { if atEnd { atEnd = false; p.seek(to: .zero) }; if !held { p.play() }; return }
+    let kept = MediaKeep.local(s)
+    if kept == nil { MediaKeep.fetch(s) }
+    let url = kept ?? url0
+    let asset = AVURLAsset(url: url, options: [AVURLAssetHTTPCookiesKey: PreviewLoad.cookies.filter { c in
+      let d = c.domain.hasPrefix(".") ? String(c.domain.dropFirst()) : c.domain
+      return (url.host ?? "") == d || (url.host ?? "").hasSuffix("." + d)
+    }])
+    let p = AVPlayer(playerItem: AVPlayerItem(asset: asset)); p.actionAtItemEnd = .pause
+    let v = PlayerView(); v.pl.player = p; v.pl.videoGravity = .resizeAspect; v.alpha = 0; v.isUserInteractionEnabled = false
+    v.frame = imageView.bounds; v.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    imageView.addSubview(v)   // (inside the picture: it follows the finger when pulled down, and flies back with it)
+    player = p; playerView = v
+    ready = v.pl.observe(\.isReadyForDisplay, options: [.initial, .new]) { [weak self] l, _ in
+      guard l.isReadyForDisplay else { return }
+      DispatchQueue.main.async { self?.spinner.stopAnimating(); UIView.animate(withDuration: 0.18) { v.alpha = 1 } }
+    }
+    rateObs = p.observe(\.timeControlStatus, options: [.new]) { [weak self] pl, _ in
+      DispatchQueue.main.async { guard let self = self else { return }; if pl.timeControlStatus == .playing { self.onPlaying?() }; self.button(animated: true) }
+    }
+    ended = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: p.currentItem, queue: .main) { [weak self] _ in self?.atEnd = true; self?.button(animated: true) }
+    p.play()
+  }
+  func stop() { want = false; held = false; player?.pause(); button(animated: false) }
+  private func stopVideo() {
+    player?.pause(); playerView?.removeFromSuperview()
+    if let e = ended { NotificationCenter.default.removeObserver(e) }
+    player = nil; playerView = nil; ready = nil; rateObs = nil; ended = nil; want = false; atEnd = false; held = false
+  }
+  // ▶ once paused with ⏸ or ended; ⏸ while it plays and the buttons show; nothing while it plays on its own or loads
+  private func button(animated: Bool) {
+    guard isVideo else { return }
+    let playing = player?.timeControlStatus == .playing
+    let name = playing ? "pause.fill" : "play.fill"
+    let alpha: CGFloat = playing ? (chrome ? 1 : 0) : (held || atEnd ? 1 : 0)
+    guard play.alpha != alpha || play.accessibilityIdentifier != name else { return }
+    let set = { self.play.setImage(UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 30, weight: .bold)), for: .normal); self.play.accessibilityIdentifier = name; self.play.alpha = alpha }
+    if animated { UIView.transition(with: play, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction], animations: set) } else { set() }
+  }
+  deinit { if let e = ended { NotificationCenter.default.removeObserver(e) } }
+
   func show(_ f: [String: Any]) {
+    stopVideo()
     file = f; token += 1
     let my = token
     zoomer.setZoomScale(1, animated: false)
@@ -129,14 +190,16 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
       PreviewLoad.image(f["thumb"] as? String) { [weak self] img in guard let self, self.token == my, self.imageView.image == nil, let img else { return }; self.imageView.image = img; self.setNeedsLayout() }
       spinner.startAnimating()
       PreviewLoad.image(f["src"] as? String) { [weak self] img in guard let self, self.token == my else { return }; self.spinner.stopAnimating(); if let img { self.imageView.image = img; self.setNeedsLayout() } }
-    case "video" where !((f["cover"] as? String) ?? "").isEmpty:
-      // (its frame filling the page, as a photo, with ▶ on it — Haris, 2026-11-02)
+    case "video":
+      // (its first picture filling the page, as a photo; it plays here once it's on show — start())
       mode = "image"
       imageView.isHidden = false
+      if let cv = f["cover"] as? String, !cv.isEmpty {
+        PreviewLoad.image(cv) { [weak self] img in guard let self, self.token == my else { return }; if let img { self.imageView.image = img; self.setNeedsLayout() } }
+      }
+      play.isHidden = false; play.alpha = 0
       spinner.startAnimating()
-      PreviewLoad.image(f["cover"] as? String) { [weak self] img in guard let self, self.token == my else { return }; self.spinner.stopAnimating(); if let img { self.imageView.image = img; self.setNeedsLayout() } }
-      play.isHidden = false
-    case "video", "audio":
+    case "audio":
       mode = "card"
       card(f, note: nil)
       play.isHidden = false
@@ -247,14 +310,14 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
       zoomer.contentSize = content.frame.size
     }
   }
-  func viewForZooming(in scrollView: UIScrollView) -> UIView? { mode == "image" || mode == "pages" ? content : nil }
+  func viewForZooming(in scrollView: UIScrollView) -> UIView? { (mode == "image" && !isVideo) || mode == "pages" ? content : nil }
   func scrollViewDidZoom(_ scrollView: UIScrollView) {
     // (a zoomed-out picture stays in the middle)
     let b = scrollView.bounds.size, c = content.frame.size
     content.center = CGPoint(x: max(c.width, b.width) / 2, y: mode == "image" ? max(c.height, b.height) / 2 : c.height / 2)
   }
   @objc private func doubleTap(_ g: UITapGestureRecognizer) {
-    guard mode == "image" || mode == "pages" else { return }
+    guard (mode == "image" && !isVideo) || mode == "pages" else { return }
     if zoomer.zoomScale > 1 { zoomer.setZoomScale(1, animated: true); return }
     let p = g.location(in: content), s: CGFloat = 2.5
     let w = zoomer.bounds.width / s, h = zoomer.bounds.height / s
@@ -318,6 +381,8 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     pager.isPagingEnabled = true
     pager.showsHorizontalScrollIndicator = false
     pager.contentInsetAdjustmentBehavior = .never
+    // (Apple's shade under the status bar off — the top has its own soft shade; both showed, two shadows: Haris 2026-11-15)
+    if #available(iOS 26.0, *) { pager.topEdgeEffect.isHidden = true; pager.bottomEdgeEffect.isHidden = true; strip.topEdgeEffect.isHidden = true; strip.bottomEdgeEffect.isHidden = true }
     pager.dataSource = self; pager.delegate = self
     pager.register(PreviewCell.self, forCellWithReuseIdentifier: PreviewCell.id)
     pager.frame = view.bounds; pager.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -433,8 +498,16 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     let go: () -> Void = { inner?.layer.borderWidth = on ? 1.5 : 0 }
     if animated { UIView.animate(withDuration: 0.2, animations: go) } else { go() }
   }
+  // the one on show plays (a video), the others pause
+  private func playCurrent() {
+    for c in pager.visibleCells { guard let pc = c as? PreviewCell, let ip = pager.indexPath(for: pc) else { continue }; if ip.item == at && appeared { pc.start() } else { pc.stop() } }
+  }
+  private var appeared = false
+  override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); appeared = true; playCurrent() }
+  override func viewWillDisappear(_ a: Bool) { super.viewWillDisappear(a); for c in pager.visibleCells { (c as? PreviewCell)?.stop() } }
   private func refreshBars() {
     guard at < files.count else { return }
+    playCurrent()
     let f = files[at]
     name.text = f["name"] as? String
     details.text = f["meta"] as? String
@@ -482,7 +555,9 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     event(["ev": "closed"])
     // (the one it was opened on, its picture there: back into the picture it came out of — the black and the buttons going
     //  with it; else the fade as before)
-    if at == openedAt, let src = source, src.window != nil, let (pic, from) = current?.shownPicture {
+    // (swiped to another file: back into that file's own picture on the page when it's there — Haris 2026-11-15)
+    let back: UIImageView? = at == openedAt ? source : source.flatMap { FileTouch.sibling(of: $0, count: files.count, opened: openedAt, want: at) }
+    if openedAt >= 0, let src = back, src.window != nil, let (pic, from) = current?.shownPicture {
       let fly = UIImageView(image: pic); fly.contentMode = .scaleAspectFill; fly.clipsToBounds = true; fly.layer.cornerCurve = src.layer.cornerCurve
       fly.frame = from
       view.insertSubview(fly, aboveSubview: pager); pager.alpha = 0; src.alpha = 0
@@ -531,6 +606,8 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     }
     let c = cv.dequeueReusableCell(withReuseIdentifier: PreviewCell.id, for: ip) as! PreviewCell
     c.onPlay = { [weak self] f in self?.playMedia(f) }
+    c.onPlaying = { [weak self] in if self?.barsHidden == false { self?.toggleBars() } }
+    c.chrome = !barsHidden
     c.onPages = { [weak self, weak c] id in
       guard let self else { return }
       if let p = self.pages[id] { c?.setPages(p.0, note: p.1) } else { self.event(["ev": "pages", "id": id]) }
@@ -572,6 +649,7 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
   /* ---------- tap, pull down ---------- */
   @objc private func toggleBars() {
     barsHidden.toggle()
+    for c in pager.visibleCells { (c as? PreviewCell)?.chrome = !barsHidden }
     UIView.animate(withDuration: 0.2) {
       self.topBar.alpha = self.barsHidden ? 0 : 1
       self.bottomBar.alpha = self.barsHidden ? 0 : 1
@@ -689,6 +767,36 @@ final class FileTouch: UIGestureRecognizer {
   }
   override func canPrevent(_ g: UIGestureRecognizer) -> Bool { false }
   override func canBePrevented(by g: UIGestureRecognizer) -> Bool { false }
+  // the picture of another file in the same row or grid as the one opened: the pictures of the same size around it, read
+  // in order (top to bottom, then left to right) — only when they are exactly the files of the preview, in its order
+  static func sibling(of src: UIImageView, count: Int, opened: Int, want: Int) -> UIImageView? {
+    guard src.window != nil else { return nil }
+    let sz = src.bounds.size
+    func pics(_ root: UIView) -> [UIImageView] {
+      var out: [UIImageView] = []
+      func walk(_ v: UIView) {
+        if let iv = v as? UIImageView, iv.image != nil, !iv.isHidden, iv.window != nil,
+           abs(iv.bounds.width - sz.width) <= sz.width * 0.35, abs(iv.bounds.height - sz.height) <= sz.height * 0.35 { out.append(iv) }
+        v.subviews.forEach(walk)
+      }
+      walk(root); return out
+    }
+    var up: UIView? = src.superview
+    for _ in 0..<7 {
+      guard let r = up else { break }
+      let list = pics(r).sorted { a, b in
+        let fa = a.convert(a.bounds, to: nil), fb = b.convert(b.bounds, to: nil)
+        return abs(fa.minY - fb.minY) > 4 ? fa.minY < fb.minY : fa.minX < fb.minX
+      }
+      if list.count >= count {
+        guard list.count == count, list.firstIndex(of: src) == opened, want < list.count else { return nil }
+        let t = list[want], f = t.convert(t.bounds, to: nil)
+        return f.intersects(src.window!.bounds) ? t : nil
+      }
+      up = r.superview
+    }
+    return nil
+  }
   // the picture under the last touch (a moment ago): the touched view's own, one inside it under the finger, or one a few
   // steps up that holds the finger's spot
   static func picture() -> UIImageView? {

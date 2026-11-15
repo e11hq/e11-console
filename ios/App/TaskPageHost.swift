@@ -1,6 +1,5 @@
 import UIKit
 import UniformTypeIdentifiers
-import QuickLook
 
 /* The app's own task page (shell 30) on the app's screen: opened when the page behind asks (taskPage open — a card,
    a row in the Inbox, a search result…), pushed in from the right as iPhone's own pages are, and taken back with ‹
@@ -611,30 +610,6 @@ extension Main {
   func endEditing() { view.endEditing(true) }
 }
 
-/* A comment's or a task's file, opened (Haris: "finish off the whole task detail / comment"): pictures in the app's
-   own preview (swipe through the others beside it); any other file fetched and shown by iPhone's own Quick Look —
-   PDFs, videos, documents — with its Share button (Save to Files, AirDrop…). */
-final class QuickFile: NSObject, QLPreviewControllerDataSource {
-  static let shared = QuickFile()
-  private var url: URL?
-  func numberOfPreviewItems(in c: QLPreviewController) -> Int { url == nil ? 0 : 1 }
-  func previewController(_ c: QLPreviewController, previewItemAt i: Int) -> QLPreviewItem { (url ?? URL(fileURLWithPath: "/")) as NSURL }
-  func show(_ f: [String: Any], from host: UIViewController, toast: @escaping (String) -> Void) {
-    guard let path = f["url"] as? String else { return toast("This file isn’t available") }
-    toast("Opening…")
-    PreviewLoad.data(serverURL() + path) { d in
-      guard let d = d else { return toast("Couldn’t open — try again") }
-      let name = (f["name"] as? String ?? "File").replacingOccurrences(of: "/", with: "-")
-      let dir = FileManager.default.temporaryDirectory.appendingPathComponent("open-\(UUID().uuidString)", isDirectory: true)
-      try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-      let u = dir.appendingPathComponent(name)
-      guard (try? d.write(to: u)) != nil else { return toast("Couldn’t open the file") }
-      self.url = u
-      let q = QLPreviewController(); q.dataSource = self
-      host.present(q, animated: true)
-    }
-  }
-}
 extension Main {
   static let officeExt = ["doc", "docx", "ppt", "pptx", "xls", "xlsx", "odt", "odp", "ods", "rtf"]
   // a file as the preview shows it: a picture, a video / sound (Apple's player), a PDF's / Office file's pages, text, or its card

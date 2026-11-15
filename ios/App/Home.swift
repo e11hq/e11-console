@@ -2502,8 +2502,6 @@ extension HomeView: UICollectionViewDelegate {
   func collectionView(_ cv: UICollectionView, didSelectItemAt ip: IndexPath) {
     cv.deselectItem(at: ip, animated: true)
     guard let key = listDS?.itemIdentifier(for: ip) else { return }
-    // (a file's tile or row: Quick Look grows out of it and goes back into it — FilesLook)
-    if listViews[key] is FileTile || listViews[key] is FileListRow { FilesLook.source = (listViews[key] as? FileTile) ?? cv.cellForItem(at: ip) }
     if let r = listViews[key] as? AppleRow { r.rowTapped(); return }
     if let r = listViews[key] as? InboxRow { r.onTap?(); return }
     if let t = listViews[key] as? FileTile { t.onTap?(); return }
