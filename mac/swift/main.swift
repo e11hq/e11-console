@@ -91,6 +91,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
 
   /* ---------- start ---------- */
   func applicationWillFinishLaunching(_ n: Notification) {
+    // Apple's own scroll bars that show while scrolling and fade away after (Haris 2026-11-15 17:11: "scroll bars are not
+    // disappearing"): this app asks for the Mac's "When scrolling" whatever the system setting — before any view is made,
+    // so the page's web view (WebKit takes the app's style) has the overlay scroll bars too
+    defaults.set("WhenScrolling", forKey: "AppleShowScrollBars")
     #if APPSTORE
     // (opened by macOS as a login item: stay in the background, like the Terminal app's --login)
     if let ev = NSAppleEventManager.shared().currentAppleEvent, ev.eventID == AEEventID(kAEOpenApplication),
