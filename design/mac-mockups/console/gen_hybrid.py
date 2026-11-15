@@ -84,10 +84,10 @@ def board(look, page='lead', sb='float'):
     # as Claude's (Haris 13:26): the sidebar button a rounded box with a short bar near its left, the arrows thin chevrons
     sbic = (f'<svg width="20" height="16" viewBox="0 0 20 16" fill="none" stroke="{t["fg"]}" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">'
             f'<rect x="1.75" y="1.75" width="16.5" height="12.5" rx="3.5"/><path d="M6.5 5.6v4.8"/></svg>')
-    chev = lambda d, c: (f'<svg width="10" height="16" viewBox="0 0 10 16" fill="none" stroke="{c}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    chev = lambda d, c: (f'<svg width="8" height="13" viewBox="0 0 10 16" fill="none" stroke="{c}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
                          f'<path d="{"M7 2.5 2 8l5 5.5" if d == "l" else "M3 2.5 8 8l-5 5.5"}"/></svg>')
-    nav = lambda: (f'<span style="display: inline-flex; align-items: center; gap: 22px; margin-left: 18px">{sbic}'
-                   f'<span style="display: inline-flex; gap: 10px">{chev("l", sec)}{chev("r", ter)}</span></span>')   # (closer — Haris 13:27)
+    nav = lambda: (f'<span style="display: inline-flex; align-items: center; gap: 16px; margin-left: 18px">{sbic}'
+                   f'<span style="display: inline-flex; gap: 15px">{chev("l", sec)}{chev("r", ter)}</span></span>')   # (smaller, a little apart, nearer the sidebar button — Haris 13:27 / 13:28)
     side = (f'<div style="position: absolute; {shell} box-sizing: border-box; display: flex; flex-direction: column; z-index: 3">'
             '<div style="height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 16px; flex: none"><span style="width: 12px; height: 12px; border-radius: 6px; background: #ff5f57"></span><span style="width: 12px; height: 12px; border-radius: 6px; background: #febc2e"></span><span style="width: 12px; height: 12px; border-radius: 6px; background: #28c840"></span>'
             + (f'<span style="margin-left: auto; display: flex; gap: 6px">{rb("moon")}{rb("plus") if page != "office" else ""}{rb("sidebar")}</span></div>' if sb == 'float'
