@@ -131,6 +131,9 @@ const Viewer = (() => {
     // from the preview itself still come above it
     if (!document.body.classList.contains('pv-open')) document.querySelectorAll('.scrim').forEach((x) => x.classList.add('pv-under'));
     document.body.classList.add('pv-open');
+    // (the Mac app's own sidebar sits over the page: it fades away while a file is open, so the preview has the whole window —
+    //  Haris 2026-11-15 15:38)
+    if (Host.isMacApp) NativeMac.call('sideCover', { on: true }).catch(() => {});
     host.innerHTML = `<div class="fpv ${phone() ? 'fpv-onphone' : 'fpv-oncomputer'} ${many ? 'fpv-many' : ''}" role="dialog" aria-label="File preview">
       <div class="fpv-top">
         ${phone() ? `<button class="fpv-rb" data-pv="close" aria-label="Close">${icon('x')}</button>` : ''}
@@ -157,6 +160,7 @@ const Viewer = (() => {
     pauseAll();
     const h = document.getElementById('pv-root'); if (h) h.innerHTML = '';
     document.body.classList.remove('pv-open');
+    if (Host.isMacApp) NativeMac.call('sideCover', { on: false }).catch(() => {});
     document.querySelectorAll('.pv-under').forEach((x) => x.classList.remove('pv-under'));
     root = null; ui.previewAtt = null; clearTimeout(hideT);
     if (keyOn) { document.removeEventListener('keydown', onKey, true); keyOn = false; }

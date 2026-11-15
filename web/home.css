@@ -661,3 +661,10 @@ html.mac-chrome .hm-lrow.late { border-radius: 8px; border-top-color: transparen
 html.mac-chrome .hm-lrow.late + .hm-lrow { border-top-color: transparent; }
 html.mac-chrome .hm-lrow .hm-sub { flex: none; width: 150px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 html.mac-chrome .hm-lrow .due { flex: none; width: 90px; min-width: 0; text-align: left; }
+/* ===== Haris 2026-11-15 15:38 ===== */
+/* Up next's buttons on one line: Next task → and its 1 of N never drop under the others */
+html.mac-chrome .hm-nbtns { flex-wrap: nowrap; white-space: nowrap; }
+html.mac-chrome .hm-nbtns .hm-btn.text { flex: none; }
+/* My pipeline's rows a little apart, as Home's task rows: two overdue rows each keep their own rounded tint */
+html.mac-chrome .hm-lrow + .hm-lrow { margin-top: 4px; }
+
