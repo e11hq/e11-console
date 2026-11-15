@@ -13,11 +13,12 @@ window.__native = { calls: [], bar: null, menu: null, pick: null };
 window.webkit = { messageHandlers: { e11: { postMessage(raw) {
   const m = JSON.parse(raw); window.__native.calls.push(m.cmd);
   let res = { ok: true };
-  if (m.cmd === 'appInfo') res = { ok: true, shell: window.__shell || 13, native: 'swift' };
+  if (m.cmd === 'appInfo') res = { ok: true, shell: window.__shell || 13, native: 'swift', preview: (window.__shell || 13) >= 13 };
   if (m.cmd === 'pageBar') window.__native.bar = m.args;
   if (m.cmd === 'menu') { window.__native.menu = m.args; res = window.__native.pick == null ? { ok: true } : { ok: true, i: window.__native.pick }; }
   if (m.cmd === 'openURL') window.__native.opened = m.args.url;
   if (m.cmd === 'splash') { (window.__native.splash = window.__native.splash || []).push(m.args); res = m.args.out ? { ok: true, shown: true, goneIn: 300 } : { ok: true, shown: true }; }
+  if (m.cmd === 'preview') window.__native.preview = m.args;
   if (m.cmd === 'sidebar') res = { ok: true, overlay: true, room: 252, slim: 0 };
   if (m.cmd === 'symbols') res = { ok: true, images: Object.fromEntries(m.args.names.map((n) => [n, 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='])) };
   setTimeout(() => window.__e11NativeReply(m.id, res), 5);
@@ -69,6 +70,12 @@ async def main():
                 w1 = await E("document.querySelector('#topbar .search').getBoundingClientRect().width")
                 await E("document.activeElement.blur()"); await pg.wait_for_timeout(400)
                 check(w0 == 220 and w1 == 300, f'the search: a little wider while typing {w0} → {w1}')
+                # a file opened: the Mac app's own preview — the files of its group, which one, where its thumbnail was (16:06)
+                await E("(() => { const t = db.tasks.find((x) => (x.attachments || []).length > 1); window.__pvT = t && t.id; if (t) previewFile(t.attachments[1], t.attachments); })()")
+                await pg.wait_for_timeout(300)
+                pv = await E("window.__native.preview && [window.__native.preview.files.length, window.__native.preview.at, !!window.__native.preview.files[0].kind, document.body.classList.contains('pv-open')]")
+                check(pv is not None and pv[1] == 1 and pv[2] and pv[3] is False, f'a file opened: the Mac app\u2019s own preview, not the page\u2019s {pv}')
+                await E("window.__e11Preview({ ev: 'closed' })")
                 # Home fills the window: both columns end at its bottom (Haris 2026-11-15 15:28)
                 fill = await E("(() => { const c = document.getElementById('content').getBoundingClientRect(), cols = [...document.querySelectorAll('.hm-grid > .hm-col')].map((x) => Math.round(x.getBoundingClientRect().bottom)); return [cols[0] === cols[1], cols[0] >= Math.round(c.bottom) - 30]; })()")
                 check(fill == [True, True], f'Home fills the window, both columns ending together {fill}')

@@ -9,10 +9,21 @@ const Viewer = (() => {
   const phone = () => typeof Phone !== 'undefined' && Phone.on;
   const W = () => (root ? root.querySelector('.fpv-stage').clientWidth : innerWidth);
 
-  /* iPhone app 18+: the same preview drawn by iOS (Preview.swift) — Copy, Download and ⋯ still run here */
+  /* iPhone app 18+: the same preview drawn by iOS (Preview.swift) — Copy, Download and ⋯ still run here. The Mac app 13+
+     too: its own preview, as E11 Talk's photo viewer (mac/swift/Preview.swift — Haris 2026-11-15 16:06) */
   const Native = (() => {
-    let shell = 0, open = false;
+    let shell = 0, open = false, mac = false;
     if (typeof Host !== 'undefined' && Host.isIOSApp) NativeMac.call('appInfo').then((r) => { shell = Number(r && r.shell) || 0; }).catch(() => {});
+    if (typeof Host !== 'undefined' && Host.isMacApp) NativeMac.call('appInfo').then((r) => { mac = !!(r && r.preview); }).catch(() => {});
+    // (where the file was clicked: the Mac's preview flies out of it — the last thing pressed with a picture in it)
+    let lastEl = null;
+    if (typeof Host !== 'undefined' && Host.isMacApp) document.addEventListener('mousedown', (e) => { lastEl = e.target && e.target.closest && e.target.closest('img, .hm-thumb, [data-pv], .att, .att-thumb, .ca-file, .fthumb, [data-att], [data-file]'); }, true);
+    const fromRect = () => {
+      const el = lastEl && lastEl.isConnected ? (lastEl.tagName === 'IMG' ? lastEl : lastEl.querySelector('img') || lastEl) : null;
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return r.width > 4 ? { x: r.left, y: r.top, w: r.width, h: r.height } : null;
+    };
     const abs = (u) => (u ? new URL(u, location.href).href : '');
     function fileOf(a) {
       const kind = fileKind(a), ext = fileExt(a.name) || 'file';
@@ -22,6 +33,7 @@ const Viewer = (() => {
       if (kind === 'image') return { ...base, kind: 'image', src: abs(imgUrl(a, 1600)), thumb: abs(imgUrl(a, 160)) };
       if (kind === 'video') return { ...base, kind: 'video', src: abs(viewUrl(a)), cover, thumb: cover };
       if (kind === 'audio') return { ...base, kind: 'audio', src: abs(fileUrl(a)) };
+      if (mac && kind === 'pdf') return { ...base, kind: 'pdf', src: abs(fileUrl(a)), cover, thumb: cover };   // (the Mac: Apple's PDF view, the file itself)
       if (Host.isServer && (kind === 'pdf' || OFFICE_EXT.includes(ext))) return { ...base, kind: 'pages', cover, thumb: cover };
       if (kind === 'text') return { ...base, kind: 'text', src: abs(fileUrl(a)) };
       return { ...base, kind: 'other', cover, thumb: cover, note: 'Download it to see the whole file.' };
@@ -44,7 +56,7 @@ const Viewer = (() => {
           break;
         case 'copy': if (a) copyAttachment(a); break;
         case 'dl': if (a) Host.call('revealPath', { path: a.path }).catch((err) => set({ toast: err.cancelled ? 'Download cancelled' : 'Couldn’t download: ' + err.message })); break;
-        case 'more': if (a) moreNative(a); break;
+        case 'more': if (a) moreNative(a, ev.x != null ? { x: ev.x, y: ev.y } : null); break;
         case 'closed': {
           open = false; ui.previewAtt = null;
           const f = after; after = null;
@@ -54,7 +66,7 @@ const Viewer = (() => {
       }
     };
     // ⋯: Info as a native message; Remove / Delete close the preview first (their questions are the page's)
-    function moreNative(a) {
+    function moreNative(a, pt) {
       const client = clientFileById(a.id) === a ? a : null;
       const t = ui.taskId && task(ui.taskId);
       const onTask = !client && t && (t.attachments || []).some((x) => x.id === a.id);
@@ -68,14 +80,16 @@ const Viewer = (() => {
       if (a.path && isAdm(me())) items.push({ label: 'Turn off link', icon: 'lock', danger: true, run: () => closeThen(() => FileLinks.toggle(a)) });
       if (client && canDelAsset(a)) items.push('-', { label: 'Trash', icon: 'trash', danger: true, run: () => closeThen(() => removeClientFile(a.id)) });
       if (onTask) items.push('-', { label: 'Remove from task', icon: 'trash', danger: true, run: () => closeThen(() => act('remove-att', a.id)) });
+      // (the Mac: Apple's menu just under its ••• button)
+      if (pt && typeof MacBar !== 'undefined' && MacBar.on()) return MacBar.menu(pt, items);
       showMenu(document.body, items, { native: true });
     }
     return {
-      ok: () => shell >= 18 && phone(),
+      ok: () => (shell >= 18 && phone()) || mac,
       open() {
         open = true;
         ui.previewAtt = list[at];
-        NativeMac.call('preview', { files: list.map(fileOf), at }).catch(() => { open = false; });
+        NativeMac.call('preview', { files: list.map(fileOf), at, from: mac ? fromRect() : null }).catch(() => { open = false; });
       },
       get isOpen() { return open; },
     };
