@@ -19,7 +19,7 @@ import ServiceManagement
 
 // Version of this Mac app's native part. Raise it when a change here needs everyone to reinstall: the web app
 // then shows a required-update banner in older Mac apps. (The earlier script app was 1–6.)
-let SHELL_VERSION = 13   // 13: Apple's menu on a right-click (command menu) · 12: the sidebar is the Mac's own (glass on macOS 26; Sidebar.swift; command sidebar / window.__e11Side) · 10: fast office use (shared-folder copies, office-network uploads and downloads) · 11: office-network downloads show their progress
+let SHELL_VERSION = 13   // 13: Apple's menu on a right-click (command menu), the sidebar edge to edge (room 252 / 100) · 12: the sidebar is the Mac's own (glass on macOS 26; Sidebar.swift; command sidebar / window.__e11Side) · 10: fast office use (shared-folder copies, office-network uploads and downloads) · 11: office-network downloads show their progress
 
 let info = Bundle.main.infoDictionary ?? [:]
 let env = ProcessInfo.processInfo.environment
@@ -190,7 +190,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     #endif
     window.contentView!.addSubview(web)
     side.host = self
-    side.frame = NSRect(x: Sidebar.INSET, y: Sidebar.INSET, width: Sidebar.WIDE, height: window.contentView!.bounds.height - Sidebar.INSET * 2)
+    side.frame = NSRect(x: 0, y: 0, width: Sidebar.INSET + Sidebar.WIDE, height: window.contentView!.bounds.height)   // (edge to edge)
     side.autoresizingMask = [.height]
     window.contentView!.addSubview(side, positioned: .above, relativeTo: web)
     #if APPSTORE
@@ -256,7 +256,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   // layouts at sizes that used to show two columns (Haris, 2026-10-30)
   func sideLayoutChanged(animated: Bool) {
     guard let cv = window?.contentView, let web = web else { return }
-    let sf = NSRect(x: Sidebar.INSET, y: Sidebar.INSET, width: side.width, height: cv.bounds.height - Sidebar.INSET * 2)
+    let sf = NSRect(x: 0, y: 0, width: Sidebar.INSET + side.width, height: cv.bounds.height)   // (edge to edge — Haris 2026-11-15)
     web.frame = cv.bounds
     placeLights()
     if animated {
@@ -475,7 +475,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       window.backgroundColor = light ? .white : NSColor(srgbRed: 0.047, green: 0.051, blue: 0.059, alpha: 1)
       placeLights()
       done(["ok": true])
-    case "sidebar": side.apply(a); if lockView != nil { side.isHidden = true }; done(["ok": true, "overlay": true, "room": Sidebar.INSET * 2 + Sidebar.WIDE, "slim": Sidebar.INSET * 2 + Sidebar.SLIM])
+    case "sidebar": side.apply(a); if lockView != nil { side.isHidden = true }; done(["ok": true, "overlay": true, "room": Sidebar.INSET + Sidebar.WIDE, "slim": Sidebar.INSET + Sidebar.SLIM])
     case "setIcon": done(setIcon(a))
     case "dragWindow":
       if let ev = NSApp.currentEvent { window.performDrag(with: ev) }
