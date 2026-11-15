@@ -553,7 +553,14 @@ const MacChrome = (() => {
     paintThemeButtons();
     if ($('#app') && $('#app').classList.contains('sb-collapsed')) bar.querySelector('.sb-toggle').title = 'Expand sidebar';
     PageHistory.paint();
-    if (shell >= 12) NativeSide.start();   // (Mac app 12: the sidebar is the Mac's own)
+    if (shell >= 12) {
+      // the room for the Mac's sidebar made at once, before the page is drawn — not slid in once it shows (Haris 2026-11-15
+      // 13:06: "the whole right side slides in to make space for the sidebar"); 13+: the sidebar edge to edge (252 / 100)
+      const de = document.documentElement;
+      de.style.setProperty('--nsb-room', (shell >= 13 ? 252 : 260) + 'px'); de.style.setProperty('--nsb-slim', (shell >= 13 ? 100 : 108) + 'px');
+      const app = document.getElementById('app'); if (app && !app.classList.contains('locked')) de.classList.add('mac-nsb', 'mac-nsb-o');
+      NativeSide.start();   // (Mac app 12: the sidebar is the Mac's own)
+    }
     const ACTIVE = 'button, a, input, textarea, select, label, [contenteditable="true"], [data-action], [data-nav], [data-id], .tabs, .search, .tm-crumbs > *, #overlay-root *, .tm-backdrop';
     const inBar = (e) => e.clientY <= 48 && !(e.target.closest && e.target.closest(ACTIVE));
     document.addEventListener('mousedown', (e) => {
@@ -10203,6 +10210,8 @@ function paintThemeButtons() {
   document.querySelectorAll('.theme-toggle').forEach((b) => { b.innerHTML = icon(auto ? 'theme-auto' : light ? 'sun' : 'moon'); b.title = title; b.setAttribute('aria-label', title); });
 }
 function setSidebarCollapsed(on) {
+  // (the page's room for the Mac's sidebar slides only as it's collapsed or expanded — never as the app opens)
+  const de = document.documentElement; de.classList.add('nsb-anim'); clearTimeout(setSidebarCollapsed.t); setSidebarCollapsed.t = setTimeout(() => de.classList.remove('nsb-anim'), 400);
   document.getElementById('app').classList.toggle('sb-collapsed', on);
   document.querySelectorAll('.sb-toggle').forEach((b) => { b.title = on ? 'Expand sidebar' : 'Collapse sidebar'; });
   savePref('sidebarCollapsed', on);

@@ -2370,9 +2370,11 @@ html.mac-chrome.mac-nsb #detail.full .tm-top { padding-left: 84px; }
 html.mac-chrome.mac-nsb #detail.side .tm { max-width: calc(100% - 60px); }
 /* newer Mac apps: the page is the whole window wide (its layouts switch at the same window sizes as before) with the
    glass sidebar over its left edge — the page keeps that room, and a task opened full or as a pop-up starts beside it */
-html.mac-nsb-o #app { padding-left: var(--nsb-room, 260px); transition: padding-left .22s ease; }
+html.mac-nsb-o #app { padding-left: var(--nsb-room, 260px); }
+html.mac-nsb-o.nsb-anim #app { transition: padding-left .22s ease; }   /* (only collapsing / expanding slides — Haris 2026-11-15) */
 html.mac-nsb-o #app.sb-collapsed { padding-left: var(--nsb-slim, 108px); }
-html.mac-chrome.mac-nsb-o #mac-bar { left: calc(var(--nsb-room, 260px) + 12px); transition: left .22s ease; }
+html.mac-chrome.mac-nsb-o #mac-bar { left: calc(var(--nsb-room, 260px) + 12px); }
+html.mac-chrome.mac-nsb-o.nsb-anim #mac-bar { transition: left .22s ease; }
 html.mac-chrome.mac-nsb-o #app.sb-collapsed ~ #mac-bar { left: calc(var(--nsb-slim, 108px) + 12px); }
 html.mac-nsb-o #detail { left: var(--nsb-room, 260px); }
 html.mac-nsb-o #app.sb-collapsed #detail { left: var(--nsb-slim, 108px); }
