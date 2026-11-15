@@ -679,3 +679,10 @@ html.mac-chrome .hm-streak .hm-hrow i .ic svg { display: block; width: 100%; hei
 /* the line under the top bar: the mock-up's — half a point, white 7% in dark, black 7% in light (Haris 2026-11-15 15:44;
    the website's 1 pt border had won over it) */
 html.mac-chrome #topbar { border-bottom: .5px solid var(--mc-line) !important; }
+/* ===== Haris 2026-11-15 15:54 ===== */
+/* the month's bars light up in full blue again when pointed at (the Mac's softer blue had won over the hover) */
+html.mac-chrome .hm-bar:hover, html.mac-chrome .hm-bar.future:hover { background: var(--mc-blue); }
+/* a bar's tooltip never runs off the chart's edges (under the sidebar on the left): the first bars' open to the right,
+   the last bars' to the left */
+.hm-bar:nth-child(-n+5) .hm-tip { left: 0; transform: translate(0, -6px); }
+.hm-bar:nth-last-child(-n+5) .hm-tip { left: auto; right: 0; transform: translate(0, -6px); }
