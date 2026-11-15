@@ -1214,7 +1214,9 @@ final class PageBar: NSView, NSSearchFieldDelegate {
   private func place(_ box: NSView, _ control: NSView, _ r: NSRect) {
     box.frame = r
     if box !== control {
-      control.frame = box.bounds.insetBy(dx: control === search ? 6 : 2, dy: 0)
+      // (the field's words centred in its glass: without its bezel it draws at its top, so it's given its own line's height)
+      let h: CGFloat = control === search ? 22 : box.bounds.height
+      control.frame = NSRect(x: control === search ? 6 : 2, y: ((box.bounds.height - h) / 2).rounded(), width: box.bounds.width - (control === search ? 12 : 4), height: h)
       if #available(macOS 26.0, *), let g = box as? NSGlassEffectView { g.cornerRadius = r.height / 2 }
     }
   }
