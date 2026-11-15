@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "build (built, checked, signed and kept — the default) or shots (the App Store screenshots: nothing signed or sent)"
+        description: "build (built, checked, signed and kept — the default), shots (the App Store screenshots: nothing signed or sent) or symbols (SF Symbols drawn for choosing one: nothing built)"
         default: build
       where:
         description: "mac (Haris's Mac — the default) or github (GitHub's own Mac: the signed build kept as this run's artifact, sent from there)"
@@ -17,7 +17,21 @@ concurrency:
   group: talk
   cancel-in-progress: false
 jobs:
+  symbols:
+    if: inputs.mode == 'symbols'
+    runs-on: ${{ inputs.where == 'github' && 'macos-26' || fromJSON('["self-hosted","macOS","ARM64"]') }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: SF Symbols drawn for choosing one (nothing built)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          swift talk/tools/symbols.swift "$RUNNER_TEMP"
+          gh release view talk-selftest >/dev/null 2>&1 || gh release create talk-selftest --prerelease --title "E11 Talk self-check" --notes "Latest E11 Talk build results." --target "$GITHUB_SHA"
+          gh release upload talk-selftest "$RUNNER_TEMP/smiley-dark.png" "$RUNNER_TEMP/smiley-light.png" --clobber
   talk:
+    if: inputs.mode != 'symbols'
     runs-on: ${{ inputs.where == 'github' && 'macos-26' || fromJSON('["self-hosted","macOS","ARM64"]') }}
     timeout-minutes: 45
     steps:
