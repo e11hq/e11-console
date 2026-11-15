@@ -173,8 +173,8 @@ extension Main {
     AppData.shared.tryNow()
   }
 
-  // Sign out (Me › Sign out — the page's signOut): this person's screens and copy put away, then Cloudflare's sign-out
-  // (the App Review copy's own); the sign-in page follows, and the app asks again once it's back on our site
+  // Sign out (Me › Sign out — the page's signOut): this person's screens and copy put away, then this iPhone's own sign-in
+  // forgotten (the App Review copy: its own sign-out); the sign-in page follows, and the app asks again once it's back on our site
   func signOutNative() {
     DeviceKey.drop(self)   // (this phone's key for our sign-in: let go — signing back in needs the password)
     bootState.state = .signedOut; bootState.me = nil; bootState.owned = false
@@ -189,11 +189,25 @@ extension Main {
     q["me"] = nil
     if let d = try? JSONSerialization.data(withJSONObject: q) { defaults.set(d, forKey: "e11_quick") }
     let review = defaults.string(forKey: "e11_server") == "review"
-    // (Cloudflare's sign-out ends on its own "You successfully logged out" page with its list of sign-in options — its skip
-    //  to our sign-in works only when signing in. So once it has signed out, the app goes on to sign in again at once, and
-    //  Cloudflare skips to our own sign-in page, as on a fresh start; its page kept out of sight meanwhile — Haris 2026-11-14)
-    if !review { signOutThenIn = true; web.alpha = 0; DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in self?.web.alpha = 1 } }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.loadHome(review ? "/review/sign-out" : "/cdn-cgi/access/logout") }
+    if review { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.loadHome("/review/sign-out") }; return }
+    // (this iPhone only — Haris 2026-11-15: Cloudflare's sign-out signs the person out on every device, so it's never used:
+    //  this phone's own sign-in is forgotten instead — Cloudflare's and our sign-in page's, in this phone's cookie store — and
+    //  the widget's copy of it; the page then goes to Cloudflare, which sends it on to our own sign-in page, as a fresh start)
+    let store = web.configuration.websiteDataStore.httpCookieStore
+    store.getAllCookies { [weak self] cookies in
+      guard let self = self else { return }
+      let host = self.serverHost.lowercased()
+      let mine = cookies.filter { c in
+        let d = (c.domain.hasPrefix(".") ? String(c.domain.dropFirst()) : c.domain).lowercased()
+        return host == d || host.hasSuffix("." + d) || d.hasSuffix("cloudflareaccess.com") || self.isSigninHost(d)
+      }
+      let all = DispatchGroup()
+      for c in mine { all.enter(); store.delete(c) { all.leave() } }
+      all.notify(queue: .main) { [weak self] in
+        WidgetShare.saveSignIn(server: serverURL(), cookies: [])
+        self?.loadHome()
+      }
+    }
   }
 
   // signing in: the web view has just come back to our site from the sign-in page — the startup screen at once, as the app

@@ -3453,7 +3453,7 @@ final class MeCtl {
   }
   private func signOutAsk() {
     let review = UserDefaults.standard.string(forKey: "e11_server") == "review"
-    ask(["kind": "alert", "title": "Sign out?", "body": review ? "You’ll need the App Review password to sign in again." : "You’ll need the code from your email to sign in again.", "okText": "Sign out", "danger": true, "cancelText": "Cancel"]) { [weak self] r in
+    ask(["kind": "alert", "title": "Sign out?", "body": review ? "You’ll need the App Review password to sign in again." : "You’ll need your password to sign in again.", "okText": "Sign out", "danger": true, "cancelText": "Cancel"]) { [weak self] r in
       if (r["ok"] as? Bool) == true { self?.main.signOutNative() }
     }
   }

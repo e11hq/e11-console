@@ -9,7 +9,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.2.0"   # (1.1.0 approved for the App Store 2026-11-07 — TestFlight takes only a higher version now; 1.2.0 = iPhone's own navigation, branch ios-nav)
+    MARKETING_VERSION: "1.2.1"   # (1.2.0 approved and released 2026-11-15 — 1.2.1: sign out on this device only)
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Automatic
 targets:
