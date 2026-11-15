@@ -343,7 +343,8 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     strip.dataSource = self; strip.delegate = self
     strip.register(UICollectionViewCell.self, forCellWithReuseIdentifier: "th")
     strip.isHidden = files.count < 2
-    glass(copyB, "link", "Copy Link", size: 48); glass(dlB, "arrow.down.to.line", "Download", size: 48)
+    // (the same size as the top's ‹ and ••• — Haris 2026-11-15)
+    glass(copyB, "link", "Copy Link"); glass(dlB, "arrow.down.to.line", "Download")
     copyB.addAction(UIAction { [weak self] _ in self?.send("copy") }, for: .touchUpInside)   // (its words when the link is on the clipboard)
     dlB.addAction(UIAction { [weak self] _ in self?.send("dl") }, for: .touchUpInside)
     let tools = UIStackView(arrangedSubviews: [copyB, dlB]); tools.axis = .horizontal; tools.distribution = .equalSpacing; tools.alignment = .center
@@ -371,7 +372,7 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
       bottomBar.leadingAnchor.constraint(equalTo: view.leadingAnchor), bottomBar.trailingAnchor.constraint(equalTo: view.trailingAnchor), bottomBar.bottomAnchor.constraint(equalTo: g.bottomAnchor),
       strip.topAnchor.constraint(equalTo: bottomBar.topAnchor), strip.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor), strip.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor), strip.heightAnchor.constraint(equalToConstant: 40),
       tools.topAnchor.constraint(equalTo: strip.bottomAnchor, constant: 10), tools.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor, constant: 34), tools.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor, constant: -34),
-      tools.heightAnchor.constraint(equalToConstant: 48), tools.bottomAnchor.constraint(equalTo: bottomBar.bottomAnchor, constant: -4),
+      tools.heightAnchor.constraint(equalToConstant: 42), tools.bottomAnchor.constraint(equalTo: bottomBar.bottomAnchor, constant: -4),
       toast.centerXAnchor.constraint(equalTo: view.centerXAnchor), toast.bottomAnchor.constraint(equalTo: bottomBar.topAnchor, constant: -14),
       toast.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, constant: -48), toast.heightAnchor.constraint(greaterThanOrEqualToConstant: 36),
     ])
