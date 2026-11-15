@@ -8739,6 +8739,7 @@ function notifMsg(n, t) {
   return `${who} ${n.text.replace(/ (on|to|from|of|for)$/, '').replace(/ —[^<]*:$|:$/, '')}${n.kind === 'assigned' ? ' this task' : n.kind === 'unassigned' ? ' this task' : ''}`;
 }
 function viewInbox() {
+  if (typeof MacInbox !== 'undefined' && MacInbox.on()) return MacInbox.view();   // (the Mac app: Mail's way — macinbox.js)
   const tab = ['all', 'cleared'].includes(ui.inboxTab) ? ui.inboxTab : 'primary';
   const f = ui.inboxFilter || 'all';
   const mine = myNotifs().filter((n) => ibMatch(n, f));
