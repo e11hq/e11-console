@@ -555,9 +555,11 @@ const MacChrome = (() => {
     PageHistory.paint();
     if (shell >= 12) {
       // the room for the Mac's sidebar made at once, before the page is drawn — not slid in once it shows (Haris 2026-11-15
-      // 13:06: "the whole right side slides in to make space for the sidebar"); 13+: the sidebar edge to edge (252 / 100)
+      // 13:06: "the whole right side slides in to make space for the sidebar"); 13+: edge to edge, 252 shown / 0 hidden
       const de = document.documentElement;
-      de.style.setProperty('--nsb-room', (shell >= 13 ? 252 : 260) + 'px'); de.style.setProperty('--nsb-slim', (shell >= 13 ? 100 : 108) + 'px');
+      de.style.setProperty('--nsb-room', (shell >= 13 ? 252 : 260) + 'px'); de.style.setProperty('--nsb-slim', (shell >= 13 ? 0 : 108) + 'px');
+      // (13: the sidebar as Claude's — shown, or hidden completely with the window's row over the page's top-left; ‹ › in it)
+      if (shell >= 13) de.classList.add('mac-nsb13');
       const app = document.getElementById('app'); if (app && !app.classList.contains('locked')) de.classList.add('mac-nsb', 'mac-nsb-o');
       NativeSide.start();   // (Mac app 12: the sidebar is the Mac's own)
     }
@@ -642,6 +644,7 @@ const NativeSide = (() => {
     const create = document.querySelector('#sidebar .create-btn');
     return {
       on: true, items, collapsed: app.classList.contains('sb-collapsed'), light, talk: !!window.E11_TALK,
+      back: !!document.getElementById('nav-back') && !document.getElementById('nav-back').disabled, fwd: !!document.getElementById('nav-fwd') && !document.getElementById('nav-fwd').disabled,
       themeIc: auto ? 'theme-auto' : light ? 'sun' : 'moon', themeTip: theme ? theme.title : '',
       create: !!create && create.style.display !== 'none',
       me: { name: (chip.querySelector('b') || {}).textContent || '', role: (chip.querySelector('small') || {}).textContent || '',
@@ -702,7 +705,14 @@ const NativeSide = (() => {
     switch (a.kind) {
       case 'go': { const el = a.key && find(a.key); if (el) el.click(); return; }
       case 'new': { const b = document.querySelector('#sidebar .create-btn'); if (b) b.click(); return; }
-      case 'theme': { const b = document.querySelector('#sidebar .theme-toggle'); if (b) b.click(); later(); return; }
+      case 'theme': {
+        // (Mac app 13: light / dark as two buttons — the one picked; older ones: the round button, which switches)
+        if (a.mode === 'light' || a.mode === 'dark') { Theme.setMode(a.mode); if (ui.view === 'profile') renderContent(); later(); return; }
+        const b = document.querySelector('#sidebar .theme-toggle'); if (b) b.click(); later(); return;
+      }
+      // (Mac app 13: the page's back / forward, now in the sidebar's top row)
+      case 'back': { const b = document.getElementById('nav-back'); if (b && !b.disabled) b.click(); return; }
+      case 'fwd': { const b = document.getElementById('nav-fwd'); if (b && !b.disabled) b.click(); return; }
       case 'collapse': setSidebarCollapsed(!document.getElementById('app').classList.contains('sb-collapsed')); later(); return;
       case 'sync': { const b = document.querySelector('#sidebar .data-link'); if (b) b.click(); return; }
       case 'menu': {
@@ -1011,6 +1021,7 @@ const PageHistory = (() => {
     const b = document.getElementById('nav-back'), f = document.getElementById('nav-fwd');
     if (b) b.disabled = idx <= 0;
     if (f) f.disabled = idx >= stack.length - 1;
+    if (typeof NativeSide !== 'undefined') NativeSide.paint();   // (Mac app 13: ‹ › are in the Mac's sidebar row)
   }
   return { mark, back: () => move(-1), forward: () => move(1), paint, canBack: () => { mark(); return idx > 0; }, prev: () => { mark(); return idx > 0 ? stack[idx - 1] : null; } };
 })();
