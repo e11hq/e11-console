@@ -358,22 +358,12 @@ extension Main {
     DispatchQueue.main.asyncAfter(deadline: .now() + 4.2) { [weak self] in self?.ownPops() }
   }
 
-  // What's new after an update (app.js maybeShowWhatsNew), and the View as… bar (viewas.js) — the app's own, without
-  // the website
+  // What's new never comes up by itself any more — not after a reload, not after an update (Haris 2026-11-15 17:23 / 17:26,
+  // as app.js maybeShowWhatsNew); it's in Me › About when asked for. The version is still noted. And the View as… bar
+  // (viewas.js) — the app's own, without the website
   func ownAfterStart() {
     let st = startInfo
-    if let v = st["version"] as? String, !v.isEmpty {
-      let seen = defaults.string(forKey: "e11-seen-version")
-      defaults.set(v, forKey: "e11-seen-version")
-      if let s = seen, s != v {
-        serverTask.request("/api/whatsnew", body: nil) { [weak self] r in
-          guard let self = self, let r = r, let notes = r["notes"] as? String, !notes.isEmpty else { return }
-          DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            self.popCommand(["kind": "whatsNew", "version": r["name"] ?? r["version"] ?? v, "when": (r["publishedAt"] as? String).map { Main.dateTimeText($0) } ?? "", "sections": Main.noteSections(notes)]) { _ in }
-          }
-        }
-      }
-    }
+    if let v = st["version"] as? String, !v.isEmpty { defaults.set(v, forKey: "e11-seen-version") }
     if let va = st["viewAs"] as? [String: Any], let who = va["as"] as? [String: Any] {
       let role = ((AppData.shared.meModel("me", "me", [["shell": SHELL_VERSION]])?["card"] as? [String: Any])?["role"] as? String) ?? ""
       popCommand(["kind": "viewAsBar", "on": true, "name": who["name"] ?? "", "role": role]) { _ in }
