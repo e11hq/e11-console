@@ -4918,6 +4918,21 @@ const MacBar = (() => {
   return { on, menu };
 })();
 
+/* ================= The Mac app: scroll bars only while scrolling (Haris 2026-11-15 16:33) =================
+   Whatever scrolls is marked for a moment (home.css shows its thin bar only then), as the Mac's own overlay scroll bars. */
+const MacScroll = (() => {
+  if (typeof Host === 'undefined' || !Host.isMacApp) return {};
+  const timers = new WeakMap();
+  document.addEventListener('scroll', (e) => {
+    const el = e.target === document ? document.documentElement : e.target;
+    if (!el || !el.classList) return;
+    el.classList.add('mac-scrolling');
+    clearTimeout(timers.get(el));
+    timers.set(el, setTimeout(() => el.classList.remove('mac-scrolling'), 900));
+  }, true);
+  return {};
+})();
+
 /* ================= The Mac app 13+: Apple's SF Symbols for the page's icons (Haris 2026-11-15 13:59) =================
    Page by page — Home first (and the top bar, the window's own): each icon, by its name (data-i), shows as the SF Symbol
    the Mac draws for it (command symbols → pictures used as masks, so they take the text's colour). Kept on this Mac, so
@@ -7737,14 +7752,15 @@ function folderMenu(anchor, c, f, lead = []) {
     } }] : []),
   ], { native: true });
 }
-// Files added to or removed from Client Assets: an Inbox update (and phone notification) for everyone working on that
-// client's tasks (assignees, creators, watchers), its Account Managers, and every Admin. Not the person who did it.
+// Files added to or removed from Client Assets: an Inbox update (and phone notification) for everyone on that client's
+// OPEN tasks (assignees, creators, watchers — not every task they ever worked on: Haris 2026-11-15 16:33), its Account
+// Managers, and every Admin and Office Admin (all of Client Assets' activity). Not the person who did it.
 function assetNotify(c, f, verb, names) {
   if (!c || !names.length) return;
   const projs = db.projects.filter((p) => p.clientId === c.id);
   const pids = new Set(projs.map((p) => p.id));
   const to = new Set();
-  db.tasks.filter((t) => pids.has(t.projectId) || (t.parentId && pids.has((task(t.parentId) || {}).projectId))).forEach((t) => {
+  db.tasks.filter((t) => !t.done && (pids.has(t.projectId) || (t.parentId && pids.has((task(t.parentId) || {}).projectId)))).forEach((t) => {
     (t.assignees || []).forEach((id) => to.add(id));
     if (creatorOf(t)) to.add(creatorOf(t));
     (t.watchers || []).forEach((id) => to.add(id));

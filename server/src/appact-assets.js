@@ -92,7 +92,8 @@ export function createAssetActs({ store, now = () => Date.now(), access, files }
     const projs = V.projects.filter((p) => p.clientId === c.id);
     const pids = new Set(projs.map((p) => p.id));
     const to = new Set();
-    V.tasks.filter((t) => pids.has(t.projectId) || (t.parentId && pids.has((task(t.parentId) || {}).projectId))).forEach((t) => {
+    // (only the client's OPEN tasks' people, its AMs and every Admin / Office Admin — Haris 2026-11-15 16:33)
+    V.tasks.filter((t) => !t.done && (pids.has(t.projectId) || (t.parentId && pids.has((task(t.parentId) || {}).projectId)))).forEach((t) => {
       (t.assignees || []).forEach((id) => to.add(id));
       if (creatorOf(t)) to.add(creatorOf(t));
       (t.watchers || []).forEach((id) => to.add(id));

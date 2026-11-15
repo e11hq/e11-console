@@ -109,7 +109,9 @@ export function createFinals({ store, files, access }) {
     const to = new Set();
     const tasks = store.list('tasks');
     const byId = new Map(tasks.map((x) => [x.id, x]));
-    tasks.filter((x) => pids.has(x.projectId) || (x.parentId && pids.has((byId.get(x.parentId) || {}).projectId))).forEach((x) => {
+    // (the client's OPEN tasks' people — and this task's own, finished just now — its AMs and every Admin / Office Admin:
+    //  Haris 2026-11-15 16:33)
+    tasks.filter((x) => x.id === t.id || (!x.done && (pids.has(x.projectId) || (x.parentId && pids.has((byId.get(x.parentId) || {}).projectId))))).forEach((x) => {
       (x.assignees || []).forEach((id) => to.add(id));
       if (x.createdBy) to.add(x.createdBy);
       (x.watchers || []).forEach((id) => to.add(id));
