@@ -658,19 +658,19 @@ enum Look {
   // a person's colour: their initials' colour in E11 Console (Haris 2026-11-11), else one picked from their id
   static func person(_ id: String) -> UIColor { hex(Talk.shared.people[id]?.color) ?? color(for: id) }
   // a person's colour for words — a name over a bubble, the reply strip and the quoted reply: WhatsApp's own calm palette,
-  // taken from its group chats (Haris 2026-11-15: its screenshots — dark as WhatsApp's, light the same hue deeper), one
+  // taken from its group chats in dark and light (Haris 2026-11-15, its screenshots; sky, pink and orange ours, made the same way), one
   // colour for each person, always the same (from their id)
   static let namePalette: [UIColor] = [
-    dyn(0x68A4F0, 0x1F6FCF),   // blue
-    dyn(0x64CC70, 0x1F8E3D),   // green
-    dyn(0x68C0B4, 0x13857A),   // teal
-    dyn(0xF4D084, 0xA87A10),   // sand
-    dyn(0xE47C84, 0xC2414F),   // rose
-    dyn(0xEC987C, 0xC25A35),   // peach
-    dyn(0xA090F4, 0x6A55D6),   // lilac
-    dyn(0x6FC8E8, 0x127FA8),   // sky
-    dyn(0xE88CC8, 0xB2408A),   // pink
-    dyn(0xF2A65A, 0xB86512),   // orange
+    dyn(0x68A4F0, 0x285CB8),   // blue
+    dyn(0x64CC70, 0x408458),   // green
+    dyn(0x68C0B4, 0x388074),   // teal
+    dyn(0xF4D084, 0x98703C),   // sand
+    dyn(0xE47C84, 0xBC283C),   // rose
+    dyn(0xEC987C, 0xB45838),   // peach
+    dyn(0xA090F4, 0x5C48D4),   // lilac
+    dyn(0x6FC8E8, 0x1F7A9E),   // sky
+    dyn(0xE88CC8, 0xA8327A),   // pink
+    dyn(0xF2A65A, 0xA8600F),   // orange
   ]
   static func nameInk(_ id: String) -> UIColor { namePalette[abs(id.unicodeScalars.reduce(0) { ($0 &* 31) &+ Int($1.value) }) % namePalette.count] }
   static func hex(_ s: String?) -> UIColor? {
