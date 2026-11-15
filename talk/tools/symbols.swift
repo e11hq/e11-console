@@ -22,3 +22,19 @@ for (look, bg, field, ink) in [("dark", NSColor.black, NSColor(white: 0.16, alph
   NSGraphicsContext.restoreGraphicsState()
   try! rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: CommandLine.arguments[1] + "/smiley-\(look).png"))
 }
+
+// Apple's outline smiley as the Mac draws it (face.smiling, regular, 15 pt) kept as a vector picture for Talk's box —
+// the iPhone's newer system draws the same symbol as a solid face (Haris 2026-11-15: "a regular in your picture is good")
+do {
+  let cfg = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular).applying(NSImage.SymbolConfiguration(paletteColors: [.black]))
+  let img = NSImage(systemSymbolName: "face.smiling", accessibilityDescription: nil)!.withSymbolConfiguration(cfg)!
+  var box = CGRect(origin: .zero, size: img.size)
+  let out = URL(fileURLWithPath: CommandLine.arguments[1] + "/smile-line.pdf")
+  let ctx = CGContext(out as CFURL, mediaBox: &box, nil)!
+  ctx.beginPDFPage(nil)
+  NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: false)
+  img.draw(in: box)
+  NSGraphicsContext.restoreGraphicsState()
+  ctx.endPDFPage(); ctx.closePDF()
+  print("smile-line.pdf", img.size)
+}
