@@ -31,6 +31,7 @@ const Home = (() => {
     clip: 'M10.5 4.5 5.6 9.4a1.4 1.4 0 0 0 2 2l5-5a2.8 2.8 0 0 0-4-4l-5 5a4.2 4.2 0 0 0 6 6l4.4-4.4',
     flag: 'M3.5 13.5V3h7l-1.5 2.5 1.5 2.5h-7',
     tick: 'm3.5 8.4 3 3 6-6.6',
+    cal: 'M4.5 4.2h7a1.3 1.3 0 0 1 1.3 1.3v6.4a1.3 1.3 0 0 1-1.3 1.3h-7a1.3 1.3 0 0 1-1.3-1.3V5.5a1.3 1.3 0 0 1 1.3-1.3zM3.2 7.2h9.6M5.8 2.6v2.6M10.2 2.6v2.6',   // (the Mac app's "due today", as its board — Haris 2026-11-15)
   };
   const tick = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true"><path d="${IC.tick}"/></svg>`;
   const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
@@ -166,7 +167,7 @@ const Home = (() => {
       <header class="hm-head"><div><div class="hm-date">${dateLine()}</div><h1>${hello(first(me()))}</h1></div>
         <div class="hm-btns"><button type="button" class="hm-btn" data-nav="today">${esc(Work.dayTitle())}</button><button type="button" class="hm-btn primary" data-action="new-task">+ New task</button></div></header>
       <section class="hm-stats">
-        ${statCard('blue', IC.clock, admin ? 'Team tasks due today' : 'Your tasks due today', due0.length, overdue.length ? `${overdue.length} overdue` : 'none overdue', overdue.length ? 'warn' : 'ok', 'today')}
+        ${statCard('blue', Host.isMacApp ? IC.cal : IC.clock, admin ? 'Team tasks due today' : 'Your tasks due today', due0.length, overdue.length ? `${overdue.length} overdue` : 'none overdue', overdue.length ? 'warn' : 'ok', 'today')}
         ${statCard('green', IC.check, 'Finished by your team', doneWeek, doneWeek - donePrev >= 0 ? `↑ ${doneWeek - donePrev} vs last week` : `↓ ${donePrev - doneWeek} vs last week`, doneWeek >= donePrev ? 'ok' : 'warn', 'finished')}
         ${statCard('orange', IC.shield, 'Waiting for CD review', inReview.length, since ? `oldest ${timeAgo(since)}` : 'nothing waiting', 'orange', 'cd')}
       </section>
