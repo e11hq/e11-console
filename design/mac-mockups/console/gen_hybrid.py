@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# E11 Console for Mac — the hybrid: Apple's window, toolbar and sidebar (native) around the website's page content restyled
+# E11 Console for Mac — the hybrid: Apple's window and toolbar, today's Mac sidebar exactly as it is, around the website's page content restyled
 # for the Mac. Boards H1 (dark) and H2 (light), both E11 Day.
 import os
 P = os.path.join(os.path.dirname(__file__), 'project')
@@ -27,6 +27,7 @@ def sym(name, color):
       'search': '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
       'bubble': '<path d="M4 5h16v11H9l-5 4z"/>',
       'sidebar': '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/>',
+      'grid': '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
       'moon': '<path d="M20 14A8 8 0 0110 4a8 8 0 1010 10z"/>',
     }[name]
     return f'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{p}</svg>'
@@ -35,36 +36,55 @@ MARK = 'M274.8 108.1 L274.2 108.8 L274.4 130.5 L275.2 131.2 L296.8 131.1 L297.4 
 
 def board(look):
     t = T[look]; A = t['accent']
-    def item(icon, name, count='', on=False, red=False, sub=''):
-        bg = f'background: {t["sel"]};' if on else ''
-        c = (f'<span style="margin-left: auto; font-size: 12px; {"min-width: 18px; height: 18px; border-radius: 9px; background: #ff3b30; color: #fff; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; box-sizing: border-box" if red else "color: " + t["dim"]}">{count}</span>') if count else ''
-        s2 = f'<div style="font-size: 11px; color: {t["dim"]}">{sub}</div>' if sub else ''
-        return (f'<div style="display: flex; align-items: center; gap: 9px; padding: 5px 10px; border-radius: 7px; font-size: 13px; {bg}">{sym(icon, A)}'
-                f'<div style="flex: 1; min-width: 0"><div>{name}</div>{s2}</div>{c}</div>')
-    def head(s, plus=False):
-        p = f'<span style="margin-left: auto; color: {t["dim"]}">{sym("plus", t["dim"])}</span>' if plus else ''
-        return f'<div style="display: flex; align-items: center; padding: 14px 10px 4px; font-size: 11px; font-weight: 600; color: {t["dim"]}">{s}{p}</div>'
-    def client(c, n):
-        return f'<div style="display: flex; align-items: center; gap: 9px; padding: 5px 10px; font-size: 13px"><span style="width: 15px; height: 15px; border-radius: 4px; background: {c}"></span>{n}</div>'
-    side = (f'<div style="position: absolute; left: 8px; top: 8px; bottom: 8px; width: 232px; border-radius: 16px; background: {t["side"]}; backdrop-filter: blur(30px); '
-            f'box-shadow: inset 0 0 0 0.5px {t["sideLine"]}, 0 8px 28px rgba(0,0,0,0.18); padding: 12px 8px; box-sizing: border-box; display: flex; flex-direction: column; z-index: 3">'
-            '<div style="display: flex; gap: 8px; padding: 4px 8px 14px"><span style="width: 12px; height: 12px; border-radius: 6px; background: #ff5f57"></span><span style="width: 12px; height: 12px; border-radius: 6px; background: #febc2e"></span><span style="width: 12px; height: 12px; border-radius: 6px; background: #28c840"></span>'
-            f'<span style="margin-left: auto">{sym("sidebar", t["dim"])}</span></div>'
+    # TODAY'S Mac sidebar, exactly as it is (mac/swift/Sidebar.swift — Haris 2026-11-15: "sidebar will remain exactly as now"):
+    # a floating glass panel 244 wide, 8 in; top row 44 (the window's buttons left; theme · New task · collapse as round
+    # glass buttons right); rows 30 tall, the page's icons as SF Symbols in E11 purple, 13.5 names, counts 12.5 grey or a red
+    # badge; headings 11 semibold; the clients scroll between; Library at the bottom; the footer: you, Synced, © E11 Agency.
+    PUR = '#7c6cff'
+    ter = 'rgba(235,235,245,0.30)' if look == 'dark' else 'rgba(60,60,67,0.30)'
+    sec = 'rgba(235,235,245,0.60)' if look == 'dark' else 'rgba(60,60,67,0.60)'
+    selbg = 'rgba(255,255,255,0.11)' if look == 'dark' else 'rgba(0,0,0,0.075)'
+    btnbg = 'rgba(255,255,255,0.07)' if look == 'dark' else 'rgba(255,255,255,0.75)'
+    btnedge = 'rgba(255,255,255,0.12)' if look == 'dark' else 'rgba(0,0,0,0.08)'
+    def ic(name):
+        return sym(name, PUR).replace('width="15" height="15"', 'width="14" height="14"')
+    def item(icon, name, count='', on=False, red=False):
+        bg = f'background: {selbg};' if on else ''
+        c = (f'<span style="margin-left: auto; min-width: 22px; height: 18px; border-radius: 9px; background: #e5484d; color: #fff; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; padding: 0 6px; box-sizing: border-box; margin-right: -3px">{count}</span>' if red
+             else f'<span style="margin-left: auto; font-size: 12.5px; color: {ter}">{count}</span>') if count else ''
+        lead = icon if icon.startswith('<') else ic(icon)
+        return (f'<div style="display: flex; align-items: center; height: 30px; padding: 0 9px 0 0; border-radius: 9px; {bg}">'
+                f'<span style="width: 36px; display: inline-flex; justify-content: center">{lead}</span>'
+                f'<span style="font-size: 13.5px; {"font-weight: 600;" if on else ""} white-space: nowrap">{name}</span>{c}</div>')
+    def head(s, plus=False, first=False):
+        p = f'<span style="margin-left: auto; margin-right: 4px; display: inline-flex">{sym("plus", sec).replace("width=\"15\" height=\"15\"", "width=\"11\" height=\"11\"").replace("stroke-width=\"1.9\"", "stroke-width=\"2.6\"")}</span>' if plus else ''
+        return f'<div style="display: flex; align-items: flex-end; height: {22 if first else 30}px; padding: 0 0 4px 9px; box-sizing: border-box; font-size: 11px; font-weight: 600; color: {sec}">{s}{p}</div>'
+    def dot(c):
+        return f'<span style="width: 10px; height: 10px; border-radius: 5px; background: {c}"></span>'
+    def rb(name):
+        return f'<span style="width: 30px; height: 30px; border-radius: 15px; background: {btnbg}; box-shadow: inset 0 0 0 0.5px {btnedge}; display: inline-flex; align-items: center; justify-content: center">{sym(name, sec).replace("width=\"15\" height=\"15\"", "width=\"14\" height=\"14\"")}</span>'
+    side = (f'<div style="position: absolute; left: 8px; top: 8px; bottom: 8px; width: 244px; border-radius: 18px; background: {t["side"]}; backdrop-filter: blur(30px); '
+            f'box-shadow: inset 0 0 0 0.5px {t["sideLine"]}, 0 8px 28px rgba(0,0,0,0.18); box-sizing: border-box; display: flex; flex-direction: column; z-index: 3">'
+            '<div style="height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 16px; flex: none"><span style="width: 12px; height: 12px; border-radius: 6px; background: #ff5f57"></span><span style="width: 12px; height: 12px; border-radius: 6px; background: #febc2e"></span><span style="width: 12px; height: 12px; border-radius: 6px; background: #28c840"></span>'
+            f'<span style="margin-left: auto; display: flex; gap: 6px">{rb("moon")}{rb("plus")}{rb("sidebar")}</span></div>'
+            '<div style="padding: 8px 10px 0; display: flex; flex-direction: column; flex: 1; min-height: 0">'
             + item('house', 'Home', on=True) + item('tray', 'Inbox', '3', red=True) + item('sun', 'E11 Day', '7') + item('check', 'My Tasks', '8') + item('cal', 'Content plans', '1', red=True)
-            + head('Clients', True) + client('#0E3E8C', 'Northline Motors') + client('#C8102E', 'Kestrel Foods') + client('#3E7D44', 'Pinecrest')
-            + '<div style="margin-top: auto"></div>' + head('Library') + item('folder', 'Client Assets', sub='Logos · Guidelines · Fonts') + item('dollar', 'Finance', sub='Dashboard · Clients · Expenses') + item('trash', 'Trash')
-            + f'<div style="margin-top: 10px; border-top: 0.5px solid {t["sideLine"]}; padding: 10px 8px 0; display: flex; flex-direction: column; gap: 6px">'
-            + f'<div style="display: flex; align-items: center; gap: 9px"><span style="width: 28px; height: 28px; border-radius: 14px; background: #7D5BD9; color: #fff; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center">AM</span>'
-            + f'<div><div style="font-size: 13px; font-weight: 600">Alex Morgan</div><div style="font-size: 11px; color: {t["dim"]}">Super Admin</div></div></div>'
-            + f'<div style="font-size: 11px; color: {t["dim"]}"><span style="color: #30d158">●</span> Synced · E11 Server</div></div></div>')
+            + head('Clients', True) + item(dot('#0E3E8C'), 'Northline Motors', '11') + item(dot('#C8102E'), 'Kestrel Foods', '8') + item(dot('#3E7D44'), 'Pinecrest', '5')
+            + '<div style="margin-top: auto"></div>' + head('Library') + item('grid', 'Client Assets', '13') + item('dollar', 'Finance') + item('trash', 'Trash', '3')
+            + '<div style="height: 6px; flex: none"></div></div>'
+            + f'<div style="height: 92px; flex: none; position: relative; padding: 0 10px">'
+            + f'<div style="position: absolute; left: 19px; right: 19px; top: 0; height: 0.5px; background: {t["sideLine"]}"></div>'
+            + f'<div style="margin-top: 8px; height: 42px; display: flex; align-items: center; padding: 0 8px; gap: 10px"><span style="width: 30px; height: 30px; border-radius: 15px; background: #7D5BD9; color: #fff; font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center">AM</span>'
+            + f'<div style="flex: 1"><div style="font-size: 13px; font-weight: 600">Alex Morgan</div><div style="font-size: 11.5px; color: {sec}">Super Admin</div></div><span style="color: {ter}; font-size: 10px">⌄</span></div>'
+            + f'<div style="margin-top: 2px; height: 18px; display: flex; align-items: center; gap: 7px; padding-left: 1px"><span style="width: 7px; height: 7px; border-radius: 4px; background: #30d158"></span><span style="font-size: 11.5px; color: {sec}">Synced · E11 Server</span></div>'
+            + f'<div style="padding-left: 10px; font-size: 11px; color: {ter}">© 2026 E11 Agency</div></div></div>')
     def tb(inner, w=None):
         return (f'<span style="height: 30px; {"width: 30px;" if not w else ""} padding: 0 {10 if w else 0}px; border-radius: 15px; background: {t["glass"]}; box-shadow: inset 0 0 0 0.5px {t["glassLine"]}; '
                 f'display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px">{inner}</span>')
-    toolbar = (f'<div style="position: absolute; left: 248px; right: 0; top: 0; height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 16px; z-index: 2">'
+    toolbar = (f'<div style="position: absolute; left: 260px; right: 0; top: 0; height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 16px; z-index: 2">'
                f'<span style="font-size: 15px; font-weight: 700">Home</span>'
                f'<span style="margin-left: auto"></span>'
-               + tb(sym('plus', t['fg']) + 'New Task', w=1) + tb(sym('moon', t['fg']))
-               + tb(sym('bubble', t['fg']) + 'Talk <span style="min-width: 18px; height: 18px; border-radius: 9px; background: #ff3b30; color: #fff; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; box-sizing: border-box">5</span>', w=1)
+                              + tb(sym('bubble', t['fg']) + 'Talk <span style="min-width: 18px; height: 18px; border-radius: 9px; background: #ff3b30; color: #fff; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; box-sizing: border-box">5</span>', w=1)
                + f'<span style="width: 220px; height: 30px; border-radius: 15px; background: {t["field"]}; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; box-sizing: border-box; font-size: 13px; color: {t["dim"]}">{sym("search", t["dim"])}Search tasks<span style="margin-left: auto; font-size: 11px">⌘K</span></span>'
                + f'<svg viewBox="0 0 297.5 132.0" style="height: 18px; width: auto; margin-left: 6px; flex: none" aria-hidden="true"><path fill="{"#fff" if look == "dark" else "#000"}" fill-rule="evenodd" d="{MARK}"/></svg>'
                + '</div>')
@@ -117,7 +137,7 @@ def board(look):
     def cl(c, ini, name, o, pc):
         return f'<div style="display: flex; align-items: center; gap: 10px; padding: 6px 0"><span style="width: 30px; height: 30px; border-radius: 8px; background: {c}; color: #fff; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center">{ini}</span><div style="flex: 1"><div style="font-size: 13px; font-weight: 600">{name}</div><div style="font-size: 11px; color: {t["dim"]}">{o} open · {pc}% done</div><div style="margin-top: 4px; height: 3px; border-radius: 2px; background: {t["line"]}"><div style="width: {pc}%; height: 100%; border-radius: 2px; background: {c}"></div></div></div></div>'
     clients = card(extra='flex: 1', inner=h2('Clients', f'<span style="font-size: 12px; color: {t["dim"]}">3</span>') + cl(N, 'NM', 'Northline Motors', 11, 64) + cl(K, 'KF', 'Kestrel Foods', 8, 52) + cl(P, 'PC', 'Pinecrest', 5, 71))
-    content = (f'<div style="position: absolute; left: 248px; right: 0; top: 52px; bottom: 0; background: {t["content"]}; border-top: 0.5px solid {t["line"]}; padding: 20px 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; overflow: hidden">'
+    content = (f'<div style="position: absolute; left: 260px; right: 0; top: 52px; bottom: 0; background: {t["content"]}; border-top: 0.5px solid {t["line"]}; padding: 20px 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; overflow: hidden">'
                f'<div><div style="font-size: 12px; color: {t["dim"]}">Saturday, November 14</div><div style="font-size: 26px; font-weight: 700; letter-spacing: -0.3px">Good evening, Alex</div></div>'
                f'<div style="display: flex; gap: 12px">{stat(A, "cal", "Team tasks due today", 3, "2 overdue", red)}{stat(green, "check", "Finished by your team", 14, "↑ 4 vs last week", green)}{stat(orange, "sun", "Waiting for CD review", 2, "oldest 3 hours ago", orange)}</div>'
                f'<div style="display: grid; grid-template-columns: 1fr 330px; gap: 14px; align-items: stretch; flex: 1; min-height: 0">'
