@@ -119,6 +119,8 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
     zoomer.addGestureRecognizer(dbl)
   }
   required init?(coder: NSCoder) { fatalError() }
+  // what a pull down moves: the picture (Talk's — it follows the finger), else the whole page
+  var dragView: UIView { mode == "image" ? imageView : contentView }
   // the picture on show and where it sits on the screen (the preview flies back from it)
   var shownPicture: (UIImage, CGRect)? {
     guard mode == "image", !imageView.isHidden, let img = imageView.image, img.size.width > 0, img.size.height > 0 else { return nil }
@@ -330,12 +332,17 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
 
 /* ---------- the preview ---------- */
 final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout, UIGestureRecognizerDelegate {
+  /* (Haris 2026-11-15: "keep the buttons as Console's, but copy the same preview from Talk" — E11 Talk's PhotoViewerVC:
+     its strip, its pull down where the picture follows the finger, its flights in and out, its timings; Console's own
+     buttons — ‹ · ••• · Copy Link · Download — and its PDFs, documents and text inside it) */
   private var files: [[String: Any]]
   private var at: Int
   private let event: ([String: Any]) -> Void
   private var pages: [String: ([String], String?)] = [:]
   private let pager: UICollectionView
-  private let strip: UICollectionView
+  // (E11 Talk's strip, as it is: a sliding row of small pictures, 26 × 36, 3 apart — the one on show with a white edge)
+  private let strip = UIScrollView(), stripRow = UIStackView()
+  private var stripPlaced = false
   // (as E11 Talk's photo viewer — Haris 2026-11-15: "the preview same as Talk's, with glass buttons"): black, ‹ · the
   //  file's name and its line · ••• at the top on a soft shade; the strip and Copy Link · Download as Apple's glass at the
   //  foot on the same shade turned upside down; a tap hides and shows them)
@@ -363,8 +370,6 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     self.event = event
     let pl = UICollectionViewFlowLayout(); pl.scrollDirection = .horizontal; pl.minimumLineSpacing = 0
     pager = UICollectionView(frame: .zero, collectionViewLayout: pl)
-    let sl = UICollectionViewFlowLayout(); sl.scrollDirection = .horizontal; sl.minimumLineSpacing = 3; sl.itemSize = CGSize(width: 26, height: 36)
-    strip = UICollectionView(frame: .zero, collectionViewLayout: sl)
     super.init(nibName: nil, bundle: nil)
     modalPresentationStyle = .overFullScreen
     modalTransitionStyle = .crossDissolve
@@ -382,7 +387,7 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     pager.showsHorizontalScrollIndicator = false
     pager.contentInsetAdjustmentBehavior = .never
     // (Apple's shade under the status bar off — the top has its own soft shade; both showed, two shadows: Haris 2026-11-15)
-    if #available(iOS 26.0, *) { pager.topEdgeEffect.isHidden = true; pager.bottomEdgeEffect.isHidden = true; strip.topEdgeEffect.isHidden = true; strip.bottomEdgeEffect.isHidden = true }
+    if #available(iOS 26.0, *) { pager.topEdgeEffect.isHidden = true; pager.bottomEdgeEffect.isHidden = true; strip.topEdgeEffect.isHidden = true; strip.bottomEdgeEffect.isHidden = true; strip.leftEdgeEffect.isHidden = true; strip.rightEdgeEffect.isHidden = true }
     pager.dataSource = self; pager.delegate = self
     pager.register(PreviewCell.self, forCellWithReuseIdentifier: PreviewCell.id)
     pager.frame = view.bounds; pager.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -404,9 +409,10 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     let names = UIStackView(arrangedSubviews: [name, details]); names.axis = .vertical; names.alignment = .center
     [closeB, names, moreB].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; topBar.addSubview($0) }
     // the foot: the strip · Copy Link and Download (Talk's Share / Delete places, each Apple's own glass)
-    strip.backgroundColor = .clear; strip.showsHorizontalScrollIndicator = false
-    strip.dataSource = self; strip.delegate = self
-    strip.register(UICollectionViewCell.self, forCellWithReuseIdentifier: "th")
+    strip.showsHorizontalScrollIndicator = false
+    stripRow.axis = .horizontal; stripRow.spacing = 3; stripRow.alignment = .center
+    buildStrip()
+    stripRow.translatesAutoresizingMaskIntoConstraints = false; strip.addSubview(stripRow)
     strip.isHidden = files.count < 2
     // (the same size as the top's ‹ and ••• — Haris 2026-11-15)
     glass(copyB, "link", "Copy Link"); glass(dlB, "arrow.down.to.line", "Download")
@@ -436,12 +442,13 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
       names.leadingAnchor.constraint(greaterThanOrEqualTo: closeB.trailingAnchor, constant: 8), names.trailingAnchor.constraint(lessThanOrEqualTo: moreB.leadingAnchor, constant: -8),
       bottomBar.leadingAnchor.constraint(equalTo: view.leadingAnchor), bottomBar.trailingAnchor.constraint(equalTo: view.trailingAnchor), bottomBar.bottomAnchor.constraint(equalTo: g.bottomAnchor),
       strip.topAnchor.constraint(equalTo: bottomBar.topAnchor), strip.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor), strip.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor), strip.heightAnchor.constraint(equalToConstant: 40),
+      stripRow.centerYAnchor.constraint(equalTo: strip.centerYAnchor), stripRow.leadingAnchor.constraint(equalTo: strip.contentLayoutGuide.leadingAnchor, constant: 14),
+      stripRow.trailingAnchor.constraint(equalTo: strip.contentLayoutGuide.trailingAnchor, constant: -14), stripRow.topAnchor.constraint(equalTo: strip.contentLayoutGuide.topAnchor, constant: 2),
       tools.topAnchor.constraint(equalTo: strip.bottomAnchor, constant: 10), tools.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor, constant: 34), tools.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor, constant: -34),
       tools.heightAnchor.constraint(equalToConstant: 42), tools.bottomAnchor.constraint(equalTo: bottomBar.bottomAnchor, constant: -4),
       toast.centerXAnchor.constraint(equalTo: view.centerXAnchor), toast.bottomAnchor.constraint(equalTo: bottomBar.topAnchor, constant: -14),
       toast.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, constant: -48), toast.heightAnchor.constraint(greaterThanOrEqualToConstant: 36),
     ])
-    (strip.collectionViewLayout as? UICollectionViewFlowLayout)?.sectionInset = UIEdgeInsets(top: 2, left: 14, bottom: 2, right: 14)
     // tap: hide / show the bars; pull down: close
     let tap = UITapGestureRecognizer(target: self, action: #selector(toggleBars))
     tap.delegate = self
@@ -491,12 +498,27 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     guard at < files.count, let id = files[at]["id"] as? String else { return }
     event(["ev": ev, "id": id])
   }
-  // the one showing: a thin white edge — Talk's strip (Haris 2026-11-15)
-  static func paintPick(_ c: UICollectionViewCell, _ on: Bool, animated: Bool) {
-    let inner = c.contentView.viewWithTag(77)
-    inner?.layer.borderColor = UIColor.white.cgColor
-    let go: () -> Void = { inner?.layer.borderWidth = on ? 1.5 : 0 }
-    if animated { UIView.animate(withDuration: 0.2, animations: go) } else { go() }
+  // the strip's pictures (Talk's): each a small button, its own small picture (or its kind's letters till it comes)
+  private func buildStrip() {
+    stripRow.arrangedSubviews.forEach { $0.removeFromSuperview() }
+    for (i, f) in files.enumerated() {
+      let b = UIButton(type: .custom); b.tag = i; b.imageView?.contentMode = .scaleAspectFill; b.clipsToBounds = true; b.layer.cornerRadius = 4
+      b.backgroundColor = UIColor(white: 0.2, alpha: 1)
+      b.setTitle(((f["ext"] as? String) ?? "").uppercased(), for: .normal); b.titleLabel?.font = .systemFont(ofSize: 7, weight: .bold); b.setTitleColor(UIColor(white: 1, alpha: 0.6), for: .normal)
+      b.widthAnchor.constraint(equalToConstant: 26).isActive = true; b.heightAnchor.constraint(equalToConstant: 36).isActive = true
+      b.addAction(UIAction { [weak self] a in guard let t = (a.sender as? UIView)?.tag else { return }; self?.go(t) }, for: .touchUpInside)
+      PreviewLoad.image([f["thumb"] as? String, f["cover"] as? String].compactMap { $0 }.first { !$0.isEmpty }) { [weak b] img in
+        guard let b = b, let img = img else { return }
+        b.setTitle(nil, for: .normal); b.setImage(img, for: .normal)
+      }
+      stripRow.addArrangedSubview(b)
+    }
+  }
+  private func go(_ i: Int) {
+    guard i != at, i >= 0, i < files.count else { return }
+    at = i
+    pager.scrollToItem(at: IndexPath(item: i, section: 0), at: .left, animated: false)
+    refreshBars()
   }
   // the one on show plays (a video), the others pause
   private func playCurrent() {
@@ -511,12 +533,15 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     let f = files[at]
     name.text = f["name"] as? String
     details.text = f["meta"] as? String
-    // (only the frame moves to the one showing — the strip isn't drawn again: that emptied its pictures, Haris 2026-11-02)
-    if strip.numberOfItems(inSection: 0) != files.count { strip.reloadData() }
-    for c in strip.visibleCells { if let ip = strip.indexPath(for: c) { PreviewVC.paintPick(c, ip.item == at, animated: true) } }
-    if files.count > 1 {
-      // (all the same width, the one showing only its white edge — as Talk's shows on the phone, Haris 2026-11-15)
-      strip.scrollToItem(at: IndexPath(item: at, section: 0), at: .centeredHorizontally, animated: true)
+    // (Talk's: the one on show its white edge; the strip centred on it — in place as the preview opens, sliding only when
+    //  you move between files)
+    for (i, b) in stripRow.arrangedSubviews.enumerated() { b.layer.borderWidth = i == at ? 1.5 : 0; b.layer.borderColor = UIColor.white.cgColor }
+    if let b = stripRow.arrangedSubviews[safe: at], files.count > 1 {
+      if !stripPlaced { view.layoutIfNeeded() } else { strip.layoutIfNeeded() }
+      let maxX = max(0, strip.contentSize.width - strip.bounds.width)
+      let x = min(maxX, max(0, b.frame.midX - strip.bounds.width / 2))
+      strip.setContentOffset(CGPoint(x: x, y: 0), animated: stripPlaced)
+      stripPlaced = true
     }
     event(["ev": "at", "id": f["id"] as? String ?? ""])
   }
@@ -536,7 +561,7 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
       files.remove(at: i)
       if files.isEmpty { return close() }
       at = min(at, files.count - 1)
-      pager.reloadData(); strip.isHidden = files.count < 2
+      pager.reloadData(); buildStrip(); strip.isHidden = files.count < 2
       pager.layoutIfNeeded(); pager.scrollToItem(at: IndexPath(item: at, section: 0), at: .left, animated: false)
       refreshBars()
     }
@@ -569,40 +594,15 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
       }
       return
     }
-    if let p = presentingViewController { p.dismiss(animated: true) } else { dismiss(animated: true) }
+    UIView.animate(withDuration: 0.2, animations: { self.view.alpha = 0 }) { _ in
+      if let p = self.presentingViewController { p.dismiss(animated: false) } else { self.dismiss(animated: false) }
+    }
   }
 
   /* ---------- the pages and the strip ---------- */
   func collectionView(_ cv: UICollectionView, numberOfItemsInSection section: Int) -> Int { files.count }
   func collectionView(_ cv: UICollectionView, cellForItemAt ip: IndexPath) -> UICollectionViewCell {
     let f = files[ip.item]
-    if cv === strip {
-      let c = cv.dequeueReusableCell(withReuseIdentifier: "th", for: ip)
-      c.contentView.subviews.forEach { $0.removeFromSuperview() }
-      c.contentView.layer.cornerRadius = 8; c.contentView.clipsToBounds = true
-      c.contentView.backgroundColor = .tertiarySystemFill
-      // (the picture in a box of its own inside the cell: that box shrinks for the one showing — the cell's own content
-      //  view is placed by the strip, and shrinking it made the pictures jump: Haris 2026-11-02)
-      c.contentView.clipsToBounds = false; c.contentView.backgroundColor = .clear; c.contentView.layer.cornerRadius = 0
-      let inner = UIView(frame: c.contentView.bounds); inner.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-      inner.backgroundColor = UIColor(white: 0.2, alpha: 1); inner.layer.cornerRadius = 4; inner.clipsToBounds = true; inner.tag = 77
-      c.contentView.addSubview(inner)
-      let iv = UIImageView(frame: inner.bounds); iv.contentMode = .scaleAspectFill; iv.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-      inner.addSubview(iv)
-      let l = UILabel(frame: inner.bounds); l.text = ((f["ext"] as? String) ?? "").uppercased(); l.font = .systemFont(ofSize: 7, weight: .bold)
-      l.textColor = UIColor(white: 1, alpha: 0.6); l.textAlignment = .center; l.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-      inner.addSubview(l)
-      PreviewVC.paintPick(c, ip.item == at, animated: false)
-      // (the cell remembers which file it's showing now: a picture already loaded comes back before the cell is on the
-      //  screen — asking the strip where the cell was then gave nothing, so photos never showed)
-      let key = (f["id"] as? String ?? "") + "#\(ip.item)"
-      c.accessibilityIdentifier = key
-      PreviewLoad.image([f["thumb"] as? String, f["cover"] as? String].compactMap { $0 }.first { !$0.isEmpty }) { [weak c] img in
-        guard let c, let img, c.accessibilityIdentifier == key else { return }
-        iv.image = img; l.isHidden = true
-      }
-      return c
-    }
     let c = cv.dequeueReusableCell(withReuseIdentifier: PreviewCell.id, for: ip) as! PreviewCell
     c.onPlay = { [weak self] f in self?.playMedia(f) }
     c.onPlaying = { [weak self] in if self?.barsHidden == false { self?.toggleBars() } }
@@ -615,13 +615,7 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     if let tap = (pager.gestureRecognizers ?? []).first(where: { $0 is UITapGestureRecognizer && ($0 as! UITapGestureRecognizer).numberOfTapsRequired == 1 }) as? UITapGestureRecognizer, let dbl = c.doubleTapGesture { tap.require(toFail: dbl) }
     return c
   }
-  func collectionView(_ cv: UICollectionView, layout: UICollectionViewLayout, sizeForItemAt ip: IndexPath) -> CGSize { cv === strip ? CGSize(width: 26, height: 36) : view.bounds.size }
-  func collectionView(_ cv: UICollectionView, didSelectItemAt ip: IndexPath) {
-    guard cv === strip, ip.item != at else { return }
-    at = ip.item
-    pager.scrollToItem(at: ip, at: .left, animated: false)
-    refreshBars()
-  }
+  func collectionView(_ cv: UICollectionView, layout: UICollectionViewLayout, sizeForItemAt ip: IndexPath) -> CGSize { view.bounds.size }
   func scrollViewDidEndDecelerating(_ sv: UIScrollView) {
     guard sv === pager else { return }
     let n = Int((sv.contentOffset.x / max(1, sv.bounds.width)).rounded())
@@ -656,28 +650,28 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     }
   }
   private var current: PreviewCell? { pager.visibleCells.compactMap { $0 as? PreviewCell }.first { pager.indexPath(for: $0)?.item == at } }
+  // ---------- pulled down (Talk's): the picture follows the finger, the black and the buttons fade; far enough — back into
+  // the picture it came out of ----------
   func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
     guard g === pull, let p = pull else { return true }
-    let v = p.velocity(in: view)
-    guard v.y > 0, abs(v.y) > abs(v.x) * 1.2 else { return false }
     if let c = current, c.isZoomed || !c.atTop { return false }
-    return true
+    let v = p.velocity(in: view)
+    return v.y > abs(v.x) * 1.2
   }
   func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { g !== pull }
   @objc private func pulled(_ g: UIPanGestureRecognizer) {
-    let dy = max(0, g.translation(in: view).y)
+    guard let page = current else { return }
+    let t = g.translation(in: view), k = max(0, min(1, t.y / 400)), v = page.dragView
     switch g.state {
     case .changed:
-      pager.transform = CGAffineTransform(translationX: 0, y: dy).scaledBy(x: 1 - min(0.15, dy / 2000), y: 1 - min(0.15, dy / 2000))
-      let k = 1 - min(1, dy / 400)
-      view.backgroundColor = UIColor.black.withAlphaComponent(k)
-      topBar.alpha = barsHidden ? 0 : k; bottomBar.alpha = barsHidden ? 0 : k
+      v.transform = CGAffineTransform(translationX: t.x, y: t.y).scaledBy(x: 1 - k * 0.3, y: 1 - k * 0.3)
+      view.backgroundColor = UIColor.black.withAlphaComponent(1 - k)
+      topBar.alpha = barsHidden ? 0 : max(0, 1 - k * 3); bottomBar.alpha = topBar.alpha
     case .ended, .cancelled:
-      if dy > 120 || g.velocity(in: view).y > 900 { close(); return }
-      UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0) {
-        self.pager.transform = .identity
-        self.view.backgroundColor = .black
-        self.topBar.alpha = self.barsHidden ? 0 : 1; self.bottomBar.alpha = self.barsHidden ? 0 : 1
+      if t.y > 110 || g.velocity(in: view).y > 900 { close(); return }
+      UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0) {
+        v.transform = .identity; self.view.backgroundColor = .black
+        self.topBar.alpha = self.barsHidden ? 0 : 1; self.bottomBar.alpha = self.topBar.alpha
       }
     default: break
     }
@@ -814,4 +808,9 @@ final class FileTouch: UIGestureRecognizer {
     for _ in 0..<4 { guard let y = x else { break }; if let iv = inside(y, 4) { return iv }; x = y.superview }
     return nil
   }
+}
+
+
+extension Array {
+  subscript(safe i: Int) -> Element? { indices.contains(i) ? self[i] : nil }
 }
