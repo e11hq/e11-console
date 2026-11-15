@@ -197,7 +197,9 @@ const OfficeHome = (() => {
         ${people.length ? people.slice(0, 6).map(({ x, note, cls }) => `<div class="ohm-person" data-oh="team">${avatarHTML(x.id, 26)}<span class="ohm-pn">${esc(fullName(x))}</span><span class="ohm-pnote ${cls}">${esc(note)}</span></div>`).join('') : '<div class="hm-empty">Everyone’s in today.</div>'}
       </section>`;
 
-    const canAdd = !isFinUser(u) && u.active !== false;
+    // + Add claim: a claim added by hand for someone (one PDF, a person, a month — Finance › Reimbursements' own form; Haris
+    // 18:02) — not their own claim; only for a Finance Admin
+    const canAdd = finAdmin();
     return `<div class="hm hm-lead ohm">
       <header class="hm-head"><div><div class="hm-date">${esc(new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }))} · Office Admin</div><h1>${esc(hello())}</h1></div>
         <div class="hm-btns">${canAdd ? '<button type="button" class="hm-btn primary" data-oh="add-claim">+ Add claim</button>' : ''}</div></header>
@@ -292,7 +294,7 @@ const OfficeHome = (() => {
     if (k === 'exp-tab') { st.expTab = v; return redraw(); }
     if (k === 'exp-all') return go('fin-expenses');
     if (k === 'exp-inv') { const x = (st.expRows || []).find((y) => y.id === v); if (x && x.invoice) previewFile(x.invoice, (st.expRows || []).filter((y) => y.invoice).map((y) => y.invoice)); return; }
-    if (k === 'add-claim') return Claims.newClaim(Claims.claimMonth());
+    if (k === 'add-claim') return Fin.add('reimb');
     if (k === 'inbox') return go('inbox');
     if (k === 'assets') { st.client = 'all'; return go('clients'); }
     if (k === 'claims-open') { Claims.st.finMonth = Claims.claimMonth(); return go('fin-reimb'); }

@@ -49,6 +49,12 @@ async def main():
                     check([t.rstrip('0123456789') for t in r['tabs']] == ['Need HR approval', 'HR approved', 'Paid', 'All'], f'Claims’ tabs {r["tabs"]}')
                     check(r['chipsOneRow'] == 'nowrap', 'the clients on one sliding row')
                     check(r['add'], '+ Add claim')
+                    # + Add claim: Finance › Reimbursements' own form — a claim added by hand for someone (Haris 18:02), not their own
+                    await pg.locator('.ohm [data-oh="add-claim"]').click(); await pg.wait_for_timeout(500)
+                    fm = await E("(() => { const m = [...document.querySelectorAll('.modal, .sheet, dialog[open], .fin-form, .overlay, .dlg')].pop(); return [ui.view, !!m && m.innerText.includes('Add staff reimbursement'), !!m]; })()")
+                    check(fm[0] == 'home' and fm[1] and fm[2], f'+ Add claim opens the by-hand form (a person, a month, the PDF), not their own claim {fm}')
+                    await pg.keyboard.press('Escape'); await pg.wait_for_timeout(300)
+                    await E("closeMenus && closeMenus(); document.querySelectorAll('.modal-backdrop, .modal, .overlay').forEach((x) => x.remove())")
                     # the dirham sign everywhere (Haris 17:54); SF Pro and the Mac's own smoothing; the cards' symbols Apple's
                     t = await E("(() => { const x = document.querySelector('.ohm'); const cs = getComputedStyle(x); return [x.textContent.includes('AED'), x.textContent.includes('\u20C3'), cs.fontFamily, cs.webkitFontSmoothing || '', [...document.querySelectorAll('.ohm .hm-stat [data-i]')].map((i) => i.dataset.i)]; })()")
                     check(not t[0] and t[1], 'the dirham sign, no "AED"')

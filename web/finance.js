@@ -880,5 +880,5 @@ const Fin = (() => {
     });
   }
 
-  return { owns, init, paintNav, invoiceTick, meMenu, addItems, canLook, title, render, transactions, subPayments, aed, st };
+  return { owns, init, paintNav, invoiceTick, meMenu, addItems, canLook, title, render, transactions, subPayments, aed, st, add };   // (add: the Office Admin's Home — + Add claim, a claim by hand)
 })();
