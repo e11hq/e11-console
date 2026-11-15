@@ -83,6 +83,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   var selftest: [String: Any] = [:]
   let LIGHTS_X: CGFloat = 20, BAR_H: CGFloat = 48
   let side = Sidebar()
+  var splash: MacSplash?   // (the startup screen, the app's own — Splash.swift)
+  var splashHello = false
   // the window buttons' row: the page's own 48px top strip, or the native sidebar's top row
   var barH: CGFloat { side.on ? Sidebar.BAR : BAR_H }
 
@@ -167,8 +169,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     window.title = APP_NAME
     window.titleVisibility = .hidden
     window.titlebarAppearsTransparent = true
-    window.appearance = NSAppearance(named: .darkAqua)
-    window.backgroundColor = NSColor(srgbRed: 0.047, green: 0.051, blue: 0.059, alpha: 1)
+    // (the look the page had last time, so the startup screen opens in it — Haris 2026-11-15 14:45)
+    let wasLight = defaults.bool(forKey: "e11_light")
+    window.appearance = NSAppearance(named: wasLight ? .aqua : .darkAqua)
+    window.backgroundColor = wasLight ? .white : NSColor(srgbRed: 0.047, green: 0.051, blue: 0.059, alpha: 1)
     window.minSize = NSSize(width: 960, height: 620)
     window.center()
     window.setFrameAutosaveName("E11ConsoleClientWindow")
@@ -177,6 +181,11 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     let config = WKWebViewConfiguration()
     config.websiteDataStore = .default()   // stay signed in between launches
     config.userContentController.add(self, name: "e11")
+    // the startup screen is the app's own (Haris 2026-11-15 14:43): the page is told before anything runs, so it never draws
+    // its own and makes itself and the sidebar ready behind this one
+    if !AT_LOGIN && MacSplash.available {
+      config.userContentController.addUserScript(WKUserScript(source: "window.__e11NativeSplash = true;", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    }
     config.preferences.javaScriptCanOpenWindowsAutomatically = true
     web = WKWebView(frame: window.contentView!.bounds, configuration: config)
     web.autoresizingMask = [.width, .height]
@@ -198,6 +207,15 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     window.contentView!.addSubview(side.edgeHot, positioned: .above, relativeTo: web)
     window.contentView!.addSubview(side, positioned: .above, relativeTo: side.edgeHot)
     window.contentView!.addSubview(side.topRow, positioned: .above, relativeTo: side)
+    if !AT_LOGIN && MacSplash.available {
+      let sp = MacSplash(frame: window.contentView!.bounds)
+      sp.autoresizingMask = [.width, .height]
+      sp.onSkip = { [weak self] in self?.endSplash(fast: true) }
+      window.contentView!.addSubview(sp, positioned: .above, relativeTo: side.topRow)
+      splash = sp
+      // (never held up for good: a page that isn't E11's — a sign-in page — or one that never answers)
+      DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in self?.endSplash() }
+    }
     #if APPSTORE
     reviewLink.frame = NSRect(x: 0, y: 14, width: window.contentView!.bounds.width, height: 30)
     reviewLink.autoresizingMask = [.width]
@@ -351,7 +369,14 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   @objc func toReview() { setServer("review") }
   func setServer(_ k: String) { defaults.set(k, forKey: "e11_server"); reviewLink.isHidden = true; loadHome(); buildMenu() }
   @objc func pickServer(_ sender: NSMenuItem) { setServer(sender.representedObject as? String ?? "live") }
+  func endSplash(fast: Bool = false) {
+    guard let sp = splash else { return }
+    sp.ready = true
+    sp.leave(fast: fast) { [weak self] in if self?.splash === sp { self?.splash = nil } }
+  }
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    // (a page that doesn't take the startup screen over — not E11's own, or an older one — lets it go)
+    if splash != nil { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in if self?.splashHello == false { self?.endSplash() } } }
     reviewLink.isHidden = !(webView.url?.host ?? "").hasSuffix(".cloudflareaccess.com")
     if webView.url?.host == URL(string: SERVER)?.host {
       shareSignIn(); sendApnsToken(tries: 0)
@@ -494,6 +519,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       done(["ok": true])
     case "setAppearance":
       let light = (a["mode"] as? String) == "light"
+      defaults.set(light, forKey: "e11_light")
       window.appearance = NSAppearance(named: light ? .aqua : .darkAqua)
       window.backgroundColor = light ? .white : NSColor(srgbRed: 0.047, green: 0.051, blue: 0.059, alpha: 1)
       placeLights()
@@ -529,6 +555,17 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       FileManager.default.createFile(atPath: p, contents: Data(bytes))
       let t = token(); picked[t] = p
       done(["ok": true, "token": t, "size": n])
+    // the startup screen (Splash.swift): the page says it has taken it over (hello), then that it and the sidebar are ready
+    // (out) — it goes once its icon has finished; the page hears when it's gone, to start what grows as it shows
+    case "splash":
+      guard let sp = splash else { done(["ok": true, "shown": false]); break }
+      if (a["hello"] as? Bool) == true { splashHello = true; done(["ok": true, "shown": true, "age": (CACurrentMediaTime() - sp.t0) * 1000]); break }
+      if (a["out"] as? Bool) == true {
+        let wait = sp.goneIn()
+        endSplash()
+        done(["ok": true, "shown": true, "goneIn": wait * 1000]); break
+      }
+      done(["ok": true, "shown": true])
     case "appInfo":
       done(["ok": true, "server": SERVER, "shell": SHELL_VERSION, "native": "swift",
             "version": info["CFBundleShortVersionString"] as? String ?? "3.0.0", "touchID": defaults.bool(forKey: LOCK_KEY),

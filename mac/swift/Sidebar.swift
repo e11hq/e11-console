@@ -197,9 +197,15 @@ final class SideEdge: NSView {
   override func mouseEntered(with e: NSEvent) { onEnter?() }
 }
 
+// a row's count: one grey everywhere (Haris 2026-11-15 14:46: the clients' numbers were darker than the others) — the
+// clients' list fades at its edges (a mask), which turns off the Mac's vibrancy there, so the grey is our own, not vibrant
+final class SideCount: NSTextField { override var allowsVibrancy: Bool { false } }
+let SIDE_COUNT = dynColor(NSColor(white: 0, alpha: 0.38), NSColor(white: 1, alpha: 0.42))
+
 // one row: an icon / colour dot / logo, the name and a count (red badge for what needs attention)
 final class SideRow: SideHit {
-  let icon = NSImageView(), title = sideLabel(13.5), count = sideLabel(12.5, .regular, .tertiaryLabelColor)
+  let icon = NSImageView(), title = sideLabel(13.5)
+  let count: NSTextField = { let t = SideCount(labelWithString: ""); t.font = .systemFont(ofSize: 12.5); t.textColor = SIDE_COUNT; t.maximumNumberOfLines = 1; return t }()
   let badge = FlippedView(), badgeText = sideLabel(11, .semibold, .white)
   var dot: NSColor?, logo: NSImage?, selected = false, hot = false
   // drag to reorder (clients, Admins: the page says which rows can be dragged)
