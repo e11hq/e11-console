@@ -526,11 +526,31 @@ final class PvFly: NSView {
     }
   }
   required init?(coder: NSCoder) { nil }
+  // (Apple's own spring, as iPhone's and Photos' zoom — Haris 16:36 / 17:06: the steep ease jumped most of the way in the
+  //  first frame, so it looked like a pop, not a flight): the model set at once, Core Animation springing size, place and
+  //  corners from where they were
   func move(to r: NSRect, radius: CGFloat, duration: Double, timing: CAMediaTimingFunction, done: @escaping () -> Void) {
-    NSAnimationContext.runAnimationGroup({ c in
-      c.duration = duration; c.timingFunction = timing; c.allowsImplicitAnimation = true
-      self.animator().frame = r
-      self.layer?.cornerRadius = radius
-    }, completionHandler: done)
+    guard let l = layer else { frame = r; done(); return }
+    let fromBounds = l.bounds, fromPos = l.position, fromRadius = l.cornerRadius
+    CATransaction.begin(); CATransaction.setDisableActions(true)
+    frame = r
+    l.cornerRadius = radius
+    CATransaction.commit()
+    let toBounds = l.bounds, toPos = l.position
+    CATransaction.begin()
+    CATransaction.setCompletionBlock(done)
+    func spring(_ key: String, _ a: Any, _ b: Any) -> CASpringAnimation {
+      let s = CASpringAnimation(keyPath: key)
+      s.mass = 1; s.stiffness = 170; s.damping = 26; s.initialVelocity = 0
+      s.fromValue = a; s.toValue = b
+      s.duration = min(max(duration, s.settlingDuration), 0.7)
+      s.fillMode = .both; s.isRemovedOnCompletion = true
+      return s
+    }
+    l.add(spring("bounds", NSValue(rect: fromBounds), NSValue(rect: toBounds)), forKey: "b")
+    l.add(spring("position", NSValue(point: fromPos), NSValue(point: toPos)), forKey: "p")
+    l.add(spring("cornerRadius", fromRadius, radius), forKey: "r")
+    CATransaction.commit()
   }
+
 }
