@@ -357,13 +357,16 @@ const Home = (() => {
 
     // the Mac app: On-time streak as Team goals achieved (Haris 2026-11-15 15:28) — the soft purple card, the ring the share of
     // your recent finished tasks that were on time with the streak in it, the rows under it, the line saying what it counts
+    // (a plain tick or ! in the small circle — the Mac draws them as Apple's checkmark / exclamationmark, centred — 15:42)
+    const MARK_TICK = '<span class="ic" data-i="hm-tick"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.5 3 3 6-7"/></svg></span>';
+    const MARK_BANG = '<span class="ic" data-i="hm-bang"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M8 3v6.5M8 13v.01"/></svg></span>';
     const streakCard = () => {
       const recent = finished.slice(0, 12), okN = recent.filter((t) => onTime(t, myDoneAt(t))).length, C = 2 * Math.PI * 15.9;
       return `<section class="hm-card hm-goal hm-streak">
             <h2>On-time streak</h2>
             <div class="hm-gr"><svg viewBox="0 0 36 36" width="76" height="76" aria-hidden="true"><circle cx="18" cy="18" r="15.9" class="hm-ring-bg"/>${recent.length ? ringArc(okN / recent.length, C, 'hm-ring') : ''}<text x="18" y="21" text-anchor="middle">${streak}</text></svg>
               <div><b>${streak === 1 ? 'Task' : 'Tasks'} in a row on time</b><span class="${!recent.length || okN === recent.length ? 'ok' : 'warn'}">${recent.length ? `${okN} of your last ${recent.length} on time` : 'nothing finished yet'}</span></div></div>
-            ${recent.length ? `<div class="hm-hlist" aria-label="Recently finished">${recent.map((t) => { const ok = onTime(t, myDoneAt(t)); return `<div class="hm-hrow" data-task="${t.id}"><i class="${ok ? 'ok' : 'late'}" title="${ok ? 'On time' : 'Late'}">${icon(ok ? 'check' : 'clock')}</i><span>${esc(t.title || 'Untitled task')}</span><em>${esc(fmtDay(ymdOf(myDoneAt(t))))}</em></div>`; }).join('')}</div>` : ''}
+            ${recent.length ? `<div class="hm-hlist" aria-label="Recently finished">${recent.map((t) => { const ok = onTime(t, myDoneAt(t)); return `<div class="hm-hrow" data-task="${t.id}"><i class="${ok ? 'ok' : 'late'}" title="${ok ? 'On time' : 'Late'}">${ok ? MARK_TICK : MARK_BANG}</i><span>${esc(t.title || 'Untitled task')}</span><em>${esc(fmtDay(ymdOf(myDoneAt(t))))}</em></div>`; }).join('')}</div>` : ''}
             <p>Your tasks finished by their due date, newest first</p>
           </section>`;
     };
