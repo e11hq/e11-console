@@ -274,17 +274,160 @@
   .hm-cal { grid-template-columns: repeat(5, minmax(120px, 1fr)); overflow-x: auto; }
 }
 
-/* ===== The Mac app only (html.mac-chrome): Home restyled to look native (Mac page by page — Haris 2026-11-15). Browsers and
-   the iPhone untouched. The smoother text (10:49 "i love the smoothest one"): Apple's font spacing itself, semibold where
-   bold, softer text, line height 1.3, the Mac's own smoothing; the page's end on the sidebar's bottom line (8 from the
-   window's edge — 10:51). ===== */
-html.mac-chrome .hm, html.mac-chrome .oh { font-family: "E11 Dirham", -apple-system, BlinkMacSystemFont, system-ui, sans-serif; letter-spacing: normal; line-height: 1.3; -webkit-font-smoothing: auto;
-  --text: rgba(255, 255, 255, .88); --text-2: rgba(255, 255, 255, .55); --text-3: rgba(255, 255, 255, .55); }
-html.mac-chrome[data-theme="light"] .hm, html.mac-chrome[data-theme="light"] .oh { --text: rgba(0, 0, 0, .85); --text-2: rgba(0, 0, 0, .62); --text-3: rgba(0, 0, 0, .62); }
-html.mac-chrome .hm *, html.mac-chrome .oh * { letter-spacing: normal; }
-html.mac-chrome .hm :is(b, strong, h1, h2, th), html.mac-chrome .oh :is(b, strong, h1, h2, th),
-html.mac-chrome .hm :is(.hm-btn.primary, .hm-tag, .hm-cd, .hm-pill, .hm-pi), html.mac-chrome .oh :is(.oh-num, .oh-ext, .oh-pill, .oh-seg button, .oh-mini) { font-weight: 600; }
-html.mac-chrome .hm .mono, html.mac-chrome .hm-sn b, html.mac-chrome .hm-kv b, html.mac-chrome .hm-big b, html.mac-chrome .hm-hn b { font-family: inherit; font-variant-numeric: tabular-nums; }
-html.mac-chrome .hm-card, html.mac-chrome .hm-stat, html.mac-chrome .oh-card, html.mac-chrome .oh-stat { border-radius: 12px; border-width: .5px; }
-html.mac-chrome .hm { padding-bottom: 8px; }
-html.mac-chrome .oh { padding-bottom: 8px; }
+/* ===== The Mac app only (html.mac-chrome): Home as its mock-up (canvas "E11 Console for Mac", H1–H6 — Mac page by page,
+   Haris 2026-11-15). Browsers and the iPhone untouched; the sidebar (locked) untouched. Inside the page: Apple's colours
+   (the window's #1c1c1e / white, cards #2a2a2d / #f5f5f7 with no border, Apple's blue, Apple's system colours), Apple's
+   segmented controls and glass buttons, the smoother text (10:49: Apple's font spacing itself, semibold, softer text, line
+   height 1.3, the Mac's own smoothing) and the page's end 8 from the window's edge (10:51). ===== */
+html.mac-chrome { --mc-content: #1c1c1e; --mc-card: #2a2a2d; --mc-row: rgba(255, 255, 255, .035); --mc-line: rgba(255, 255, 255, .07); --mc-field: rgba(118, 118, 128, .24);
+  --mc-win: #1e1e20; --mc-glass: rgba(255, 255, 255, .08); --mc-glass-line: rgba(255, 255, 255, .12); --mc-sel: rgba(255, 255, 255, .10); --mc-blue: #0a84ff;
+  --mc-orange: #ff9f0a; --mc-red: #ff453a; --mc-green: #30d158; --mc-yellow: #ffd60a; --mc-fg: rgba(255, 255, 255, .88); --mc-dim: rgba(235, 235, 245, .55); --mc-ter: #636366; }
+html.mac-chrome[data-theme="light"] { --mc-content: #ffffff; --mc-card: #f5f5f7; --mc-row: rgba(0, 0, 0, .025); --mc-line: rgba(0, 0, 0, .07); --mc-field: rgba(118, 118, 128, .12);
+  --mc-win: #ffffff; --mc-glass: rgba(255, 255, 255, .7); --mc-glass-line: rgba(0, 0, 0, .10); --mc-sel: rgba(0, 0, 0, .07); --mc-blue: #007aff;
+  --mc-red: #e0352b; --mc-green: #28a745; --mc-yellow: #b98900; --mc-fg: rgba(0, 0, 0, .85); --mc-dim: rgba(60, 60, 67, .62); --mc-ter: #aeaeb2; }
+html.mac-chrome #content:has(> .hm), html.mac-chrome #content:has(> .oh) { background: var(--mc-content); }
+html.mac-chrome :is(.hm, .oh) {
+  --text: var(--mc-fg); --text-2: var(--mc-dim); --text-3: var(--mc-dim); --border: var(--mc-line); --border-strong: var(--mc-glass-line);
+  --panel: var(--mc-card); --bg: var(--mc-content); --hover: var(--mc-sel); --active: var(--mc-win); --raised: var(--mc-field);
+  --accent: var(--mc-blue); --accent-strong: var(--mc-blue); --accent-ink: var(--mc-blue); --accent-soft: color-mix(in srgb, var(--mc-blue) 16%, transparent); --accent-line: color-mix(in srgb, var(--mc-blue) 40%, transparent);
+  --red: var(--mc-red); --amber: var(--mc-orange); --green: var(--mc-green);
+  color: var(--mc-fg); font-family: "E11 Dirham", -apple-system, BlinkMacSystemFont, system-ui, sans-serif; letter-spacing: normal; line-height: 1.3; -webkit-font-smoothing: auto; }
+html.mac-chrome :is(.hm, .oh) * { letter-spacing: normal; }
+html.mac-chrome :is(.hm, .oh) :is(b, strong, h1, h2, th, .hm-btn.primary, .hm-tag, .hm-cd, .hm-pill, .hm-pi, .oh-num, .oh-ext, .oh-pill, .oh-mini) { font-weight: 600; }
+html.mac-chrome .hm :is(.mono, .hm-sn b, .hm-kv b, .hm-big b, .hm-hn b, .hm-tab i) { font-family: inherit; font-variant-numeric: tabular-nums; }
+/* the page */
+html.mac-chrome .hm { max-width: none; padding: 20px 24px 8px; gap: 14px; }
+html.mac-chrome .oh { max-width: none; padding: 20px 24px 8px; gap: 14px; }
+html.mac-chrome :is(.hm, .oh) :is(.hm-date, .oh-date) { font-size: 12px; color: var(--mc-dim); }
+html.mac-chrome :is(.hm, .oh) h1 { font-size: 26px; font-weight: 600; margin-top: 0; }
+html.mac-chrome :is(.hm, .oh) h2, html.mac-chrome .oh-card-h h2 { font-size: 15px; font-weight: 600; }
+html.mac-chrome .hm-grid { grid-template-columns: minmax(0, 1fr) 330px; gap: 14px; }
+html.mac-chrome .hm-col { gap: 14px; }
+/* cards: Apple's grouped boxes, no border */
+html.mac-chrome :is(.hm-card, .hm-stat, .oh-card, .oh-stat) { background: var(--mc-card); border: 0; border-radius: 12px; box-shadow: none; }
+html.mac-chrome .hm-card { padding: 14px 16px; }
+html.mac-chrome .hm-h { margin-bottom: 10px; }
+html.mac-chrome .oh-card.focus { box-shadow: 0 0 0 2px var(--mc-blue); }
+/* buttons: Apple's — the blue one, and glass */
+html.mac-chrome .hm-btn { height: 28px; padding: 0 12px; border-radius: 7px; font-size: 13px; font-weight: 400; border: 0; background: var(--mc-glass); box-shadow: inset 0 0 0 .5px var(--mc-glass-line); color: var(--mc-fg); }
+html.mac-chrome .hm-btn.primary { background: var(--mc-blue); box-shadow: none; color: #fff; font-weight: 500; }
+html.mac-chrome :is(.oh, .hm) .btn.sm { height: 28px; padding: 0 12px; border-radius: 7px; font-size: 13px; border: 0; background: var(--mc-glass); box-shadow: inset 0 0 0 .5px var(--mc-glass-line); color: var(--mc-fg); }
+/* the three numbers */
+html.mac-chrome .hm-stats { gap: 12px; }
+html.mac-chrome .hm-stat { gap: 12px; padding: 14px 16px; }
+html.mac-chrome .hm-ic { width: 36px; height: 36px; border-radius: 10px; }
+html.mac-chrome .hm-ic svg { width: 16px; height: 16px; }
+html.mac-chrome .hm-ic.blue { background: color-mix(in srgb, var(--mc-blue) 18%, transparent); color: var(--mc-blue); }
+html.mac-chrome .hm-ic.green { background: color-mix(in srgb, var(--mc-green) 18%, transparent); color: var(--mc-green); }
+html.mac-chrome .hm-ic.orange { background: color-mix(in srgb, var(--mc-orange) 18%, transparent); color: var(--mc-orange); }
+html.mac-chrome .hm-sl { font-size: 12px; color: var(--mc-dim); }
+html.mac-chrome .hm-sn { gap: 8px; margin-top: 0; }
+html.mac-chrome .hm-sn b { font-size: 22px; }
+html.mac-chrome .hm-sn span { font-size: 12px; font-weight: 400; }
+html.mac-chrome .hm-sn .ok { color: var(--mc-green); } html.mac-chrome .hm-sn .warn { color: var(--mc-red); } html.mac-chrome .hm-sn .orange { color: var(--mc-orange); }
+/* Apple's segmented controls */
+html.mac-chrome :is(.hm-seg, .oh-seg) { gap: 0; padding: 2px; border: 0; border-radius: 8px; background: var(--mc-field); }
+html.mac-chrome :is(.hm-tab, .oh-seg button) { height: auto; padding: 3px 10px; border-radius: 6px; font-size: 12px; font-weight: 400; color: var(--mc-fg); }
+html.mac-chrome :is(.hm-tab.on, .oh-seg button.on) { background: var(--mc-win); color: var(--mc-fg); font-weight: 600; box-shadow: 0 .5px 2px rgba(0, 0, 0, .25); }
+html.mac-chrome .hm-tab i { font-size: 12px; color: var(--mc-dim); margin-left: 4px; }
+html.mac-chrome .hm-tab.red i { color: var(--mc-red); }
+html.mac-chrome .hm-tabs { display: inline-flex; align-self: flex-start; gap: 0; margin: 12px 0 0; padding: 2px; border: 0; border-radius: 8px; background: var(--mc-field); }
+html.mac-chrome .hm-a, html.mac-chrome .hm-link, html.mac-chrome .oh-link { color: var(--mc-blue); font-size: 12px; }
+/* task rows: Apple's table rows, every other one tinted; the soft status pill */
+html.mac-chrome .hm-row { gap: 12px; min-height: 56px; padding: 0 10px; border-top: 0; border-radius: 8px; }
+html.mac-chrome .hm-row:nth-child(odd) { background: var(--mc-row); }
+html.mac-chrome .hm-row:hover { background: var(--mc-sel); }
+html.mac-chrome .hm-row.late { background: rgba(229, 72, 77, .10); }
+html.mac-chrome[data-theme="light"] .hm-row.late { background: rgba(229, 72, 77, .06); }
+html.mac-chrome .hm-pc { width: 9px; height: 9px; }
+html.mac-chrome .hm-t { font-size: 13px; line-height: 18px; }
+html.mac-chrome .hm-sub { font-size: 11.5px; line-height: 16px; color: var(--mc-dim); }
+html.mac-chrome .hm-sub .due.today { color: var(--mc-fg); } html.mac-chrome .hm-sub .due.overdue { color: var(--mc-red); }
+html.mac-chrome .hm-cd { color: var(--mc-yellow); background: color-mix(in srgb, var(--mc-yellow) 16%, transparent); }
+html.mac-chrome .hm-counts { font-size: 11px; color: var(--mc-dim); }
+html.mac-chrome .hm .status-pill { text-transform: none; letter-spacing: normal; font-size: 11px; font-weight: 600; border-radius: 10px; padding: 3px 8px;
+  background: color-mix(in srgb, var(--sc) 16%, transparent) !important; color: var(--sc) !important; }
+html.mac-chrome .hm-more-btn { border-top: 0; font-size: 12px; color: var(--mc-dim); padding: 8px 10px 0; }
+/* the month's chart */
+html.mac-chrome .hm-kv b { font-size: 20px; }
+html.mac-chrome .hm-big b { font-size: 28px; }
+html.mac-chrome .hm-delta { padding: 0; background: none !important; font-size: 11px; }
+html.mac-chrome .hm-delta.good { color: var(--mc-green); } html.mac-chrome .hm-delta.bad { color: var(--mc-red); }
+html.mac-chrome .hm-bar { background: color-mix(in srgb, var(--mc-blue) 55%, transparent); border-radius: 2px; }
+html.mac-chrome .hm-bar.future { background: var(--mc-line); }
+html.mac-chrome .hm-peak span { width: 20px; height: 20px; background: var(--mc-win); color: var(--mc-blue); box-shadow: 0 0 0 .5px var(--mc-line), 0 2px 6px rgba(0, 0, 0, .2); }
+html.mac-chrome .hm-peak em { color: var(--mc-dim); font-size: 10px; }
+html.mac-chrome .hm-ticks { font-size: 10.5px; color: var(--mc-dim); }
+/* activity, schedule, clients, checklist */
+html.mac-chrome :is(.hm-act, .hm-cl, .hm-am) { border-top: .5px solid var(--mc-line); padding: 9px 0; border-radius: 0; }
+html.mac-chrome .hm-act-txt { font-size: 13px; }
+html.mac-chrome .hm-act-txt .hm-mute, html.mac-chrome .hm-quote { color: var(--mc-dim); font-size: 12px; }
+html.mac-chrome .hm-file { padding: 5px 9px; border: 0; border-radius: 8px; background: var(--mc-field); }
+html.mac-chrome .hm-when { font-size: 11.5px; }
+html.mac-chrome .hm-days { margin: 0 0 8px; }
+html.mac-chrome .hm-day { padding: 6px 0; border-radius: 9px; font-size: 11px; color: var(--mc-dim); }
+html.mac-chrome .hm-day b { font-size: 16px; font-weight: 600; }
+html.mac-chrome .hm-day.on { background: var(--mc-blue); color: #fff; }
+html.mac-chrome .hm-day.today:not(.on) b { color: var(--mc-blue); }
+html.mac-chrome .hm-agenda { gap: 0; }
+html.mac-chrome .hm-ag { padding: 7px 0; border-radius: 0; background: none; border-top: .5px solid var(--mc-line); gap: 10px; }
+html.mac-chrome .hm-ag:hover { background: var(--mc-sel); }
+html.mac-chrome .hm-ag > i { width: 3px; height: 30px; align-self: center; }
+html.mac-chrome .hm-ag b, html.mac-chrome .hm-proj b, html.mac-chrome .hm-cl b { font-size: 13px; }
+html.mac-chrome :is(.hm-ag, .hm-proj, .hm-cl) .hm-sub { font-size: 11px; }
+html.mac-chrome .hm-proj { padding: 6px 0; gap: 10px; border-radius: 0; }
+html.mac-chrome .hm-pi { width: 30px; height: 30px; border-radius: 8px; font-size: 11px; }
+html.mac-chrome .hm-pbar { height: 3px; background: var(--mc-line); margin-top: 4px; }
+html.mac-chrome .hm-cl { border-top: 0; padding: 6px 0; gap: 10px; }
+html.mac-chrome .hm-cl b { font-weight: 400; }
+html.mac-chrome .hm-chk { width: 16px; height: 16px; border-radius: 4px; border: 0; box-shadow: inset 0 0 0 1px var(--mc-ter); }
+html.mac-chrome .hm-chk.on { background: var(--mc-blue); box-shadow: none; color: #fff; }
+html.mac-chrome .hm-hero { border-radius: 12px; padding: 16px; background: linear-gradient(140deg, #5b4ee0, #2f7bff); }
+html.mac-chrome .hm-hero::after { display: none; }
+html.mac-chrome .hm-hero h2 { font-size: 15px; }
+html.mac-chrome .hm-hn b { font-size: 40px; }
+html.mac-chrome .hm-hn span { font-size: 12px; }
+html.mac-chrome .hm-avs .av { box-shadow: 0 0 0 2px #4766e9; }
+/* Production / Social: Up next and the rest on Apple's colours */
+html.mac-chrome .hm-next { border: 0; border-radius: 12px; }
+html.mac-chrome :is(.hm-lane, .hm-slot, .hm-lane-list) { border-radius: 10px; }
+html.mac-chrome .hm-lane { background: var(--mc-field); }
+html.mac-chrome .hm-lane.on { background: color-mix(in srgb, var(--mc-blue) 16%, transparent); box-shadow: inset 0 0 0 1.5px var(--mc-blue); }
+html.mac-chrome :is(.hm-mini, .hm-post) { background: var(--mc-card); border-color: var(--mc-line); }
+html.mac-chrome .hm-slot { background: var(--mc-field); }
+html.mac-chrome .hm-slot.today { box-shadow: inset 0 0 0 1.5px var(--mc-blue); }
+/* the Office Admin's: tiles with the big coloured number, Apple's chips, rows and pop-up */
+html.mac-chrome .oh-stats { gap: 12px; }
+html.mac-chrome .oh-stat { padding: 14px 16px; gap: 14px; }
+html.mac-chrome .oh-num { width: auto; height: auto; background: none !important; font-size: 28px; font-weight: 600; }
+html.mac-chrome .oh-num.violet { color: #bf5af2; } html.mac-chrome .oh-num.red { color: var(--mc-red); } html.mac-chrome .oh-num.blue { color: var(--mc-blue); }
+html.mac-chrome .oh-num.amber { color: var(--mc-orange); } html.mac-chrome .oh-num.green { color: var(--mc-green); } html.mac-chrome .oh-num.grey { color: var(--mc-dim); }
+html.mac-chrome .oh-sl b { font-size: 13px; } html.mac-chrome .oh-sl small { font-size: 12px; color: var(--mc-dim); }
+html.mac-chrome .oh-grid { gap: 14px; }
+html.mac-chrome .oh-card-h { padding: 14px 16px 10px; }
+html.mac-chrome .oh-chip { padding: 4px 10px; border: 0; border-radius: 14px; font-size: 12px; background: var(--mc-field); color: var(--mc-fg); }
+html.mac-chrome .oh-chip.on { background: var(--mc-blue); color: #fff; }
+html.mac-chrome .oh-chip.on i { background: #fff !important; }
+html.mac-chrome .oh-chip i { border-radius: 4px; }
+html.mac-chrome .oh-row { padding: 7px 8px; border-radius: 8px; }
+html.mac-chrome .oh-row.sel { background: var(--mc-sel); }
+html.mac-chrome .oh-ext { width: 38px; height: 30px; border-radius: 7px; }
+html.mac-chrome .oh-t b { font-size: 13px; font-weight: 600; } html.mac-chrome .oh-t small { font-size: 11.5px; color: var(--mc-dim); }
+html.mac-chrome .oh-row.unread .oh-t b { font-weight: 600; }
+html.mac-chrome :is(.oh-ib, .oh-more) { width: 26px; height: 26px; border: 0; background: var(--mc-glass); box-shadow: inset 0 0 0 .5px var(--mc-glass-line); color: var(--mc-fg); }
+html.mac-chrome .oh-msel select { height: 24px; border: 0; border-radius: 6px; background: var(--mc-glass); box-shadow: inset 0 0 0 .5px var(--mc-glass-line); color: var(--mc-fg); }
+html.mac-chrome .oh-bar { height: 8px; border-radius: 4px; }
+html.mac-chrome .oh-bar .sub { background: var(--mc-orange); } html.mac-chrome .oh-bar .ok { background: var(--mc-green); } html.mac-chrome .oh-bar .paid { background: var(--mc-blue); }
+html.mac-chrome .oh-legend { gap: 12px; color: var(--mc-dim); }
+html.mac-chrome .oh-legend b.sub { color: var(--mc-orange); } html.mac-chrome .oh-legend b.ok { color: var(--mc-green); } html.mac-chrome .oh-legend b.paid { color: var(--mc-blue); }
+html.mac-chrome .oh-amt { color: var(--mc-fg); font-weight: 600; }
+html.mac-chrome .oh-grp { font-size: 11.5px; color: var(--mc-dim); padding: 10px 6px 2px; }
+html.mac-chrome .oh-claim, html.mac-chrome .oh-card .oh-scroll > .oh-row[data-action="open-notif"] { border-top: .5px solid var(--mc-line); border-radius: 0; padding: 10px 6px; }
+html.mac-chrome .oh-mini { height: 26px; padding: 0 12px; font-size: 12px; font-weight: 400; border: 0; border-radius: 7px; background: var(--mc-glass); box-shadow: inset 0 0 0 .5px var(--mc-glass-line); color: var(--mc-fg); }
+html.mac-chrome .oh-pill { font-size: 11px; padding: 3px 8px; border-radius: 10px; }
+html.mac-chrome .oh-p-sub { color: var(--mc-orange); background: color-mix(in srgb, var(--mc-orange) 16%, transparent); }
+html.mac-chrome .oh-p-ok { color: var(--mc-green); background: color-mix(in srgb, var(--mc-green) 16%, transparent); }
+html.mac-chrome .oh-p-paid { color: var(--mc-blue); background: color-mix(in srgb, var(--mc-blue) 16%, transparent); }
+html.mac-chrome .oh-dot { background: var(--mc-blue); }
+html.mac-chrome .oh-foot { border-top: .5px solid var(--mc-line); color: var(--mc-dim); font-size: 12px; }
+html.mac-chrome .oh-search { border: 0; background: var(--mc-field); border-radius: 9px; }

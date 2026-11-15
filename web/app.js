@@ -2253,7 +2253,7 @@ function statusInfo(t) {
 }
 function statusPill(t, extra = '') {
   const s = statusInfo(t);
-  return `<span class="status-pill" style="background:${s.color};color:${textOn(s.color)}" ${extra}>${esc(s.name)}</span>`;
+  return `<span class="status-pill" style="background:${s.color};color:${textOn(s.color)};--sc:${s.color}" ${extra}>${esc(s.name)}</span>`;   // (--sc: the Mac app's soft pill, home.css)
 }
 // Round status icon that fills up as the task moves through its statuses (ClickUp-style)
 function statusIconSVG(color, kind, frac) {
