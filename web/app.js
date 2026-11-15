@@ -4918,6 +4918,65 @@ const MacBar = (() => {
   return { on, menu };
 })();
 
+/* ================= The Mac app: Apple-style overlay scroll bars (Haris 2026-11-15 17:19) =================
+   WebKit inside the app keeps its scroll bars on show whatever the app asks, so they're hidden (home.css) and this draws
+   one thin bar over whatever is scrolling, at its right edge, fading a moment after it stops; dragged, it scrolls. */
+const MacScroll = (() => {
+  if (typeof Host === 'undefined' || !Host.isMacApp) return {};
+  const bars = new Map();   // scrolling element → its bar
+  const scroller = (t) => (t === document || t === document.documentElement || t === document.body ? document.scrollingElement || document.documentElement : t);
+  function place(el, bar) {
+    const doc = el === (document.scrollingElement || document.documentElement);
+    const r = doc ? { top: 0, bottom: innerHeight, right: innerWidth } : el.getBoundingClientRect();
+    const h = el.clientHeight, H = el.scrollHeight;
+    if (H <= h + 1) { bar.style.display = 'none'; return; }
+    bar.style.display = '';
+    const pad = 3, track = (r.bottom - r.top) - pad * 2, th = Math.max(28, track * h / H);
+    const top = r.top + pad + (track - th) * (el.scrollTop / (H - h));
+    bar.style.height = th + 'px'; bar.style.top = top + 'px'; bar.style.left = (r.right - 3 - 7) + 'px';
+  }
+  function show(el) {
+    let b = bars.get(el);
+    if (!b) {
+      b = { bar: document.createElement('div'), t: 0 };
+      b.bar.className = 'mac-sb';
+      // dragged: scrolls its list, as Apple's
+      b.bar.addEventListener('mousedown', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const y0 = e.clientY, s0 = el.scrollTop, h = el.clientHeight, H = el.scrollHeight;
+        const track = (el === (document.scrollingElement || document.documentElement) ? innerHeight : el.getBoundingClientRect().height) - 6;
+        const k = (H - h) / Math.max(1, track - parseFloat(b.bar.style.height));
+        b.bar.classList.add('drag');
+        const mv = (m) => { el.scrollTop = s0 + (m.clientY - y0) * k; };
+        const up = () => { b.bar.classList.remove('drag'); removeEventListener('mousemove', mv, true); removeEventListener('mouseup', up, true); later(el, b); };
+        addEventListener('mousemove', mv, true); addEventListener('mouseup', up, true);
+      });
+      b.bar.addEventListener('mouseenter', () => clearTimeout(b.t));
+      b.bar.addEventListener('mouseleave', () => later(el, b));
+      document.body.appendChild(b.bar);
+      bars.set(el, b);
+    }
+    place(el, b.bar);
+    b.bar.classList.add('on');
+    later(el, b);
+  }
+  function later(el, b) {
+    clearTimeout(b.t);
+    b.t = setTimeout(() => {
+      if (b.bar.classList.contains('drag') || b.bar.matches(':hover')) return;
+      b.bar.classList.remove('on');
+      // (a list that's gone takes its bar with it)
+      setTimeout(() => { if (!el.isConnected) { b.bar.remove(); bars.delete(el); } }, 400);
+    }, 900);
+  }
+  document.addEventListener('scroll', (e) => {
+    const el = scroller(e.target);
+    if (el && el.nodeType === 1 && el.scrollHeight > el.clientHeight + 1) show(el);
+  }, true);
+  addEventListener('resize', () => bars.forEach((b, el) => { if (b.bar.classList.contains('on')) place(el, b.bar); }));
+  return {};
+})();
+
 /* ================= The Mac app 13+: Apple's SF Symbols for the page's icons (Haris 2026-11-15 13:59) =================
    Page by page — Home first (and the top bar, the window's own): each icon, by its name (data-i), shows as the SF Symbol
    the Mac draws for it (command symbols → pictures used as masks, so they take the text's colour). Kept on this Mac, so
