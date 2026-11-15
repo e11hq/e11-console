@@ -667,11 +667,14 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
       let p = page.first(where: { ($0["v"] as? String) == v })
       if v == "plans", (m["plans"] as? Bool) == true { list[i]["badge"] = p?["badge"] as? String ?? "" }
       if v == "me" {
-        for k in ["photo", "photoUrl", "who", "online"] { if let x = p?[k] { list[i][k] = x } }
+        for k in ["who", "online"] { if let x = p?[k] { list[i][k] = x } }
         if list[i]["who"] == nil, let me = AppData.shared.me { list[i]["who"] = me }
         // (your photo's address from the app's own copy — without the website nobody said it, and your photo went from
         //  the top corner and the Me tab: Haris 2026-11-06)
-        if list[i]["photoUrl"] == nil, let ph = m["photo"] as? String, !ph.isEmpty { list[i]["photoUrl"] = serverURL().trimmingCharacters(in: CharacterSet(charactersIn: "/")) + ph }
+        // (the copy's address always wins: it was taken from the bar before first, which always had the old one — a new
+        //  photo showed only on My profile, the corner and the Me tab kept the old one for a long time: Haris 2026-11-15)
+        if let ph = m["photo"] as? String, !ph.isEmpty { list[i]["photoUrl"] = serverURL().trimmingCharacters(in: CharacterSet(charactersIn: "/")) + ph }
+        else if !m.keys.contains("photo"), let x = p?["photoUrl"] { list[i]["photoUrl"] = x }
         if m.keys.contains("photo"), !(m["photo"] is String) { list[i]["photoNone"] = true }
       }
       list[i]["on"] = v == on
