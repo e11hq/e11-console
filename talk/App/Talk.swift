@@ -868,7 +868,9 @@ enum LinkPrevMaker {
     return d.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { $0.url }.first { $0.scheme?.hasPrefix("http") == true }
   }
   static func make(_ url: URL, done: @escaping (Msg.LinkPrev?, Data?, Data?) -> Void) {
-    let p = LPMetadataProvider(); p.timeout = 6
+    // (20 seconds, not 6: in 6 Apple's reader often had the page but not yet its picture — an App Store link came without
+    //  its 1200 × 630 picture; Haris 2026-11-15. The message goes at once either way; the card fills in when it's read.)
+    let p = LPMetadataProvider(); p.timeout = 20
     p.startFetchingMetadata(for: url) { md, _ in
       guard let md = md else { DispatchQueue.main.async { done(nil, nil, nil) }; return }
       let site = (md.url ?? url).host?.replacingOccurrences(of: "www.", with: "")
