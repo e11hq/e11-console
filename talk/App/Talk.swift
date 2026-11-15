@@ -643,6 +643,7 @@ enum Look {
   static func dyn(_ dark: UInt32, _ light: UInt32) -> UIColor { UIColor { $0.userInterfaceStyle == .dark ? rgb(dark) : rgb(light) } }
   static func rgb(_ v: UInt32, _ a: CGFloat = 1) -> UIColor { UIColor(red: CGFloat((v >> 16) & 0xff) / 255, green: CGFloat((v >> 8) & 0xff) / 255, blue: CGFloat(v & 0xff) / 255, alpha: a) }
   static let mine = dyn(0x2B5FA3, 0x2F7BFF)          // your bubbles
+  static let mention = dyn(0x82B4FF, 0x1F63D6)       // an @mention: our bubble's blue, toned for each look — white on your own bubble (Haris 2026-11-15)
   static let theirs = dyn(0x262628, 0xFFFFFF)        // everyone else's
   static let chatBg = dyn(0x0A0A0A, 0xF2F2F7)        // behind the chat
   static let field = dyn(0x2B2B2B, 0xFFFFFF)         // the message box

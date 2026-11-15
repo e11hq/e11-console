@@ -2399,7 +2399,7 @@ final class BubbleCell: UITableViewCell {
         guard let n = T.people[id]?.name, !n.isEmpty else { continue }
         var from = txt.startIndex
         while let r = txt.range(of: "@" + n, range: from..<txt.endIndex) {
-          a.addAttributes([.font: UIFont.systemFont(ofSize: 17, weight: .semibold), .foregroundColor: mine ? UIColor.white : Look.nameInk(id)], range: NSRange(r, in: txt))
+          a.addAttributes([.font: UIFont.systemFont(ofSize: 17, weight: .semibold), .foregroundColor: mine ? UIColor.white : Look.mention], range: NSRange(r, in: txt))
           from = r.upperBound
         }
       }
@@ -3327,6 +3327,7 @@ final class MessageBar: UIView, UITextViewDelegate {
   }
   func textChanged() {
     place.isHidden = !box.text.isEmpty
+    paintMentions()
     let h = min(130, max(30, ceil(box.sizeThatFits(CGSize(width: max(100, box.bounds.width), height: 400)).height)))
     let scrolls = h >= 130
     if box.isScrollEnabled != scrolls { box.isScrollEnabled = scrolls; if scrolls { box.scrollRangeToVisible(box.selectedRange) } }
@@ -3340,6 +3341,28 @@ final class MessageBar: UIView, UITextViewDelegate {
     // the box jumped with each new line — Haris 2026-11-14)
     boxH = h; invalidateIntrinsicContentSize(); setNeedsLayout()
     UIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { host.layoutIfNeeded() }
+  }
+  // the people picked with @ shown in the box as they'll be sent: the name in our blue, its @ in grey (WhatsApp's; Haris
+  // 2026-11-15) — only the colours set, the words and the caret left where they are
+  private func paintMentions() {
+    let ts = box.textStorage, all = NSRange(location: 0, length: ts.length)
+    guard all.length > 0 else { return }
+    let base: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 17), .foregroundColor: UIColor.label]
+    ts.beginEditing()
+    ts.setAttributes(base, range: all)
+    let text = ts.string as NSString
+    for name in Set(picked.values) where !name.isEmpty {
+      var from = 0
+      while from < text.length {
+        let r = text.range(of: "@" + name, range: NSRange(location: from, length: text.length - from))
+        if r.location == NSNotFound { break }
+        ts.addAttribute(.foregroundColor, value: UIColor.secondaryLabel, range: NSRange(location: r.location, length: 1))
+        ts.addAttributes([.foregroundColor: Look.mention, .font: UIFont.systemFont(ofSize: 17, weight: .medium)], range: NSRange(location: r.location + 1, length: r.length - 1))
+        from = r.location + r.length
+      }
+    }
+    ts.endEditing()
+    box.typingAttributes = base
   }
   private func sendNow() {
     let t = box.text.trimmingCharacters(in: .whitespacesAndNewlines)
