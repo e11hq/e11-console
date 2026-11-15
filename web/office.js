@@ -75,7 +75,10 @@ const OfficeHome = (() => {
   const shownFor = () => (window.__e11ShownAt ? Date.now() - window.__e11ShownAt : 0);
   const sv = (k, d) => `<span class="hm-ic-s" data-i="oh-${k}"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg></span>`;
   const MI = {
-    claim: 'M8 2.2a5.8 5.8 0 1 0 0 11.6A5.8 5.8 0 0 0 8 2.2zM9.9 5.9C9.5 5.3 8.8 5 8 5c-1.1 0-1.9.6-1.9 1.4 0 1.9 3.9 1.1 3.9 3.1 0 .9-.9 1.5-2 1.5-.9 0-1.6-.4-2-1M8 4v1M8 11v1',
+    claim: 'M2 4.5h12v7H2zM8 9.6a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2zM4.2 8h.01M11.8 8h.01',
+    sub: 'M3.5 8a4.5 4.5 0 0 1 7.8-3.1M12.5 8a4.5 4.5 0 0 1-7.8 3.1M11.6 2.6v2.5H9.1M4.4 13.4v-2.5h2.5',
+    expense: 'M3 2.5h10v11l-1.7-1-1.6 1-1.7-1-1.6 1-1.7-1L3 13.5zM5.5 5.5h5M5.5 8h5M5.5 10.5h3',
+    reimb: 'M5.5 7.4a2.2 2.2 0 1 0 0-4.4 2.2 2.2 0 0 0 0 4.4zM1.8 13c0-2.1 1.7-3.6 3.7-3.6 1 0 1.8.3 2.5.9M10 9.5h4.5M12.5 7.5l2 2-2 2',
     tray: 'M2.5 9.5 4.3 4h7.4l1.8 5.5V12a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1zM2.5 9.5h3l.8 1.6h3.4l.8-1.6h3',
     folder: 'M2.2 4.6c0-.7.5-1.2 1.2-1.2h2.8l1.4 1.5h4.9c.7 0 1.2.5 1.2 1.2v5.6c0 .7-.5 1.2-1.2 1.2H3.4c-.7 0-1.2-.5-1.2-1.2z',
     team: 'M6 7.4a2.2 2.2 0 1 0 0-4.4 2.2 2.2 0 0 0 0 4.4zM2 13c0-2.2 1.8-3.8 4-3.8s4 1.6 4 3.8M11 3.2a2 2 0 0 1 0 4M12.2 9.4c1.1.4 1.8 1.4 1.8 2.6',
@@ -88,8 +91,9 @@ const OfficeHome = (() => {
     const u = me();
     const today = todayStr();
     const hasFin = fin();
-    const AED = (n) => 'AED ' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const AED0 = (n) => 'AED ' + Math.round(Number(n) || 0).toLocaleString('en-US');
+    // (the dirham sign everywhere, as the rest of the app — Haris 17:54)
+    const AED = (n) => '\u20C3' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const AED0 = (n) => '\u20C3' + Math.round(Number(n) || 0).toLocaleString('en-US');
     const m = Claims.claimMonth();
     const claims = hasFin ? Claims.all().filter((c) => c.month === m && ['submitted', 'approved', 'paid'].includes(c.state)).sort((a, b) => String(b.submittedAt || '').localeCompare(String(a.submittedAt || ''))) : [];
     const cnt = (s) => claims.filter((c) => c.state === s).length;
@@ -123,6 +127,23 @@ const OfficeHome = (() => {
         <div class="hm-h"><div class="hm-hl"><h2>Claims</h2><span class="hm-seg">${TABS.map(([k, l]) => { const n = k === 'all' ? claims.length : cnt(k); return `<button type="button" class="hm-tab ${st.claimTab === k ? 'on' : ''} ${k === 'submitted' && n ? 'amber' : ''}" data-oh="claim-tab" data-v="${k}">${l}<i>${n}</i></button>`; }).join('')}</span></div><a class="hm-a" data-oh="see-all">See all</a></div>
         ${claimRows.length ? claimRows.map(claimRow).join('') + (inTab.length > claimRows.length ? `<button type="button" class="hm-more-btn" data-oh="see-all">+${inTab.length - claimRows.length} more · See all</button>` : '')
           : `<div class="hm-empty">${st.claimTab === 'submitted' ? 'Nothing waiting for HR approval.' : st.claimTab === 'all' ? `No claims submitted yet for ${esc(monthName(m))}.` : `None ${st.claimTab === 'paid' ? 'paid' : 'HR approved'} yet this month.`}</div>`}
+      </section>` : '';
+
+    // Expenses this month, below Claims (Haris 17:54): Claims' card again — the kinds as tabs with counts, See all, rows
+    // tinted in turn; a row with an invoice opens it in the preview
+    const EK = [['all', 'All'], ['sub', 'Subscriptions'], ['expense', 'Office expenses'], ['reimb', 'Reimbursements']];
+    const EKL = { sub: 'Subscription', expense: 'Office expense', reimb: 'Reimbursement' };
+    const tm = todayStr().slice(0, 7);
+    const exp = hasFin && typeof Fin !== 'undefined' ? Fin.transactions().filter((x) => String(x.date).startsWith(tm)) : [];
+    if (!st.expTab) st.expTab = 'all';
+    const expIn = exp.filter((x) => st.expTab === 'all' || x.kind === st.expTab), expRows = expIn.slice(0, 5);
+    st.expRows = expIn;
+    const expCard = hasFin ? `<section class="hm-card ohm-exp">
+        <div class="hm-h"><div class="hm-hl"><h2>Expenses</h2><span class="hm-seg">${EK.map(([k, l]) => `<button type="button" class="hm-tab ${st.expTab === k ? 'on' : ''}" data-oh="exp-tab" data-v="${k}">${l}<i>${k === 'all' ? exp.length : exp.filter((x) => x.kind === k).length}</i></button>`).join('')}</span></div><span class="ohm-total">${AED(expIn.reduce((a, x) => a + x.amount, 0))}</span><a class="hm-a" data-oh="exp-all">See all</a></div>
+        ${expRows.length ? expRows.map((x) => `<div class="hm-row ohm-claim ohm-x" ${x.invoice ? `data-oh="exp-inv" data-v="${esc(x.id)}"` : ''}><span class="hm-ic ohm-k ${x.kind}">${sv(x.kind, MI[x.kind])}</span>
+            <span class="hm-main"><span class="hm-t">${esc(x.name)}</span><span class="hm-sub">${EKL[x.kind] || ''} · ${esc(fmtDay(x.date))}${x.invoice ? '' : ' · no invoice yet'}</span></span>
+            <span class="ohm-amt">${AED(x.amount)}</span></div>`).join('') + (expIn.length > expRows.length ? `<button type="button" class="hm-more-btn" data-oh="exp-all">+${expIn.length - expRows.length} more · See all</button>` : '')
+          : `<div class="hm-empty">No ${st.expTab === 'all' ? 'expenses' : EK.find(([k]) => k === st.expTab)[1].toLowerCase()} in ${esc(monthName(tm))} yet.</div>`}
       </section>` : '';
 
     // Latest in Client Assets: pictures; clients on one sliding row, newest first, each with its files this week
@@ -186,7 +207,7 @@ const OfficeHome = (() => {
         ${card('blue', 'folder', 'New in Client Assets', fresh.length, 'this week', 'ok', 'assets')}
       </section>
       <div class="hm-grid">
-        <div class="hm-col">${claimsCard}${assetsCard}</div>
+        <div class="hm-col">${claimsCard}${expCard}${assetsCard}</div>
         <aside class="hm-col">${monthCard}${inboxCard}${teamCard}</aside>
       </div>
     </div>`;
@@ -268,6 +289,9 @@ const OfficeHome = (() => {
     const k = b.dataset.oh, v = b.dataset.v;
     // the Mac app's Home (macView)
     if (k === 'claim-tab') { st.claimTab = v; return redraw(); }
+    if (k === 'exp-tab') { st.expTab = v; return redraw(); }
+    if (k === 'exp-all') return go('fin-expenses');
+    if (k === 'exp-inv') { const x = (st.expRows || []).find((y) => y.id === v); if (x && x.invoice) previewFile(x.invoice, (st.expRows || []).filter((y) => y.invoice).map((y) => y.invoice)); return; }
     if (k === 'add-claim') return Claims.newClaim(Claims.claimMonth());
     if (k === 'inbox') return go('inbox');
     if (k === 'assets') { st.client = 'all'; return go('clients'); }

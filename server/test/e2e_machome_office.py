@@ -39,18 +39,25 @@ async def main():
                 if look == 'dark':
                     r = await E("""(() => { const q = (s) => document.querySelector(s); const st = [...document.querySelectorAll('.ohm .hm-stat')].map((x) => Math.round(x.getBoundingClientRect().width));
                       const aside = q('.ohm .hm-grid aside'); return { has: !!q('.hm.ohm') && !q('.oh'), stats: st, aside: Math.round(aside.getBoundingClientRect().width),
-                      cards: [...document.querySelectorAll('.ohm .hm-card h2')].map((h) => h.textContent), tabs: [...document.querySelectorAll('.ohm .hm-tab')].map((t) => t.textContent),
+                      cards: [...document.querySelectorAll('.ohm .hm-card h2')].map((h) => h.textContent), tabs: [...document.querySelectorAll('.ohm [data-oh="claim-tab"]')].map((t) => t.textContent),
                       thumbs: document.querySelectorAll('.ohm .ohm-grid .hm-thumb').length, chipsOneRow: getComputedStyle(q('.ohm-chips')).flexWrap, ring: !!q('.ohm-month .hm-ring.hm-grow, .ohm-month .hm-ring'),
                       add: !!q('.ohm [data-oh="add-claim"]') }; })()""")
                     print(r)
                     check(r['has'], 'the Mac app shows the Office Admin Home in Home’s style')
                     check(len(r['stats']) == 3 and r['stats'][2] == r['aside'] == 330 and r['stats'][0] == r['stats'][1], f'three cards: two equal, the third the right column’s 330 {r["stats"]} {r["aside"]}')
-                    check(r['cards'][:2] == ['Claims', 'Latest in Client Assets'] and 'Inbox' in r['cards'] and 'Team today' in r['cards'] and any(c.endswith('’s claims') for c in r['cards']), f'the cards {r["cards"]}')
+                    check(r['cards'][:3] == ['Claims', 'Expenses', 'Latest in Client Assets'] and 'Inbox' in r['cards'] and 'Team today' in r['cards'] and any(c.endswith('’s claims') for c in r['cards']), f'the cards {r["cards"]}')
                     check([t.rstrip('0123456789') for t in r['tabs']] == ['Need HR approval', 'HR approved', 'Paid', 'All'], f'Claims’ tabs {r["tabs"]}')
                     check(r['chipsOneRow'] == 'nowrap', 'the clients on one sliding row')
                     check(r['add'], '+ Add claim')
+                    # the dirham sign everywhere (Haris 17:54); SF Pro and the Mac's own smoothing; the cards' symbols Apple's
+                    t = await E("(() => { const x = document.querySelector('.ohm'); const cs = getComputedStyle(x); return [x.textContent.includes('AED'), x.textContent.includes('\u20C3'), cs.fontFamily, cs.webkitFontSmoothing || '', [...document.querySelectorAll('.ohm .hm-stat [data-i]')].map((i) => i.dataset.i)]; })()")
+                    check(not t[0] and t[1], 'the dirham sign, no "AED"')
+                    check('-apple-system' in t[2], f'SF Pro (the system font) {t[2]}')
+                    check(t[4] == ['oh-claim', 'oh-tray', 'oh-folder'] and await E("['oh-claim','oh-tray','oh-folder','oh-sub','oh-expense','oh-reimb'].every((k) => MacSF.MAP[k])"), f'the symbols are Apple’s SF Symbols {t[4]}')
+                    await pg.locator('.ohm .ohm-exp .hm-tab', has_text='Subscriptions').click(); await pg.wait_for_timeout(300)
+                    check(await E("document.querySelector('.ohm-exp .hm-tab.on').dataset.v") == 'sub', 'an Expenses tab picked')
                     # a tab picked; the ring rule (grows from 0 once the page shows)
-                    await pg.locator('.ohm .hm-tab', has_text='All').click(); await pg.wait_for_timeout(300)
+                    await pg.locator('.ohm [data-oh="claim-tab"][data-v="all"]').click(); await pg.wait_for_timeout(300)
                     check(await E("document.querySelector('.ohm .hm-tab.on').dataset.v") == 'all', 'a Claims tab picked')
                     # the ring: grows from 0 once the page shows (Home's rule), drawn as the paid share
                     await E("(() => { const c = Claims.all().find((x) => x.state === 'approved'); if (c) { c.state = 'paid'; c.paidOn = todayStr(); } window.__e11ShownAt = Date.now(); renderContent(); })()"); await pg.wait_for_timeout(100)

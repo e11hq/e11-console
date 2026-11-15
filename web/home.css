@@ -751,3 +751,11 @@ html.mac-chrome .ohm-person::before { content: ''; position: absolute; top: 0; l
 html.mac-chrome .ohm-pn { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 html.mac-chrome .ohm-pnote { font-size: 12px; color: var(--mc-dim); white-space: nowrap; }
 html.mac-chrome .ohm-pnote.away { color: var(--mc-orange); } html.mac-chrome .ohm-pnote.bday { color: var(--mc-blue); }
+/* Expenses (below Claims): the kind as Home's small coloured square, the month's total beside See all */
+html.mac-chrome .ohm-exp .hm-h .ohm-total { margin-left: auto; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+html.mac-chrome .ohm-k { width: 30px; height: 30px; border-radius: 8px; }
+html.mac-chrome .ohm-k.sub { background: color-mix(in srgb, var(--mc-blue) 18%, transparent); color: var(--mc-blue); }
+html.mac-chrome .ohm-k.expense { background: color-mix(in srgb, var(--mc-orange) 18%, transparent); color: var(--mc-orange); }
+html.mac-chrome .ohm-k.reimb { background: color-mix(in srgb, #bf5af2 18%, transparent); color: #bf5af2; }
+html.mac-chrome[data-theme="light"] .ohm-k.reimb { color: #af52de; }
+html.mac-chrome .ohm-x:not([data-oh]) { cursor: default; }
