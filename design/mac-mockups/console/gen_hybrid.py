@@ -28,11 +28,16 @@ def sym(name, color):
       'bubble': '<path d="M4 5h16v11H9l-5 4z"/>',
       'sidebar': '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/>',
       'grid': '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
+      'flag': '<path d="M5 21V4h11l-2 4 2 4H5"/>',
+      'tick': '<path d="M5 12.5l4.5 4.5L19 7"/>',
+      'shield': '<path d="M12 3l8 3v6c0 4.5-3.4 7.8-8 9-4.6-1.2-8-4.5-8-9V6z"/>',
       'moon': '<path d="M20 14A8 8 0 0110 4a8 8 0 1010 10z"/>',
     }[name]
     return f'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{p}</svg>'
 
 MARK = 'M274.8 108.1 L274.2 108.8 L274.4 130.5 L275.2 131.2 L296.8 131.1 L297.4 130.2 L297.2 108.5 L296.6 108.0Z M212.8 2.0 L211.6 3.2 L211.9 24.5 L218.6 25.2 L224.8 28.0 L229.2 32.2 L231.4 36.0 L232.6 40.0 L232.8 130.6 L233.4 131.9 L254.8 131.9 L255.9 130.4 L255.9 43.5 L254.9 35.5 L253.2 29.8 L250.0 22.6 L247.8 19.2 L242.4 13.1 L237.6 9.2 L232.4 6.2 L225.0 3.5 L219.0 2.2Z M149.8 2.0 L148.6 3.2 L148.9 24.5 L155.6 25.2 L161.8 28.0 L166.2 32.2 L168.4 36.0 L169.6 40.0 L169.8 130.6 L170.4 131.9 L191.8 131.9 L192.9 130.4 L192.9 43.5 L191.9 35.5 L190.2 29.8 L187.0 22.6 L184.8 19.2 L179.4 13.1 L174.6 9.2 L169.4 6.2 L162.0 3.5 L156.0 2.2Z M11.6 8.8 L7.8 12.8 L3.9 18.6 L1.4 24.8 L0.0 31.5 L0.0 98.4 L1.1 104.1 L2.8 108.9 L5.4 113.8 L8.4 117.9 L13.5 122.8 L17.9 125.6 L23.2 128.0 L31.5 129.9 L129.2 129.8 L129.9 128.9 L129.9 107.9 L128.9 106.8 L34.1 106.8 L30.5 105.9 L27.1 103.8 L24.6 100.9 L23.0 96.1 L22.9 71.5 L23.6 70.4 L105.8 70.1 L106.5 69.2 L106.6 48.4 L105.8 47.0 L24.1 47.0 L22.9 45.9 L22.9 34.6 L23.6 31.1 L25.6 27.6 L28.9 24.8 L34.1 23.1 L128.9 23.1 L129.9 22.0 L129.8 0.6 L128.9 0.0 L31.5 0.0 L27.5 0.6 L20.1 3.1 L17.0 4.8Z'
+
+H = 1180
 
 def board(look):
     t = T[look]; A = t['accent']
@@ -119,15 +124,39 @@ def board(look):
             + row(4, K, 'Menu photography retouch', 'Kestrel Foods · due Mon, Nov 16', 2, 12, av('AB', '#2980B9') + av('RT', '#8E44AD', ml=-6), 'In Progress', orange)
             + row(5, N, 'Dealer event invitation', 'Northline Motors · by Sam Rivera · due Wed, Nov 18', 0, 1, av('AB', '#2980B9'), 'To Do', t['dim'])
             + f'<div style="font-size: 12px; color: {t["dim"]}; padding: 8px 10px 0">+3 more · See all</div>')
-    bars = ''.join(f'<span style="flex: 1; height: {h}%; border-radius: 2px; background: {A if i < 14 else t["line"]}; opacity: {1 if i < 14 else 1}"></span>'
-                   for i, h in enumerate([20, 45, 30, 60, 50, 8, 5, 55, 70, 40, 85, 65, 10, 30] + [4] * 16))
-    chart = card(extra='flex: 1; display: flex; flex-direction: column', inner=f'<div style="display: flex; gap: 36px; align-items: flex-end">'
+    vals = [1, 3, 2, 4, 3, 0, 0, 4, 5, 3, 6, 4, 1, 2, 0]
+    NDAYS = 30
+    bars = ''.join(f'<span style="flex: 1; height: {max(3, v / 6 * 100) if i < len(vals) else 3}%; border-radius: 2px; background: {A if i < len(vals) else t["line"]}; opacity: {0.55 if i < len(vals) else 1}"></span>' for i, v in enumerate(vals + [0] * (NDAYS - len(vals))))
+    # the website's line: a 5-day running average over the bars, and the busiest day's flag
+    avg = [sum(vals[max(0, i - 2):i + 3]) / len(vals[max(0, i - 2):i + 3]) for i in range(len(vals))]
+    X = lambda i: (i + 0.5) / NDAYS * 100
+    Y = lambda v: 100 - v / 6 * 88
+    path = f'M{X(0):.2f},{Y(avg[0]):.2f}' + ''.join(f' C{(X(i-1)+X(i))/2:.2f},{Y(avg[i-1]):.2f} {(X(i-1)+X(i))/2:.2f},{Y(avg[i]):.2f} {X(i):.2f},{Y(avg[i]):.2f}' for i in range(1, len(avg)))
+    pk = vals.index(max(vals))
+    peak = (f'<div style="position: absolute; left: {X(pk)}%; top: -26px; transform: translateX(-50%); display: flex; flex-direction: row; align-items: center; gap: 4px; white-space: nowrap; font-size: 10px; color: {t["dim"]}">'
+            f'<span style="width: 20px; height: 20px; border-radius: 10px; background: {t["win"]}; box-shadow: 0 0 0 0.5px {t["line"]}, 0 2px 6px rgba(0,0,0,0.2); display: inline-flex; align-items: center; justify-content: center">{sym("flag", A).replace(chr(34)+"15"+chr(34), chr(34)+"11"+chr(34))}</span><em style="font-style: normal">Busiest day</em></div>')
+    ticks = ''.join(f'<span>Nov {d}</span>' for d in [1, 8, 15, 22, 30])
+    chart = card(extra='display: flex; flex-direction: column', inner=f'<div style="display: flex; gap: 36px; align-items: flex-end">'
                  + ''.join(f'<div><div style="font-size: 12px; color: {t["dim"]}">{l}</div><div style="display: flex; align-items: baseline; gap: 6px"><span style="font-size: 20px; font-weight: 700">{v}</span>{c}</div></div>'
                            for l, v, c in [('Completed', 41, f'<span style="font-size: 11px; color: {green}">+12%</span>'), ('On time', '86%', f'<span style="font-size: 11px; color: {green}">+4%</span>'), ('Overdue', 2, '')])
                  + f'<div style="margin-left: auto; text-align: right"><span style="font-size: 28px; font-weight: 700">41</span> <span style="font-size: 12px; color: {t["dim"]}">tasks completed · November</span></div></div>'
-                 + f'<div style="margin: 12px 0 10px; align-self: flex-start; display: inline-flex; padding: 2px; border-radius: 8px; background: {t["field"]}">'
+                 + f'<div style="margin: 12px 0 34px; align-self: flex-start; display: inline-flex; padding: 2px; border-radius: 8px; background: {t["field"]}">'
                  + ''.join(f'<span style="padding: 3px 10px; border-radius: 6px; font-size: 12px; {"background:" + t["win"] + "; box-shadow: 0 0.5px 2px rgba(0,0,0,0.25); font-weight: 600;" if i == 0 else ""}">{l}</span>' for i, l in enumerate(['Completed by the team', 'Tasks created', 'Sent for CD review']))
-                 + f'</div><div style="display: flex; align-items: flex-end; gap: 4px; flex: 1; min-height: 60px">{bars}</div>')
+                 + f'</div><div style="position: relative; height: 150px"><div style="position: absolute; inset: 0; display: flex; align-items: flex-end; gap: 4px">{bars}</div>'
+                 + f'<svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible" aria-hidden="true"><path d="{path}" fill="none" stroke="{A}" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>{peak}</div>'
+                 + f'<div style="display: flex; justify-content: space-between; margin-top: 6px; font-size: 10.5px; color: {t["dim"]}">{ticks}</div>')
+    def act(ini, c, who, what, task, when, quote='', file=''):
+        q = f'<div style="font-size: 12px; color: {t["dim"]}; margin-top: 2px">“{quote}”</div>' if quote else ''
+        f = (f'<div style="margin-top: 5px; display: inline-flex; align-items: center; gap: 7px; padding: 5px 9px; border-radius: 8px; background: {t["field"]}; font-size: 11.5px">'
+             f'<span style="font-weight: 600">{file[0]}</span><span style="color: {t["dim"]}">{file[1]}</span></div>') if file else ''
+        return (f'<div style="display: flex; gap: 10px; padding: 9px 0; border-top: 0.5px solid {t["line"]}">{av(ini, c, 32)}'
+                f'<div style="flex: 1; min-width: 0; font-size: 13px"><b>{who}</b> <span style="color: {t["dim"]}">{what}</span> <span style="color: {A}">{task}</span>{q}{f}</div>'
+                f'<span style="font-size: 11.5px; color: {t["dim"]}; white-space: nowrap">{when}</span></div>')
+    acts = card(extra='flex: 1', inner=h2('Recent activity', f'<span style="margin-left: auto; font-size: 12px; color: {A}">Open Inbox</span>')
+                + act('JL', '#E67E22', 'Jamie Lowe', 'commented on', 'Winter Drive Campaign – Key Visual', '12m ago', quote='Second round of the visual is up — the darker sky version.')
+                + act('MK', '#16A085', 'Maya Kent', 'attached a file to', 'December content plan', '1h ago', file=('Dec-plan-v2.pdf', '2.4 MB'))
+                + act('RT', '#8E44AD', 'Rui Tan', 'moved', 'Launch socials — 6 posts', '3h ago')
+                + act('AB', '#2980B9', 'Ana Brooks', 'mentioned you on', 'Menu photography retouch', 'Yesterday', quote='@Alex can we push the client call to Monday?'))
     days = ''.join(f'<div style="flex: 1; text-align: center; padding: 6px 0; border-radius: 9px; {"background:" + A + "; color: #fff;" if d == "Mo" else ""}"><div style="font-size: 11px; {"" if d == "Mo" else "color:" + t["dim"]}">{d}</div><div style="font-size: 16px; font-weight: 600">{n}</div></div>'
                    for d, n in [('Mo', 16), ('Tu', 17), ('We', 18), ('Th', 19), ('Fr', 20)])
     def ag(c, name, sub, avs):
@@ -136,27 +165,43 @@ def board(look):
                  + ag(K, 'Menu photography retouch', 'In Progress · Waiting for client', av('AB', '#2980B9', 22)) + ag(N, 'Showroom banner resize', 'To Do', av('JL', '#E67E22', 22)) + ag(P, 'Brand guidelines v2', 'In Review', av('MK', '#16A085', 22)))
     def cl(c, ini, name, o, pc):
         return f'<div style="display: flex; align-items: center; gap: 10px; padding: 6px 0"><span style="width: 30px; height: 30px; border-radius: 8px; background: {c}; color: #fff; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center">{ini}</span><div style="flex: 1"><div style="font-size: 13px; font-weight: 600">{name}</div><div style="font-size: 11px; color: {t["dim"]}">{o} open · {pc}% done</div><div style="margin-top: 4px; height: 3px; border-radius: 2px; background: {t["line"]}"><div style="width: {pc}%; height: 100%; border-radius: 2px; background: {c}"></div></div></div></div>'
-    clients = card(extra='flex: 1', inner=h2('Clients', f'<span style="font-size: 12px; color: {t["dim"]}">3</span>') + cl(N, 'NM', 'Northline Motors', 11, 64) + cl(K, 'KF', 'Kestrel Foods', 8, 52) + cl(P, 'PC', 'Pinecrest', 5, 71))
+    clients = card(h2('Clients', f'<span style="font-size: 12px; color: {t["dim"]}">3</span>') + cl(N, 'NM', 'Northline Motors', 11, 64) + cl(K, 'KF', 'Kestrel Foods', 8, 52) + cl(P, 'PC', 'Pinecrest', 5, 71))
+    def ck(text, task, on=False):
+        box = (f'<span style="width: 16px; height: 16px; border-radius: 4px; flex: none; display: inline-flex; align-items: center; justify-content: center; '
+               + (f'background: {A}">' + sym('tick', '#fff').replace('width="15" height="15"', 'width="11" height="11"') if on else f'box-shadow: inset 0 0 0 1px {t["ter"]}">') + '</span>')
+        return (f'<div style="display: flex; gap: 10px; align-items: flex-start; padding: 6px 0">{box}<div style="min-width: 0"><div style="font-size: 13px; {"text-decoration: line-through; color:" + t["dim"] + ";" if on else ""}">{text}</div>'
+                f'<div style="font-size: 11px; color: {t["dim"]}">{task}</div></div></div>')
+    checklist = card(h2('Checklist', f'<span style="margin-left: auto; font-size: 12px; color: {t["dim"]}">1 of 4 done</span>')
+                     + ck('Export the 1080 × 1350 cuts', 'Launch socials — 6 posts') + ck('Send the call sheet to the crew', 'Menu photography retouch')
+                     + ck('Check the CTA on mobile', 'Website — homepage copy') + ck('Approve the sky colour', 'Winter Drive Campaign – Key Visual', on=True))
+    hero = (f'<div style="flex: 1; border-radius: 12px; padding: 16px; box-sizing: border-box; color: #fff; background: linear-gradient(140deg, #5b4ee0, #2f7bff)">'
+            f'<div style="font-size: 15px; font-weight: 700">Team on time</div>'
+            f'<div style="display: flex; align-items: center; gap: 12px; margin: 8px 0 10px"><span style="font-size: 40px; font-weight: 700; letter-spacing: -1px">86%</span><span style="font-size: 12px; opacity: 0.85; line-height: 1.3">+4% vs<br>October</span></div>'
+            f'<div style="display: flex; margin-bottom: 10px">' + ''.join(av(i, c, 30, ml=(0 if k == 0 else -8)) .replace(f'box-shadow: 0 0 0 2px {t["card"]}', 'box-shadow: 0 0 0 2px #4766e9') for k, (i, c) in enumerate([('JL', '#E67E22'), ('MK', '#16A085'), ('RT', '#8E44AD'), ('AB', '#2980B9'), ('SR', '#C0392B')])) + '</div>'
+            f'<div style="font-size: 12px; opacity: 0.9">Team tasks that were finished by their due date this month</div></div>')
+    btn = lambda label, primary=False: (f'<span style="height: 28px; padding: 0 12px; border-radius: 7px; font-size: 13px; display: inline-flex; align-items: center; '
+                                         + (f'background: {A}; color: #fff; font-weight: 500">' if primary else f'background: {t["glass"]}; box-shadow: inset 0 0 0 0.5px {t["glassLine"]}">') + label + '</span>')
     content = (f'<div style="position: absolute; left: 260px; right: 0; top: 52px; bottom: 0; background: {t["content"]}; border-top: 0.5px solid {t["line"]}; padding: 20px 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; overflow: hidden">'
-               f'<div><div style="font-size: 12px; color: {t["dim"]}">Saturday, November 14</div><div style="font-size: 26px; font-weight: 700; letter-spacing: -0.3px">Good evening, Alex</div></div>'
-               f'<div style="display: flex; gap: 12px">{stat(A, "cal", "Team tasks due today", 3, "2 overdue", red)}{stat(green, "check", "Finished by your team", 14, "↑ 4 vs last week", green)}{stat(orange, "sun", "Waiting for CD review", 2, "oldest 3 hours ago", orange)}</div>'
+               f'<div style="display: flex; align-items: flex-end"><div><div style="font-size: 12px; color: {t["dim"]}">Saturday, November 14</div><div style="font-size: 26px; font-weight: 700; letter-spacing: -0.3px">Good evening, Alex</div></div>'
+               f'<div style="margin-left: auto; display: flex; gap: 8px">{btn("E11 Day")}{btn("+ New task", True)}</div></div>'
+               f'<div style="display: flex; gap: 12px">{stat(A, "cal", "Team tasks due today", 3, "2 overdue", red)}{stat(green, "check", "Finished by your team", 14, "↑ 4 vs last week", green)}{stat(orange, "shield", "Waiting for CD review", 2, "oldest 3 hours ago", orange)}</div>'
                f'<div style="display: grid; grid-template-columns: 1fr 330px; gap: 14px; align-items: stretch; flex: 1; min-height: 0">'
-               f'<div style="display: flex; flex-direction: column; gap: 14px; min-width: 0">{card(h2("Team’s tasks", seg) + rows)}{chart}</div>'
-               f'<div style="display: flex; flex-direction: column; gap: 14px">{sched}{clients}</div></div></div>')
+               f'<div style="display: flex; flex-direction: column; gap: 14px; min-width: 0">{card(h2("Team’s tasks", seg) + rows)}{chart}{acts}</div>'
+               f'<div style="display: flex; flex-direction: column; gap: 14px">{sched}{clients}{checklist}{hero}</div></div></div>')
     # a right-click menu: Apple's own, the website's choices
     menu = (f'<div style="position: absolute; left: 560px; top: 372px; width: 220px; padding: 5px 0; border-radius: 10px; background: {"rgba(40,40,44,0.96)" if look == "dark" else "rgba(250,250,252,0.97)"}; '
             f'box-shadow: 0 0 0 0.5px {t["glassLine"]}, 0 12px 36px rgba(0,0,0,0.3); z-index: 9; font-size: 13px">'
             + ''.join(f'<div style="padding: 4px 12px; margin: 0 5px; border-radius: 5px; {"background:" + A + "; color: #fff;" if i == 0 else ""}">{x}</div>' if x != '-' else f'<div style="height: 0.5px; background: {t["line"]}; margin: 4px 10px"></div>'
                       for i, x in enumerate(['Open Task', 'Status  ›', 'Mark Complete', '-', 'Copy Link']))
             + '</div>') if look == 'dark' else ''
-    body = (f'<div style="width: 1440px; height: 900px; background: {t["desk"]}; position: relative; overflow: hidden; font-family: -apple-system, \'SF Pro Text\', \'Helvetica Neue\', Inter, sans-serif; color: {t["fg"]}">'
+    body = (f'<div style="width: 1440px; height: {H}px; background: {t["desk"]}; position: relative; overflow: hidden; font-family: -apple-system, \'SF Pro Text\', \'Helvetica Neue\', Inter, sans-serif; color: {t["fg"]}">'
             f'<div style="position: absolute; inset: 0; background: {t["win"]}; border-radius: 14px; overflow: hidden">{side}{toolbar}{content}{menu}</div></div>')
     return f'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>E11 Console for Mac — hybrid ({look})</title><script src="./support.js"></script></head>
 <body><x-dc><helmet><style>body{{margin:0}}</style></helmet>
 {body}
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{{"$preview":{{"width":1440,"height":900}}}}'>
+<script type="text/x-dc" data-dc-script data-props='{{"$preview":{{"width":1440,"height":{H}}}}}'>
 class Component extends DCLogic {{ renderVals() {{ return {{}}; }} }}
 </script></body></html>
 '''
