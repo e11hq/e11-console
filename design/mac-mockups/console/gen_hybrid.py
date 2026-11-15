@@ -37,7 +37,7 @@ def sym(name, color):
 
 MARK = 'M274.8 108.1 L274.2 108.8 L274.4 130.5 L275.2 131.2 L296.8 131.1 L297.4 130.2 L297.2 108.5 L296.6 108.0Z M212.8 2.0 L211.6 3.2 L211.9 24.5 L218.6 25.2 L224.8 28.0 L229.2 32.2 L231.4 36.0 L232.6 40.0 L232.8 130.6 L233.4 131.9 L254.8 131.9 L255.9 130.4 L255.9 43.5 L254.9 35.5 L253.2 29.8 L250.0 22.6 L247.8 19.2 L242.4 13.1 L237.6 9.2 L232.4 6.2 L225.0 3.5 L219.0 2.2Z M149.8 2.0 L148.6 3.2 L148.9 24.5 L155.6 25.2 L161.8 28.0 L166.2 32.2 L168.4 36.0 L169.6 40.0 L169.8 130.6 L170.4 131.9 L191.8 131.9 L192.9 130.4 L192.9 43.5 L191.9 35.5 L190.2 29.8 L187.0 22.6 L184.8 19.2 L179.4 13.1 L174.6 9.2 L169.4 6.2 L162.0 3.5 L156.0 2.2Z M11.6 8.8 L7.8 12.8 L3.9 18.6 L1.4 24.8 L0.0 31.5 L0.0 98.4 L1.1 104.1 L2.8 108.9 L5.4 113.8 L8.4 117.9 L13.5 122.8 L17.9 125.6 L23.2 128.0 L31.5 129.9 L129.2 129.8 L129.9 128.9 L129.9 107.9 L128.9 106.8 L34.1 106.8 L30.5 105.9 L27.1 103.8 L24.6 100.9 L23.0 96.1 L22.9 71.5 L23.6 70.4 L105.8 70.1 L106.5 69.2 L106.6 48.4 L105.8 47.0 L24.1 47.0 L22.9 45.9 L22.9 34.6 L23.6 31.1 L25.6 27.6 L28.9 24.8 L34.1 23.1 L128.9 23.1 L129.9 22.0 L129.8 0.6 L128.9 0.0 L31.5 0.0 L27.5 0.6 L20.1 3.1 L17.0 4.8Z'
 
-H = 1180
+H = 1250
 
 def board(look, page='lead'):
     t = T[look]; A = t['accent']
@@ -115,16 +115,16 @@ def board(look, page='lead'):
         # as the iPhone's task rows (Haris 10:41): the CD chip after the client line, the Urgent / P1 tag, an overdue row's faint red
         bg = (f'rgba(229,72,77,{0.10 if look == "dark" else 0.06})' if late else (t['row'] if i % 2 else 'transparent'))
         yel = '#ffd60a' if look == 'dark' else '#b98900'
-        cdc = (f' <span style="display: inline-flex; align-items: center; gap: 3px; height: 16px; padding: 0 6px; border-radius: 4px; font-size: 10.5px; font-weight: 700; vertical-align: 1px; color: {yel}; background: color-mix(in srgb, {yel} 16%, transparent)">{"✓ " if cd[1] else ""}{cd[0]}</span>') if cd else ''
+        cdc = (f'<span style="margin-left: 7px; vertical-align: middle; display: inline-flex; align-items: center; gap: 3px; height: 16px; padding: 0 6px; border-radius: 4px; font-size: 10.5px; font-weight: 700; color: {yel}; background: color-mix(in srgb, {yel} 16%, transparent)">{"✓ " if cd[1] else ""}{cd[0]}</span>') if cd else ''
         tg = ''
         if tag:
             u = tag == 'Urgent'
             tc = ('#ff9494' if look == 'dark' else '#d9363e') if u else t['dim']
             tb = 'rgba(229,72,77,0.16)' if u else t['field']
-            tg = f'<span style="margin-left: 8px; font-size: 11.5px; font-weight: 700; padding: 1px 7px; border-radius: 5px; color: {tc}; background: {tb}; vertical-align: 1px">{tag}</span>'
-        return (f'<div style="display: grid; grid-template-columns: 10px 1fr 70px 76px 96px; gap: 12px; align-items: center; height: 46px; padding: 0 10px; border-radius: 7px; background: {bg}">'
+            tg = f'<span style="margin-left: 8px; font-size: 11px; line-height: 16px; font-weight: 700; padding: 0 7px; border-radius: 5px; color: {tc}; background: {tb}">{tag}</span>'
+        return (f'<div style="display: grid; grid-template-columns: 10px 1fr 70px 76px 96px; gap: 12px; align-items: center; height: 56px; padding: 0 10px; border-radius: 8px; background: {bg}">'
                 f'<span style="width: 9px; height: 9px; border-radius: 3px; background: {c}"></span>'
-                f'<span style="min-width: 0"><div style="font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{name}{tg}</div><div style="font-size: 11px; color: {t["dim"]}; white-space: nowrap">{sub}{cdc}</div></span>'
+                f'<span style="min-width: 0; display: flex; flex-direction: column; gap: 4px"><div style="font-size: 13px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center">{name}{tg}</div><div style="font-size: 11.5px; line-height: 16px; color: {t["dim"]}; white-space: nowrap">{sub}{cdc}</div></span>'
                 f'<span style="font-size: 11px; color: {t["dim"]}">💬 {cm} · 📎 {fl}</span><span style="display: flex">{avs}</span><span>{pill(st, sc)}</span></div>')
     N, K, P = '#0E3E8C', '#C8102E', '#3E7D44'
     rows = (row(0, N, 'Winter Drive Campaign – Key Visual', f'Northline Motors · by Sam Rivera · due <span style="color: {t["fg"]}">Today</span>', 6, 4, av('JL', '#E67E22') + av('MK', '#16A085', ml=-6), 'In Review', yellow, cd=('CD', False), tag='Urgent')
