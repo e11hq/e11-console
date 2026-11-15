@@ -16,6 +16,11 @@ const Home = (() => {
   const pName = (t) => (proj(t.projectId) || {}).name || 'No client';
   const title = (t) => (t.title ? esc(t.title) : '<span class="ph">Untitled task</span>');
   const nComments = (t) => (t.comments || []).length;
+  // as the iPhone's task rows (Mac page by page, Haris 2026-11-15 10:41): the Urgent / P1 (any number) tag after the title, the CD chip
+  // on the line under it (✓ once approved), an overdue row's faint red
+  const tag = (t) => { const p = t.done ? 'none' : prioOf(t); return p === 'urgent' ? '<span class="hm-tag urgent">Urgent</span>' : typeof p === 'number' ? `<span class="hm-tag">P${p}</span>` : ''; };   // (any number, as the iPhone: P1, P2…)
+  const cdTag = (t) => { const c = !t.done && CD[t.cdStatus]; return c ? `<span class="hm-cd ${t.cdStatus === 'approved' ? 'ok' : ''}" style="--c:${c.color}" title="CD Status: ${esc(c.label)}">${t.cdStatus === 'approved' ? '✓ ' : ''}CD</span>` : ''; };
+  const late = (t) => (!t.done && t.due && t.due < todayStr() ? 'late' : '');
   const nFiles = (t) => shownAtts(t).length;
   const svg = (d, w = 1.5) => `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
   const IC = {
@@ -169,9 +174,9 @@ const Home = (() => {
         <div class="hm-col">
           <section class="hm-card">
             <div class="hm-h"><div class="hm-hl"><h2>${admin ? 'Team’s tasks' : Work.hasClients(currentUserId) ? 'Your clients’ tasks' : 'Your created tasks'}</h2><span class="hm-seg">${rangeTabs}</span></div><a class="hm-a" data-hm="see-all">See all</a></div>
-            ${rows.length ? rows.map((t) => `<div class="hm-row" data-task="${t.id}">
+            ${rows.length ? rows.map((t) => `<div class="hm-row ${late(t)}" data-task="${t.id}">
                 <i class="hm-pc" style="background:${pColor(t)}"></i>
-                <span class="hm-main"><span class="hm-t">${title(t)}</span><span class="hm-sub">${esc(pName(t))}${admin && t.createdBy !== currentUserId && userById(t.createdBy) ? ` · by ${esc(fullName(userById(t.createdBy)))}` : ''}${t.due ? ` · due <span class="due ${dueClass(t)}">${esc(fmtDue(t.due))}</span>` : ''}</span></span>
+                <span class="hm-main"><span class="hm-tl"><span class="hm-t">${title(t)}</span>${tag(t)}</span><span class="hm-sub">${esc(pName(t))}${admin && t.createdBy !== currentUserId && userById(t.createdBy) ? ` · by ${esc(fullName(userById(t.createdBy)))}` : ''}${t.due ? ` · due <span class="due ${dueClass(t)}">${esc(fmtDue(t.due))}</span>` : ''}${cdTag(t)}</span></span>
                 <span class="hm-counts"><span title="Comments">${svg(IC.chat, 1.4)}${nComments(t)}</span><span title="Files">${svg(IC.clip, 1.4)}${nFiles(t)}</span></span>
                 <span class="hm-who">${(t.assignees || []).length ? avatarStack(t.assignees, 26, 3, t) : '<span class="hm-mute">Unassigned</span>'}</span>
                 <span class="hm-st">${statusPill(t)}</span>
@@ -262,7 +267,7 @@ const Home = (() => {
           <span class="hm-lh"><span><i style="background:${laneC(k)}"></i>${esc(k || 'No Task Update')}</span><b class="mono">${ts.length}</b></span>
           ${ts.slice(0, 2).map((t) => `<span class="hm-mini" style="border-left-color:${pColor(t)}">${title(t)}</span>`).join('')}${ts.length > 2 ? `<span class="hm-more">+${ts.length - 2} more</span>` : ''}
         </button>`).join('')}</div>
-        <div class="hm-lane-list">${sel.map((t) => `<div class="hm-lrow" data-task="${t.id}"><i style="background:${pColor(t)}"></i><span class="hm-t">${title(t)}</span><span class="hm-sub">${esc(pName(t))}</span><span class="due ${dueClass(t)}">${esc(fmtDue(t.due))}</span></div>`).join('')}</div>`
+        <div class="hm-lane-list">${sel.map((t) => `<div class="hm-lrow ${late(t)}" data-task="${t.id}"><i style="background:${pColor(t)}"></i><span class="hm-t">${title(t)}</span>${tag(t)}${cdTag(t)}<span class="hm-sub">${esc(pName(t))}</span><span class="due ${dueClass(t)}">${esc(fmtDue(t.due))}</span></div>`).join('')}</div>`
         : '<div class="hm-empty">No open tasks right now.</div>'}
     </section>`;
 
@@ -402,6 +407,13 @@ const Home = (() => {
       c.done = !c.done; logActivity(t, `${c.done ? 'checked' : 'unchecked'} <b>${esc(c.text)}</b>`); t.updatedAt = nowISO(); commit(); return;
     }
     renderContent();
+  });
+
+  // a task right-clicked anywhere on Home: the iPhone's choices (app.js taskContextMenu)
+  document.addEventListener('contextmenu', (e) => {
+    if (typeof ui === 'undefined' || ui.view !== 'home') return;
+    const el = e.target.closest && e.target.closest('.hm [data-task]');
+    if (el && typeof taskContextMenu === 'function') taskContextMenu(e, el.dataset.task);
   });
 
   return { view, st };

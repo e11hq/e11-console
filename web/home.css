@@ -65,6 +65,21 @@
 .hm-counts { display: flex; gap: 12px; color: var(--text-3); font-size: 12.5px; flex: none; }
 .hm-counts span { display: flex; align-items: center; gap: 4px; }
 .hm-counts svg { width: 14px; height: 14px; }
+/* as the iPhone's task rows (Haris 2026-11-15 10:41–10:45): 56 tall, 4 between the title and its line, the Urgent / P1 tag
+   after the title, the CD chip on the line (✓ once approved), an overdue row's faint red (10% dark, 6% light) */
+.hm-row { min-height: 56px; box-sizing: border-box; padding-top: 8px; padding-bottom: 8px; }
+.hm-row .hm-main { gap: 4px; }
+.hm-tl { display: flex; align-items: center; min-width: 0; }
+.hm-tl .hm-t { min-width: 0; }
+.hm-tag { flex: none; margin-left: 8px; font-size: 11px; line-height: 16px; font-weight: 700; padding: 0 7px; border-radius: 5px; color: var(--text-2); background: var(--raised); }
+.hm-tag.urgent { color: #ff9494; background: rgba(229, 72, 77, .16); }
+:root[data-theme="light"] .hm-tag.urgent { color: #d9363e; }
+.hm-cd { display: inline-flex; align-items: center; height: 16px; margin-left: 7px; padding: 0 6px; border-radius: 4px; vertical-align: middle; font-size: 10.5px; font-weight: 700; color: var(--c); background: color-mix(in srgb, var(--c) 16%, transparent); }
+:root[data-theme="light"] .hm-cd { color: color-mix(in srgb, var(--c) 70%, #000); }
+.hm-row.late, .hm-lrow.late { background: rgba(229, 72, 77, .10); }
+:root[data-theme="light"] .hm-row.late, :root[data-theme="light"] .hm-lrow.late { background: rgba(229, 72, 77, .06); }
+.hm-row.late:hover, .hm-lrow.late:hover { background: rgba(229, 72, 77, .15); }
+.hm-lrow .hm-tag { margin-left: 0; }
 .hm-who { width: 92px; flex: none; display: flex; }
 .hm-st { width: 110px; flex: none; display: flex; justify-content: flex-end; }
 
@@ -258,3 +273,18 @@
   .hm-counts, .hm-st { display: none; }
   .hm-cal { grid-template-columns: repeat(5, minmax(120px, 1fr)); overflow-x: auto; }
 }
+
+/* ===== The Mac app only (html.mac-chrome): Home restyled to look native (Mac page by page — Haris 2026-11-15). Browsers and
+   the iPhone untouched. The smoother text (10:49 "i love the smoothest one"): Apple's font spacing itself, semibold where
+   bold, softer text, line height 1.3, the Mac's own smoothing; the page's end on the sidebar's bottom line (8 from the
+   window's edge — 10:51). ===== */
+html.mac-chrome .hm, html.mac-chrome .oh { font-family: "E11 Dirham", -apple-system, BlinkMacSystemFont, system-ui, sans-serif; letter-spacing: normal; line-height: 1.3; -webkit-font-smoothing: auto;
+  --text: rgba(255, 255, 255, .88); --text-2: rgba(255, 255, 255, .55); --text-3: rgba(255, 255, 255, .55); }
+html.mac-chrome[data-theme="light"] .hm, html.mac-chrome[data-theme="light"] .oh { --text: rgba(0, 0, 0, .85); --text-2: rgba(0, 0, 0, .62); --text-3: rgba(0, 0, 0, .62); }
+html.mac-chrome .hm *, html.mac-chrome .oh * { letter-spacing: normal; }
+html.mac-chrome .hm :is(b, strong, h1, h2, th), html.mac-chrome .oh :is(b, strong, h1, h2, th),
+html.mac-chrome .hm :is(.hm-btn.primary, .hm-tag, .hm-cd, .hm-pill, .hm-pi), html.mac-chrome .oh :is(.oh-num, .oh-ext, .oh-pill, .oh-seg button, .oh-mini) { font-weight: 600; }
+html.mac-chrome .hm .mono, html.mac-chrome .hm-sn b, html.mac-chrome .hm-kv b, html.mac-chrome .hm-big b, html.mac-chrome .hm-hn b { font-family: inherit; font-variant-numeric: tabular-nums; }
+html.mac-chrome .hm-card, html.mac-chrome .hm-stat, html.mac-chrome .oh-card, html.mac-chrome .oh-stat { border-radius: 12px; border-width: .5px; }
+html.mac-chrome .hm { padding-bottom: 8px; }
+html.mac-chrome .oh { padding-bottom: 8px; }

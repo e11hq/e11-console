@@ -5933,8 +5933,7 @@ async function attachFiles(target = 'task', replyTo = null, dropped = null, sour
   } catch (e) { if (target === 'comment') { delete ui.commentUp[key]; Unsent.uploaded(key, false); } toast('Could not attach: ' + e.message); }
 }
 
-function statusMenu(anchor) {
-  const t = task(ui.taskId);
+function statusMenu(anchor, t = task(ui.taskId)) {
   const items = [];
   const cdWait = !t.parentId && needsCD(t) && !cdOK(t);   // (statuses past Review wait for the CD's approval)
   statusList(t).forEach((st) => { const lock = cdWait && t.sectionId !== st.id && pastReview(t, st.id); items.push({ html: `<div class="mi ${!t.done && t.sectionId === st.id ? 'cur' : ''} ${lock ? 'mi-locked' : ''}" data-mi="${items.length}" ${lock ? `title="${esc(CD_WAIT_MSG(t))}"` : ''}><span class="sw" style="background:${st.color}"></span>${esc(st.name)}${lock ? `<span class="mi-lock">${icon('lock')}</span>` : ''}</div>`, run: () => { changeStatus(t, st.id); } }); });
@@ -5943,6 +5942,44 @@ function statusMenu(anchor) {
   else items.push({ html: `<div class="mi-note">${icon('lock')}${esc(completeBlockedMsg(t))}</div>` });
   // showMenu needs index-aligned items: rebuild html with real indices
   showMenu(anchor, items.map((it, i) => (it === '-' ? it : { ...it, html: it.html.replace(/data-mi="\d+"/, `data-mi="${i}"`) })), { native: 12 });
+}
+
+/* ---- A task row right-clicked (Mac page by page, Haris 2026-11-15 10:33 / 10:36): the iPhone's choices, one list for the
+   Mac app and browsers — Open Task · Status › · Mark Complete · Due Date… · Attach Files… · Copy Link · Trash. Drawn by the
+   page for now; the Mac app's own menu comes with its next update. A normal click is unchanged. ---- */
+const atPoint = (x, y) => ({ getBoundingClientRect: () => ({ left: x, right: x, top: y, bottom: y, width: 0, height: 0 }) });
+function taskContextMenu(e, id) {
+  const t = task(id);
+  if (!t || (typeof Phone !== 'undefined' && Phone.on)) return false;
+  e.preventDefault();
+  const at = atPoint(e.clientX, e.clientY);
+  const edit = can('editDates', t), del = can('deleteTask');
+  showMenu(at, [
+    { label: 'Open Task', icon: 'open', run: () => openTask(t.id) },
+    '-',
+    { label: 'Status ›', icon: 'chev-right', run: () => statusMenu(at, t) },
+    ...(!t.done && canComplete(t) ? [{ label: 'Mark Complete', icon: 'check', run: async () => { if (!(await askClientApproval(t))) return; setDone(t, true); commit(); } }] : []),
+    ...(edit ? [{ label: 'Due Date…', icon: 'cal', run: () => dueDialog(t) }] : []),
+    '-',
+    { label: 'Attach Files…', icon: 'clip', run: () => attachFiles('task', null, null, null, t.id) },
+    { label: 'Copy Link', icon: 'link', run: () => TaskLink.copy(t.id) },
+    ...(del ? ['-', { label: 'Trash', icon: 'trash', danger: true, run: () => deleteTaskFlow(t.id) }] : []),
+  ]);
+  return true;
+}
+// the due date picked in a small dialog (the right-click's Due Date…)
+function dueDialog(t) {
+  const root = $('#overlay-root');
+  const v = t.due || todayStr();
+  root.innerHTML = `<div class="scrim"><form class="dialog form-dlg" autocomplete="off"><h2>Due date — ${esc(t.title || 'Untitled task')}</h2>
+    <label class="dlg-label">Due</label><span class="date-chip set">${icon('cal')}<span class="date-lbl">${esc(fmtDay(v))}</span><input type="date" class="date-in" name="date" value="${v}"></span>
+    <div class="actions">${t.due ? '<button type="button" class="btn" data-r="clear">Remove</button>' : ''}<span class="spacer"></span><button type="button" class="btn" data-r="0">Cancel</button><button type="submit" class="btn primary">Save</button></div></form></div>`;
+  const f = $('form', root), d = f.elements.date;
+  const close = () => { root.innerHTML = ''; };
+  d.addEventListener('change', () => { $('.date-lbl', root).textContent = d.value ? fmtDay(d.value) : 'Pick a date'; });
+  $('[data-r="0"]', root).addEventListener('click', close);
+  const cl = $('[data-r="clear"]', root); if (cl) cl.addEventListener('click', () => { close(); setDue(t, null); commit(); });
+  f.addEventListener('submit', (e) => { e.preventDefault(); close(); if (d.value && d.value !== t.due) { setDue(t, d.value); commit(); } });
 }
 
 /* ---- CD Status ---- */

@@ -25,7 +25,7 @@ body.office-mode .brand-acts [data-action="focus-search"] { display: none !impor
 .oh.no-fin .oh-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .oh-card { min-height: 0; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; transition: border-color .2s, box-shadow .2s; }
 .oh-card.focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.oh-card-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px 10px; }
+.oh-card-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 16px 10px; }
 .oh-card-h h2 { margin: 0; font-size: 15px; }
 .oh-dim { color: var(--text-3); font-size: 12px; }
 .oh-seg { display: flex; background: var(--raised); border-radius: 9px; padding: 3px; }
@@ -50,10 +50,27 @@ body.office-mode .brand-acts [data-action="focus-search"] { display: none !impor
 .oh-row.unread .oh-t b { font-weight: 650; }
 .oh-w { color: var(--text-3); font-size: 12px; flex: none; }
 .oh-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
-.oh-detail { margin: 2px 8px 8px 52px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; gap: 8px; }
-.oh-kv { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 4px 12px; font-size: 12.5px; }
-.oh-kv span:nth-child(odd) { color: var(--text-3); }
-.oh-acts { display: flex; gap: 6px; }
+/* a file picked: Open Folder · Download as two small round buttons at its right (no details box — Haris 2026-11-15) */
+.oh-fbtns { display: flex; gap: 6px; flex: none; }
+.oh-ib { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--border-strong); background: var(--panel); color: var(--text); cursor: pointer; padding: 0; }
+.oh-ib:hover { background: var(--hover); }
+.oh-ib .ic, .oh-ib svg { width: 14px; height: 14px; }
+/* Finance: the month (the last 12), ••• and the claims in two groups with See All; one thing at a row's right */
+.oh-ctl { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+/* (a narrow box: Claims · Expenses · ••• go under the title together rather than run off its edge) */
+.oh-card-h:has(.oh-msel) { flex-wrap: wrap; row-gap: 8px; justify-content: flex-start; }
+.oh-card-h:has(.oh-msel) .oh-seg button { padding: 4px 10px; }
+.oh-msel { position: relative; display: inline-flex; }
+.oh-msel select { height: 26px; padding: 0 26px 0 9px; border-radius: 7px; border: 1px solid var(--border-strong); background: var(--bg); color: var(--text); font: inherit; font-size: 12.5px; -webkit-appearance: none; appearance: none; cursor: pointer; }
+.oh-msel .ic, .oh-msel > svg { position: absolute; right: 8px; top: 50%; width: 10px; height: 10px; margin-top: -5px; pointer-events: none; color: var(--text-3); }
+.oh-more { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--border-strong); background: var(--panel); color: var(--text); cursor: pointer; padding: 0; flex: none; }
+.oh-more:hover { background: var(--hover); }
+.oh-more .ic, .oh-more svg { width: 14px; height: 14px; }
+.oh-grp { display: flex; align-items: baseline; gap: 6px; padding: 12px 8px 4px; font-size: 12px; font-weight: 600; color: var(--text-3); }
+.oh-grp i { font-style: normal; font-weight: 400; }
+.oh-grp .oh-link { margin-left: auto; font-size: 12px; font-weight: 500; }
+.oh-claim { gap: 12px; padding: 10px 8px; border-top: 1px solid var(--border); border-radius: 0; }
+.oh-claim .oh-mini, .oh-claim .oh-pill { margin-left: 16px; }
 .oh-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--text-3); }
 .oh-link { border: 0; background: none; font: inherit; color: var(--accent-ink); font-weight: 600; cursor: pointer; }
 .oh-empty { color: var(--text-3); font-size: 13px; padding: 12px 8px; }

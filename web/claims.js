@@ -617,5 +617,5 @@ const Claims = (() => {
     }
   });
 
-  return { addByHand, ownerName, paidOn, previewPdf, receiptsOf, pill, owns, render, title, financeSection, afterFinanceRender, openNotif, tick, claimMonth, newClaim, st, byId, sheetPages, all, totalOf, itemsOf, markApproved, markPaid, open: openClaim };
+  return { addByHand, ownerName, paidOn, previewPdf, receiptsOf, pill, owns, render, title, financeSection, afterFinanceRender, openNotif, tick, claimMonth, newClaim, st, byId, sheetPages, all, totalOf, itemsOf, markApproved, markPaid, open: openClaim, downloadPdf, addMonth };   // (downloadPdf, addMonth: the Office Admin's Home — Share PDF, its month)
 })();
