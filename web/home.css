@@ -652,7 +652,7 @@ html.mac-chrome .hm-lead .hm-grid > aside > .hm-card:last-child .hm-cl-list { fl
    pointed at too) — in light, on Apple's grey fill so a white button doesn't vanish on white */
 html.mac-chrome :is(.hm-btn, .hm-next .hm-btn.ghost, #tb-talk, .oh-ib, .oh-more, .oh-msel select, .oh-mini, :is(.oh, .hm) .btn.sm) { box-shadow: none !important; }
 html.mac-chrome :is(.hm-stat, .oh-stat):hover { box-shadow: none; }
-html.mac-chrome[data-theme="light"] :is(.hm-btn:not(.primary), .hm-next .hm-btn.ghost, #tb-talk, .oh-ib, .oh-more, .oh-msel select, .oh-mini, :is(.oh, .hm) .btn.sm) { background: var(--mc-field); }
+html.mac-chrome[data-theme="light"] :is(.hm-btn:not(.primary):not(.text), .hm-next .hm-btn.ghost, #tb-talk, .oh-ib, .oh-more, .oh-msel select, .oh-mini, :is(.oh, .hm) .btn.sm) { background: var(--mc-field); }
 html.mac-chrome[data-theme="light"] #tb-talk:hover, html.mac-chrome[data-theme="light"] :is(.oh-ib, .oh-more):hover { background: var(--mc-sel); }
 /* My pipeline's rows: the mock-up's spacing — 10 in from the edges, the client and the due date in their own columns, an
    overdue row's faint red rounded as Home's task rows */
