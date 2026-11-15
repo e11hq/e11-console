@@ -243,7 +243,7 @@ def board(look, page='lead'):
     menu = (f'<div style="position: absolute; left: 560px; top: 372px; width: 220px; padding: 5px 0; border-radius: 10px; background: {"rgba(40,40,44,0.96)" if look == "dark" else "rgba(250,250,252,0.97)"}; '
             f'box-shadow: 0 0 0 0.5px {t["glassLine"]}, 0 12px 36px rgba(0,0,0,0.3); z-index: 9; font-size: 13px">'
             + ''.join(f'<div style="padding: 4px 12px; margin: 0 5px; border-radius: 5px; {"background:" + A + "; color: #fff;" if i == 0 else ""}">{x}</div>' if x != '-' else f'<div style="height: 0.5px; background: {t["line"]}; margin: 4px 10px"></div>'
-                      for i, x in enumerate(['Open Task', 'Status  ›', 'Mark Complete', '-', 'Copy Link']))
+                      for i, x in enumerate(['Open Task', '-', 'Status  ›', 'Mark Complete', 'Due Date…', '-', 'Attach Files…', 'Copy Link', '-', 'Trash']))
             + '</div>') if look == 'dark' and page == 'lead' else ''
     body = (f'<div style="width: 1440px; height: {H}px; background: {t["desk"]}; position: relative; overflow: hidden; font-family: -apple-system, \'SF Pro Text\', \'Helvetica Neue\', Inter, sans-serif; color: {t["fg"]}">'
             f'<div style="position: absolute; inset: 0; background: {t["win"]}; border-radius: 14px; overflow: hidden">{side}{toolbar}{content}{menu}</div></div>')
