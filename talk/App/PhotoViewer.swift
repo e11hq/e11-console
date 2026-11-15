@@ -102,7 +102,8 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     stripRow.translatesAutoresizingMaskIntoConstraints = false; strip.addSubview(stripRow)
     func tool(_ sym: String, _ label: String, _ red: Bool = false, _ act: @escaping () -> Void) -> UIButton {
       let b = UIButton(type: .system)
-      b.setImage(UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .regular)), for: .normal)
+      // (the same size as the top's ‹ and ••• — Haris 2026-11-15)
+      b.setImage(UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)), for: .normal)
       b.tintColor = red ? .systemRed : .white; b.accessibilityLabel = label
       b.addAction(UIAction { _ in act() }, for: .touchUpInside); return b
     }
@@ -118,13 +119,13 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
         var c = UIButton.Configuration.glass(); c.image = b.image(for: .normal); c.contentInsets = .zero
         if sym == "trash" { c.baseForegroundColor = .systemRed }
         b.setImage(nil, for: .normal); b.configuration = c; b.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([b.widthAnchor.constraint(equalToConstant: 48), b.heightAnchor.constraint(equalToConstant: 48)])
+        NSLayoutConstraint.activate([b.widthAnchor.constraint(equalToConstant: 42), b.heightAnchor.constraint(equalToConstant: 42)])
       }
       let pair = UIVisualEffectView(effect: UIGlassEffect()); pair.cornerConfiguration = .capsule()
       let both = UIStackView(arrangedSubviews: [fwdT, saveT]); both.axis = .horizontal; both.distribution = .fillEqually
       [fwdT, saveT].forEach { $0.tintColor = .label }
       both.translatesAutoresizingMaskIntoConstraints = false; pair.contentView.addSubview(both); pair.translatesAutoresizingMaskIntoConstraints = false
-      NSLayoutConstraint.activate([pair.widthAnchor.constraint(equalToConstant: 112), pair.heightAnchor.constraint(equalToConstant: 48),
+      NSLayoutConstraint.activate([pair.widthAnchor.constraint(equalToConstant: 100), pair.heightAnchor.constraint(equalToConstant: 42),
         both.leadingAnchor.constraint(equalTo: pair.contentView.leadingAnchor, constant: 6), both.trailingAnchor.constraint(equalTo: pair.contentView.trailingAnchor, constant: -6),
         both.topAnchor.constraint(equalTo: pair.contentView.topAnchor), both.bottomAnchor.constraint(equalTo: pair.contentView.bottomAnchor)])
       [shareT, pair, delT].forEach { tools.addArrangedSubview($0) }
@@ -158,7 +159,7 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
       stripRow.centerYAnchor.constraint(equalTo: strip.centerYAnchor), stripRow.leadingAnchor.constraint(equalTo: strip.contentLayoutGuide.leadingAnchor, constant: 14),
       stripRow.trailingAnchor.constraint(equalTo: strip.contentLayoutGuide.trailingAnchor, constant: -14), stripRow.topAnchor.constraint(equalTo: strip.contentLayoutGuide.topAnchor, constant: 2),
       tools.topAnchor.constraint(equalTo: strip.bottomAnchor, constant: 10), tools.leadingAnchor.constraint(equalTo: foot.leadingAnchor, constant: 34), tools.trailingAnchor.constraint(equalTo: foot.trailingAnchor, constant: -34),
-      tools.heightAnchor.constraint(equalToConstant: { if #available(iOS 26.0, *) { return 48 } else { return 40 } }()), tools.bottomAnchor.constraint(equalTo: foot.bottomAnchor, constant: -4),
+      tools.heightAnchor.constraint(equalToConstant: { if #available(iOS 26.0, *) { return 42 } else { return 40 } }()), tools.bottomAnchor.constraint(equalTo: foot.bottomAnchor, constant: -4),
     ])
     strip.isHidden = items.count < 2
     let tap = UITapGestureRecognizer(target: self, action: #selector(toggleChrome))
