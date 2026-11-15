@@ -676,3 +676,6 @@ html.mac-chrome .hm-streak .hm-hrow i { display: grid; place-items: center; }
 html.mac-chrome .hm-streak .hm-hrow i .ic { display: block; width: 9px; height: 9px; }
 html.mac-chrome .hm-streak .hm-hrow i .ic svg { display: block; width: 100%; height: 100%; }
 
+/* the line under the top bar: the mock-up's — half a point, white 7% in dark, black 7% in light (Haris 2026-11-15 15:44;
+   the website's 1 pt border had won over it) */
+html.mac-chrome #topbar { border-bottom: .5px solid var(--mc-line) !important; }
