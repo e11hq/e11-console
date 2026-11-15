@@ -673,7 +673,9 @@ const NativeSide = (() => {
       de.classList.toggle('mac-nsb', show);
       // (newer Mac apps: the sidebar floats over a page as wide as the window — the page keeps room for it itself)
       de.classList.toggle('mac-nsb-o', show && !!r.overlay);
-      if (r && r.room) { de.style.setProperty('--nsb-room', r.room + 'px'); de.style.setProperty('--nsb-slim', (r.slim || 108) + 'px'); }
+      // (Mac app 13 answers slim 0 — hidden completely: read as 0, not as "not sent" — 108 left the hidden sidebar's page a
+      // dark strip at its left and made it jump, Haris 2026-11-15 14:39)
+      if (r && r.room) { de.style.setProperty('--nsb-room', r.room + 'px'); de.style.setProperty('--nsb-slim', (r.slim != null ? r.slim : 108) + 'px'); }
     }).catch(() => {});
   }
   function later() { if (on && !timer) timer = setTimeout(paint, 60); }

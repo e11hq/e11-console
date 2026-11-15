@@ -322,6 +322,8 @@ html.mac-chrome :is(.oh, .hm) .btn.sm { height: 28px; padding: 0 12px; border-ra
    third is as wide as the right one */
 html.mac-chrome .hm-stats { gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)) 330px; }
 html.mac-chrome .hm-stat { gap: 12px; padding: 14px 16px; }
+/* the top cards pointed at: the Talk button's own hover — its grey laid over the card (Haris 2026-11-15 14:40) */
+html.mac-chrome :is(.hm-stat, .oh-stat):hover { background: linear-gradient(var(--mc-sel), var(--mc-sel)), var(--mc-card); }
 html.mac-chrome .hm-ic { width: 36px; height: 36px; border-radius: 10px; }
 html.mac-chrome .hm-ic svg { width: 16px; height: 16px; }
 html.mac-chrome .hm-ic.blue { background: color-mix(in srgb, var(--mc-blue) 18%, transparent); color: var(--mc-blue); }
@@ -470,6 +472,10 @@ html.mac-chrome #topbar { height: 52px; background: var(--mc-content); border-bo
 html.mac-chrome #topbar .page-title { font-size: 15px; font-weight: 600; letter-spacing: normal; color: var(--mc-fg); }
 html.mac-chrome #topbar .search { width: 220px; height: 30px; padding: 0 10px; gap: 6px; border: 0; border-radius: 15px; background: var(--mc-field); box-shadow: none; }
 html.mac-chrome #topbar .search:focus-within { background: var(--mc-field); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mc-blue) 45%, transparent); }
+/* typing in it: a little wider, smoothly (Haris 2026-11-15 14:41) */
+html.mac-chrome #topbar .search { transition: width .25s cubic-bezier(.22, .8, .3, 1); }
+html.mac-chrome #topbar .search:focus-within { width: 300px; }
+html.mac-chrome body.office-mode #topbar .search:focus-within { width: 320px; }
 html.mac-chrome #topbar .search input { font-size: 13px; color: var(--mc-fg); }
 html.mac-chrome #topbar .search input::placeholder { color: var(--mc-dim); }
 html.mac-chrome #topbar .search .ic { width: 14px; height: 14px; color: var(--mc-dim); }

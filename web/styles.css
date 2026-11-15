@@ -2373,6 +2373,9 @@ html.mac-chrome.mac-nsb #detail.full .tm-top { padding-left: 84px; }
 html.mac-nsb13 #mac-bar { display: none !important; }
 html.mac-chrome.mac-nsb.mac-nsb13 #topbar, html.mac-chrome.mac-nsb.mac-nsb13 #detail.full .tm-top { padding-left: 24px !important; }
 html.mac-chrome.mac-nsb.mac-nsb13 #app.sb-collapsed #topbar, html.mac-chrome.mac-nsb.mac-nsb13 #app.sb-collapsed #detail.full .tm-top { padding-left: 190px !important; }
+/* (hiding / showing: the page's title glides to beside ‹ › and back with the page — Haris 2026-11-15 14:39; the sidebar shown on
+   hover then comes over it) */
+html.mac-chrome.mac-nsb13.nsb-anim :is(#topbar, #detail.full .tm-top) { transition: padding-left .22s ease; }
 html.mac-chrome.mac-nsb #detail.side .tm { max-width: calc(100% - 60px); }
 /* newer Mac apps: the page is the whole window wide (its layouts switch at the same window sizes as before) with the
    glass sidebar over its left edge — the page keeps that room, and a task opened full or as a pop-up starts beside it */

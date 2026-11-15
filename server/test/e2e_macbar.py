@@ -17,6 +17,7 @@ window.webkit = { messageHandlers: { e11: { postMessage(raw) {
   if (m.cmd === 'pageBar') window.__native.bar = m.args;
   if (m.cmd === 'menu') { window.__native.menu = m.args; res = window.__native.pick == null ? { ok: true } : { ok: true, i: window.__native.pick }; }
   if (m.cmd === 'openURL') window.__native.opened = m.args.url;
+  if (m.cmd === 'sidebar') res = { ok: true, overlay: true, room: 252, slim: 0 };
   if (m.cmd === 'symbols') res = { ok: true, images: Object.fromEntries(m.args.names.map((n) => [n, 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='])) };
   setTimeout(() => window.__e11NativeReply(m.id, res), 5);
 } } } };
@@ -51,6 +52,19 @@ async def main():
                 hm = await E("(() => { const a = document.querySelector('.hm-lead aside'); return [document.querySelector('.hm-tab.on').dataset.v, a.firstElementChild.classList.contains('hm-goal'), !!a.querySelector('.hm-goal + .hm-card .hm-h h2') && a.querySelector('.hm-goal + .hm-card .hm-h h2').textContent, !!document.querySelector('.hm-hero'), getComputedStyle(document.querySelector('.hm-pbar i')).backgroundImage.startsWith('linear-gradient')]; })()")
                 check(hm == ['today', True, 'Schedule', False, True], f'Home: Today first, Team goals achieved above Schedule, the clients\u2019 lines a gradient {hm}')
                 await pg.screenshot(path=os.environ.get('SHOT_DIR', '/tmp') + '/macbar-home.png')
+                # hidden completely: the page the whole window wide — the app's slim 0 is 0, not the old 108 (Haris 14:39)
+                await E("setSidebarCollapsed(true)"); await pg.wait_for_timeout(500)
+                pl = await E("getComputedStyle(document.getElementById('app')).paddingLeft")
+                await E("setSidebarCollapsed(false)"); await pg.wait_for_timeout(500)
+                check(pl == '0px', f'the sidebar hidden: the page the whole window wide {pl}')
+                await pg.hover('.hm-stat'); await pg.wait_for_timeout(100)
+                hv = await E("getComputedStyle(document.querySelector('.hm-stat')).backgroundImage")
+                check(hv.startswith('linear-gradient'), f'a top card pointed at: the Talk button\u2019s hover {hv[:40]}')
+                w0 = await E("document.querySelector('#topbar .search').getBoundingClientRect().width")
+                await pg.focus('#topbar .search input'); await pg.wait_for_timeout(400)
+                w1 = await E("document.querySelector('#topbar .search').getBoundingClientRect().width")
+                await E("document.activeElement.blur()"); await pg.wait_for_timeout(400)
+                check(w0 == 220 and w1 == 300, f'the search: a little wider while typing {w0} → {w1}')
                 st0 = await E("[!!window.__e11ShownAt, document.documentElement.classList.contains('e11-shown')]")
                 check(st0 == [True, True], f'the page marked on show once the startup screen has gone {st0}')
                 await pg.wait_for_timeout(1300); await E("render()"); await pg.wait_for_timeout(100)
