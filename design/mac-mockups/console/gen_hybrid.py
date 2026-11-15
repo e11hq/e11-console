@@ -74,15 +74,20 @@ def board(look, page='lead', sb='float'):
         return f'<span style="width: 30px; height: 30px; border-radius: 15px; background: {btnbg}; box-shadow: inset 0 0 0 0.5px {btnedge}; display: inline-flex; align-items: center; justify-content: center">{sym(name, sec).replace("width=\"15\" height=\"15\"", "width=\"14\" height=\"14\"")}</span>'
     # the sidebar as Claude's (Haris 2026-11-15 13:20): pinned edge to edge; hidden completely; shown floating while the pointer
     # is on its button. Top row: the window's buttons, the sidebar button, ‹ ›, and light / dark as two buttons; no New task.
-    plain = 'rgba(30,30,32,0.92)' if look == 'dark' else 'rgba(246,246,248,0.96)'
+    plain = '#232325' if look == 'dark' else '#f3f3f5'
     shell = {'float': f'left: 8px; top: 8px; bottom: 8px; width: 244px; border-radius: 18px; background: {t["side"]}; backdrop-filter: blur(30px); box-shadow: inset 0 0 0 0.5px {t["sideLine"]}, 0 8px 28px rgba(0,0,0,0.18);',
              'pinned': f'left: 0; top: 0; bottom: 0; width: 252px; padding-left: 8px; background: {plain}; box-shadow: inset -0.5px 0 0 {t["sideLine"]};',
-             'peek': f'left: 8px; top: 8px; bottom: 8px; width: 244px; border-radius: 18px; background: {t["side"]}; backdrop-filter: blur(30px); box-shadow: inset 0 0 0 0.5px {t["sideLine"]}, 0 18px 50px rgba(0,0,0,0.35);'}.get(sb, '')
+             'peek': f'left: 0; top: 0; bottom: 0; width: 252px; padding-left: 8px; background: {plain}; box-shadow: inset -0.5px 0 0 {t["sideLine"]}, 12px 0 40px rgba(0,0,0,0.22);'}.get(sb, '')   # (edge to edge, as Claude's — Haris 13:26)
     def seg2(a, b, on):
         bt = lambda name, sel: f'<span style="width: 28px; height: 24px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; {"background:" + t["win"] + "; box-shadow: 0 0.5px 2px rgba(0,0,0,0.25);" if sel else ""}">{sym(name, t["fg"] if sel else sec).replace(chr(34) + "15" + chr(34), chr(34) + "13" + chr(34))}</span>'
         return f'<span style="margin-left: auto; display: inline-flex; padding: 2px; border-radius: 9px; background: {t["field"]}">{bt(a, on == a)}{bt(b, on == b)}</span>'
-    nav = lambda: (f'<span style="display: inline-flex; align-items: center; gap: 14px; margin-left: 10px; color: {sec}">{sym("sidebar", t["fg"])}'
-                   f'<span style="font-size: 17px; line-height: 1">‹</span><span style="font-size: 17px; line-height: 1; color: {ter}">›</span></span>')
+    # as Claude's (Haris 13:26): the sidebar button a rounded box with a short bar near its left, the arrows thin chevrons
+    sbic = (f'<svg width="20" height="16" viewBox="0 0 20 16" fill="none" stroke="{t["fg"]}" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">'
+            f'<rect x="1.75" y="1.75" width="16.5" height="12.5" rx="3.5"/><path d="M6.5 5.6v4.8"/></svg>')
+    chev = lambda d, c: (f'<svg width="10" height="16" viewBox="0 0 10 16" fill="none" stroke="{c}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+                         f'<path d="{"M7 2.5 2 8l5 5.5" if d == "l" else "M3 2.5 8 8l-5 5.5"}"/></svg>')
+    nav = lambda: (f'<span style="display: inline-flex; align-items: center; gap: 22px; margin-left: 18px">{sbic}'
+                   f'<span style="display: inline-flex; gap: 22px">{chev("l", sec)}{chev("r", ter)}</span></span>')
     side = (f'<div style="position: absolute; {shell} box-sizing: border-box; display: flex; flex-direction: column; z-index: 3">'
             '<div style="height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 16px; flex: none"><span style="width: 12px; height: 12px; border-radius: 6px; background: #ff5f57"></span><span style="width: 12px; height: 12px; border-radius: 6px; background: #febc2e"></span><span style="width: 12px; height: 12px; border-radius: 6px; background: #28c840"></span>'
             + (f'<span style="margin-left: auto; display: flex; gap: 6px">{rb("moon")}{rb("plus") if page != "office" else ""}{rb("sidebar")}</span></div>' if sb == 'float'
