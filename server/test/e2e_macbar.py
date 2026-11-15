@@ -17,6 +17,7 @@ window.webkit = { messageHandlers: { e11: { postMessage(raw) {
   if (m.cmd === 'pageBar') window.__native.bar = m.args;
   if (m.cmd === 'menu') { window.__native.menu = m.args; res = window.__native.pick == null ? { ok: true } : { ok: true, i: window.__native.pick }; }
   if (m.cmd === 'openURL') window.__native.opened = m.args.url;
+  if (m.cmd === 'symbols') res = { ok: true, images: Object.fromEntries(m.args.names.map((n) => [n, 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='])) };
   setTimeout(() => window.__e11NativeReply(m.id, res), 5);
 } } } };
 """
@@ -41,9 +42,14 @@ async def main():
                     check(not await E("MacBar.on()") and await E("getComputedStyle(document.querySelector('#topbar .search')).visibility") == 'visible', 'an older Mac app keeps the page’s own search')
                     await pg.locator('.hm-lead .hm-row').first.click(button='right'); await pg.wait_for_timeout(200)
                     check(await pg.locator('.menu .mi').count() > 0 and await E("window.__native.menu") is None, '...and the page’s own menu')
+                    check(not await E("document.documentElement.classList.contains('mac-sf')"), 'an older Mac app keeps the page\u2019s own icons')
                     check(not errs, f'no page errors (12) {errs[:2]}')
                     await ctx.close(); continue
                 check(await E("getComputedStyle(document.querySelector('#topbar .search')).visibility") == 'visible' and await E("window.__native.bar") is None, 'the top bar stays the page\u2019s own (Talk and search)')
+                # Apple's SF Symbols for Home's icons (and the top bar's), the page's drawings hidden under them (Haris 2026-11-15)
+                await pg.wait_for_timeout(300)
+                sf = await E("(() => { const e = document.querySelector('.hm [data-i=\"hm-chat\"]'); const t = document.querySelector('#topbar [data-i=\"search\"]'); const c = getComputedStyle(e); return [document.documentElement.classList.contains('mac-sf'), (c.webkitMaskImage || c.maskImage || '').startsWith('url('), getComputedStyle(e.firstElementChild).visibility, (getComputedStyle(t).webkitMaskImage || '').startsWith('url(')]; })()")
+                check(sf == [True, True, 'hidden', True], f'Home and the top bar: SF Symbols in the Mac app 13 {sf}')
                 # a task opened full covers the strip: Apple's controls go
                 tid = await E("document.querySelector('.hm-lead .hm-row').dataset.task")
                 await E("window.__native.menu = null; window.__native.pick = null")

@@ -31,8 +31,11 @@ const Home = (() => {
     clip: 'M10.5 4.5 5.6 9.4a1.4 1.4 0 0 0 2 2l5-5a2.8 2.8 0 0 0-4-4l-5 5a4.2 4.2 0 0 0 6 6l4.4-4.4',
     flag: 'M3.5 13.5V3h7l-1.5 2.5 1.5 2.5h-7',
     tick: 'm3.5 8.4 3 3 6-6.6',
+    doc: 'M4 1.8h5l3 3v9.4H4z',
     cal: 'M4.5 4.2h7a1.3 1.3 0 0 1 1.3 1.3v6.4a1.3 1.3 0 0 1-1.3 1.3h-7a1.3 1.3 0 0 1-1.3-1.3V5.5a1.3 1.3 0 0 1 1.3-1.3zM3.2 7.2h9.6M5.8 2.6v2.6M10.2 2.6v2.6',   // (the Mac app's "due today", as its board — Haris 2026-11-15)
   };
+  // an icon by its name (data-i): in the Mac app 13 it shows as Apple's SF Symbol (app.js MacSF), elsewhere as drawn here
+  const ik = (k, w = 1.5) => svg(IC[k], w).replace('<svg ', `<svg data-i="hm-${k}" `);
   const tick = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true"><path d="${IC.tick}"/></svg>`;
   const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
   const delta = (now, before) => {
@@ -63,7 +66,7 @@ const Home = (() => {
     return `<div class="hm-act" ${t ? `data-hm="act" data-v="${t.id}" ${a.nid ? `data-nid="${a.nid}"` : ''} ${a.cid ? `data-cid="${a.cid}"` : ''}` : ''}>${avatarHTML(a.from, 32)}
       <span class="hm-act-txt"><b>${esc(fullName(userById(a.from)))}</b> <span class="hm-mute">${a.html}</span> ${t ? `<span class="hm-link">${title(t)}</span>` : ''}
         ${a.quote ? `<span class="hm-quote">“${esc(a.quote)}”</span>` : ''}
-        ${a.file ? `<span class="hm-file">${svg('M4 1.8h5l3 3v9.4H4z', 1.4)}<span><b>${esc(a.file.name)}</b><small>${fmtSize(a.file.size)}</small></span></span>` : ''}</span>
+        ${a.file ? `<span class="hm-file">${ik('doc', 1.4)}<span><b>${esc(a.file.name)}</b><small>${fmtSize(a.file.size)}</small></span></span>` : ''}</span>
       <span class="hm-when">${esc(timeAgo(a.at))}</span></div>`;
   }
   const actCard = (list, empty, extra = '') => `<section class="hm-card hm-acts ${extra}">
@@ -161,15 +164,15 @@ const Home = (() => {
     // team on time this month
     const team = [...new Set(doneM.flatMap((t) => t.assignees || []))].filter((u) => userById(u));
 
-    const statCard = (cls, ic, l, n, note, noteCls, kind) => `<button type="button" class="hm-stat" data-hm="stat" data-v="${kind}"><span class="hm-ic ${cls}">${svg(ic, 1.5)}</span><span><span class="hm-sl">${l}</span><span class="hm-sn"><b>${n}</b><span class="${noteCls}">${note}</span></span></span></button>`;
+    const statCard = (cls, ic, l, n, note, noteCls, kind) => `<button type="button" class="hm-stat" data-hm="stat" data-v="${kind}"><span class="hm-ic ${cls}">${ik(ic, 1.5)}</span><span><span class="hm-sl">${l}</span><span class="hm-sn"><b>${n}</b><span class="${noteCls}">${note}</span></span></span></button>`;
 
     return `<div class="hm hm-lead">
       <header class="hm-head"><div><div class="hm-date">${dateLine()}</div><h1>${hello(first(me()))}</h1></div>
         <div class="hm-btns"><button type="button" class="hm-btn" data-nav="today">${esc(Work.dayTitle())}</button><button type="button" class="hm-btn primary" data-action="new-task">+ New task</button></div></header>
       <section class="hm-stats">
-        ${statCard('blue', Host.isMacApp ? IC.cal : IC.clock, admin ? 'Team tasks due today' : 'Your tasks due today', due0.length, overdue.length ? `${overdue.length} overdue` : 'none overdue', overdue.length ? 'warn' : 'ok', 'today')}
-        ${statCard('green', IC.check, 'Finished by your team', doneWeek, doneWeek - donePrev >= 0 ? `↑ ${doneWeek - donePrev} vs last week` : `↓ ${donePrev - doneWeek} vs last week`, doneWeek >= donePrev ? 'ok' : 'warn', 'finished')}
-        ${statCard('orange', IC.shield, 'Waiting for CD review', inReview.length, since ? `oldest ${timeAgo(since)}` : 'nothing waiting', 'orange', 'cd')}
+        ${statCard('blue', Host.isMacApp ? 'cal' : 'clock', admin ? 'Team tasks due today' : 'Your tasks due today', due0.length, overdue.length ? `${overdue.length} overdue` : 'none overdue', overdue.length ? 'warn' : 'ok', 'today')}
+        ${statCard('green', 'check', 'Finished by your team', doneWeek, doneWeek - donePrev >= 0 ? `↑ ${doneWeek - donePrev} vs last week` : `↓ ${donePrev - doneWeek} vs last week`, doneWeek >= donePrev ? 'ok' : 'warn', 'finished')}
+        ${statCard('orange', 'shield', 'Waiting for CD review', inReview.length, since ? `oldest ${timeAgo(since)}` : 'nothing waiting', 'orange', 'cd')}
       </section>
       <div class="hm-grid">
         <div class="hm-col">
@@ -178,7 +181,7 @@ const Home = (() => {
             ${rows.length ? rows.map((t) => `<div class="hm-row ${late(t)}" data-task="${t.id}">
                 <i class="hm-pc" style="background:${pColor(t)}"></i>
                 <span class="hm-main"><span class="hm-tl"><span class="hm-t">${title(t)}</span>${tag(t)}</span><span class="hm-sub">${esc(pName(t))}${admin && t.createdBy !== currentUserId && userById(t.createdBy) ? ` · by ${esc(fullName(userById(t.createdBy)))}` : ''}${t.due ? ` · due <span class="due ${dueClass(t)}">${esc(fmtDue(t.due))}</span>` : ''}${cdTag(t)}</span></span>
-                <span class="hm-counts"><span title="Comments">${svg(IC.chat, 1.4)}${nComments(t)}</span><span title="Files">${svg(IC.clip, 1.4)}${nFiles(t)}</span></span>
+                <span class="hm-counts"><span title="Comments">${ik('chat', 1.4)}${nComments(t)}</span><span title="Files">${ik('clip', 1.4)}${nFiles(t)}</span></span>
                 <span class="hm-who">${(t.assignees || []).length ? avatarStack(t.assignees, 26, 3, t) : '<span class="hm-mute">Unassigned</span>'}</span>
                 <span class="hm-st">${statusPill(t)}</span>
               </div>`).join('') + (ranged.length > rows.length ? `<button type="button" class="hm-more-btn" data-hm="see-all">+${ranged.length - rows.length} more · See all</button>` : '') : `<div class="hm-empty">${emptyMsg}</div>`}
@@ -196,7 +199,7 @@ const Home = (() => {
             <div class="hm-chart">
               <div class="hm-bars">${bars}</div>
               <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="hm-line" aria-hidden="true"><path d="${line}" vector-effect="non-scaling-stroke"/></svg>
-              ${past[pk] ? `<div class="hm-peak" style="left:${X(pk)}%;top:${44 + Y(past[pk]) * 1.48}px"><span>${svg(IC.flag, 1.6)}</span><em>Busiest day</em></div>` : ''}
+              ${past[pk] ? `<div class="hm-peak" style="left:${X(pk)}%;top:${44 + Y(past[pk]) * 1.48}px"><span>${ik('flag', 1.6)}</span><em>Busiest day</em></div>` : ''}
               <div class="hm-ticks">${ticks}</div>
             </div>
           </section>

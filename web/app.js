@@ -4907,6 +4907,42 @@ const MacBar = (() => {
   return { on, menu };
 })();
 
+/* ================= The Mac app 13+: Apple's SF Symbols for the page's icons (Haris 2026-11-15 13:59) =================
+   Page by page — Home first (and the top bar, the window's own): each icon, by its name (data-i), shows as the SF Symbol
+   the Mac draws for it (command symbols → pictures used as masks, so they take the text's colour). Kept on this Mac, so
+   the next start shows them at once. Browsers and older Mac apps keep the page's own drawings (SF Symbols are only for
+   apps on Apple's own platforms). */
+const MacSF = (() => {
+  const SCOPE = ':is(.hm, .oh, #topbar)';
+  const MAP = {
+    'hm-clock': 'clock', 'hm-check': 'checkmark.circle', 'hm-shield': 'checkmark.shield', 'hm-chat': 'bubble.left', 'hm-clip': 'paperclip',
+    'hm-flag': 'flag.fill', 'hm-cal': 'calendar', 'hm-doc': 'doc', 'search': 'magnifyingglass', 'chat': 'bubble.left', 'folder': 'folder',
+    'download': 'arrow.down.circle', 'more': 'ellipsis', 'chev': 'chevron.up.chevron.down', 'check': 'checkmark.circle', 'clock': 'clock',
+  };
+  const KEY = 'e11-sf-1';
+  function css(images) {
+    return Object.entries(MAP).filter(([, n]) => images[n]).map(([k, n]) =>
+      `html.mac-sf ${SCOPE} [data-i="${k}"]{background-color:currentColor;-webkit-mask:url(${images[n]}) center/contain no-repeat;mask:url(${images[n]}) center/contain no-repeat}`
+      + `html.mac-sf ${SCOPE} [data-i="${k}"]>*{visibility:hidden}`).join('\n');
+  }
+  function put(text) {
+    let st = document.getElementById('mac-sf'); if (!st) { st = document.createElement('style'); st.id = 'mac-sf'; document.head.appendChild(st); }
+    st.textContent = text; document.documentElement.classList.add('mac-sf');
+  }
+  if (Host.isMacApp) {
+    try { const c = localStorage.getItem(KEY); if (c) put(c); } catch (e) { /* drawn without */ }
+    setTimeout(() => NativeMac.call('appInfo').then((r) => {
+      if (!(Number(r && r.shell) >= 13)) return;
+      return NativeMac.call('symbols', { names: [...new Set(Object.values(MAP))], size: 32 }).then((x) => {
+        if (!x || !x.images) return;
+        const text = css(x.images); put(text);
+        try { localStorage.setItem(KEY, text); } catch (e) { /* fine */ }
+      });
+    }).catch(() => {}), 0);
+  }
+  return { MAP };
+})();
+
 /* The Mac app: no Reload / Back menu on a right-click where nothing of ours is (Haris 2026-11-15 13:13) — the page's own
    menus (a task, a claim, a file…) and the Mac's own menu on typed words, a selection and links stay. Browsers untouched. */
 document.addEventListener('contextmenu', (e) => {
