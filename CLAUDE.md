@@ -642,6 +642,20 @@ a736a4a, branches `stable/ios-1741` and `locked/ios-app-1741` (never moved or de
 device) + the sign-out alert "You'll need your password to sign in again". With server 1.9.60 (the website / Mac: /sign-out) and
 Cloudflare's global session at 15 minutes. Quick build, signed and kept; TestFlight only on Haris's yes. E11 Talk stays locked at
 144 (its latest). Nothing changes in its look, behaviour or code without telling Haris first and his yes.
+**THE iPHONE APP — STABLE, LOCKED, the App Store release candidate: 1.2.1 build 1754 (Haris, 2026-11-15 20:13: "Lock the talk ios
+app and console ios app, mark as RC"):** commit 09327b3, branches `stable/ios-1754`, `locked/ios-app-1754` and
+`candidate/appstore-ios-1.2.1-build-1754` (never moved or deleted; 1741's and earlier stay as history). 1754 = 1741 + What's new
+never by itself; a new photo at once in the corner and on the Me tab; comments' ↓ and a tap on the clock Claude's way (a jump, a
+crossfade, the last screen gliding); the file preview copied from E11 Talk's viewer with Console's own buttons (‹ · ••• · Copy Link ·
+Download, the same size, Apple's glass) — black, Talk's strip centred, the picture flying out of and back into its own thumbnail
+(FileTouch), pulled down following the finger, videos playing in it — one preview everywhere (Client Assets too; Quick Look gone).
+Quick build. Nothing changes in its look, behaviour or code without telling Haris first and his yes.
+**E11 TALK — STABLE, LOCKED, the App Store release candidate: 1.0.2 build 147 (Haris, 2026-11-15 20:13):** commit 5a8e051 on
+talk-chat-1, branches `stable/talk-147`, `locked/talk-147` and `candidate/appstore-talk-1.0.2-build-147` (never moved or deleted;
+144's and earlier stay as history). 147 = 144 + a chat's ↓ and a tap on the clock Claude's way; Read / Unread swiped smoothly (marked
+once the row has slid back); the reply / edit strip sliding up from behind the box and back (WhatsApp's); the viewer's foot buttons
+the size of the top's, its strip centred. Version 1.0.2 (1.0.1's train closed). Nothing changes in its look, behaviour or code
+without telling Haris first and his yes.
 **E11 TALK — STABLE, LOCKED, the App Store release candidate: 1.0.0 build 123 (Haris, 2026-11-14 13:08: "Lock the talk app as
 stable app store release candidate"):** commit 5f06b6a on talk-chat-1, branches `stable/talk-123`, `locked/talk-123` and
 `candidate/appstore-talk-1.0.0-build-123` (never moved or deleted; 120's and 109's stay as history). 123 = 120 + the photo
