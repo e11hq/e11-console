@@ -658,8 +658,10 @@ extension Main {
       let vc = PreviewVC(["files": files.map { Main.previewItem($0) }, "at": i]) { [weak self] ev in self?.previewEvent(ev, files) }
       self.previewVC = vc
       // (out of the picture that was tapped, as E11 Talk's — Haris 2026-11-15; no picture there: the fade as before)
-      vc.source = FileTouch.picture()
+      // (no finger on a picture — opened by a link from another app, E11 Talk's card: out of the file's own picture on the
+      //  page by its mark when it's on screen, and back into it — Haris 2026-11-15)
       vc.keys = files.map { FileTouch.key($0) }
+      vc.source = FileTouch.picture() ?? FileTouch.marked(vc.keys[i], in: host.view.window)
       host.present(vc, animated: !vc.flies)
     }
   }
