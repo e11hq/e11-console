@@ -990,6 +990,14 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
           let si = NSImage(size: self.side.bounds.size); si.addRepresentation(rep)
           si.draw(in: self.side.frame)
         }
+        // what lies over the page: Apple's search and Talk (shell 13), and the window's title-bar row (its buttons, a toolbar)
+        for v in [self.bar as NSView?, self.window.standardWindowButton(.closeButton)?.superview?.superview] {
+          guard let v = v, !v.isHidden, v.bounds.width > 0, let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) else { continue }
+          v.cacheDisplay(in: v.bounds, to: rep)
+          let vi = NSImage(size: v.bounds.size); vi.addRepresentation(rep)
+          let f = v.superview.map { $0.convert(v.frame, to: nil) } ?? v.frame
+          vi.draw(in: f)
+        }
         out.unlockFocus()
         if let tiff = out.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff), let png = rep.representation(using: .png, properties: [:]) {
           try? png.write(to: URL(fileURLWithPath: picture))
