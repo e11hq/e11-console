@@ -30,6 +30,12 @@
    leaves a dark band at the bottom with taps there not registering. */
 /* the Mac app draws its own startup screen (it sets __e11NativeSplash before anything runs): the page's stays hidden */
 if (window.__e11NativeSplash) document.documentElement.classList.add('native-splash');
+/* the Mac app (12+): the website's own sidebar never drawn, not even for a moment as the page loads afresh (Haris 2026-11-15
+   15:12) — the room for the Mac's sidebar made before anything is drawn, from the Mac app the page had last time */
+try { var sh = Number(localStorage.getItem('e11-mac-shell')) || 0, de = document.documentElement;
+  if (window.webkit && webkit.messageHandlers && webkit.messageHandlers.e11 && sh >= 12) {
+    de.classList.add('mac-chrome', 'mac-nsb', 'mac-nsb-o'); if (sh >= 13) de.classList.add('mac-nsb13');
+    de.style.setProperty('--nsb-room', (sh >= 13 ? 252 : 260) + 'px'); de.style.setProperty('--nsb-slim', (sh >= 13 ? 0 : 108) + 'px'); } } catch (e) { /* storage off */ }
 /* The startup colour straight away (remembered look, dark on a first start), so nothing dark shows around a light startup screen */
 try { var m = JSON.parse(localStorage.getItem('e11-splash') || '{}') || {}, h = new Date().getHours();
   var lt = m.themeMode === 'auto' ? (h >= 6 && h < 18) : m.themeMode === 'light'; /* dark unless picked; Automatic: by daylight, like the app */
