@@ -654,12 +654,12 @@ Quick build. Nothing changes in its look, behaviour or code without telling Hari
 talk and console as RC, and release them to app store"):** commit 0455469, branches `stable/ios-1758`, `locked/ios-app-1758` and
 `candidate/appstore-ios-1.2.1-build-1758` (never moved or deleted; 1754's and earlier stay as history — 1758 replaces 1754 as the
 candidate). 1758 = 1754 + the preview's strip keeping the file on show in its middle + the preview flying back into the file
-swiped to by that file's own mark (Client Assets faded before). Quick build. Nothing changes in its look, behaviour or code
+swiped to by that file's own mark (Client Assets faded before). Quick build. **Submitted for App Review 2026-11-15 21:02 (manual release).** Nothing changes in its look, behaviour or code
 without telling Haris first and his yes.
 **E11 TALK — STABLE, LOCKED, the App Store release candidate: 1.0.2 build 148 (Haris, 2026-11-15 20:50):** commit f401cef on
 talk-chat-1, branches `stable/talk-148`, `locked/talk-148` and `candidate/appstore-talk-1.0.2-build-148` (never moved or deleted;
 147's and earlier stay as history — 148 replaces 147 as the candidate). 148 = 147 + the viewer's strip keeping the photo on show
-in its middle. Nothing changes in its look, behaviour or code without telling Haris first and his yes.
+in its middle. **Submitted for App Review 2026-11-15 21:01 (manual release).** Nothing changes in its look, behaviour or code without telling Haris first and his yes.
 **E11 TALK — STABLE, LOCKED, the App Store release candidate: 1.0.2 build 147 (Haris, 2026-11-15 20:13):** commit 5a8e051 on
 talk-chat-1, branches `stable/talk-147`, `locked/talk-147` and `candidate/appstore-talk-1.0.2-build-147` (never moved or deleted;
 144's and earlier stay as history). 147 = 144 + a chat's ↓ and a tap on the clock Claude's way; Read / Unread swiped smoothly (marked
