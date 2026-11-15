@@ -701,6 +701,9 @@ submitted 22:40 (Waiting for Review, manual release):** commit 78d8d31, branch `
 the sign-in page fading out as the server answers (no raw text after Sign In) + the message box growing / shrinking a line as
 one with its bar. Builds made under a released version can't be sent again: the next update is **1.0.2** (Haris 22:51: "we'll
 update more then release").
+**E11 TALK 1.0.1 — APPROVED and RELEASED on the App Store (Haris 2026-11-15 11:07 approved; released 11:08, all 175 countries,
+public):** build 143, commit 78d8d31, branch `approved/appstore-talk-1.0.1-build-143` (never moved or deleted). The next update is
+**1.0.2** (144's reply-strip fade and anything after).
 **E11 TALK — STABLE, LOCKED at build 144 (Haris, 2026-11-14 22:59: "Lock the latest version"):** commit 50a1753 on talk-chat-1,
 branches `stable/talk-144` and `locked/talk-144` (never moved or deleted; 137's and earlier stay as history). 144 = 143 + the reply /
 edit strip fading in and out while the message bar grows or shrinks as one (✕ no longer drops the box). On TestFlight; version
