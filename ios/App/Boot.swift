@@ -286,7 +286,9 @@ extension Main {
     switch key {
     case "mytasks": if !myTasksHadModel { myTasksCommand(["show": true, "me": me]) }
     case "inbox": if !inboxHadModel { inboxCommand(["show": true, "me": me]) }
-    case "projects": clientsCommand(["show": true, "view": "list", "me": me])
+    // (not over a client's page asked for a moment ago — a client tapped in My Day's or My Tasks' search, the Clients tab
+    //  opening for the first time: its list asked for here came after, and the page went back to the list, Haris 2026-11-16)
+    case "projects": if clientsOn != "client" { clientsCommand(["show": true, "view": "list", "me": me]) }
     case "me": if !meCtl.hasModel { meCtl.command(["show": true, "me": me, "tab": "me", "model": ["env": ["shell": SHELL_VERSION]]]) }
     default: break
     }
