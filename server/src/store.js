@@ -33,12 +33,18 @@ export function openStore(file) {
     // (in the order they were first saved — the page's own order, as statuses To do … Done; asked by kind alone, SQLite
     //  walks the (kind, id) key and gave them by id: CTR first, and the app's new tasks landed in CTR — Haris 2026-11-05)
     all: db.prepare(`SELECT kind, id, data FROM entities WHERE deleted = 0 ORDER BY rowid`),
+    allRev: db.prepare(`SELECT kind, id, rev, data FROM entities WHERE deleted = 0 ORDER BY rowid`),
     since: db.prepare(`SELECT kind, id, data, deleted, rev FROM entities WHERE rev > ? ORDER BY rev`),
     kind: db.prepare(`SELECT id, data FROM entities WHERE kind = ? AND deleted = 0 ORDER BY rowid`),
     kvGet: db.prepare(`SELECT value FROM kv WHERE key = ?`),
     kvSet: db.prepare(`INSERT INTO kv(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`),
   };
   const parse = (row) => (row && row.data ? JSON.parse(row.data) : null);
+  const parsed = new Map();   // kind\0id → { rev, o } (snapshot's records, parsed once)
+  // (frozen, always: a record shared between requests can't be changed by one of them by mistake — the whole test suite and
+  //  the shared rules in strict mode passed with it, 2026-11-16; E11_FREEZE=0 turns it off)
+  const FREEZE = process.env.E11_FREEZE !== '0';
+  const deepFreeze = (o) => { if (o && typeof o === 'object' && !Object.isFrozen(o)) { Object.freeze(o); for (const v of Object.values(o)) deepFreeze(v); } return o; };
   const currentRev = () => Number(q.rev.get().value);
 
   function tx(fn) {
@@ -53,13 +59,21 @@ export function openStore(file) {
     list(kind) { return q.kind.all(kind).map(parse); },
     kv: { get: (k) => { const r = q.kvGet.get(k); return r ? r.value : null; }, set: (k, v) => q.kvSet.run(k, String(v)) },
     // Whole data set, shaped like the app's data file
+    // (each record parsed once and kept until it changes — every request parsed the whole data set again, 42% of its time
+    //  with a year of tasks and most of the rest in clearing it away after: the load test of 2026-11-16. The records handed
+    //  out are shared, so nothing may change them — they're frozen.)
     snapshot() {
       const out = { meta: {} };
       KINDS.filter((k) => k !== 'meta').forEach((k) => { out[k] = []; });
-      for (const r of q.all.all()) {
-        if (r.kind === 'meta') out.meta = JSON.parse(r.data);
-        else if (out[r.kind]) out[r.kind].push(JSON.parse(r.data));
+      const seen = new Set();
+      for (const r of q.allRev.all()) {
+        const key = r.kind + '\u0000' + r.id; seen.add(key);
+        let c = parsed.get(key);
+        if (!c || c.rev !== r.rev) { const o = JSON.parse(r.data); c = { rev: r.rev, o: FREEZE ? deepFreeze(o) : o }; parsed.set(key, c); }
+        if (r.kind === 'meta') out.meta = c.o;
+        else if (out[r.kind]) out[r.kind].push(c.o);
       }
+      if (parsed.size > seen.size) for (const k of parsed.keys()) if (!seen.has(k)) parsed.delete(k);
       return { rev: currentRev(), data: out };
     },
     since(rev) {

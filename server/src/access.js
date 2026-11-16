@@ -32,7 +32,16 @@ export function createAccess(store, opts = {}) {
 
   // An inactive client (project.inactive) is hidden with everything in it — its tasks, their files and Inbox updates,
   // its Client Assets and its Finance history — from everyone, until an Admin switches it back on
-  function inactiveIds() { return new Set(store.list('projects').filter((p) => p.inactive).map((p) => p.id)); }
+  // (worked out once per change of the data, not once per record checked: every task a request looked at read and parsed every
+  //  client again — 46% of a request's time with a year of tasks, the load test of 2026-11-16. The projects only change with
+  //  the data's revision, so the same answer is kept until it moves.)
+  let projCache = { rev: -1, list: [], off: new Set() };
+  function projectsNow() {
+    const r = store.rev();
+    if (projCache.rev !== r) { const list = store.list('projects'); projCache = { rev: r, list, off: new Set(list.filter((p) => p.inactive).map((p) => p.id)) }; }
+    return projCache;
+  }
+  function inactiveIds() { return projectsNow().off; }
   function taskProject(t) {
     if (!t) return null;
     if (t.projectId) return t.projectId;
@@ -43,7 +52,7 @@ export function createAccess(store, opts = {}) {
   // Client Assets of a client whose projects are all inactive
   function hiddenClient(c, off = inactiveIds()) {
     if (!c || !off.size) return false;
-    const linked = store.list('projects').filter((p) => p.clientId === c.id);
+    const linked = projectsNow().list.filter((p) => p.clientId === c.id);
     return linked.length > 0 && linked.every((p) => off.has(p.id));
   }
   // Production and Freelancers only see what they're part of: the tasks they're assigned to, created, guard, or are

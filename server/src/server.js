@@ -1711,13 +1711,21 @@ export function createServer(cfg) {
     const enc = body.length < 1400 ? null : /\bbr\b/.test(accept) ? 'br' : /\bgzip\b/.test(accept) ? 'gzip' : null;
     if (!enc) { res.writeHead(status, { ...headers, 'Content-Length': body.length, Vary: 'Accept-Encoding' }); return res.end(req.method === 'HEAD' ? undefined : body); }
     const k = key ? `${enc}|${key}` : null;
-    let out = k && packed.get(k);
-    if (!out) {
-      out = enc === 'br' ? zlib.brotliCompressSync(body, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: key ? 9 : 4 } }) : zlib.gzipSync(body, { level: key ? 9 : 6 });
+    const send = (out) => {
+      res.writeHead(status, { ...headers, 'Content-Encoding': enc, 'Content-Length': out.length, Vary: 'Accept-Encoding' });
+      res.end(req.method === 'HEAD' ? undefined : out);
+    };
+    const cached = k && packed.get(k);
+    if (cached) return send(cached);
+    // (packed off the main thread — a big answer packed in place held up everyone else's requests meanwhile: the load test of
+    //  2026-11-16, 50 people downloading their copies; a failure sends it unpacked)
+    const done = (err, out) => {
+      if (err) { res.writeHead(status, { ...headers, 'Content-Length': body.length, Vary: 'Accept-Encoding' }); return res.end(req.method === 'HEAD' ? undefined : body); }
       if (k) { packed.set(k, out); if (packed.size > 200) packed.delete(packed.keys().next().value); }
-    }
-    res.writeHead(status, { ...headers, 'Content-Encoding': enc, 'Content-Length': out.length, Vary: 'Accept-Encoding' });
-    return res.end(req.method === 'HEAD' ? undefined : out);
+      send(out);
+    };
+    if (enc === 'br') zlib.brotliCompress(body, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: key ? 9 : 4 } }, done);
+    else zlib.gzip(body, { level: key ? 9 : 6 }, done);
   }
 
   /* App Review copy only: the made-up demo data (demo.js), fresh on an empty copy and every night from 3:00 Dubai.
