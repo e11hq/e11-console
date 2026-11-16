@@ -98,6 +98,11 @@ try:
                 seen_away.add(st)
                 sh('xcrun', 'simctl', 'launch', udid, 'com.apple.Preferences'); time.sleep(3)
                 subprocess.run(['xcrun', 'simctl', 'launch', udid, BUNDLE], env=lenv, capture_output=True, text=True)
+            # (the colours check in both looks: the simulator turned light, then dark again — as the phone's own setting)
+            if st and st.endswith('_aContrastLight') and st not in seen_away:
+                seen_away.add(st); sh('xcrun', 'simctl', 'ui', udid, 'appearance', 'light')
+            if st and st.endswith('_aContrastDark') and st not in seen_away:
+                seen_away.add(st); sh('xcrun', 'simctl', 'ui', udid, 'appearance', 'dark')
             if st == 'done': break
             # (the app gone — crashed — or stuck: no new step for 60 s)
             if time.time() - last > 100:
@@ -155,7 +160,7 @@ if APPLE:
             check(lc.get('after') == n0 + 1 and (lc.get('again') or 0) <= 2, f"{lab}: a comment made elsewhere arrives on the open task at once, the rest left as they were {lc}")
         else: print(f'note {lab}: live comment not tried {lc}')
         lf = ap.get('liveCommentFrames') or {}
-        if lf.get('rows'):
+        if lf.get('rows') and lc and lc.get('after') == ((lc.get('before') or {}).get('n') or 0) + 1:
             check((lf.get('biggestStep') or 0) <= 30, f"{lab}: as a comment arrives, the ones already there glide — none jumps in a single frame {lf}")
         if li and not li.get('none'):
             rid = (li.get('before') or {}).get('id'); af = li.get('after') or {}
@@ -171,13 +176,14 @@ if APPLE:
             else: print(f'note {lab}: live Client Assets — the role may not add folders {la}')
         elif la: print(f'note {lab}: live Client Assets not tried {la}')
         kb = ap.get('keyboard') or {}
-        if kb and not kb.get('none'):
+        if kb and not kb.get('none') and not (kb.get('before') or {}).get('text'): print(f'note {lab}: keyboard on return not tried (no comment box open) {kb}')
+        elif kb and not kb.get('none'):
             b0 = kb.get('before') or {}
             check(kb.get('text') == b0.get('text') and kb.get('first') == b0.get('first') and abs((kb.get('y') or 0) - (b0.get('y') or 0)) <= 2 and kb.get('active'), f"{lab}: a comment being typed, away to another app and back — the words, the keyboard and the list as they were {kb}")
         ct = ap.get('contrast') or {}
         for scr, r in ct.items():
             if isinstance(r, dict) and r.get('checked') is not None:
-                check(not r.get('faint'), f"{lab}: {scr} — every text readable on what's behind it, light and dark ({r.get('checked')} read, {r.get('glass')} over glass): {r.get('faint')}")
+                check(not r.get('faint'), f"{lab}: {scr} — every text readable on what's behind it ({r.get('checked')} read, {r.get('glass')} over glass): {r.get('faint')}")
     # (Haris 2026-11-11: back from a client's Client Assets — what was set again, and the search box's fill frame by frame)
     print('measure apple caBack', json.dumps({'notes': (a.get('caBack') or {}).get('notes'), 'frames': (a.get('caBackFrames') or {}).get('frames')}))
     check(st.get('pageReady') is False, f"the Apple pages ran without the website {st}")

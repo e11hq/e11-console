@@ -103,8 +103,11 @@ extension Main {
       return UIColor(red: r1 * a1 + r2 * (1 - a1), green: g1 * a1 + g2 * (1 - a1), blue: b1 * a1 + b2 * (1 - a1), alpha: 1)
     }
     var bad: [String] = [], checked = 0, glass = 0
-    for style in [UIUserInterfaceStyle.light, .dark] {
-      let tc = UITraitCollection(userInterfaceStyle: style)
+    // (only the look on show: Apple's list cells hold colours already worked out for it, so asking them for the other look
+    //  gives this one's back — 1.00 everywhere in light while dark was on. ios/walktest.py switches the simulator's look and
+    //  the steps read again: aContrastLight / aContrastDark)
+    for style in [w.traitCollection.userInterfaceStyle] {
+      let tc = w.traitCollection
       var q: [UIView] = [w]
       while !q.isEmpty {
         let v = q.removeFirst()
@@ -157,6 +160,32 @@ extension Main {
     for id in cards.prefix(60) { if let items = AppData.shared.screen("comments", id).model?["items"] as? [[String: Any]], items.count >= 4, let first = items.first?["id"] as? String, items.count > (best?.2 ?? 0) { best = (id, first, items.count) } }
     let roles = { (l: [[String: Any]]) -> [String] in l.prefix(8).map { "\($0["name"] ?? "?"): \(($0["role"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "<none>")" } }
     let p = { self.taskPages.last }
+    // each tab's first screen and a task page, in the look on show (keys "dark:today", "light:task" …)
+    let look = { self.screenWindow?.traitCollection.userInterfaceStyle == .light ? "light" : "dark" }
+    let contrastRun = {
+      self.tab(self.tabKeys.first ?? "today")
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+        var all = ((self.selfResult["apple"] as? [String: Any])?["contrast"] as? [String: Any]) ?? [:]
+        all[look() + ":" + self.selectedTabKey] = self.selfContrast(); self.apple("contrast", all)
+        let rest = Array(self.tabKeys.dropFirst())
+        func next(_ i: Int) {
+          guard i < rest.count else { if let t = best?.0 ?? cards.first { self.openTaskPage(t, tab: "details", focus: "") }; return }
+          self.tab(rest[i])
+          DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            var a = ((self.selfResult["apple"] as? [String: Any])?["contrast"] as? [String: Any]) ?? [:]
+            a[look() + ":" + rest[i]] = self.selfContrast(); self.apple("contrast", a); next(i + 1)
+          }
+        }
+        next(0)
+      }
+    }
+    let contrastTask = {
+      var a = ((self.selfResult["apple"] as? [String: Any])?["contrast"] as? [String: Any]) ?? [:]
+      a[look() + ":task"] = self.taskPages.isEmpty ? ["none": "no task opened"] : self.selfContrast()
+      self.apple("contrast", a)
+      for x in self.taskPages { self.closeTaskPage(x, animated: false) }
+      self.tab(self.tabKeys.first ?? "today")
+    }
     return [
       ("aStart", { self.apple("start", ["cards": cards.count, "task": best?.0 ?? cards.first ?? "", "comments": best?.2 ?? 0, "pageReady": false]) }),
       // Home's In review box: My Tasks, Waiting for CD review on
@@ -424,28 +453,15 @@ extension Main {
       }),
       // Colours (the full test, Haris 2026-11-16): each tab's first screen and a task page, light and dark
       ("aContrast", { self.tab(self.tabKeys.first ?? "today") }),
-      ("aContrastRead", {
-        var all: [String: Any] = [:]
-        all[self.selectedTabKey] = self.selfContrast()
-        self.apple("contrast", all)
-        let rest = Array(self.tabKeys.dropFirst())
-        func next(_ i: Int) {
-          guard i < rest.count else { if let t = best?.0 ?? cards.first { self.openTaskPage(t, tab: "details", focus: "") }; return }
-          self.tab(rest[i])
-          DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            var a = ((self.selfResult["apple"] as? [String: Any])?["contrast"] as? [String: Any]) ?? [:]
-            a[rest[i]] = self.selfContrast(); self.apple("contrast", a); next(i + 1)
-          }
-        }
-        next(0)
-      }),
+      ("aContrastRead", { contrastRun() }),
       ("aContrastWait", {}), ("aContrastWait2", {}), ("aContrastWait3", {}), ("aContrastWait4", {}),
-      ("aContrastTask", {
-        var a = ((self.selfResult["apple"] as? [String: Any])?["contrast"] as? [String: Any]) ?? [:]
-        a["task"] = self.selfContrast(); self.apple("contrast", a)
-        for x in self.taskPages { self.closeTaskPage(x, animated: false) }
-        self.tab(self.tabKeys.first ?? "today")
-      }),
+      ("aContrastTask", { contrastTask() }),
+      // (ios/walktest.py turns the simulator light on this step and dark again on aContrastDark)
+      ("aContrastLight", {}), ("aContrastLightWait", {}), ("aContrastLightWait2", {}),
+      ("aContrastLightRead", { contrastRun() }),
+      ("aContrastLightWait3", {}), ("aContrastLightWait4", {}), ("aContrastLightWait5", {}), ("aContrastLightWait6", {}),
+      ("aContrastLightTask", { contrastTask() }),
+      ("aContrastDark", {}), ("aContrastDarkWait", {}),
       // The keyboard on return (the full test, Haris 2026-11-16): a comment being typed, the app sent away to another app and
       // back (ios/walktest.py does it on the "aKbAway" step) — the words still there, the keyboard as it was, the list where it was
       ("aKb", { self.tab(self.tabKeys.first ?? "today"); if let t = best?.0 ?? cards.first { self.openTaskPage(t, tab: "comments", focus: "") } }),
@@ -468,12 +484,12 @@ extension Main {
       }),
       // Live (the full test, Haris 2026-11-16): a change made elsewhere — straight to the server, as the Mac or another phone
       // would — while the page is open; read a few seconds later, without leaving the page
-      ("aLiveC", { self.tab(self.tabKeys.first ?? "today"); if let t = best?.0 ?? cards.first { self.openTaskPage(t, tab: "comments", focus: "") } }),
+      ("aLiveC", { self.liveBefore = [:]; self.tab(self.tabKeys.first ?? "today"); if let t = best?.0 ?? cards.first { self.openTaskPage(t, tab: "comments", focus: "") } }),
       ("aLiveCWait", {}),
       ("aLiveCSend", {
         guard let f = p()?.feed, let t = p()?.taskId else { self.apple("liveComment", ["none": "no feed"]); return }
         self.liveBefore = ["n": f.selfOrder.count, "again": f.setAgain]
-        self.elsewhere("/api/app/act", ["ev": "comment", "id": t, "text": "Live check \(Int(Date().timeIntervalSince1970))", "op": UUID().uuidString]) { r in self.liveBefore["sent"] = r }
+        self.elsewhere("/api/home/act", { () -> [String: Any] in let w = "Live check \(Int(Date().timeIntervalSince1970))"; return ["act": "comment", "id": t, "html": "<p>\(w)</p>", "text": w, "from": "task", "copy": true, "op": UUID().uuidString] }()) { r in self.liveBefore["sent"] = r }
         // (frame by frame while it arrives: each comment already there — the biggest move it made in one frame; a glide moves a
         //  few points a frame, a snap tens at once)
         var last: [String: CGFloat] = [:], worst: [String: CGFloat] = [:], frames = 0
@@ -490,8 +506,9 @@ extension Main {
       }),
       ("aLiveCWait2", {}),
       ("aLiveCRead", {
-        let f = p()?.feed
-        self.apple("liveComment", ["before": self.liveBefore, "after": f?.selfOrder.count ?? -1, "again": (f?.setAgain ?? 0) - ((self.liveBefore["again"] as? Int) ?? 0)])
+        // (no task open — a role with no tasks to hand: the "none" from aLiveCSend stays, not the last check's before)
+        guard let f = p()?.feed, self.liveBefore["n"] != nil else { for x in self.taskPages { self.closeTaskPage(x, animated: false) }; return }
+        self.apple("liveComment", ["before": self.liveBefore, "after": f.selfOrder.count, "again": f.setAgain - ((self.liveBefore["again"] as? Int) ?? 0)])
         for x in self.taskPages { self.closeTaskPage(x, animated: false) }
       }),
       ("aLiveI", {
