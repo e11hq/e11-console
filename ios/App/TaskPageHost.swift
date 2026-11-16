@@ -438,6 +438,10 @@ extension Main {
       guard let self = self, let p = self.taskPages.last else { return }
       if let t = p.threadFeed, thread != nil { t.addPending(id: id, parent: thread, text: words, files: cards) } else { p.feed?.addPending(id: id, parent: thread, text: words, files: cards) }
     }
+    c.onPendingShared = { [weak self] id, thread, card in
+      guard let self = self, let p = self.taskPages.last else { return }
+      if let t = p.threadFeed, thread != nil { t.addPending(id: id, parent: thread, text: "", files: [], extra: card) } else { p.feed?.addPending(id: id, parent: thread, text: "", files: [], extra: card) }
+    }
     c.onPendingEnd = { [weak self] id, ok in
       guard let p = self?.taskPages.last else { return }
       p.feed?.endPending(id: id, ok: ok); p.threadFeed?.endPending(id: id, ok: ok)

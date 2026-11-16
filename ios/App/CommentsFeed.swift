@@ -12,18 +12,30 @@ import AudioToolbox
    through the comment box (CommentBar) and the comments screen behind it until step 3. */
 /* To a far end of the list, Claude's way (Haris 2026-11-16, his recordings of Claude's app — as E11 Talk's chat): one
    smooth run all the way — Apple's own animated scroll, which takes the same short time however far it goes, so a long
-   list simply flies by and lands softly. No jump and no crossfade. Rows passing on the way take their real heights, so if
-   the end moved meanwhile it glides the last few points there. */
+   list simply flies by and lands softly. No jump and no crossfade. Should the end have moved on the way, the last few
+   points follow at once as it lands — no pause, no second slide a moment later (Haris 2026-11-16, E11 Talk's: "takes
+   second adjustment after it settles"). */
+private var glideKey = 0
 extension UIScrollView {
+  private var glideTo: (() -> CGFloat)? {
+    get { objc_getAssociatedObject(self, &glideKey) as? () -> CGFloat }
+    set { objc_setAssociatedObject(self, &glideKey, newValue, .OBJC_ASSOCIATION_COPY_NONATOMIC) }
+  }
   func glide(_ to: @escaping () -> CGFloat) {
     layoutIfNeeded()
+    glideTo = to
     setContentOffset(CGPoint(x: contentOffset.x, y: to()), animated: true)
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
-      guard let self, !self.isTracking, !self.isDecelerating else { return }
-      let y = to()
-      if abs(self.contentOffset.y - y) > 1 { self.setContentOffset(CGPoint(x: self.contentOffset.x, y: y), animated: true) }
-    }
   }
+  // (the list's delegate calls this as Apple's scroll ends — scrollViewDidEndScrollingAnimation)
+  func glideLanded() {
+    guard let to = glideTo else { return }
+    glideTo = nil
+    guard !isTracking, !isDecelerating else { return }
+    layoutIfNeeded()
+    let y = to()
+    if abs(contentOffset.y - y) > 0.5 { setContentOffset(CGPoint(x: contentOffset.x, y: y), animated: abs(contentOffset.y - y) > 6) }
+  }
+  func glideStop() { glideTo = nil }
 }
 
 final class FeedLoader {
@@ -294,11 +306,13 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
   }
   // a comment with files sent before they finished uploading (Haris, 2026-11-02): in the feed at once, its cards
   // pulsing with their upload rings, then the real one takes its place (its pictures already there)
-  func addPending(id: String, parent: String?, text: String, files: [[String: Any]]) {
+  // (extra: a contact card or a place sent — its card drawn at once, at its own size: Haris 2026-11-16)
+  func addPending(id: String, parent: String?, text: String, files: [[String: Any]], extra: [String: Any] = [:]) {
     guard parent == thread, let m = model else { return }
     let at = ISO8601DateFormatter().string(from: Date())
     let runs: [[String: Any]] = text.isEmpty ? [] : [["t": text]]
-    let it: [String: Any] = ["id": id, "who": m["me"] as? String ?? "", "at": at, "runs": runs, "replies": NSNull(), "files": files]
+    var it: [String: Any] = ["id": id, "who": m["me"] as? String ?? "", "at": at, "runs": runs, "replies": NSNull(), "files": files]
+    extra.forEach { it[$0.key] = $0.value }
     pending.append((id, it, false, knownIds(m)))
     draw(m, mine: true)
   }
@@ -573,9 +587,10 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     return false
   }
   func scrollViewDidEndScrollingAnimation(_ s: UIScrollView) {
+    s.glideLanded()
     if hasOlder && s.contentOffset.y <= -s.adjustedContentInset.top + 1 { older() }
   }
-  func scrollViewWillBeginDragging(_ s: UIScrollView) { keepId = nil; focusId = nil }   // (moved by the finger: it's theirs again)
+  func scrollViewWillBeginDragging(_ s: UIScrollView) { s.glideStop(); keepId = nil; focusId = nil }   // (moved by the finger: it's theirs again)
   func scrollViewDidScroll(_ s: UIScrollView) {
     if hasOlder && s.contentOffset.y < -s.adjustedContentInset.top + 700 && (s.isDragging || s.isDecelerating) { older() }
     if isAtEnd() { if pendingNew > 0 || jump.alpha > 0 { pendingNew = 0; seenIds = Set(order) }; paintJump(newCount: 0) }
@@ -716,8 +731,8 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     // (never past the list's end: the last comment replied to left an empty gap above the box — the room kept for the ↓
     //  button, which doesn't show at the end — Haris 2026-11-10)
     let end = max(-scroll.contentInset.top, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height)
-    if f.maxY > visibleBottom { scroll.setContentOffset(CGPoint(x: 0, y: min(end, f.maxY - scroll.bounds.height + bottomRoom + jumpRoom)), animated: true) }
-    else if f.minY < scroll.contentOffset.y + scroll.contentInset.top { scroll.setContentOffset(CGPoint(x: 0, y: f.minY - scroll.contentInset.top - 8), animated: true) }
+    if f.maxY > visibleBottom { scroll.glideStop(); scroll.setContentOffset(CGPoint(x: 0, y: min(end, f.maxY - scroll.bounds.height + bottomRoom + jumpRoom)), animated: true) }
+    else if f.minY < scroll.contentOffset.y + scroll.contentInset.top { scroll.glideStop(); scroll.setContentOffset(CGPoint(x: 0, y: f.minY - scroll.contentInset.top - 8), animated: true) }
   }
 
   // ---------- what each comment allows ----------
@@ -1361,9 +1376,12 @@ final class SharedCard: UIView {
     let d = traitCollection.userInterfaceStyle == .dark, size = CGSize(width: 270, height: 120)
     dark = d
     if let i = MapThumb.cached(p, size, dark: d) { map.image = i; return }
-    MapThumb.make(p, size, dark: d) { [weak self] i in
-      guard let self = self, self.dark == d, let i = i else { return }
-      UIView.transition(with: self.map, duration: 0.2, options: .transitionCrossDissolve) { self.map.image = i }
+    // (the map's place its own size from the first moment, the comments' grey shimmer passing over it until the map fades in —
+    //  Haris 2026-11-16)
+    let sh = map.subviews.compactMap { $0 as? Shimmer }.first ?? { let n = Shimmer(frame: map.bounds); n.autoresizingMask = [.flexibleWidth, .flexibleHeight]; map.addSubview(n); return n }()
+    MapThumb.make(p, size, dark: d) { [weak self, weak sh] i in
+      guard let self = self, self.dark == d, let i = i else { sh?.removeFromSuperview(); return }
+      UIView.transition(with: self.map, duration: 0.2, options: .transitionCrossDissolve) { self.map.image = i } completion: { _ in sh?.removeFromSuperview() }
     }
   }
   override func traitCollectionDidChange(_ prev: UITraitCollection?) {

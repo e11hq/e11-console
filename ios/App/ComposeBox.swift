@@ -95,6 +95,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
   private var upDone: [String: String] = [:], upFailed = Set<String>()
   private var outbox: [(pendingId: String, body: [String: Any], files: [(uid: String, name: String, size: Int64)])] = []
   var onPendingFiles: ((String, String?, String, [[String: Any]]) -> Void)?   // a comment sent while its files upload: (id, thread, words, its cards)
+  var onPendingShared: ((String, String?, [String: Any]) -> Void)?   // a contact or a place sent: (id, thread, its card — "contact" / "location")
   private var textH: NSLayoutConstraint!
   private var tilesH: NSLayoutConstraint!
 
@@ -387,14 +388,15 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       case .allPhotos?: self.attach("photos", refocus: false)
       case .camera?: self.attach("camera", refocus: false)
       case .files?: self.attach("filesheet", refocus: false)
-      case .contact?: ContactFlow.present(from: top, tint: .tintColor) { [weak self] k in self?.sendShared(["contact": k.json], says: "Contact: " + k.name) }
-      case .location?: PlacePicker.present(from: top, tint: .tintColor) { [weak self] p in self?.sendShared(["location": p.json], says: "Location" + (p.name.map { ": " + $0 } ?? "")) }
+      case .contact?: ContactFlow.present(from: top, tint: .tintColor) { [weak self] k in self?.sendShared(["contact": k.json]) }
+      case .location?: PlacePicker.present(from: top, tint: .tintColor) { [weak self] p in self?.sendShared(["location": p.json]) }
       }
     }
     top.present(v, animated: true)
   }
-  // a contact card or a place: its own comment, shown at once (its words for the moment, the card once the server has it)
-  private func sendShared(_ what: [String: Any], says: String) {
+  // a contact card or a place: its own comment, its card shown at once at its own size (Haris 2026-11-16 — it was its words
+  // until the server had it, and the comment grew)
+  private func sendShared(_ what: [String: Any]) {
     var body: [String: Any] = ["act": "comment", "id": taskId, "html": "", "text": ""]
     what.forEach { body[$0.key] = $0.value }
     let thread = parentId ?? replyTo?.id
@@ -402,7 +404,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     if editing == nil { CommentSound.send() }
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     let pendingId = "pending-" + UUID().uuidString
-    onPendingFiles?(pendingId, thread, says, [])
+    onPendingShared?(pendingId, thread, what)
     onSend?(body) { [weak self] ok in
       self?.onPendingEnd?(pendingId, ok)
       if ok { UINotificationFeedbackGenerator().notificationOccurred(.success) }
