@@ -594,7 +594,10 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     // (the one it was opened on, its picture there: back into the picture it came out of — the black and the buttons going
     //  with it; else the fade as before)
     // (swiped to another file: back into that file's own picture on the page when it's there — Haris 2026-11-15)
-    let back: UIImageView? = at == openedAt ? source : keys[safe: at].flatMap { FileTouch.marked($0, in: source?.window) }
+    // (opened by a link from another app: no picture found as it opened — the folder behind still coming in — so it's looked
+    //  for now, by the file's mark, as a swiped-to one: it faded instead of flying home, Haris 2026-11-16)
+    let win = source?.window ?? presentingViewController?.view.window ?? view.window
+    let back: UIImageView? = (at == openedAt ? source : nil) ?? keys[safe: at].flatMap { FileTouch.marked($0, in: win) }
     if openedAt >= 0, let src = back, src.window != nil, let (pic, from) = current?.shownPicture {
       let fly = UIImageView(image: pic); fly.contentMode = .scaleAspectFill; fly.clipsToBounds = true; fly.layer.cornerCurve = src.layer.cornerCurve
       fly.frame = from
