@@ -550,6 +550,13 @@ extension Main {
       // as the preview's Download does — every byte the same, its progress too
       // Midnight (the full test, Haris 2026-11-16): iPhone's day-changed signal — every screen worked out again for the new day;
       // on the same day nothing on E11 Day is set again (only what changed changes)
+      // Memory (the full test, Haris 2026-11-16): what the app holds once every page above has been through — iPhone's own
+      // count (phys_footprint, as Xcode's gauge shows it)
+      ("aMem", {
+        var info = task_vm_info_data_t(), n = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let kr = withUnsafeMutablePointer(to: &info) { $0.withMemoryRebound(to: integer_t.self, capacity: Int(n)) { task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &n) } }
+        self.apple("memory", ["MB": kr == KERN_SUCCESS ? Int(info.phys_footprint / 1_048_576) : -1])
+      }),
       ("aDay", { self.tab(self.tabKeys.first ?? "today") }),
       ("aDaySend", {
         self.liveBefore = ["rows": self.homeView.rowsSet, "gen": AppData.shared.gen]

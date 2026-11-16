@@ -1066,8 +1066,32 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     c.maintainsFixedSize = true
     return c
   }
+  // (a pill's words in its own colour on a tint of it — in light, a pale colour on its pale tint over the white card couldn't
+  //  be read: LPO Pending's yellow at 1.55, the full test 2026-11-16. In light only, and only when it's too faint, the same
+  //  hue deepened until it reads (3:1 at least); dark, and every pill that already reads, exactly as before. One of Apple's
+  //  dynamic colours: iPhone switches it with the look)
+  static func readable(_ fg: UIColor, on bg: UIColor) -> UIColor {
+    UIColor { tc in
+      let f = fg.resolvedColor(with: tc)
+      guard tc.userInterfaceStyle != .dark else { return f }
+      func rgba(_ c: UIColor) -> (CGFloat, CGFloat, CGFloat, CGFloat) { var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0; c.getRed(&r, green: &g, blue: &b, alpha: &a); return (r, g, b, a) }
+      func lum(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat) -> CGFloat {
+        let x = { (v: CGFloat) -> CGFloat in v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
+        return 0.2126 * x(r) + 0.7152 * x(g) + 0.0722 * x(b)
+      }
+      let (tr, tg, tb, ta) = rgba(bg.resolvedColor(with: tc)), (cr, cg, cb, _) = rgba(TaskPage.card.resolvedColor(with: tc))
+      let back = lum(tr * ta + cr * (1 - ta), tg * ta + cg * (1 - ta), tb * ta + cb * (1 - ta))
+      var (r, g, b, a) = rgba(f)
+      for _ in 0..<12 {
+        let l = lum(r, g, b)
+        if (max(l, back) + 0.05) / (min(l, back) + 0.05) >= 3 { break }
+        r *= 0.88; g *= 0.88; b *= 0.88
+      }
+      return UIColor(red: r, green: g, blue: b, alpha: a)
+    }
+  }
   private func pill(_ t: String, fg: UIColor, bg: UIColor) -> UIView {
-    let l = PaddedLabel(); l.text = t; l.font = .systemFont(ofSize: 14, weight: .semibold); l.textColor = fg; l.backgroundColor = bg
+    let l = PaddedLabel(); l.text = t; l.font = .systemFont(ofSize: 14, weight: .semibold); l.textColor = TaskPage.readable(fg, on: bg); l.backgroundColor = bg
     l.layer.cornerRadius = 9; l.layer.cornerCurve = .continuous; l.clipsToBounds = true; l.insets = UIEdgeInsets(top: 4, left: 10, bottom: 4, right: 10)
     return l
   }
