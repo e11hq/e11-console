@@ -2339,7 +2339,8 @@ final class BubbleCell: UITableViewCell {
     fwdB.alpha = 1; reacts.alpha = 1
     fwdMine.isActive = mine; fwdTheirs.isActive = !mine
     lead.isActive = !mine; trail.isActive = mine
-    mediaW.constant = isVoice ? 292 : mine ? 236 : 262; mediaW.isActive = isPhoto || isVoice
+    // (a file's card as wide as a photo — left to itself it shrank to its time, the name cut to a letter: Haris 2026-11-16)
+    mediaW.constant = isVoice ? 292 : mine ? 236 : 262; mediaW.isActive = isPhoto || isVoice || isDoc
     wMine.isActive = mine && !isPhoto && !isVoice; wTheirs.isActive = !mine && !isPhoto && !isVoice
     stackTrail.constant = mine ? -11 : -12
     bubble.fill = mine ? Look.mine : Look.theirs
