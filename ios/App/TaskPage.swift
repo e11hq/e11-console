@@ -1530,13 +1530,6 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     return UIColor(red: CGFloat(a[0].doubleValue) / 255, green: CGFloat(a[1].doubleValue) / 255, blue: CGFloat(a[2].doubleValue) / 255, alpha: 1)
   }
   static func size(_ n: Int) -> String { n <= 0 ? "" : n < 1024 * 1024 ? "\(max(1, n / 1024)) KB" : String(format: "%.1f MB", Double(n) / 1048576) }
-  static func fileSym(_ name: String) -> String {
-    let e = (name as NSString).pathExtension.lowercased()
-    if ["jpg", "jpeg", "png", "heic", "gif", "webp"].contains(e) { return "photo" }
-    if ["mp4", "mov", "m4v"].contains(e) { return "film" }
-    if e == "pdf" { return "doc.richtext" }
-    return "doc"
-  }
   static func when(_ iso: String) -> String {
     let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     guard let d = f.date(from: iso) ?? ISO8601DateFormatter().date(from: iso) else { return "" }
@@ -1563,26 +1556,7 @@ final class TaskRow: UIView, UIContextMenuInteractionDelegate {
   func contextMenuInteraction(_ i: UIContextMenuInteraction, previewForHighlightingMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? { PressPreview.make(self) }
   var pressBg = true
   private var tapG: UITapGestureRecognizer?
-  private var menuBtn: UIButton?
   @objc private func tapped() { onTap?() }
-  // with a menu: a switch or button inside the row keeps its own taps; anywhere else opens the menu
-  override func hitTest(_ p: CGPoint, with e: UIEvent?) -> UIView? {
-    guard let mb = menuBtn else { return super.hitTest(p, with: e) }
-    mb.isHidden = true
-    let v = super.hitTest(p, with: e)
-    mb.isHidden = false
-    if let c = v as? UIControl, c !== mb { return c }
-    return point(inside: p, with: e) ? mb : nil
-  }
-  // the menu opens from a tap anywhere on the row (an invisible button over it)
-  func attachMenu(_ m: UIMenu) {
-    let b = UIButton(type: .custom)
-    b.menu = m; b.showsMenuAsPrimaryAction = true
-    b.translatesAutoresizingMaskIntoConstraints = false
-    addSubview(b)
-    NSLayoutConstraint.activate([b.leadingAnchor.constraint(equalTo: leadingAnchor), b.trailingAnchor.constraint(equalTo: trailingAnchor), b.topAnchor.constraint(equalTo: topAnchor), b.bottomAnchor.constraint(equalTo: bottomAnchor)])
-    menuBtn = b
-  }
   override func touchesBegan(_ t: Set<UITouch>, with e: UIEvent?) { super.touchesBegan(t, with: e); if onTap != nil && pressBg { backgroundColor = .systemFill } }
   override func touchesEnded(_ t: Set<UITouch>, with e: UIEvent?) { super.touchesEnded(t, with: e); unpress() }
   override func touchesCancelled(_ t: Set<UITouch>, with e: UIEvent?) { super.touchesCancelled(t, with: e); unpress() }

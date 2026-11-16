@@ -1040,16 +1040,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     fab.configuration = newCfg
     squashFab(from: was)
   }
-  // a line's words changing while it shows (the grey line under a title — Subscriptions ↔ Office expenses): a short
-  // crossfade, not a jump; first shown or emptied: at once (the standard, Haris 2026-11-05)
-  static func fadeText(_ l: UILabel, _ text: String?) {
-    let old = l.text ?? "", new = text ?? ""
-    if old != new, !old.isEmpty, !new.isEmpty, l.window != nil, !l.isHidden {
-      let t = CATransition(); t.type = .fade; t.duration = 0.22; t.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-      l.layer.add(t, forKey: "text")
-    }
-    l.text = text
-  }
   func setFab2(_ label: String, _ run: (() -> Void)?) {
     fab2Run = run; fab2.accessibilityLabel = label
     fab2.isHidden = run == nil
@@ -1131,8 +1121,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     return out
   }
   var backFrame: CGRect { CGRect(x: 16, y: safeAreaInsets.top + 22 - BTN / 2, width: BTN, height: BTN) }
-  func backTap() { send(["ev": "back"]) }
-  func relayout() { if listOn { applyList(animated: true); return }; UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.setNeedsLayout(); self.layoutIfNeeded() } }
   // (the Clients tab coming back: Inactive Clients closed again)
   func clientsFresh() { if clientsMore.open { clientsMore.open = false; if !m.isEmpty { drawClients(m) } } }
   private func drawClients(_ model: [String: Any]) {
@@ -1360,14 +1348,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   //  now, so scrolled with the small title showing, "the top" stopped where the small title forms and Apple's bar never
   //  opened the big title again: Haris 2026-11-08. Remembered while the big title is open: the most room it has given.)
   private var appleOpenTop: CGFloat = 0
-  // a block's row brought to about 40% down the screen (an Inbox update opening the Reviews on its request)
-  func scrollToShow(_ v: UIView, animated: Bool = true) {
-    layoutIfNeeded()
-    userScrolled = true
-    let r = v.convert(v.bounds, to: sv)
-    let y = max(-inTop, min(r.midY - sv.bounds.height * 0.4, sv.contentSize.height + inBottom - sv.bounds.height))
-    sv.setContentOffset(CGPoint(x: 0, y: y), animated: animated)
-  }
   func scrollViewDidScroll(_ scrollView: UIScrollView) {
     if scrollView === scroll || scrollView === list { showMotto() }
     if appleTop, !searching, scrollView === sv, sv.adjustedContentInset.top > appleOpenTop { appleOpenTop = sv.adjustedContentInset.top }

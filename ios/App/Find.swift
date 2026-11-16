@@ -39,17 +39,6 @@ enum Find {
   // where a word is in a text, at the start of a word (accents and case don't matter); a word typed together found
   // written apart too — "altayer" marks "AL TAYER"
   // (made once per word, not once per label — searching hung while every card made its own: Haris 2026-11-06)
-  private static var reCache: [String: NSRegularExpression] = [:]
-  private static let reLock = NSLock()
-  private static func joinedRe(_ w: String) -> NSRegularExpression? {
-    reLock.lock(); defer { reLock.unlock() }
-    if let r = reCache[w] { return r }
-    let pat = w.map { NSRegularExpression.escapedPattern(for: String($0)) }.joined(separator: "[^\\p{L}\\p{N}]?")
-    guard let r = try? NSRegularExpression(pattern: pat, options: [.caseInsensitive]) else { return nil }
-    if reCache.count > 200 { reCache.removeAll() }
-    reCache[w] = r
-    return r
-  }
   static func ranges(_ w: String, _ ns: NSString) -> [NSRange] {
     guard w.count >= 2, !w.hasPrefix("#") else { return [] }
     var out: [NSRange] = [], from = 0

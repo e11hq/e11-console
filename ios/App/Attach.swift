@@ -34,7 +34,6 @@ struct AttachRow {
 enum Attach {
   static let maxBytes = 1_000_000_000   // (files up to 1 GB, in the iPhone apps — Haris 2026-11-16)
   static func size(_ url: URL) -> Int { ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.intValue ?? 0 }
-  static func tooBig(_ url: URL) -> Bool { size(url) > maxBytes }
   // a sheet sized to what it holds (iPhone's own sheet, its own grabber)
   static func sheet(_ vc: UIViewController, height: CGFloat) {
     vc.modalPresentationStyle = .pageSheet

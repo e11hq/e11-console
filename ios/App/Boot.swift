@@ -371,28 +371,6 @@ extension Main {
       popCommand(["kind": "viewAsBar", "on": true, "name": who["name"] ?? "", "role": role]) { _ in }
     } else { ViewAsBar.current?.go() }
   }
-  // (app.js NativePop.sections: the notes' lines in sections — headings, then their points)
-  static func noteSections(_ md: String) -> [[String: Any]] {
-    var out: [[String: Any]] = []
-    let plain = { (t: String) -> String in t.replacingOccurrences(of: "\\*\\*(.+?)\\*\\*", with: "$1", options: .regularExpression).replacingOccurrences(of: "`(.+?)`", with: "$1", options: .regularExpression).trimmingCharacters(in: .whitespaces) }
-    for l in md.components(separatedBy: .newlines) {
-      if let r = l.range(of: "^#{1,3}\\s+", options: .regularExpression) { out.append(["h": plain(String(l[r.upperBound...])), "items": [String]()]); continue }
-      var t = l
-      if let r = l.range(of: "^\\s*[-*]\\s+", options: .regularExpression) { t = String(l[r.upperBound...]) }
-      t = plain(t)
-      if t.isEmpty { continue }
-      if out.isEmpty { out.append(["h": "", "items": [String]()]) }
-      var last = out.removeLast(); var items = last["items"] as? [String] ?? []; items.append(t); last["items"] = items; out.append(last)
-    }
-    return out.isEmpty ? [["h": "", "items": ["Improvements and fixes."]]] : out
-  }
-  // (app.js fmtDateTime: "Nov 5, 2026, 7:15 PM")
-  static func dateTimeText(_ iso: String) -> String {
-    let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    guard let d = f.date(from: iso) ?? ISO8601DateFormatter().date(from: iso) else { return "" }
-    let o = DateFormatter(); o.locale = Locale(identifier: "en_US"); o.dateFormat = "MMM d, yyyy, h:mm a"
-    return o.string(from: d)
-  }
 
   // ---------- Step 9: the list screens' and the task page's taps the page did — done by the app when it isn't there
   // (Home's, My Tasks', a client's page's cards: open, copy, attach, me, review; the task page's copy, from) ----------

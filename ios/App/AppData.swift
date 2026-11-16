@@ -316,7 +316,6 @@ final class AppData: NSObject, URLSessionDataDelegate {
   var rev: Int { guard copyReady else { return 0 }; return q.sync { (call("E11AppView.rev", []) as? NSNumber)?.intValue ?? 0 } }
   // something changed (the stream, a download): whoever's showing a screen from the copy redraws
   @discardableResult func listen(_ f: @escaping () -> Void) -> UUID { let id = UUID(); listeners[id] = f; return id }
-  func stopListening(_ id: UUID) { listeners[id] = nil }
   private var changePending = false
   // only one person's copy on the phone (Haris 2026-11-09: old data discarded): another person's goes as soon as someone
   // else starts here, and every copy when signing out (Me › Sign out). Signed out by the sign-in running out, the same
@@ -417,7 +416,6 @@ final class AppData: NSObject, URLSessionDataDelegate {
       }.resume()
     } }
   }
-  func withCookie(_ f: @escaping (String) -> Void) { onMain { self.cookies(f) } }
   private func onMain(_ f: @escaping () -> Void) { if Thread.isMainThread { f() } else { DispatchQueue.main.async(execute: f) } }
   private func request(_ path: String, _ done: @escaping ([String: Any]?) -> Void) {
     raw(path) { s in

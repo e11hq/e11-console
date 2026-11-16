@@ -1904,7 +1904,6 @@ final class MeCtl {
   func refresh() { if isOpen, stack.contains(where: { $0.kind == "about" }) { loadAbout(false) } }
 
   // ---------- what's on each ----------
-  private func redrawRoot() { if let s = stack.first(where: { $0.kind == "me" }) { draw(s) } }
   private func draw(_ s: Screen) {
     var mm: [String: Any] = ["show": true, "me": me ?? "", "look": main.lookBoth]
     if s.kind == "me" { mm["title"] = apple ? "Settings" : "Me"; mm["date"] = "E11 Console App" }   // (in Apple's navigation: "Settings" — Haris 2026-11-08; the tab stays "Me")

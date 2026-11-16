@@ -1199,7 +1199,6 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   // as Apple's dynamic colours (HomeLook) — iPhone switches them itself
   var looks: [String: [String: Any]] = [:]
   var lookBoth: [String: Any] { var d: [String: Any] = [:]; if let x = looks["dark"] { d["dark"] = x }; if let x = looks["light"] { d["light"] = x }; return d }
-  func keepLook(_ l: Any?) { if let l = l as? [String: Any], let lt = l["light"] as? Bool { looks[lt ? "light" : "dark"] = l } }
   var homePagePeople: [String: [String: Any]] = [:], homeServerPeople: [String: [String: Any]] = [:]
   // the server's Home drawn (with the page's colours), when Home is on screen
   func drawServerHome(_ m: [String: Any]) {
@@ -1449,29 +1448,6 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   weak var clientsHereNav: UINavigationController?
   var clientsNavNow: UINavigationController? { tabKeys.contains("projects") ? AppleTabs.shared?.clientsNav : clientsFromMeApple ? AppleTabs.shared?.meNav : clientsHereNav }
   var shownTab: Int?
-  // back to a page tab's first screen as iPhone goes back: a picture of what's on screen slides away to the right while
-  // the first screen (drawn by the page under it) comes in from the left
-  func tabBackSlide(_ key: String) {
-    let W = view.bounds.width
-    let top: UIView = assetsCtl.top ?? web
-    let snap = top.snapshotView(afterScreenUpdates: false)
-    if assetsCtl.isOpen { assetsCtl.close(animated: false) }
-    // (back to Me from a page deeper than it — My profile, Client Assets: the app's own Me comes in under the slide)
-    let meRoot = key == meCtl.tab ? meCtl.rootUnder() : nil
-    if let s = snap { s.frame = top.frame; view.insertSubview(s, belowSubview: tabsMark) }
-    if let r = meRoot {
-      r.transform = CGAffineTransform(translationX: -W * 0.3, y: 0)
-      UIView.animate(withDuration: 0.36, delay: 0.08, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { r.transform = .identity }
-    }
-    web.transform = CGAffineTransform(translationX: -W * 0.3, y: 0)
-    updateCorner()
-    // (a moment for the page to draw its first screen, then the slide)
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-      UIView.animate(withDuration: 0.36, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
-        snap?.transform = CGAffineTransform(translationX: W, y: 0); self.web.transform = .identity
-      } completion: { _ in snap?.removeFromSuperview(); self.web.transform = .identity }
-    }
-  }
   // Me tapped again over Client Assets: what's on top slides away to the right, Me (its first page) comes back under it
   func assetsBackToMe() {
     guard let top = assetsCtl.top else { return }
@@ -2793,14 +2769,6 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
   }
   // (a picked or ticked photo sent from another screen — the comment box's own + sheet)
   func pickAssets(_ a: [PHAsset], small: Bool = false, _ done: @escaping ([String: Any]) -> Void) { finish([]); self.done = done; self.small = small; keepAssets(a) }
-  func pickOriginals(from vc: UIViewController, _ done: @escaping ([String: Any]) -> Void) {
-    finish([]); self.done = done; small = false
-    OriginalsPicker.present(from: vc) { [weak self] got in self?.finish(got.compactMap { self?.keep($0.url, name: $0.name) }) }
-  }
-  func pickScan(from vc: UIViewController, _ done: @escaping ([String: Any]) -> Void) {
-    finish([]); self.done = done; small = false
-    DocScanner.present(from: vc) { [weak self] f in self?.finish([f].compactMap { $0 }.compactMap { self?.keep($0.url, name: $0.name) }) }
-  }
   private func keep(_ src: URL, name: String) -> [String: Any]? {
     let tok = UUID().uuidString
     let dest = dir.appendingPathComponent(tok + "-" + name.replacingOccurrences(of: "/", with: "-"))
