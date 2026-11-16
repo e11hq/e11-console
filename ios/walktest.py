@@ -153,6 +153,14 @@ if APPLE:
             check(rid not in (af.get('unread') or []) and (af.get('tab') == 'all' or rid not in (af.get('rows') or [])), f"{lab}: an update read elsewhere leaves Unread at once (to All when none is left) {li}")
             check(str(li.get('badge')) in ('', str(li.get('copyUnread'))), f"{lab}: the Inbox tab's badge follows at once {li.get('badge')} vs {li.get('copyUnread')}")
         else: print(f'note {lab}: live Inbox not tried {li}')
+        la = ap.get('liveAssets') or {}
+        if la and not la.get('none'):
+            b0 = ((la.get('before') or {}).get('top')) or {}; a0 = la.get('after') or {}
+            sent = str((la.get('before') or {}).get('sent', ''))
+            if sent.startswith('200') and '"ok":true' in sent.replace(' ', ''):
+                check(a0.get('folders') == (b0.get('folders') or 0) + 1 and (a0.get('rowsSet') or 0) - (b0.get('rowsSet') or 0) <= 2, f"{lab}: a folder added elsewhere arrives in the open Client Assets at once, nothing else set again {la}")
+            else: print(f'note {lab}: live Client Assets — the role may not add folders {la}')
+        elif la: print(f'note {lab}: live Client Assets not tried {la}')
         ct = ap.get('contrast') or {}
         for scr, r in ct.items():
             if isinstance(r, dict) and r.get('checked') is not None:

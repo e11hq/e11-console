@@ -297,6 +297,15 @@ extension Main {
       ("aCaAllWait", {}),
       ("aCaOpen", { if self.meApple { self.apple("caOpen", ["r": self.assetsCtl.selfOpenClient()]) } }),
       ("aCaOpenWait", {}),
+      // (live, the full test 2026-11-16: a folder added elsewhere while the client's Client Assets are open — it arrives in
+      //  place, the page not drawn again)
+      ("aLiveA", {
+        guard self.meApple, let c = self.assetsCtl.selfTop["client"] as? String, !c.isEmpty else { self.apple("liveAssets", ["none": "not open", "top": self.assetsCtl.selfTop]); return }
+        self.liveBefore = ["top": self.assetsCtl.selfTop]
+        self.elsewhere("/api/app/act", ["ev": "caNewFolder", "client": c, "name": "Live \(Int(Date().timeIntervalSince1970) % 100000)", "op": UUID().uuidString]) { r in self.liveBefore["sent"] = r }
+      }),
+      ("aLiveAWait", {}),
+      ("aLiveARead", { if self.meApple, self.liveBefore["top"] != nil { self.apple("liveAssets", ["before": self.liveBefore, "after": self.assetsCtl.selfTop]) } }),
       ("aCaBack", {
         guard self.meApple else { return }
         BarLog.start()

@@ -281,6 +281,12 @@ final class AssetsCtl {
     push(screen("client", id, nil), animated: true); ask(["ev": "want", "client": id]) { _ in }
     return "opened"
   }
+  // (the self-test's live check: the screen on top — its client, how many folders and files it shows, its rows set again)
+  var selfTop: [String: Any] {
+    guard let t = stack.last else { return ["open": false] }
+    let m = t.client.flatMap { models[$0] } ?? [:]
+    return ["client": t.client ?? "", "folders": ((m["folders"] as? [[String: Any]]) ?? []).count, "files": ((m["files"] as? [[String: Any]]) ?? []).count, "rowsSet": t.h.rowsSet]
+  }
   func openAll(animated: Bool) {
     if stack.isEmpty { pickHost() }
     push(screen("all", nil, nil), animated: animated)
