@@ -663,7 +663,9 @@ extension Main {
       // (no finger on a picture — opened by a link from another app, E11 Talk's card: out of the file's own picture on the
       //  page by its mark when it's on screen, and back into it — Haris 2026-11-15)
       vc.keys = files.map { FileTouch.key($0) }
-      vc.source = FileTouch.picture() ?? FileTouch.marked(vc.keys[i], in: host.view.window)
+      // (looked for on the screen on show — Apple's tabs' window; the app's own screen behind them has none, so a file opened
+      //  by a link never found its picture and faded in: Haris 2026-11-16)
+      vc.source = FileTouch.picture() ?? FileTouch.marked(vc.keys[i], in: host.view.window ?? self.screenWindow)
       ClientTrail.linkNote("present: touch=\(FileTouch.picture() != nil) host=\(type(of: host)) hostWindow=\(host.view.window != nil) inHost=\(FileTouch.marked(vc.keys[i], in: host.view.window) != nil) inScreen=\(FileTouch.marked(vc.keys[i], in: self.screenWindow) != nil) flies=\(vc.flies)")
       host.present(vc, animated: !vc.flies)
     }

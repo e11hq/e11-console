@@ -1768,8 +1768,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
         // (Apple's push on the Clients tab — once: a page already there is drawn again in place)
         if !n.viewControllers.contains(where: { ($0 as? ClientVC)?.h === h }) {
           let vc = ClientVC(h)
-          n.pushViewController(vc, animated: n.view.window != nil && AppleTabs.shared?.ownNav === n)
-          ClientTrail.note("pushed on \(n === AppleTabs.shared?.clientsNav ? "clientsNav" : n === AppleTabs.shared?.homeNav ? "homeNav" : "other") window=\(n.view.window != nil) presented=\(n.presentedViewController.map { String(describing: type(of: $0)) } ?? "-") now \(n.viewControllers.map { String(describing: type(of: $0)) })")
+          pushClient(vc, on: n, tries: 0)
         } else { h.isHidden = false }
       } else {
         if h.superview == nil, !clientsFromMeApple, let vc = ClientsVC.shared { vc.adopt(h) }
@@ -1790,6 +1789,21 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     } else { h.transform = .identity; h.isHidden = false }
     if !page { clientPageIfMade?.isHidden = true }
     edgePanOn()
+  }
+  // a client's page pushed — once its navigation takes it: asked while the navigation is still moving (the Clients tab
+  // just switched to, the search bar still sliding away), Apple's navigation lets the push go, and its next settling said
+  // the page had gone — the app went back to the list (Haris 2026-11-16: a client tapped in search never opened). Asked
+  // again as soon as it has settled, and the navigation's settling doesn't count it as gone meanwhile.
+  private(set) weak var clientPushWaiting: ClientVC?
+  private func pushClient(_ vc: ClientVC, on n: UINavigationController, tries: Int) {
+    guard clientsOn == "client", clientsWanted, !n.viewControllers.contains(vc) else { clientPushWaiting = nil; return }
+    n.pushViewController(vc, animated: n.view.window != nil && AppleTabs.shared?.ownNav === n)
+    ClientTrail.note("pushed on \(n === AppleTabs.shared?.clientsNav ? "clientsNav" : n === AppleTabs.shared?.homeNav ? "homeNav" : "other") try \(tries) now \(n.viewControllers.map { String(describing: type(of: $0)) })")
+    if n.viewControllers.contains(vc) { clientPushWaiting = nil; return }
+    clientPushWaiting = vc
+    guard tries < 40 else { clientPushWaiting = nil; clientPageGone(); return }   // (never taken: as if it had gone, nothing left half-open)
+    if let tc = n.transitionCoordinator { tc.animate(alongsideTransition: nil) { [weak self, weak vc, weak n] _ in DispatchQueue.main.async { if let vc, let n { self?.pushClient(vc, on: n, tries: tries + 1) } } } }
+    else { DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak vc, weak n] in if let vc, let n { self?.pushClient(vc, on: n, tries: tries + 1) } } }
   }
   func clientsOwn(_ v: Bool) {
     guard v != clientsPageOwn else { return }

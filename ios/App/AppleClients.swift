@@ -23,7 +23,7 @@ extension Main {
     guard clientsApple, n === AppleTabs.shared?.clientsNav else { return }
     let vcs = n.viewControllers
     assetsCtl.reconcile(vcs)
-    if ClientVC.pushed, !vcs.contains(where: { $0 is ClientVC }) { clientPageGone() }
+    if ClientVC.pushed, clientPushWaiting == nil, !vcs.contains(where: { $0 is ClientVC }) { clientPageGone() }
   }
 }
 

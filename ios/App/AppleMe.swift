@@ -32,7 +32,7 @@ extension Main {
     let vcs = n.viewControllers
     meCtl.reconcile(vcs)
     if assetsCtl.appleNav === n { assetsCtl.reconcile(vcs) }   // (Client Assets opened over Me)
-    if ClientVC.pushed, clientsNavNow === n, !vcs.contains(where: { $0 is ClientVC }) { clientPageGone() }
+    if ClientVC.pushed, clientPushWaiting == nil, clientsNavNow === n, !vcs.contains(where: { $0 is ClientVC }) { clientPageGone() }
   }
 }
 
