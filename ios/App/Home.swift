@@ -2057,7 +2057,9 @@ final class HomeClientRow: UIView, AppleRow {
     cfg.imageProperties.reservedLayoutSize = CGSize(width: 40, height: 40)
     cfg.imageToTextPadding = 12
     let name = c["name"] as? String ?? ""
-    let base: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 15.5, weight: .semibold), .foregroundColor: L.title]
+    // (never struck through, said in so many words: a cell that showed a done task kept its line on the client's name —
+    //  iPhone's label carries a strike-through over when the new words don't say otherwise, Haris 2026-11-16)
+    let base: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 15.5, weight: .semibold), .foregroundColor: L.title, .strikethroughStyle: 0]
     let mk = (c["marks"] as? [String]) ?? []
     cfg.attributedText = mk.isEmpty ? NSAttributedString(string: name, attributes: base) : HomeCard.marked(name, mk, base: base, mark: [.backgroundColor: Find.wash])
     let n = c["open"] as? Int ?? 0

@@ -789,6 +789,8 @@ final class MeCtl {
   //  then that page over it)
   private var wantOpen: String?, wantOpenId: String?
   private var plMonth: String?
+  // (Content plans' own search: its words, the list showing what's found while they're there — Haris 2026-11-16)
+  private var plQ = ""
   // (which tab it serves: Me — or, for Social Managers and Executives, their Content plans tab, whose first page is the
   //  plans list itself, as Client Assets' — Haris 2026-11-04)
   private(set) var tab = "me"
@@ -881,7 +883,7 @@ final class MeCtl {
   private func requestPage(_ ev: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
     // (the page doesn't answer this one — it says so with its own toast)
     if (ev["ev"] as? String) == "trRestore" { send(ev); return }
-    // (no website: the searches answered from the app's own copy — Overview's files, Content plans; they waited 15 s for a
+    // (no website: the searches answered from the app's own copy — Overview's files; they waited 15 s for a
     //  page that isn't there: Haris 2026-11-06)
     if let r = ownAnswer(ev) { done(r); return }
     let rid = UUID().uuidString
@@ -893,7 +895,6 @@ final class MeCtl {
   private func ownAnswer(_ ev: [String: Any]) -> [String: Any]? {
     let q = (ev["q"] as? String ?? "").trimmingCharacters(in: .whitespaces)
     switch ev["ev"] as? String ?? "" {
-    case "plFind": return AppData.shared.meModel("plans", "plansFind", [q, ev["month"] as? String ?? ""])
     // (a plan's post, from the app's own copy — without the website nothing answered and it never opened: Haris 2026-11-08)
     case "plPost":
       guard AppData.shared.tabsOn else { return nil }
@@ -1494,12 +1495,17 @@ final class MeCtl {
       }
     case "rvTask": if let t = ev["tid"] as? String, !t.isEmpty { main.openTaskPage(t, tab: "details", focus: "") }
     case "rvFile":
-      // (the request's files, from its task's own page model — they carry where each file is)
-      guard let it = reviewItem(ev["id"] as? String ?? ""), let tid = it.0["tid"] as? String,
-            let tm = AppData.shared.screen("task", tid).model else { return }
-      let all = ((tm["files"] as? [[String: Any]]) ?? []) + ((tm["commentFiles"] as? [[String: Any]]) ?? [])
-      let want = (((it.0["files"] as? [[String: Any]]) ?? []) + ((it.0["carriedFiles"] as? [[String: Any]]) ?? [])).compactMap { $0["id"] as? String }
-      let list = want.compactMap { id in all.first { ($0["id"] as? String) == id } }
+      // (the request's own files — they carry where each file is (server 1.9.62); the task's own list leaves out the files
+      //  still with the CD, so those opened nothing: Haris 2026-11-16. An older server's: from the task's list, as before)
+      guard let it = reviewItem(ev["id"] as? String ?? "") else { return }
+      let own = ((it.0["files"] as? [[String: Any]]) ?? []) + ((it.0["carriedFiles"] as? [[String: Any]]) ?? [])
+      var list = own.filter { ($0["path"] as? String).map { !$0.isEmpty } ?? false }.map { f -> [String: Any] in
+        ["id": f["id"] ?? "", "path": f["path"] ?? "", "name": f["name"] ?? "File", "size": f["size"] ?? 0, "type": f["type"] ?? ""]
+      }
+      if list.count < own.count, let tid = it.0["tid"] as? String, let tm = AppData.shared.screen("task", tid).model {
+        let all = ((tm["files"] as? [[String: Any]]) ?? []) + ((tm["commentFiles"] as? [[String: Any]]) ?? [])
+        list = own.compactMap { f in list.first { ($0["id"] as? String) == (f["id"] as? String) } ?? all.first { ($0["id"] as? String) == (f["id"] as? String) } }
+      }
       if let i = list.firstIndex(where: { ($0["id"] as? String) == (ev["fid"] as? String) }) { main.openFiles(list, at: i) }
     case "pfTest":
       main.withToken { [weak self] t, why in
@@ -1566,7 +1572,7 @@ final class MeCtl {
       clearStack(); tab = want
     }
     if stack.isEmpty {
-      if rootKind == "plans" { plMonth = plMonth ?? ""; send(["ev": "pl", "on": true, "month": plMonth ?? ""]) }
+      if rootKind == "plans" { plMonth = plMonth ?? ""; plQ = ""; send(["ev": "pl", "on": true, "month": plMonth ?? ""]) }
       if rootKind == "team" { teamTab = 0; teamQ = ""; send(["ev": "team", "on": true]) }
       push(screen(rootKind, nil), animated: false)
     }
@@ -1654,7 +1660,7 @@ final class MeCtl {
     if kind == "about" { loadAbout(false) }
     if kind == "profile" { send(["ev": "pf", "on": true]) }
     if kind == "trash" { send(["ev": "tr", "on": true]) }
-    if kind == "plans" { plMonth = plMonth ?? ""; send(["ev": "pl", "on": true, "month": plMonth ?? ""]) }
+    if kind == "plans" { plMonth = plMonth ?? ""; plQ = ""; send(["ev": "pl", "on": true, "month": plMonth ?? ""]) }
     if kind == "plan", let id = id { let p = id.split(separator: "|").map(String.init); send(["ev": "plOpen", "pid": p.first ?? "", "month": p.count > 1 ? p[1] : ""]) }
     push(screen(kind, id), animated: true)
   }
@@ -3026,6 +3032,14 @@ final class MeCtl {
     // (the month and what's waiting for you, in the line under the title — mock-up "Content plans — fully Apple", 2026-11-10)
     let mineRows = rows0.filter { ($0["mine"] as? Bool) == true }
     if h.assets != "plansTab" && h.assets != "plansPage" { h.drawAssetsBar(name: "Content plans", sub: plansLine, logo: nil, rgb: nil, ini: nil, showLogo: false) }
+    // (its own search — Social's tab and Content plans pushed from Me, Apple's search bar each: the found clients and posts
+    //  in place of the list, as Reviews' and Team's. Through Home's own search the results went into a page that's never
+    //  shown, and nothing came — Haris 2026-11-16)
+    let onSearch: (String) -> Void = { [weak self, weak h] q in guard let self = self, let h = h, self.plQ != q else { return }; self.plQ = q; self.blocks(h) }
+    if let vc = pageVCs[ObjectIdentifier(h)], h.assets == "plansPage" { vc.useSearch("Search clients and posts", scopes: [], selected: 0); vc.onSearch = onSearch }
+    else if h.assets == "plansTab", let vc = MeTabVC.byKey["plans"] { vc.onSearch = onSearch }
+    let q = plQ.trimmingCharacters(in: .whitespaces)
+    if !q.isEmpty { plansFound(h, q, &out); return }
     guard let rows = m["rows"] as? [[String: Any]] else { let n = part(h, "wait") { AppleEmpty() }; n.setLoading(); out.append(n); return }
     let month = m["month"] as? String ?? ""
     let mb = part(h, "month") { PlanMonthChips() }
@@ -3168,40 +3182,33 @@ final class MeCtl {
     if let f = m["foot"] as? String, !f.isEmpty { out.append(foot(h, "pfoot", f, centered: true)) }
     DispatchQueue.main.async { [weak self] in self?.refreshPost() }
   }
-  // 🔍 on Content plans (Haris 2026-11-04): the months the app reaches — the one on screen first — clients and posts
-  private func planFind(_ h: HomeView, _ raw: String) {
-    let q = raw.trimmingCharacters(in: .whitespaces)
-    guard !q.isEmpty else { h.showFound([], hint: nil); return }
-    request(["ev": "plFind", "q": q, "month": plMonth ?? ""]) { [weak self, weak h] r in
-      guard let self = self, let h = h, h.searching else { return }
-      let groups = (r["found"] as? [[String: Any]]) ?? []
-      var views: [UIView] = []
-      for g in groups {
-        let month = g["month"] as? String ?? ""
-        let head = SetHead(); head.set(g["label"] as? String ?? ""); views.append(head)
-        let items = ((g["items"] as? [[String: Any]]) ?? []).enumerated().map { i, x -> SetItem in
-          let pid = x["pid"] as? String ?? "", post = x["post"] as? String, plan = x["plan"] as? String
-          var it = SetItem(key: "\(month).\(i)", title: x["title"] as? String ?? "", sub: x["sub"] as? String ?? "", sym: post == nil ? nil : "photo.on.rectangle", col: post == nil ? nil : .systemOrange, tap: { [weak self, weak h] in
-            guard let self = self else { return }
-            h?.closeSearch()
-            self.plMonth = month; self.send(["ev": "pl", "on": true, "month": month])
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-              self?.open("plan", "\(pid)|\(month)")
-              if let post = post, let plan = plan { DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self?.openPost(plan, post) } }
-            }
-          })
-          if post == nil { it.person = (photo: nil, ini: x["ini"] as? String ?? "", rgb: NativeSheetVC.color(x["rgb"]) ?? .systemGray) }
-          return it
-        }
-        let grp = SetGroup(); grp.set(items, look: h.look); views.append(grp)
+  // what Content plans' search found (Haris 2026-11-04; its own blocks since 2026-11-16): the month on screen first, then every
+  // month you can open — clients and posts, the words marked; a tap opens the skeleton (and the post)
+  private func plansFound(_ h: HomeView, _ q: String, _ out: inout [UIView]) {
+    let r = AppData.shared.meModel("plans", "plansFind", [q, plMonth ?? ""]) ?? [:]
+    let groups = (r["found"] as? [[String: Any]]) ?? []
+    var grps: [SetGroup] = []
+    for g in groups {
+      let month = g["month"] as? String ?? ""
+      out.append(head(h, "f." + month, g["label"] as? String ?? ""))
+      let items = ((g["items"] as? [[String: Any]]) ?? []).map { x -> SetItem in
+        let pid = x["pid"] as? String ?? "", post = x["post"] as? String, plan = x["plan"] as? String
+        var it = SetItem(key: "f.\(month).\(pid).\(post ?? "")", title: x["title"] as? String ?? "", sub: x["sub"] as? String ?? "", sym: post == nil ? nil : "photo.on.rectangle", col: post == nil ? nil : .systemOrange, tap: { [weak self] in
+          guard let self = self else { return }
+          self.plMonth = month; self.send(["ev": "pl", "on": true, "month": month])
+          self.open("plan", "\(pid)|\(month)")
+          if let post = post, let plan = plan { DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.openPost(plan, post) } }
+        })
+        if post == nil { it.person = (photo: nil, ini: x["ini"] as? String ?? "", rgb: NativeSheetVC.color(x["rgb"]) ?? .systemGray) }
+        return it
       }
-      // (nothing found: Apple's own "No Results"; close matches said in the footer — mock-up 2026-11-10)
-      if views.isEmpty { let e = AppleEmpty(); e.set("magnifyingglass", "No Results", "Check the spelling or try a new search."); views.append(e) }
-      else { let f = SetFoot(); f.set((r["loose"] as? Bool) == true ? "Nothing matched exactly — these are close. The month showing first, then every month you can open." : "The month showing first, then every month you can open.", centered: true); views.append(f) }
-      h.showFound(views, hint: nil)
-      let titles = groups.flatMap { ($0["items"] as? [[String: Any]]) ?? [] }
-      Find.mark(views, (r["marks"] as? [String]) ?? Find.filter(titles, q) { "\($0["title"] ?? "") \($0["sub"] ?? "")" }.marks)
+      let grp = group(h, "f." + month, items); out.append(grp); grps.append(grp)
     }
+    // (nothing found: Apple's own "No Results"; close matches said in the footer — mock-up 2026-11-10)
+    if groups.isEmpty { let e = part(h, "fnone") { AppleEmpty() }; e.set("magnifyingglass", "No Results", "Check the spelling or try a new search."); out.append(e); return }
+    out.append(foot(h, "ffoot", (r["loose"] as? Bool) == true ? "Nothing matched exactly — these are close. The month showing first, then every month you can open." : "The month showing first, then every month you can open.", centered: true))
+    let titles = groups.flatMap { ($0["items"] as? [[String: Any]]) ?? [] }
+    Find.mark(grps, (r["marks"] as? [String]) ?? Find.filter(titles, q) { "\($0["title"] ?? "") \($0["sub"] ?? "")" }.marks)
   }
   // a post marked, shown on the skeleton at once (its line under it, and Approve dimmed or not) until the server's answer
   // is in the copy; a no puts it back with why (Haris 2026-11-09 "what you do shows at once")
@@ -3306,7 +3313,6 @@ final class MeCtl {
     case "toast": send(["ev": "toast"])
     // (your photo on the Content plans tab: the Me tab, as from every other tab — Haris 2026-11-04)
     case "me" where MeCtl.tabRoots.contains(h.assets ?? ""): main.selectTab("me")
-    case "find" where h.assets == "plansPage" || h.assets == "me.plan" || h.assets == "plansTab": planFind(h, ev["q"] as? String ?? "")
     default: break
     }
   }

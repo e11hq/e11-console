@@ -1435,7 +1435,10 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   var clientsListIfMade: HomeView?, clientPageIfMade: HomeView?
   // (the CD's Clients list opened from Me, in Me's own Apple navigation — AppleMe.swift: its pages pushed on Me's)
   var clientsFromMeApple = false
-  var clientsNavNow: UINavigationController? { tabKeys.contains("projects") ? AppleTabs.shared?.clientsNav : clientsFromMeApple ? AppleTabs.shared?.meNav : nil }
+  // (no Clients tab — Social, the CD: a client found by My Day's or My Tasks' search pushed on that tab's own navigation, ‹
+  //  back to the search; it tried the Clients tab, which isn't there, and nothing opened — Haris 2026-11-16)
+  weak var clientsHereNav: UINavigationController?
+  var clientsNavNow: UINavigationController? { tabKeys.contains("projects") ? AppleTabs.shared?.clientsNav : clientsFromMeApple ? AppleTabs.shared?.meNav : clientsHereNav }
   var shownTab: Int?
   // back to a page tab's first screen as iPhone goes back: a picture of what's on screen slides away to the right while
   // the first screen (drawn by the page under it) comes in from the left
@@ -1630,6 +1633,11 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   func clientPageGone() {
     ClientVC.pushed = false
     clientPageIfMade?.isHidden = true
+    // (pushed on the tab it was found from — no Clients tab: gone with it, nothing of Clients left wanted)
+    if clientsHereNav != nil, !tabKeys.contains("projects"), !clientsFromMeApple {
+      clientsHereNav = nil; clientsWanted = false; clientsOn = "list"; serverClients.query = "view=list"; clientFrom = nil
+      updateCorner(); return
+    }
     guard clientsOn == "client" else { updateCorner(); return }
     clientsOn = "list"; serverClients.query = "view=list"; clientFrom = nil
     if clientsWanted { DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in guard let self = self, self.clientsOn == "list" else { return }; self.serverClients.refresh() } }
@@ -1790,7 +1798,10 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     // (a client's page asked for while Home's own screen is on — from Home's search: it opens on the Clients tab, where
     //  the app draws clients' pages; Home is its own screen now — AppleHome.swift)
     // (and from My Tasks' search, the same — Haris 2026-11-08)
-    if APPLE_HOME, (a["show"] as? Bool) == true, (a["view"] as? String) == "client", AppleTabs.shared?.ownShown == true, selectedTabKey != "projects" {
+    if APPLE_HOME, (a["show"] as? Bool) == true, (a["view"] as? String) == "client", !tabKeys.contains("projects"), !clientsFromMeApple, let n = AppleTabs.shared?.ownNav {
+      clientsHereNav = n
+      a["from"] = ""
+    } else if APPLE_HOME, (a["show"] as? Bool) == true, (a["view"] as? String) == "client", AppleTabs.shared?.ownShown == true, selectedTabKey != "projects" {
       if (AppleHomeBits.shared.search?.isActive ?? false) { AppleHomeBits.shared.search?.isActive = false }
       MyTasksVC.shared?.closeSearch()
       a["from"] = ""
