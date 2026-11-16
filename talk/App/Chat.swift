@@ -460,8 +460,17 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     shownFrom = all[max(0, i - 20)].id
     reload(animated: false); table.layoutIfNeeded()
   }
-  // a tap on the top of the screen (the clock / the notch): to the top Claude's way, not a long scroll through the chat
-  func scrollViewShouldScrollToTop(_ s: UIScrollView) -> Bool { s.glide { -s.adjustedContentInset.top }; return false }
+  // a tap on the top of the screen (the clock / the notch): one smooth run to the top of what's shown; there, the next 100
+  // older are put in above, out of sight, so the next tap runs on up through them — a tap a hundred further back, until the
+  // chat's start (Haris 2026-11-16)
+  func scrollViewShouldScrollToTop(_ s: UIScrollView) -> Bool {
+    if s.contentOffset.y <= -s.adjustedContentInset.top + 1 { older() }
+    s.glide { -s.adjustedContentInset.top }
+    return false
+  }
+  func scrollViewDidEndScrollingAnimation(_ s: UIScrollView) {
+    if hasOlder && s.contentOffset.y <= -s.adjustedContentInset.top + 1 { older() }
+  }
   func scrollViewDidScroll(_ s: UIScrollView) {
     if hasOlder && s.contentOffset.y < -s.adjustedContentInset.top + 700 && (s.isDragging || s.isDecelerating) { older() }
     let away = s.contentOffset.y + s.bounds.height < s.contentSize.height - 160
