@@ -366,23 +366,25 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     guard let vc = window?.rootViewController else { return }
     var top = vc; while let p = top.presentedViewController { top = p }
+    // (the keyboard down while anything from the sheet is open; back afterwards only if it was up — Haris 2026-11-16)
     let typing = text.isFirstResponder
+    if typing { text.resignFirstResponder() }
     let v = AttachSheet(title: "Add to Comment", rows: [.camera, .files, .contact, .location], nextWord: "Add", tint: .tintColor)
     v.onChoice = { [weak self, weak top] c in
       guard let self = self, let top = top else { return }
+      Attach.whenClosed(top) { [weak self] in if typing { self?.text.becomeFirstResponder() } }
       switch c {
-      case nil: if typing { self.text.becomeFirstResponder() }
+      case nil: break
       case .photos(let a)?:
         Picker.shared.pickAssets(a) { [weak self] r in
           for f in (r["files"] as? [[String: Any]]) ?? [] {
             guard let self = self, let tok = f["token"] as? String, let url = Picker.shared.url(tok) else { continue }
             self.addFile(url, name: f["name"] as? String ?? "File", voice: nil)
           }
-          self?.text.becomeFirstResponder()
         }
-      case .allPhotos?: self.attach("photos")
-      case .camera?: self.attach("camera")
-      case .files?: self.attach("filesheet")
+      case .allPhotos?: self.attach("photos", refocus: false)
+      case .camera?: self.attach("camera", refocus: false)
+      case .files?: self.attach("filesheet", refocus: false)
       case .contact?: ContactFlow.present(from: top, tint: .tintColor) { [weak self] k in self?.sendShared(["contact": k.json], says: "Contact: " + k.name) }
       case .location?: PlacePicker.present(from: top, tint: .tintColor) { [weak self] p in self?.sendShared(["location": p.json], says: "Location" + (p.name.map { ": " + $0 } ?? "")) }
       }
@@ -405,7 +407,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     }
   }
   // ---------- files ----------
-  private func attach(_ source: String) {
+  private func attach(_ source: String, refocus: Bool = true) {
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     guard let vc = window?.rootViewController else { return }
     var top = vc; while let p = top.presentedViewController { top = p }
@@ -414,7 +416,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
         guard let self = self, let tok = f["token"] as? String, let url = Picker.shared.url(tok) else { continue }
         self.addFile(url, name: f["name"] as? String ?? "File", voice: nil)
       }
-      self?.text.becomeFirstResponder()
+      if refocus { self?.text.becomeFirstResponder() }
     }
   }
   // copied words with mentions or chips: the words and mentions where the cursor is; each chip's file added to the
