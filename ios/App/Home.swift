@@ -2518,25 +2518,48 @@ extension HomeView: UICollectionViewDelegate {
   // touch and hold a task: Apple's own lift of its cell and Apple's menu — Attach Files (Camera · Photos · Files); Copy link
   // and Trash are on its swipe (Haris 2026-11-09 12:36: "no need for them to be in the menu"). My Tasks' Done tab: read only
   // (a folder's or file's tile held: Apple's lift on its picture alone, on nothing — as the Files app; every other row: Apple's own)
+  // (as E11 Talk's held bubble — Haris 2026-11-16: what lifts is a picture of the tile in its own shape, the tile itself out
+  //  of its place while it's up, and the same picture back as it's let go — no second copy of it showing behind the blur,
+  //  and no edge round the folder in light or dark)
   private func tileLift(_ ip: IndexPath) -> UITargetedPreview? {
     guard let key = listDS?.itemIdentifier(for: ip), let t = listViews[key] as? FileTile, t.window != nil else { return nil }
     let v = t.liftView
-    let p = UIPreviewParameters(); p.backgroundColor = .clear
-    // (a folder: Apple's folder has its strip cut out — on the page the page shows through it; lifted, the dimmed screen
-    //  did, a dark band across it. Behind it, lifted, the same colour it sits on: Haris 2026-11-11 11:00)
-    // (the picture in its own shape, the folder's read off Apple's folder itself — its whole tab and slope, no box around it
-    //  in light or dark: Haris 2026-11-10 17:54, 2026-11-11 07:43)
-    p.visiblePath = t.liftPath; p.shadowPath = t.liftPath
-    if t.isFolder {
-      // (the lifted folder is a picture of it on the colour it sits on, inside its own shape only — the colour set as the
-      //  preview's background filled a box round it: Haris 2026-11-11 13:40)
-      var s: UIView? = t; while let x = s, (x.backgroundColor?.cgColor.alpha ?? 0) < 0.99 { s = x.superview }
-      let bg = s?.backgroundColor ?? HomeLook(nil).bg, b = v.bounds, path = t.liftPath
-      let img = UIGraphicsImageRenderer(bounds: b).image { _ in bg.resolvedColor(with: v.traitCollection).setFill(); path.fill(); v.drawHierarchy(in: b, afterScreenUpdates: false) }
-      let iv = UIImageView(image: img); iv.frame = b
-      return UITargetedPreview(view: iv, parameters: p, target: UIPreviewTarget(container: v, center: CGPoint(x: b.midX, y: b.midY)))
+    if let s = tileShot, s.key == key, v.alpha == 0 { return tilePreview(s.img, s.path, on: v) }
+    let b = v.bounds, path = t.liftPath
+    // (a folder: Apple's folder has its strip cut out — lifted, the dimmed screen showed through it as a dark band; the
+    //  colour it sits on is put behind it there only, kept a little inside its outline so none of it shows round the edge —
+    //  Haris 2026-11-11 11:00, 2026-11-16)
+    var bg: UIColor? = nil
+    if t.isFolder { var x: UIView? = t; while let y = x, (y.backgroundColor?.cgColor.alpha ?? 0) < 0.99 { x = y.superview }; bg = (x?.backgroundColor ?? HomeLook(nil).bg).resolvedColor(with: v.traitCollection) }
+    let img = UIGraphicsImageRenderer(bounds: b).image { ctx in
+      path.addClip()
+      v.drawHierarchy(in: b, afterScreenUpdates: false)
+      if let bg = bg {
+        let inset = UIBezierPath(cgPath: path.cgPath)
+        let k: CGFloat = 1.5
+        inset.apply(CGAffineTransform(translationX: -b.midX, y: -b.midY).concatenating(CGAffineTransform(scaleX: (b.width - 2 * k) / max(1, b.width), y: (b.height - 2 * k) / max(1, b.height))).concatenating(CGAffineTransform(translationX: b.midX, y: b.midY)))
+        ctx.cgContext.saveGState(); inset.addClip(); ctx.cgContext.setBlendMode(.destinationOver); bg.setFill(); ctx.fill(b); ctx.cgContext.restoreGState()
+      }
     }
-    return UITargetedPreview(view: v, parameters: p)
+    tileShot = (key, img, path)
+    return tilePreview(img, path, on: v)
+  }
+  private var tileShot: (key: String, img: UIImage, path: UIBezierPath)? {
+    get { objc_getAssociatedObject(self, &HomeView.tileShotKey) as? (String, UIImage, UIBezierPath) }
+    set { objc_setAssociatedObject(self, &HomeView.tileShotKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
+  }
+  private static var tileShotKey = 0
+  private func tilePreview(_ img: UIImage, _ path: UIBezierPath, on v: UIView) -> UITargetedPreview {
+    let b = v.bounds
+    let iv = UIImageView(image: img); iv.frame = b; iv.backgroundColor = .clear
+    let p = UIPreviewParameters(); p.backgroundColor = .clear
+    p.visiblePath = path; p.shadowPath = path
+    return UITargetedPreview(view: iv, parameters: p, target: UIPreviewTarget(container: v, center: CGPoint(x: b.midX, y: b.midY)))
+  }
+  // (the tile out of its place while it's held — its picture is what's up — and back the moment the picture has landed)
+  func collectionView(_ cv: UICollectionView, willDisplayContextMenu c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
+    guard let key = c.identifier as? String, let t = listViews[key] as? FileTile else { return }
+    t.liftView.alpha = 0
   }
   func collectionView(_ cv: UICollectionView, contextMenuConfiguration c: UIContextMenuConfiguration, highlightPreviewForItemAt ip: IndexPath) -> UITargetedPreview? { tileLift(ip) }
   func collectionView(_ cv: UICollectionView, contextMenuConfiguration c: UIContextMenuConfiguration, dismissalPreviewForItemAt ip: IndexPath) -> UITargetedPreview? { tileLift(ip) }
@@ -2608,6 +2631,10 @@ extension HomeView: UICollectionViewDelegate {
   }
   private static var afterMenu: (() -> Void)?
   func collectionView(_ cv: UICollectionView, willEndContextMenuInteraction c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
+    if let key = c.identifier as? String, let t = listViews[key] as? FileTile {
+      let back = { [weak self, weak t] in t?.liftView.alpha = 1; if self?.tileShot?.key == key { self?.tileShot = nil } }
+      if let a = animator { a.addCompletion(back) } else { DispatchQueue.main.async(execute: back) }
+    }
     let run = { let f = HomeView.afterMenu; HomeView.afterMenu = nil; f?() }
     if let a = animator { a.addCompletion(run) } else { DispatchQueue.main.async(execute: run) }
   }
