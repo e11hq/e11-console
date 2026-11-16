@@ -20,20 +20,25 @@ private var glideKey = 0
 //  120 on the phones that have it.)
 private final class Glider: NSObject {
   weak var s: UIScrollView?
-  let to: () -> CGFloat, from: CGFloat, began = CACurrentMediaTime(), time: CFTimeInterval
+  let to: () -> CGFloat, from: CGFloat, time: CFTimeInterval
+  // (the clock starts on the first frame the screen draws, not when the run is made: a comment arriving builds its row
+  //  right after, the first frame came ~50 ms late and the ease-out began a third of the way in — a 44 pt jump before the
+  //  glide, the full test 2026-11-16. Each frame placed where the screen will show it: the frame's own target time)
+  var began: CFTimeInterval?
   var link: CADisplayLink?
   init(_ s: UIScrollView, to: @escaping () -> CGFloat) {
     self.s = s; self.to = to; from = s.contentOffset.y
     time = 0.38
     super.init()
-    let l = CADisplayLink(target: self, selector: #selector(step))
+    let l = CADisplayLink(target: self, selector: #selector(step(_:)))
     if #available(iOS 15.0, *) { l.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120) }
     l.add(to: .main, forMode: .common); link = l
   }
   func stop() { link?.invalidate(); link = nil }
-  @objc private func step() {
+  @objc private func step(_ l: CADisplayLink) {
     guard let s = s, !s.isTracking else { stop(); return }
-    let t = min(1, (CACurrentMediaTime() - began) / time)
+    guard let b = began else { began = l.targetTimestamp; return }
+    let t = min(1, (l.targetTimestamp - b) / time)
     let e = 1 - pow(1 - t, 3)   // (eases out, as Apple's own scroll)
     let y = to()
     s.contentOffset = CGPoint(x: s.contentOffset.x, y: from + (y - from) * CGFloat(e))

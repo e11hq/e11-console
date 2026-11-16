@@ -116,7 +116,7 @@ extension Main {
         guard let l = v as? UILabel, let t = l.text, !t.trimmingCharacters(in: .whitespaces).isEmpty, l.bounds.width > 2,
               l.convert(l.bounds, to: nil).intersects(w.bounds) else { continue }
         // what's behind: the first ancestor painting a solid colour (half-see-through ones blended over it)
-        var layers: [UIColor] = [], x: UIView? = l.superview, solid: UIColor? = nil, overGlass = false
+        var layers: [UIColor] = [], x: UIView? = l, solid: UIColor? = nil, overGlass = false   // (from the label itself: a chip's label paints its own pill)
         while let y = x {
           if y is UIVisualEffectView { overGlass = true; break }
           // (a view's own colour, or its layer's — chips and badges paint the layer; a cell's background as Apple's
