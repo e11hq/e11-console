@@ -3951,11 +3951,12 @@ final class E11CardView: UIView {
     col.isHidden = !live; quiet.isHidden = live
     quietBottom?.isActive = false
     if !live {
-      // (turned off or deleted: the name and a line saying so — nothing to open)
+      // (turned off or deleted: the name and a line saying so — nothing to open; a link no one made or one taken away:
+      //  it doesn't exist — Haris 2026-11-16)
       picH.isActive = false; picOff.isActive = true; pic.image = nil; picShown = nil
-      qIcon.image = UIImage(systemName: state == "off" ? "nosign" : "trash")?.withTintColor(subInk, renderingMode: .alwaysOriginal)
+      qIcon.image = UIImage(systemName: state == "off" || state == "none" ? "nosign" : "trash")?.withTintColor(subInk, renderingMode: .alwaysOriginal)
       qTitle.text = l.title ?? (folder ? "Folder" : "File"); qTitle.textColor = ink.withAlphaComponent(0.85)
-      qSub.text = state == "off" ? "This link was turned off" : folder ? "This folder was deleted" : "This file was deleted"; qSub.textColor = subInk
+      qSub.text = state == "none" ? "This link doesn’t exist" : state == "off" ? "This link was turned off" : folder ? "This folder was deleted" : "This file was deleted"; qSub.textColor = subInk
       quietBottom = quiet.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12); quietBottom?.isActive = true
       col.isHidden = true
       accessibilityLabel = "\(qTitle.text ?? ""). \(qSub.text ?? "")"

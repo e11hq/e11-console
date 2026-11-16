@@ -547,10 +547,8 @@ final class GroupsVC: ListVC {
   }
   private let meFace = Avatar(frame: CGRect(x: 0, y: 0, width: 38, height: 38))
   private var meKey = ""
-  @objc private func toSettings() {
-    if Talk.shared.isContact { navigationController?.pushViewController(SettingsVC(), animated: true); return }
-    tabBarController?.selectedIndex = (tabBarController?.viewControllers?.count ?? 2) - 1
-  }
+  // (the Settings tab — a client contact's too, since they have tabs: Haris 2026-11-16)
+  @objc private func toSettings() { tabBarController?.selectedIndex = (tabBarController?.viewControllers?.count ?? 2) - 1 }
   private func newGroup() {
     let nav = UINavigationController(rootViewController: NewGroupVC(client: nil, forClient: clientsTab))
     present(nav, animated: true)

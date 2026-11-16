@@ -166,6 +166,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
     let settings = UINavigationController(rootViewController: SettingsVC())
     settings.navigationBar.prefersLargeTitles = true
     settings.tabBarItem = UITabBarItem(title: "Settings", image: UIImage(systemName: "gearshape"), selectedImage: UIImage(systemName: "gearshape.fill"))
+    groupsNav = groups; clientsNav = clients; settingsNav = settings
+    shaped = false   // (new tabs — after signing in again: shaped for this account afresh)
     t.viewControllers = [groups, clients, settings]
     t.delegate = self
     tabs = t
@@ -173,28 +175,31 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
     shape()
     return t
   }
-  // a client contact sees one list of their chats (no tab bar); staff see the three tabs. Checked on every count change, so
-  // it acts only when the kind of account changes — it used to put the tab bar back whenever a message or a read came in,
-  // there behind an open chat's message box
+  // a client contact: two tabs, E11 Agency (their groups) · Settings (Haris 2026-11-16 — it was one list with no tab bar,
+  // Settings from their photo); staff: the three. Checked on every count change, so it acts only when the kind of account
+  // changes — never putting tabs back while a chat is open
+  private var groupsNav: UINavigationController?, clientsNav: UINavigationController?, settingsNav: UINavigationController?   // (kept here: the Clients tab is out of the tab bar for a client contact)
   private var contactMode = false, shaped = false
   @objc private func shape() {
-    guard let t = tabs else { return }
+    guard let t = tabs, let g = groupsNav, let cl = clientsNav, let st = settingsNav else { return }
     let c = Talk.shared.isContact
     if c != contactMode || !shaped {
       shaped = true
       contactMode = c
-      // (iOS 18 on: Apple's own call — the tab bar's isHidden set by hand left Apple's call to hide it beside a chat
-      //  doing nothing, the bar staying behind the chat and Message info)
-      if #available(iOS 18, *) { t.setTabBarHidden(c, animated: false) } else { t.tabBar.isHidden = c }
-      if c { t.selectedIndex = 0; (t.viewControllers?.first as? UINavigationController)?.popToRootViewController(animated: false) }
-      t.viewControllers?.compactMap { ($0 as? UINavigationController)?.viewControllers.first }.forEach { $0.additionalSafeAreaInsets.bottom = 0 }
+      let want: [UIViewController] = c ? [g, st] : [g, cl, st]
+      if t.viewControllers?.count != want.count { t.setViewControllers(want, animated: false) }
+      if c { t.selectedIndex = 0; g.popToRootViewController(animated: false) }
     }
   }
+  // the tabs' counts: E11 Agency — the groups it shows (staff: those without a client; a client contact: all theirs);
+  // Clients — the groups with a client (each unread message on one tab only, the one it's found on — Haris 2026-11-16)
   @objc private func badge() {
     shape()
     let T = Talk.shared
-    tabs?.viewControllers?.first?.tabBarItem.badgeValue = T.totalUnread > 0 ? "\(T.totalUnread)" : nil
-    if (tabs?.viewControllers?.count ?? 0) > 1 { let n = T.groups.values.filter { $0.withClient }.reduce(0) { $0 + T.unread($1.id) }; tabs?.viewControllers?[1].tabBarItem.badgeValue = n > 0 && !T.isContact ? "\(n)" : nil }
+    let mine = T.isContact ? T.totalUnread : T.groups.values.filter { !$0.withClient }.reduce(0) { $0 + T.unread($1.id) }
+    groupsNav?.tabBarItem.badgeValue = mine > 0 ? "\(mine)" : nil
+    let n = T.isContact ? 0 : T.groups.values.filter { $0.withClient }.reduce(0) { $0 + T.unread($1.id) }
+    clientsNav?.tabBarItem.badgeValue = n > 0 ? "\(n)" : nil
   }
   private func showSignIn() {
     Server.follow()
