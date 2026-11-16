@@ -112,14 +112,24 @@ final class Net {
       var q = "/api/talk/upload?offset=\(offset)&name=\(name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "file")"
       if let id = id { q += "&id=\(id)" }
       if last { q += "&last=1" }
-      session.dataTask(with: request(q, method: "POST", body: data.subdata(in: offset..<end))) { d, _, _ in
+      var watch: NSKeyValueObservation?
+      let t = session.dataTask(with: request(q, method: "POST", body: data.subdata(in: offset..<end))) { d, _, _ in
         let j = d.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
         DispatchQueue.main.async {
+          watch?.invalidate(); watch = nil
           guard (j?["ok"] as? Bool) == true, let fid = j?["id"] as? String else { done(nil); return }
           progress(data.isEmpty ? 1 : Double(end) / Double(data.count))
           if last { done(fid) } else { next(fid, end) }
         }
-      }.resume()
+      }
+      // (how far this piece has gone, as it goes — the ring fills smoothly, not a quarter at a time)
+      if !data.isEmpty {
+        watch = t.progress.observe(\.fractionCompleted) { p, _ in
+          let f = Double(offset) + p.fractionCompleted * Double(end - offset)
+          DispatchQueue.main.async { progress(min(0.99, f / Double(data.count))) }
+        }
+      }
+      t.resume()
     }
     next(nil, 0)
   }

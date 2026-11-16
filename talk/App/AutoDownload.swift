@@ -47,12 +47,32 @@ enum Auto {
   enum State: Equatable { case here, auto, wait, loading(Int64, Int64), gone }
   static func state(_ m: Msg) -> State {
     guard let f = m.file else { return .here }
+    // (one of yours going up: the same ring as a download, filling as it goes — Haris 2026-11-16)
+    if m.pending, !m.failed, let u = Uploads.going[f.id] { return .loading(u.0, u.1) }
     if here(f) { return .here }
     if let g = Downloads.shared.got[f.id] { return .loading(g.0, g.1) }
     if gone(m) { return .gone }
     return now(m.kind) ? .auto : .wait
   }
   static func size(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, countStyle: .file) }
+}
+
+/* a file of yours going up: how far it is, for the same ring as a download (Haris 2026-11-16) — set as each part goes,
+   gone once it's on the server; each change told to the bubbles showing it, as a download's */
+enum Uploads {
+  private(set) static var going: [String: (Int64, Int64)] = [:]
+  private static var told: [String: Int] = [:]
+  static func set(_ id: String, _ frac: Double, total: Int) {
+    let pct = Int(frac * 100)
+    guard told[id] != pct else { return }   // (told each whole percent — no more often)
+    told[id] = pct; going[id] = (Int64(Double(total) * min(1, frac)), Int64(total))
+    NotificationCenter.default.post(name: .talkFile, object: id)
+  }
+  static func end(_ id: String) {
+    guard going[id] != nil else { return }
+    going[id] = nil; told[id] = nil
+    NotificationCenter.default.post(name: .talkFile, object: id)
+  }
 }
 
 /* a file downloaded on a tap (or as Wi-Fi comes back): how far it is, for the ring; stopped with the ring */

@@ -57,6 +57,18 @@ enum Attach {
     NSLayoutConstraint.activate([b.widthAnchor.constraint(equalToConstant: 44), b.heightAnchor.constraint(equalToConstant: 44)])
     return b
   }
+  // once everything opened from the + sheet has closed (the sheet, Choose Files, Photos, the camera, the scanner, the contact
+  // picker, the map, the send screen) and the page is on top again: the keyboard back only if it was up when + was tapped
+  // (Haris 2026-11-16 — it came up on its own, over the sheets)
+  static func whenClosed(_ vc: UIViewController, _ run: @escaping () -> Void) {
+    func check(_ n: Int) {
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak vc] in
+        guard let vc = vc, n < 2400 else { return }   // (given up after 12 minutes)
+        if vc.presentedViewController == nil && vc.view.window != nil { run() } else { check(n + 1) }
+      }
+    }
+    check(0)
+  }
   static var bottomInset: CGFloat {
     (UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first?.windows.first { $0.isKeyWindow })?.safeAreaInsets.bottom ?? 34
   }
@@ -275,7 +287,7 @@ final class PhotoTile: UICollectionViewCell {
 }
 
 // ---------- Files: originals up to 1 GB (WhatsApp's) ----------
-final class FilesSheet: UIViewController, UITableViewDataSource, UITableViewDelegate {
+final class FilesSheet: UIViewController, UITableViewDataSource, UITableViewDelegate, UIAdaptivePresentationControllerDelegate {
   private let rows = [("files", "Choose from Files", "doc"), ("originals", "Choose Photo or Video", "photo.on.rectangle"), ("scan", "Scan Document", "doc.viewfinder")]
   var onPick: ((String?) -> Void)?
   private let table = UITableView(frame: .zero, style: .insetGrouped)
@@ -287,6 +299,7 @@ final class FilesSheet: UIViewController, UITableViewDataSource, UITableViewDele
   override func viewDidLoad() {
     super.viewDidLoad()
     view.backgroundColor = .systemGroupedBackground
+    presentationController?.delegate = self
     let t = UILabel(); t.text = "Choose Files"; t.font = .systemFont(ofSize: 17, weight: .semibold); t.textAlignment = .center
     let s = UILabel(); s.text = "Send original files up to 1 GB in size."; s.font = .systemFont(ofSize: 15); s.textColor = .secondaryLabel; s.textAlignment = .center; s.numberOfLines = 2
     let words = UIStackView(arrangedSubviews: [t, s]); words.axis = .vertical; words.spacing = 3
@@ -313,6 +326,8 @@ final class FilesSheet: UIViewController, UITableViewDataSource, UITableViewDele
   }
   func tableView(_ t: UITableView, didSelectRowAt ip: IndexPath) { t.deselectRow(at: ip, animated: true); done(rows[ip.row].0) }
   private func done(_ k: String?) { let f = onPick; onPick = nil; dismiss(animated: true) { f?(k) } }
+  // (pulled down: closed with nothing chosen — told, so nothing is left waiting)
+  func presentationControllerDidDismiss(_ p: UIPresentationController) { let f = onPick; onPick = nil; f?(nil) }
 }
 
 // ---------- picked photos and videos to files ----------

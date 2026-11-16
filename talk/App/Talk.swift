@@ -393,7 +393,10 @@ final class Talk {
       }
     }
     if let data = upload, let f = file {
-      Net.shared.upload(data, name: f.name, progress: { p in progress?(p) }) { [weak self] fid in
+      Uploads.set(f.id, 0, total: data.count)
+      var going = true   // (a late word of progress after it's up doesn't bring the ring back)
+      Net.shared.upload(data, name: f.name, progress: { p in guard going else { return }; progress?(p); Uploads.set(f.id, p, total: data.count) }) { [weak self] fid in
+        going = false; Uploads.end(f.id)
         guard let fid = fid else { self?.mark(g, cid, failed: true); return }
         try? FileManager.default.copyItem(at: Net.local(f.id), to: Net.local(fid))
         m.file?.id = fid

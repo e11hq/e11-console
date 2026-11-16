@@ -993,12 +993,15 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   // the + sheet (V9): your recent photos to tick, then Camera · Files · Contact · Location; the keyboard back if it was up
   // and nothing was chosen
   private func plusSheet() {
+    // (the keyboard down while anything from the sheet is open; back afterwards only if it was up — Haris 2026-11-16)
     let typing = bar.box.isFirstResponder
+    if typing { bar.box.resignFirstResponder() }
     let v = AttachSheet(title: "Send to " + (Talk.shared.groups[group]?.name ?? "chat"), rows: [.camera, .files, .contact, .location], nextWord: "Next", tint: Look.accent)
     v.onChoice = { [weak self] c in
       guard let self = self else { return }
+      Attach.whenClosed(self) { [weak self] in if typing { self?.bar.box.becomeFirstResponder() } }
       switch c {
-      case nil: if typing { self.bar.box.becomeFirstResponder() }
+      case nil: break
       case .photos(let a)?:
         AttachExport.compatible(a) { [weak self] files in self?.preview(files.map { SendPreviewVC.Item(url: $0.url, kind: $0.kind, name: $0.name) }) }
       case .allPhotos?: self.attach("photos")
