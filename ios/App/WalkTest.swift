@@ -446,6 +446,26 @@ extension Main {
         for x in self.taskPages { self.closeTaskPage(x, animated: false) }
         self.tab(self.tabKeys.first ?? "today")
       }),
+      // The keyboard on return (the full test, Haris 2026-11-16): a comment being typed, the app sent away to another app and
+      // back (ios/walktest.py does it on the "aKbAway" step) — the words still there, the keyboard as it was, the list where it was
+      ("aKb", { self.tab(self.tabKeys.first ?? "today"); if let t = best?.0 ?? cards.first { self.openTaskPage(t, tab: "comments", focus: "") } }),
+      ("aKbWait", {}),
+      ("aKbType", {
+        guard let c = self.composeIfMade else { self.apple("keyboard", ["none": "no comment box"]); return }
+        c.text.becomeFirstResponder(); c.text.insertText("Draft kept 42")
+      }),
+      ("aKbTyped", {
+        let f = p()?.feed
+        self.liveBefore = ["text": self.composeIfMade?.text.text ?? "", "first": self.composeIfMade?.text.isFirstResponder ?? false, "y": Int(f?.scroll.contentOffset.y ?? -1)]
+      }),
+      ("aKbAway", {}), ("aKbAwayWait", {}), ("aKbAwayWait2", {}), ("aKbAwayWait3", {}),
+      ("aKbRead", {
+        let f = p()?.feed
+        self.apple("keyboard", ["before": self.liveBefore, "text": self.composeIfMade?.text.text ?? "", "first": self.composeIfMade?.text.isFirstResponder ?? false,
+                                "y": Int(f?.scroll.contentOffset.y ?? -1), "active": UIApplication.shared.applicationState == .active])
+        self.composeIfMade?.text.text = ""; self.composeIfMade?.text.resignFirstResponder()
+        for x in self.taskPages { self.closeTaskPage(x, animated: false) }
+      }),
       // Live (the full test, Haris 2026-11-16): a change made elsewhere — straight to the server, as the Mac or another phone
       // would — while the page is open; read a few seconds later, without leaving the page
       ("aLiveC", { self.tab(self.tabKeys.first ?? "today"); if let t = best?.0 ?? cards.first { self.openTaskPage(t, tab: "comments", focus: "") } }),

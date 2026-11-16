@@ -82,6 +82,7 @@ try:
         r = subprocess.run(['xcrun', 'simctl', 'launch', udid, BUNDLE], env=lenv, capture_output=True, text=True)
         data = sh('xcrun', 'simctl', 'get_app_container', udid, BUNDLE, 'data').stdout.strip()
         res, seen, t0, last = {}, set(), time.time(), time.time()
+        seen_away = set()
         while time.time() - t0 < 900:   # (more time per role — the full test, Haris 2026-11-16)
             try: res = json.load(open(os.path.join(data, 'Documents', 'selftest.json')))
             except Exception: pass
@@ -92,6 +93,11 @@ try:
                 bad = w.get('lost') or w.get('issues')
                 if n == 0 or bad or st == 'done':
                     sh('xcrun', 'simctl', 'io', udid, 'screenshot', os.path.join(SHOTS, f'{n:02d}-{tag}-{st}.png'))
+            # (the keyboard-on-return check: the app sent to another app and brought back, as a person does)
+            if st and st.endswith('_aKbAway') and st not in seen_away:
+                seen_away.add(st)
+                sh('xcrun', 'simctl', 'launch', udid, 'com.apple.Preferences'); time.sleep(3)
+                subprocess.run(['xcrun', 'simctl', 'launch', udid, BUNDLE], env=lenv, capture_output=True, text=True)
             if st == 'done': break
             # (the app gone — crashed — or stuck: no new step for 60 s)
             if time.time() - last > 100:
@@ -161,6 +167,10 @@ if APPLE:
                 check(a0.get('folders') == (b0.get('folders') or 0) + 1 and (a0.get('rowsSet') or 0) - (b0.get('rowsSet') or 0) <= 2, f"{lab}: a folder added elsewhere arrives in the open Client Assets at once, nothing else set again {la}")
             else: print(f'note {lab}: live Client Assets — the role may not add folders {la}')
         elif la: print(f'note {lab}: live Client Assets not tried {la}')
+        kb = ap.get('keyboard') or {}
+        if kb and not kb.get('none'):
+            b0 = kb.get('before') or {}
+            check(kb.get('text') == b0.get('text') and kb.get('first') == b0.get('first') and abs((kb.get('y') or 0) - (b0.get('y') or 0)) <= 2 and kb.get('active'), f"{lab}: a comment being typed, away to another app and back — the words, the keyboard and the list as they were {kb}")
         ct = ap.get('contrast') or {}
         for scr, r in ct.items():
             if isinstance(r, dict) and r.get('checked') is not None:
