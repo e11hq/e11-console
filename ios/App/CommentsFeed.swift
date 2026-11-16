@@ -10,25 +10,19 @@ import AudioToolbox
    page of its own (sliding in like the task page); coming back, that card pulses as WhatsApp's do. Away from the
    bottom a round glass ↓ shows; comments arriving meanwhile make it a "N new comments ↓" pill. Writing still goes
    through the comment box (CommentBar) and the comments screen behind it until step 3. */
-/* To a far end of a long list, Claude's way (Haris 2026-11-15, his recording of Claude's app): never a long scroll through
-   everything — the list put a screen away from where it's going, under a quick crossfade from how it looked, then the last
-   screen glides there smoothly (Apple's own scroll animation). Near enough already: just the glide. `to` is asked again
-   after the jump: rows coming into view take their real heights, and the end moves with them. */
+/* To a far end of the list, Claude's way (Haris 2026-11-16, his recordings of Claude's app — as E11 Talk's chat): one
+   smooth run all the way — Apple's own animated scroll, which takes the same short time however far it goes, so a long
+   list simply flies by and lands softly. No jump and no crossfade. Rows passing on the way take their real heights, so if
+   the end moved meanwhile it glides the last few points there. */
 extension UIScrollView {
-  func glide(_ to: () -> CGFloat) {
+  func glide(_ to: @escaping () -> CGFloat) {
     layoutIfNeeded()
-    let y0 = to(), d = y0 - contentOffset.y, h = bounds.height
-    guard abs(d) > h * 1.5, let host = superview else { setContentOffset(CGPoint(x: contentOffset.x, y: y0), animated: true); return }
-    let shot = snapshotView(afterScreenUpdates: false)
-    UIView.performWithoutAnimation {
-      setContentOffset(CGPoint(x: contentOffset.x, y: y0 - (d > 0 ? h : -h)), animated: false)
-      layoutIfNeeded()
-    }
-    if let s = shot {
-      s.frame = frame; host.insertSubview(s, aboveSubview: self)
-      UIView.animate(withDuration: 0.2, delay: 0, options: [.curveEaseOut], animations: { s.alpha = 0 }, completion: { _ in s.removeFromSuperview() })
-    }
     setContentOffset(CGPoint(x: contentOffset.x, y: to()), animated: true)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+      guard let self, !self.isTracking, !self.isDecelerating else { return }
+      let y = to()
+      if abs(self.contentOffset.y - y) > 1 { self.setContentOffset(CGPoint(x: self.contentOffset.x, y: y), animated: true) }
+    }
   }
 }
 
@@ -527,7 +521,7 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
   func toEnd(animated: Bool) {
     layoutIfNeeded(); scroll.layoutIfNeeded()
     let end = { max(-self.scroll.contentInset.top, self.scroll.contentSize.height + self.scroll.contentInset.bottom - self.scroll.bounds.height) }
-    if animated { scroll.glide(end); return }   // (far away: Claude's way — Haris 2026-11-15)
+    if animated { scroll.glide(end); return }   // (Claude's way — Haris 2026-11-16)
     scroll.setContentOffset(CGPoint(x: 0, y: end()), animated: false)
   }
   // a tap on the top of the screen (the clock / the notch): to the first comment Claude's way, not a long scroll through all
