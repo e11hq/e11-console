@@ -136,7 +136,27 @@ export function createServer(cfg) {
   // the icon's count as it is now, and which notifications to take off it (Haris 2026-11-16: the count stayed until the app
   // was opened). A new update brings its own notification and count; a burst of changes, one note.
   const quietWait = new Map(), quietRead = new Map(), quietLast = new Map();
+  // (and a task changed that someone is on — its people, its maker — while their app is closed: one quiet note, at most every
+  //  two minutes each, so the app takes the changes in the background and opens on what's current; no note to anyone whose
+  //  app has its live line open — it already has them. Haris 2026-11-16)
+  const wakeLast = new Map();
+  function wakeSoon(changed) {
+    const t = (cfg.now || Date.now)();
+    const who = new Set();
+    for (const r of changed) {
+      if (r.kind !== 'tasks' || !r.data) continue;
+      for (const id of [...(Array.isArray(r.data.assignees) ? r.data.assignees : []), r.data.createdBy, r.data.guardian]) if (id) who.add(String(id));
+    }
+    if (!who.size) return;
+    const live = new Set([...streams].map((x) => String(x.userId)));
+    for (const uid of who) {
+      if (live.has(uid) || t - (wakeLast.get(uid) || 0) < 120_000 || !apns.devices(uid)) continue;
+      wakeLast.set(uid, t);
+      apns.quiet(uid, { read: [] }).catch((e) => console.error('APNs wake:', e.message));
+    }
+  }
   function quietSoon(changed) {
+    try { wakeSoon(changed); } catch (e) { console.error('wake:', e.message); }
     const t = (cfg.now || Date.now)();
     for (const r of changed) {
       if (r.kind !== 'notifications' || !r.data || !r.data.to) continue;

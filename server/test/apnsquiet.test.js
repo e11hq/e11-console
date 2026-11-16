@@ -57,3 +57,14 @@ test('a new update brings its own notification — no quiet one for it', async (
   await wait(300);
   assert.equal(got.filter((x) => x.body.e11 && x.body.e11.quiet).length, 0);
 });
+
+test('a task changed while their app is closed: one quiet wake, not more than every two minutes', async () => {
+  got = [];
+  app.store.importAll({ tasks: [{ id: 't9', title: 'Banner', assignees: ['u-a'], createdBy: 'u-h', projectId: null }] }, 'u-h');
+  const t9 = app.store.get('tasks', 't9');
+  await post(OWNER, '/api/push', { changes: [{ kind: 'tasks', id: 't9', data: { ...t9, title: 'Banner 2' } }] });
+  await post(OWNER, '/api/push', { changes: [{ kind: 'tasks', id: 't9', data: { ...t9, title: 'Banner 3' } }] });
+  await wait(300);
+  const wakes = got.filter((x) => x.h['apns-push-type'] === 'background' && x.body.e11 && x.body.e11.quiet && x.body.e11.read.length === 0);
+  assert.equal(wakes.length, 1, JSON.stringify(got.map((x) => x.body)));
+});
