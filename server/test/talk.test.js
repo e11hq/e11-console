@@ -68,6 +68,19 @@ test('messages are passed on: each member gets them, and they go once every phon
   assert.equal((await sync('sm', 0)).events.length, 0, 'once everyone has it, it’s gone from the server');
 });
 
+test('a contact card and a place, from the + sheet (Haris 2026-11-16)', async () => {
+  const c = await act('am', { act: 'send', group: G, contact: { name: 'Print House', phones: [{ label: 'work', value: '+971 4 555 0100' }, { label: 'x', value: 'not a number' }], emails: [{ label: 'work', value: 'hi@print.ae' }] } });
+  assert.ok(c.ok);
+  const l = await act('am', { act: 'send', group: G, location: { lat: 25.2048123456, lng: 55.2708, name: 'Office', addr: 'Dubai' } });
+  assert.ok(l.ok);
+  assert.equal((await act('am', { act: 'send', group: G, location: { lat: 200, lng: 0 } })).ok, false, 'a place off the map is refused');
+  assert.equal((await act('am', { act: 'send', group: G, contact: { name: 'No numbers' } })).ok, false, 'a contact with nothing to reach is refused');
+  const ev = (await sync('des')).events;
+  const cm = ev.find((e) => e.id === c.id), lm = ev.find((e) => e.id === l.id);
+  assert.equal(cm.kind, 'contact'); assert.deepEqual(cm.contact.phones, [{ label: 'work', value: '+971 4 555 0100' }]); assert.equal(cm.contact.emails[0].value, 'hi@print.ae');
+  assert.equal(lm.kind, 'location'); assert.equal(lm.location.lat, 25.204812); assert.equal(lm.location.name, 'Office');
+});
+
 test('only the group’s admins add people; Super / Office Admins can make themselves admin', async () => {
   assert.equal((await act('des', { act: 'addPeople', group: G, ids: ['u-6'] })).ok, false);
   assert.ok((await act('am', { act: 'addPeople', group: G, ids: ['u-6'] })).ok);

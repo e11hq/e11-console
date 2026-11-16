@@ -3715,11 +3715,30 @@ function commentHTML(t, c, isReply) {
         ? `<div class="composer edit"><div class="rt-editor" contenteditable="true" id="edit-comment" data-placeholder="Edit comment…">${c.html ? sanitizeHTML(c.html) : esc(c.text).replace(/\n/g, '<br>')}</div><div class="cb-foot">${fmtToolbar()}<span class="spacer"></span><button class="btn ghost sm" data-action="cancel-edit">Cancel</button><button class="btn primary sm" data-action="save-edit" data-id="${c.id}">Save</button></div></div>`
         : (c.html ? `<div class="cm-text rich">${sanitizeHTML(c.html, true)}</div>` : c.text ? `<div class="cm-text">${linkify(esc(c.text))}</div>` : '')}
       ${(c.attachments || []).length ? commentFiles(c.attachments) : ''}
+      ${c.contact || c.location ? sharedCardHTML(c) : ''}
       ${typeof Cmx !== 'undefined' ? Cmx.cardsHTML(t, c) : ''}
       ${reacts.length ? `<div class="cm-reacts">${reacts.map(([e, n]) => `<button class="react on" data-action="react" data-id="${c.id}" data-emoji="${e}">${e}<span>${n}</span></button>`).join('')}</div>` : ''}
       ${typeof Cmx !== 'undefined' ? Cmx.seenHTML(t, c) : ''}
     </div>
   </div>`;
+}
+
+// A contact or a place sent from the phone's + sheet (Haris 2026-11-16): a place opens Google Maps there; a contact saves as
+// a contact file (.vcf) to add to the computer's contacts
+function sharedCardHTML(c) {
+  if (c.location) {
+    const p = c.location, q = `${p.lat},${p.lng}`;
+    return `<a class="cm-place" href="https://www.google.com/maps/search/?api=1&amp;query=${encodeURIComponent(q)}" target="_blank" rel="noopener">
+      <span class="cm-place-map" aria-hidden="true"><span class="cm-place-pin"></span></span>
+      <span class="cm-place-txt"><b>${esc(p.name || 'Location')}</b><span>${esc(p.addr || q)}</span></span></a>`;
+  }
+  const k = c.contact, kind = (x, d) => String(x || '').replace(/[^A-Za-z]/g, '') || d;
+  const v = ['BEGIN:VCARD', 'VERSION:3.0', `FN:${k.name}`, ...(k.phones || []).map((x) => `TEL;TYPE=${kind(x.label, 'cell')}:${x.value}`),
+    ...(k.emails || []).map((x) => `EMAIL;TYPE=${kind(x.label, 'internet')}:${x.value}`), 'END:VCARD'].join('\r\n');
+  const first = (k.phones || [])[0] || (k.emails || [])[0];
+  return `<div class="cm-contact"><span class="av cm-contact-av" style="width:36px;height:36px;font-size:14px;background:${avColor(k.name)}">${esc(initials(k.name))}</span>
+    <span class="cm-place-txt"><b>${esc(k.name)}</b><span>${esc(first ? first.value : '')}</span></span>
+    <a class="btn ghost sm" href="data:text/vcard;charset=utf-8,${encodeURIComponent(v)}" download="${esc(k.name.replace(/[\\/:*?"<>|]/g, '') || 'Contact')}.vcf">Save Contact</a></div>`;
 }
 
 const FMT_BUTTONS = [

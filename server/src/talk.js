@@ -546,6 +546,22 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     if (mustBeIn && !member(g, u.id)) return [null, bad('You’re not in this group', 403)];
     return [g, null];
   }
+  // A contact card: a name and up to 10 numbers / emails, each with its label (mobile, work…)
+  const contactOf = (c) => {
+    if (!c || typeof c !== 'object') return null;
+    const name = clip(c.name, 120).trim();
+    const list = (a, re) => (Array.isArray(a) ? a : []).slice(0, 10).map((x) => ({ label: clip(x && x.label, 40), value: clip(x && x.value, 200).trim() })).filter((x) => x.value && re.test(x.value));
+    const phones = list(c.phones, /^[+0-9 ()\-.#*]{3,}$/), emails = list(c.emails, /^[^\s@]+@[^\s@]+$/);
+    if (!name || (!phones.length && !emails.length)) return null;
+    return { name, phones, emails, ...(c.org ? { org: clip(c.org, 120) } : {}) };
+  };
+  // A place: where it is (latitude, longitude), and a nearby place's name and address when one was picked
+  const placeOf = (p) => {
+    if (!p || typeof p !== 'object') return null;
+    const lat = Number(p.lat), lng = Number(p.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+    return { lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6, name: clip(p.name || '', 120) || null, addr: clip(p.addr || '', 200) || null };
+  };
   const sys = (g, by, text, extraData = {}) => { const id = rid('m'); emit(g, 'msg', { id, kind: 'sys', text, ...extraData }, by); Q.touch.run(now(), g.id); return id; };
   const nameOf = (id) => { const x = personOfId(id); return x ? x.name : 'Someone'; };
   const changed = (g, by) => emit(g, 'group', { group: g.id }, by, memberIds(g));
@@ -846,7 +862,11 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
           if (!seeTask(u, tk)) return bad('That task isn’t there any more', 404);
           task = taskCard(tk);
         }
-        if (!text.trim() && !file && !task) return bad('Nothing to send');
+        // (a contact card or a place, from the + sheet — Haris 2026-11-16: the phone's own contact, only what was left ticked;
+        //  a place: your current location or one nearby, from Apple's map)
+        const contact = !file && !task ? contactOf(b.contact) : null;
+        const place = !file && !task && !contact ? placeOf(b.location) : null;
+        if (!text.trim() && !file && !task && !contact && !place) return bad('Nothing to send');
         const id = rid('m'), mentions = cleanIds(b.mentions).filter((m) => member(g, m));
         const reply = b.reply && typeof b.reply === 'object' ? { id: clip(b.reply.id, 40), by: clip(b.reply.by, 40), text: clip(b.reply.text, 200), kind: clip(b.reply.kind, 10) } : null;
         // a link's preview, made on the sender's phone (Apple's link reader there): the address, title, site, whether it's a
@@ -858,12 +878,14 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
             video: b.link.video === true, img: own(b.link.img), icon: own(b.link.icon) };
         }
         Q.putSent.run(id, g.id, u.id, t, JSON.stringify([file && file.id, link && link.img && link.img.id, link && link.icon && link.icon.id].filter(Boolean)));
-        const seq = emit(g, 'msg', { id, cid: clip(b.cid, 60), kind: file ? file.kind : 'text', text, file, reply, mentions, ...(b.fwd === true ? { fwd: true } : {}), ...(link ? { link } : {}), ...(task ? { task } : {}),
+        const seq = emit(g, 'msg', { id, cid: clip(b.cid, 60), kind: file ? file.kind : contact ? 'contact' : place ? 'location' : 'text', text, file, reply, mentions, ...(b.fwd === true ? { fwd: true } : {}), ...(link ? { link } : {}), ...(task ? { task } : {}),
+          ...(contact ? { contact } : {}), ...(place ? { location: place } : {}),
           ...(file && typeof b.album === 'string' && /^[A-Za-z0-9-]{6,40}$/.test(b.album) ? { album: b.album } : {}) }, u.id);   // (album: photos and videos sent together — one album in the chat, Haris 2026-11-12)   // (fwd: forwarded from another chat — "Forwarded" over it)
         // (each other member's phone downloads it — now, or later when their Auto-download is off; kept for them until then)
         if (file) for (const d of devicesFor(memberIds(g), u.id)) if (d !== u.id) Q.addNeed.run(file.id, d, g.id, t);   // (linked Macs too — their own Auto-download)
         Q.touch.run(t, g.id);
-        notify(g, u, file && !text.trim() ? ({ photo: '📷 Photo', video: '🎥 Video', voice: '🎤 Voice message' }[file.kind] || `📄 ${file.name}`) : task && !text.trim() ? `☑️ ${task.title}` : text, id, mentions);
+        notify(g, u, file && !text.trim() ? ({ photo: '📷 Photo', video: '🎥 Video', voice: '🎤 Voice message' }[file.kind] || `📄 ${file.name}`) : task && !text.trim() ? `☑️ ${task.title}`
+          : contact ? `👤 ${contact.name}` : place ? `📍 ${place.name || 'Location'}` : text, id, mentions);
         return { ok: true, id, seq, at: t };
       }
       case 'edit': case 'del': case 'react': {

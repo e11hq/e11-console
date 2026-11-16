@@ -891,7 +891,7 @@ var E11Rules = (() => {
           id: c.id, who: c.authorId, at: c.at, edited: !!c.editedAt, owner: !!t.createdBy && c.authorId === t.createdBy, mine: c.authorId === meId,
           runs: runsOf(c), text: String(c.text || ''), mentionsMe: mentionsIn(c.html).has(meId),
           files: (c.attachments || []).map((a) => ({ id: a.id, name: a.name || 'File', size: a.size || 0, path: a.path || null, thumb: a.thumb || null, w: a.w || 0, h: a.h || 0, voice: !!a.voice, dur: a.dur || 0 })).concat(fileRefsOf(c.html).map((f) => ({ ...f, id: c.id + '-' + f.id, w: 0, h: 0, voice: false, dur: 0 }))),
-          urls: urlsIn(c), reactions: rx, seen: sn,
+          urls: urlsIn(c), reactions: rx, seen: sn, ...(c.contact ? { contact: c.contact } : {}), ...(c.location ? { location: c.location } : {}),
           replies: reps.length ? { n: reps.length, last: reps[reps.length - 1].at, people: [...new Set(reps.map((r) => r.authorId).reverse())].slice(0, 3) } : null,
           canEdit: !ro && c.authorId === meId && nowMs() - Date.parse(c.at || 0) < 10 * 60000, canDelete: !ro && (c.authorId === meId || isAdm(me())), canReply: !ro && !c.parentId,
         };
@@ -1025,16 +1025,31 @@ var E11Rules = (() => {
       for (const x of db.tasks || []) for (const a of (x.attachments || []).concat(...(x.comments || []).map((c) => c.attachments || []))) if (a && a.path === path) return a;
       return null;
     }
-    function postComment(t, parentId, html, text, files) {
+    // a contact card or a place sent from the phone's + sheet (Haris 2026-11-16) — kept on the comment as plain data
+    function cleanContact(c) {
+      if (!c || typeof c !== 'object') return null;
+      const cut = (v, n) => String(v == null ? '' : v).slice(0, n).trim();
+      const list = (a, re) => (Array.isArray(a) ? a : []).slice(0, 10).map((x) => ({ label: cut(x && x.label, 40), value: cut(x && x.value, 200) })).filter((x) => x.value && re.test(x.value));
+      const name = cut(c.name, 120), phones = list(c.phones, /^[+0-9 ()\-.#*]{3,}$/), emails = list(c.emails, /^[^\s@]+@[^\s@]+$/);
+      return name && (phones.length || emails.length) ? { name, phones, emails } : null;
+    }
+    function cleanPlace(p) {
+      if (!p || typeof p !== 'object') return null;
+      const lat = Number(p.lat), lng = Number(p.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+      return { lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6, name: String(p.name || '').slice(0, 120) || null, addr: String(p.addr || '').slice(0, 200) || null };
+    }
+    function postComment(t, parentId, html, text, files, extra) {
+      const contact = cleanContact(extra && extra.contact), place = contact ? null : cleanPlace(extra && extra.location);
       const clean = cleanHtml(html), plain = String(text || '').trim().slice(0, 20000);
       const list = (files || []).filter((f) => f && f.path && (String(f.path).startsWith(`attachments/${t.id}/`) || knownFile(String(f.path)))).slice(0, 30)
         .map((f) => { const k = String(f.path).startsWith(`attachments/${t.id}/`) ? null : knownFile(String(f.path));
           return { id: newId(), name: String(f.name || (k && k.name) || 'File').slice(0, 200), size: Number(f.size) || (k && k.size) || 0, path: String(f.path), type: String(f.type || (k && k.type) || ''), ...(k && k.thumb ? { thumb: k.thumb } : {}), ...(f.voice ? { voice: true, dur: Math.max(0, Math.round(Number(f.dur) || 0)) } : {}), addedAt: nowISO(), addedBy: meId }; });
-      if (!plain && !list.length) return { error: 'Nothing to send' };
+      if (!plain && !list.length && !contact && !place) return { error: 'Nothing to send' };
       if (parentId) { const p = (t.comments || []).find((c) => c.id === parentId); if (!p || p.parentId) return { error: 'That comment is no longer here' }; }
       t.comments = t.comments || [];
       const cid = newId();
-      t.comments.push({ id: cid, text: plain, html: clean, at: nowISO(), attachments: list, parentId: parentId || null, reactions: {}, authorId: meId });
+      t.comments.push({ id: cid, text: plain, html: clean, at: nowISO(), attachments: list, parentId: parentId || null, reactions: {}, authorId: meId, ...(contact ? { contact } : {}), ...(place ? { location: place } : {}) });
       const mentioned = mentionsIn(clean);
       mentioned.forEach((x) => pushNotif(x, t, 'mention', `mentioned you in a ${parentId ? 'reply' : 'comment'} on`, { snippet: trunc(plain, 160), commentId: cid }));
       if (parentId) {
@@ -1043,7 +1058,7 @@ var E11Rules = (() => {
         ppl.forEach((x) => { if (!mentioned.has(x) && !watchersOf(t).includes(x)) pushNotif(x, t, 'comment', 'replied in a thread on', { snippet: trunc(plain, 160), commentId: cid }); });
       }
       const voice = list.some((f) => f.voice);
-      notifyWatchers(t, 'comment', parentId ? 'replied to a comment on' : 'commented on', { snippet: trunc(plain || (voice ? 'Voice message' : `${list.length} file${list.length === 1 ? '' : 's'}`), 160), skip: [...mentioned], commentId: cid });
+      notifyWatchers(t, 'comment', parentId ? 'replied to a comment on' : 'commented on', { snippet: trunc(plain || (contact ? `Contact: ${contact.name}` : place ? `Location${place.name ? ': ' + place.name : ''}` : voice ? 'Voice message' : `${list.length} file${list.length === 1 ? '' : 's'}`), 160), skip: [...mentioned], commentId: cid });
       t.updatedAt = nowISO();
       return { messages: [], id: cid };
     }

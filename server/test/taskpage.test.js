@@ -223,6 +223,16 @@ test('a file of another task, pasted into a description, is added to this task\'
   assert.ok(!T('t3').attachments.some((a) => a.path === 'attachments/nope/secret.pdf'), 'only files this person can already see');
 });
 
+test('a comment with a contact card or a place, from the + sheet (Haris 2026-11-16)', async () => {
+  let r = await act('am@e11-digital.com', { act: 'comment', id: 't3', html: '', text: '', contact: { name: 'Print House', phones: [{ label: 'work', value: '+971 4 555 0100' }] } });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.deepEqual(T('t3').comments.at(-1).contact, { name: 'Print House', phones: [{ label: 'work', value: '+971 4 555 0100' }], emails: [] });
+  r = await act('am@e11-digital.com', { act: 'comment', id: 't3', html: '', text: '', location: { lat: 25.2, lng: 55.27, name: 'Shoot', addr: 'Dubai' } });
+  assert.equal(r.ok, true); assert.equal(T('t3').comments.at(-1).location.name, 'Shoot');
+  r = await act('am@e11-digital.com', { act: 'comment', id: 't3', html: '', text: '', location: { lat: 'x' } });
+  assert.equal(r.ok, false, 'nothing to send');
+});
+
 test('writing a comment, a reply with a mention, a voice message; editing', async () => {
   let r = await act('prod@e11-digital.com', { act: 'comment', id: 't3', html: 'Done <b>now</b>', text: 'Done now' });
   assert.equal(r.ok, true); const c = T('t3').comments.at(-1); assert.equal(c.html, 'Done <b>now</b>'); assert.equal(c.authorId, 'u-prod');

@@ -340,7 +340,7 @@ var E11AppView = (function () {
       else if (a === 'withdrawReview') r = rules.withdrawReview(t);
       else if (a === 'removeFile') { const d = rules.removeAttachment(t, String(body.value || '')); if (d.error) return fail(409, d.error); undo = d.undo; r = d.messages; }
       else if (a === 'attach') r = rules.attachFilesTo(t, Array.isArray(body.files) ? body.files : []);
-      else if (a === 'comment') r = rules.postComment(t, body.parentId ? String(body.parentId) : null, body.html, body.text, Array.isArray(body.files) ? body.files : []);
+      else if (a === 'comment') r = rules.postComment(t, body.parentId ? String(body.parentId) : null, body.html, body.text, Array.isArray(body.files) ? body.files : [], { contact: body.contact, location: body.location });
       else if (a === 'editComment') r = rules.editComment(t, String(body.value || ''), body.html, body.text);
       else if (a === 'addCheck') { if (!rules.can('addChecklist', t)) return fail(403, 'Your role doesn’t allow adding checklist items'); r = rules.addCheck(t, body.value); }
       else if (a === 'clientApproval') {
