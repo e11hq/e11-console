@@ -13,8 +13,10 @@ import UIKit
 let APPLE_CLIENTS = APPLE_NAV
 
 extension Main {
-  // (Clients in its own Apple navigation: only for those with a Clients tab — the CD opens the list from Me, the old way)
-  var clientsApple: Bool { APPLE_CLIENTS && tabKeys.contains("projects") }
+  // (Clients in its own Apple navigation: only for those with a Clients tab — the CD opens the list from Me, the old way;
+  //  and a client found by search where there's no Clients tab — its page pushed on that tab's navigation, Apple's way:
+  //  drawn the old way it was put nowhere and never showed, Haris 2026-11-16)
+  var clientsApple: Bool { APPLE_CLIENTS && (tabKeys.contains("projects") || clientsHereNav != nil) }
   // the Clients tab's navigation has settled (a push, a pop, the tab tapped again popping everything): what's no longer
   // in it is gone for the app too
   func clientsNavShown(_ n: UINavigationController) {

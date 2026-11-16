@@ -128,6 +128,7 @@ final class AssetsCtl {
     else if t.ownNav === t.assetsNav { appleNav = t.assetsNav }
     else if t.ownNav === t.meNav { appleNav = t.meNav }   // (Me in its own Apple navigation — AppleMe.swift: pushed on Me)
     else if let o = t.ownNav, t.roleNavs.values.contains(where: { $0 === o }) { appleNav = o }   // (a role's own tab — an Office Admin's Overview's See All: pushed on it, as on Me — Haris 2026-11-11)
+    else if let o = t.ownNav, o === main.clientsHereNav { appleNav = o }   // (a client found by search where there's no Clients tab — its folders pushed after its page, on that tab: Haris 2026-11-16)
     else if t.ownNav == nil { appleNav = main.navigationController }
     else { appleNav = nil }
   }
