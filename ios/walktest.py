@@ -154,6 +154,9 @@ if APPLE:
             n0 = ((lc.get('before') or {}).get('n')) or 0
             check(lc.get('after') == n0 + 1 and (lc.get('again') or 0) <= 2, f"{lab}: a comment made elsewhere arrives on the open task at once, the rest left as they were {lc}")
         else: print(f'note {lab}: live comment not tried {lc}')
+        lf = ap.get('liveCommentFrames') or {}
+        if lf.get('rows'):
+            check((lf.get('biggestStep') or 0) <= 30, f"{lab}: as a comment arrives, the ones already there glide — none jumps in a single frame {lf}")
         if li and not li.get('none'):
             rid = (li.get('before') or {}).get('id'); af = li.get('after') or {}
             check(rid not in (af.get('unread') or []) and (af.get('tab') == 'all' or rid not in (af.get('rows') or [])), f"{lab}: an update read elsewhere leaves Unread at once (to All when none is left) {li}")

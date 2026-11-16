@@ -474,6 +474,19 @@ extension Main {
         guard let f = p()?.feed, let t = p()?.taskId else { self.apple("liveComment", ["none": "no feed"]); return }
         self.liveBefore = ["n": f.selfOrder.count, "again": f.setAgain]
         self.elsewhere("/api/app/act", ["ev": "comment", "id": t, "text": "Live check \(Int(Date().timeIntervalSince1970))", "op": UUID().uuidString]) { r in self.liveBefore["sent"] = r }
+        // (frame by frame while it arrives: each comment already there — the biggest move it made in one frame; a glide moves a
+        //  few points a frame, a snap tens at once)
+        var last: [String: CGFloat] = [:], worst: [String: CGFloat] = [:], frames = 0
+        SelfFrames.run(3.0, {
+          let now = f.selfRowTops; frames += 1
+          for (id, y) in now { if let y0 = last[id] { worst[id] = max(worst[id] ?? 0, abs(y - y0)) } }
+          last = now; return [:]
+        }) { _ in
+          let top = worst.values.max() ?? 0
+          var a = ((self.selfResult["apple"] as? [String: Any])?["liveCommentFrames"] as? [String: Any]) ?? [:]
+          a = ["frames": frames, "biggestStep": Int(top.rounded()), "rows": worst.count]
+          self.apple("liveCommentFrames", a)
+        }
       }),
       ("aLiveCWait2", {}),
       ("aLiveCRead", {

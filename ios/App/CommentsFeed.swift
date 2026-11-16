@@ -200,6 +200,8 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
   private var order: [String] = []
   // (for the self-test: the comments in order, and how many rows were set again in place since it opened)
   var selfOrder: [String] { order }
+  // (each comment row on screen: where its top is in the window — for the frame-by-frame smoothness reading)
+  var selfRowTops: [String: CGFloat] { var o: [String: CGFloat] = [:]; for (id, c) in cells where c.window != nil { o[id] = c.convert(c.bounds, to: nil).minY }; return o }
   private(set) var setAgain = 0
   private(set) var model: [String: Any]?
   var people: [String: [String: Any]] = [:]
