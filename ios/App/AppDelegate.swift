@@ -392,7 +392,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   }
   // the uploads' bar: "Uploading <name>" (or "N files"), how much of how much, its bar, Cancel — gone when nothing's going up
   func paintUploadHUD() {
-    let jobs = UploadCenter.shared.jobs.values.filter { !$0.cancelled }
+    let jobs = UploadCenter.shared.jobs.values.filter { !$0.cancelled && $0.bar }
     if jobs.isEmpty { upHud?.removeFromSuperview(); upHud = nil; placeHUDs(); return }
     if upHud == nil {
       let u = DownloadHUD(); u.onCancel = { UIImpactFeedbackGenerator(style: .light).impactOccurred(); UploadCenter.shared.cancelAll() }

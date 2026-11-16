@@ -12,9 +12,11 @@ import UniformTypeIdentifiers
 // (Haris 2026-11-09: "upload progress … and cancel same as download, to all uploads")
 final class UploadCenter {
   static let shared = UploadCenter()
-  struct Job { var name: String; var size: Int64; var sent: Int64; var cancelled: Bool }
+  // (bar: false — a comment's files, which show their own progress on their tiles: not on the bar at the bottom too,
+  //  Haris 2026-11-16)
+  struct Job { var name: String; var size: Int64; var sent: Int64; var cancelled: Bool; var bar = true }
   private(set) var jobs: [UUID: Job] = [:]
-  func begin(_ name: String, _ size: Int64) -> UUID { let id = UUID(); jobs[id] = Job(name: name, size: size, sent: 0, cancelled: false); Main.shared.paintUploadHUD(); return id }
+  func begin(_ name: String, _ size: Int64, bar: Bool = true) -> UUID { let id = UUID(); jobs[id] = Job(name: name, size: size, sent: 0, cancelled: false, bar: bar); Main.shared.paintUploadHUD(); return id }
   func step(_ id: UUID, _ sent: Int64) { guard jobs[id] != nil else { return }; jobs[id]?.sent = sent; Main.shared.paintUploadHUD() }
   func end(_ id: UUID) { jobs[id] = nil; Main.shared.paintUploadHUD() }
   func cancelled(_ id: UUID) -> Bool { jobs[id]?.cancelled ?? true }
@@ -26,9 +28,9 @@ enum Uploader {
   // a file on the phone → the server (2 MB at a time) → its path there. Cancel (the bar at the bottom): the piece on its way
   // stops and it says it didn't go (done(nil)), as a failed upload. Each piece sent by iPhone itself (Transfers — it goes on
   // with the app in the background or the phone locked: Haris 2026-11-10)
-  static func send(_ url: URL, name: String, task: String, dest: String? = nil, cookies: @escaping (@escaping (String) -> Void) -> Void, progress: @escaping (Double) -> Void, done: @escaping (String?) -> Void) {
+  static func send(_ url: URL, name: String, task: String, dest: String? = nil, bar: Bool = true, cookies: @escaping (@escaping (String) -> Void) -> Void, progress: @escaping (Double) -> Void, done: @escaping (String?) -> Void) {
     let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
-    let job = UploadCenter.shared.begin(name, size)
+    let job = UploadCenter.shared.begin(name, size, bar: bar)
     let finish: (String?) -> Void = { p in UploadCenter.shared.running[job] = nil; UploadCenter.shared.end(job); done(p) }
     func piece(_ offset: Int64, _ path: String?) {
       if UploadCenter.shared.cancelled(job) { return finish(nil) }
@@ -494,7 +496,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     files.append((uid: uid, name: name, size: size, path: nil, progress: 0, failed: false, thumb: thumb))
     if let t = thumb { FeedLoader.shared.setLocal("local:" + uid, t) }   // (its card in the comments, if sent before it's up)
     paintTiles()
-    Uploader.send(url, name: name, task: taskId, cookies: cookies, progress: { [weak self] p in
+    Uploader.send(url, name: name, task: taskId, bar: false, cookies: cookies, progress: { [weak self] p in
       UploadRing.post(uid, p)
       guard let self = self, let i = self.files.firstIndex(where: { $0.uid == uid }) else { return }
       self.files[i].progress = p; self.paintTiles()
@@ -876,7 +878,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     let thread = parentId ?? replyTo?.id   // (a reply shows in its thread, not in the list)
     onPending?(pendingId, thread, dur)
     CommentSound.send()
-    Uploader.send(url, name: name, task: taskId, cookies: cookies, progress: { _ in }) { [weak self] path in
+    Uploader.send(url, name: name, task: taskId, bar: false, cookies: cookies, progress: { _ in }) { [weak self] path in
       guard let self = self else { return }
       try? FileManager.default.removeItem(at: url)
       guard let p = path else { self.onPendingEnd?(pendingId, false); self.onToast?("The voice message didn’t upload — try again"); return }
