@@ -562,11 +562,9 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     var items: [UIMenuElement] = []
     items.append(UIAction(title: "Copy link", image: UIImage(systemName: "link")) { [weak self] _ in guard let self = self else { return }; self.onEvent?(["ev": "copy", "id": self.taskId]) })
     if (m["readOnly"] as? Bool) != true {   // (attaching stays on the phone — Haris, 2026-11-01)
-      items.append(UIMenu(title: "Attach Files", image: UIImage(systemName: "paperclip"), children: [
-        UIAction(title: "Camera", image: UIImage(systemName: "camera")) { [weak self] _ in guard let self = self else { return }; UIImpactFeedbackGenerator(style: .light).impactOccurred(); self.onAttachFrom?("camera") },
-        UIAction(title: "Photos", image: UIImage(systemName: "photo.on.rectangle")) { [weak self] _ in guard let self = self else { return }; UIImpactFeedbackGenerator(style: .light).impactOccurred(); self.onAttachFrom?("photos") },
-        UIAction(title: "Files", image: UIImage(systemName: "folder")) { [weak self] _ in guard let self = self else { return }; UIImpactFeedbackGenerator(style: .light).impactOccurred(); self.onAttachFrom?("files") },
-      ]))
+      // (Attach Files… opens the + sheet — your recent photos, Camera · Files: canvas "Attach panel — Talk & Console", W5,
+      //  Haris 2026-11-16)
+      items.append(UIAction(title: "Attach Files…", image: UIImage(systemName: "paperclip")) { [weak self] _ in guard let self = self else { return }; UIImpactFeedbackGenerator(style: .light).impactOccurred(); self.onAttachFrom?("sheet") })
     }
     if (m["canDelete"] as? Bool) == true && !TaskPage.viewOnly {
       items.append(UIMenu(options: .displayInline, children: [UIAction(title: "Trash task", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in self?.confirmDelete() }]))

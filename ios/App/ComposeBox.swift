@@ -118,12 +118,9 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       b.setImage(UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)), for: .normal)
       b.tintColor = .label; b.backgroundColor = .tertiarySystemFill; b.layer.cornerRadius = 18
     }
-    // (+ opens Apple's own menu — Camera · Photos · Files — then Apple's camera, photo picker and Files: Haris 2026-11-09)
-    let src: (String, String, String) -> UIAction = { key, title, sym in
-      UIAction(title: title, image: UIImage(systemName: sym)) { [weak self] _ in self?.attach(key) }
-    }
-    plus.menu = UIMenu(children: [src("camera", "Camera", "camera"), src("photos", "Photos", "photo.on.rectangle"), src("files", "Files", "folder")])
-    plus.showsMenuAsPrimaryAction = true
+    // (+ opens the + sheet — your recent photos, Camera · Files · Contact · Location: canvas "Attach panel — Talk &
+    //  Console", W4, Haris 2026-11-16)
+    plus.addAction(UIAction { [weak self] _ in self?.plusSheet() }, for: .touchUpInside)
     right.addAction(UIAction { [weak self] _ in self?.sendTapped() }, for: .touchUpInside)
     let hold = UILongPressGestureRecognizer(target: self, action: #selector(holdMic(_:))); hold.minimumPressDuration = 0.18
     right.addGestureRecognizer(hold); holdG = hold
@@ -364,6 +361,49 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     textViewDidChange(text)
   }
 
+  // ---------- the + sheet ----------
+  private func plusSheet() {
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    guard let vc = window?.rootViewController else { return }
+    var top = vc; while let p = top.presentedViewController { top = p }
+    let typing = text.isFirstResponder
+    let v = AttachSheet(title: "Add to Comment", rows: [.camera, .files, .contact, .location], nextWord: "Add", tint: .tintColor)
+    v.onChoice = { [weak self, weak top] c in
+      guard let self = self, let top = top else { return }
+      switch c {
+      case nil: if typing { self.text.becomeFirstResponder() }
+      case .photos(let a)?:
+        Picker.shared.pickAssets(a) { [weak self] r in
+          for f in (r["files"] as? [[String: Any]]) ?? [] {
+            guard let self = self, let tok = f["token"] as? String, let url = Picker.shared.url(tok) else { continue }
+            self.addFile(url, name: f["name"] as? String ?? "File", voice: nil)
+          }
+          self?.text.becomeFirstResponder()
+        }
+      case .allPhotos?: self.attach("photos")
+      case .camera?: self.attach("camera")
+      case .files?: self.attach("filesheet")
+      case .contact?: ContactFlow.present(from: top, tint: .tintColor) { [weak self] k in self?.sendShared(["contact": k.json], says: "Contact: " + k.name) }
+      case .location?: PlacePicker.present(from: top, tint: .tintColor) { [weak self] p in self?.sendShared(["location": p.json], says: "Location" + (p.name.map { ": " + $0 } ?? "")) }
+      }
+    }
+    top.present(v, animated: true)
+  }
+  // a contact card or a place: its own comment, shown at once (its words for the moment, the card once the server has it)
+  private func sendShared(_ what: [String: Any], says: String) {
+    var body: [String: Any] = ["act": "comment", "id": taskId, "html": "", "text": ""]
+    what.forEach { body[$0.key] = $0.value }
+    let thread = parentId ?? replyTo?.id
+    if let p = thread { body["parentId"] = p }
+    if editing == nil { CommentSound.send() }
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    let pendingId = "pending-" + UUID().uuidString
+    onPendingFiles?(pendingId, thread, says, [])
+    onSend?(body) { [weak self] ok in
+      self?.onPendingEnd?(pendingId, ok)
+      if ok { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+    }
+  }
   // ---------- files ----------
   private func attach(_ source: String) {
     UIImpactFeedbackGenerator(style: .light).impactOccurred()

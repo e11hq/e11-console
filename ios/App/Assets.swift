@@ -953,9 +953,9 @@ final class AssetsCtl {
   // Upload: iPhone's own Photos / Camera / Files, each file sent in pieces into the folder, then filed by the page
   private func upload(_ h: HomeView, client: String, folder: String) {
     guard !upBusy, let f = models[client].flatMap({ folderInfo($0, folder) }), let dir = f["dir"] as? String else { if upBusy { toast(h, "Still uploading — one moment") }; return }
-    main.topMost().present(AttachSheetVC(title: "Upload to \(f["name"] as? String ?? "folder")") { [weak self, weak h] src in
-      guard let self = self else { return }
-      Picker.shared.pick(from: self.main.topMost(), single: false, source: src) { [weak self, weak h] r in
+    // (the + sheet — your recent photos, Camera · Files: canvas "Attach panel — Talk & Console", W5, Haris 2026-11-16)
+    do {
+      Picker.shared.pick(from: main.topMost(), single: false, source: "sheet", title: f["name"] as? String ?? "Upload") { [weak self, weak h] r in
         guard let self = self else { return }
         let picked = ((r["files"] as? [[String: Any]]) ?? []).compactMap { x -> (URL, String)? in
           guard let tok = x["token"] as? String, let u = Picker.shared.url(tok) else { return nil }
@@ -988,7 +988,7 @@ final class AssetsCtl {
         }
         next(0)
       }
-    }, animated: true)
+    }
   }
   // several files at once: one .zip from the server, then iPhone's own Save / Share sheet
   private func downloadMany(_ h: HomeView, _ files: [[String: Any]], name: String) {

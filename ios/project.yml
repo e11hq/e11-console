@@ -45,7 +45,7 @@ targets:
       properties:
         CFBundleDisplayName: E11 Console
         # (the Talk button: is E11 Talk on this iPhone — Haris 2026-11-13)
-        LSApplicationQueriesSchemes: [e11talk]
+        LSApplicationQueriesSchemes: [e11talk, comgooglemaps, waze]   # (+ a place opening in this iPhone's map apps — Haris 2026-11-16)
         CFBundleName: E11 Console
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
@@ -70,6 +70,10 @@ targets:
         NSCameraUsageDescription: Take a photo or video to attach to a task.
         NSMicrophoneUsageDescription: Record voice messages for comments, and sound with a video you attach to a task.
         NSPhotoLibraryAddUsageDescription: Save pictures and videos you download from E11 Console to Photos.
+        # (the + sheet — Haris 2026-11-16: your recent photos in it, send where you are in a comment, save a contact sent there)
+        NSPhotoLibraryUsageDescription: Show your recent photos in the + sheet, to attach to a task, a comment or Client Assets.
+        NSLocationWhenInUseUsageDescription: Send your current location, or a place near you, in a comment.
+        NSContactsUsageDescription: Save a contact someone sent in a comment to your contacts.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         E11ServerURL: https://console.e11hq.com

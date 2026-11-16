@@ -2566,8 +2566,10 @@ extension HomeView: UICollectionViewDelegate {
     let id = card.id
     return UIContextMenuConfiguration(identifier: key as NSString, previewProvider: nil) { [weak self] _ in
       // (the picker is asked for once the menu has closed — while it's still closing, iPhone shows no other screen)
-      let src = { (s: String, t: String, img: String) in UIAction(title: t, image: UIImage(systemName: img)) { _ in HomeView.afterMenu = { self?.send(["ev": "attach", "id": id, "source": s]) } } }
-      return UIMenu(title: "Attach Files", children: [src("camera", "Camera", "camera"), src("photos", "Photos", "photo"), src("files", "Files", "doc.badge.arrow.up")])
+      // (Attach Files… opens the + sheet over the list — your recent photos, Camera · Files: canvas "Attach panel — Talk &
+      //  Console", W5, Haris 2026-11-16)
+      let title = card.taskTitle
+      return UIMenu(children: [UIAction(title: "Attach Files…", image: UIImage(systemName: "paperclip")) { _ in HomeView.afterMenu = { self?.send(["ev": "attach", "id": id, "source": "sheet", "title": title]) } }])
     }
   }
   // hold an Inbox row: Apple's peek of it (InboxPeekVC — the task, the comment in full or the task's facts, from the phone's

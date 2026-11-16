@@ -960,6 +960,9 @@ final class CommentCell: UIView {
       let w = UIStackView(arrangedSubviews: [r, UIView()]); stack.addArrangedSubview(w)
     }
     for u in ((it["urls"] as? [String]) ?? []).prefix(3) { stack.addArrangedSubview(LinkCard(u)) }
+    // (a contact card or a place, from the + sheet — Haris 2026-11-16)
+    if let k = SharedContact(it["contact"] as? [String: Any]) { let w = UIStackView(arrangedSubviews: [SharedCard(contact: k), UIView()]); stack.addArrangedSubview(w) }
+    else if let pl = SharedPlace(it["location"] as? [String: Any]) { let w = UIStackView(arrangedSubviews: [SharedCard(place: pl), UIView()]); stack.addArrangedSubview(w) }
     let rx = (it["reactions"] as? [[String: Any]]) ?? []
     if !rx.isEmpty {
       let r = UIStackView(); r.spacing = 6
@@ -1246,6 +1249,77 @@ final class LinkCard: UIView {
     }
   }
   required init?(coder: NSCoder) { fatalError() }
+}
+
+// a contact or a place in a comment (canvas "Attach panel — Talk & Console", C2, Haris 2026-11-16). A place: Apple's map
+// around it with its pin, its name and address — tapped, the map apps on this iPhone. A contact: its initials, name and first
+// number, then Message · Save Contact (iPhone's own contact card and New Contact).
+final class SharedCard: UIView {
+  private var place: SharedPlace?, contact: SharedContact?
+  private let map = UIImageView()
+  private var dark = false
+  init(place p: SharedPlace) {
+    super.init(frame: .zero)
+    place = p; base()
+    map.contentMode = .scaleAspectFill; map.clipsToBounds = true; map.backgroundColor = .quaternarySystemFill
+    let words = SharedCard.words(p.title, p.line)
+    let col = UIStackView(arrangedSubviews: [map, words]); col.axis = .vertical; col.spacing = 8
+    fill(col, top: 0)
+    map.heightAnchor.constraint(equalToConstant: 120).isActive = true
+    picture()
+    addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(open)))
+    isAccessibilityElement = true; accessibilityTraits = .link; accessibilityLabel = "Location: \(p.title), \(p.line)"
+  }
+  init(contact k: SharedContact) {
+    super.init(frame: .zero)
+    contact = k; base()
+    let face = UILabel(); face.text = k.name.split(separator: " ").prefix(2).compactMap { $0.first.map(String.init) }.joined().uppercased()
+    face.font = .systemFont(ofSize: 14, weight: .semibold); face.textAlignment = .center; face.backgroundColor = .systemGray4; face.layer.cornerRadius = 19; face.clipsToBounds = true
+    face.widthAnchor.constraint(equalToConstant: 38).isActive = true; face.heightAnchor.constraint(equalToConstant: 38).isActive = true
+    let top = UIStackView(arrangedSubviews: [face, SharedCard.words(k.name, k.first)]); top.spacing = 10; top.alignment = .center
+    let line = UIView(); line.backgroundColor = .separator; line.heightAnchor.constraint(equalToConstant: 0.5).isActive = true
+    let act = { (t: String, run: @escaping () -> Void) -> UIButton in
+      var c = UIButton.Configuration.plain(); c.title = t; c.baseForegroundColor = .tintColor
+      c.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { var a = $0; a.font = .systemFont(ofSize: 15, weight: .semibold); return a }
+      let b = UIButton(configuration: c); b.addAction(UIAction { _ in run() }, for: .touchUpInside); return b
+    }
+    let acts = UIStackView(arrangedSubviews: [act("Message") { ContactOpen.card(k, from: Main.shared.topMost()) }, act("Save Contact") { ContactOpen.save(k, from: Main.shared.topMost()) }])
+    acts.distribution = .fillEqually
+    let col = UIStackView(arrangedSubviews: [top, line, acts]); col.axis = .vertical; col.spacing = 6
+    fill(col, top: 10)
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  private func base() {
+    backgroundColor = .tertiarySystemFill; layer.cornerRadius = 12; layer.cornerCurve = .continuous; clipsToBounds = true
+    widthAnchor.constraint(equalToConstant: 270).isActive = true
+  }
+  private func fill(_ col: UIStackView, top: CGFloat) {
+    col.translatesAutoresizingMaskIntoConstraints = false; addSubview(col)
+    NSLayoutConstraint.activate([col.topAnchor.constraint(equalTo: topAnchor, constant: top), col.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
+                                 col.leadingAnchor.constraint(equalTo: leadingAnchor), col.trailingAnchor.constraint(equalTo: trailingAnchor)])
+    for v in col.arrangedSubviews where v !== map { v.layoutMargins = UIEdgeInsets(top: 0, left: 12, bottom: 0, right: 12); (v as? UIStackView)?.isLayoutMarginsRelativeArrangement = true }
+  }
+  private static func words(_ a: String, _ b: String) -> UIStackView {
+    let t = UILabel(); t.font = .systemFont(ofSize: 15, weight: .semibold); t.text = a; t.lineBreakMode = .byTruncatingTail
+    let s = UILabel(); s.font = .systemFont(ofSize: 12.5); s.textColor = .secondaryLabel; s.text = b; s.lineBreakMode = .byTruncatingTail
+    let v = UIStackView(arrangedSubviews: [t, s]); v.axis = .vertical; v.spacing = 2; return v
+  }
+  // (the map follows the phone's look — made once for each look and kept, fading in the first time)
+  private func picture() {
+    guard let p = place else { return }
+    let d = traitCollection.userInterfaceStyle == .dark, size = CGSize(width: 270, height: 120)
+    dark = d
+    if let i = MapThumb.cached(p, size, dark: d) { map.image = i; return }
+    MapThumb.make(p, size, dark: d) { [weak self] i in
+      guard let self = self, self.dark == d, let i = i else { return }
+      UIView.transition(with: self.map, duration: 0.2, options: .transitionCrossDissolve) { self.map.image = i }
+    }
+  }
+  override func traitCollectionDidChange(_ prev: UITraitCollection?) {
+    super.traitCollectionDidChange(prev)
+    if prev?.userInterfaceStyle != traitCollection.userInterfaceStyle { picture() }
+  }
+  @objc private func open() { if let p = place { MapsChooser.show(p, from: Main.shared.topMost(), source: self) } }
 }
 
 final class Shimmer: UIView {

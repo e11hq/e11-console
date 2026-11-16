@@ -264,7 +264,7 @@ extension Main {
     }
     p.onAttachFrom = { [weak self, weak p] src in
       guard let self = self, let p = p else { return }
-      Picker.shared.pick(from: self.topMost(), single: false, source: src) { [weak self, weak p] r in
+      Picker.shared.pick(from: self.topMost(), single: false, source: src, title: p.model?["title"] as? String) { [weak self, weak p] r in
         guard let self = self, let p = p else { return }
         let picked = ((r["files"] as? [[String: Any]]) ?? []).compactMap { f -> (URL, String)? in
           guard let tok = f["token"] as? String, let u = Picker.shared.url(tok) else { return nil }
@@ -285,19 +285,17 @@ extension Main {
       }
     }
     p.onDescUpload = { [weak self, weak p] picked in guard let self = self, let p = p else { return }; self.uploadToTask(p, picked, toDesc: true) }
+    // (the + sheet — your recent photos, Camera · Files: canvas "Attach panel — Talk & Console", W5, Haris 2026-11-16)
     p.onAttachFiles = { [weak self, weak p] in
       guard let self = self, let p = p, let host = self.sheetHost() else { return }
-      host.present(AttachSheetVC() { [weak self, weak p] src in
+      Picker.shared.pick(from: host, single: false, source: "sheet", title: p.model?["title"] as? String) { [weak self, weak p] r in
         guard let self = self, let p = p else { return }
-        Picker.shared.pick(from: self.topMost(), single: false, source: src) { [weak self, weak p] r in
-          guard let self = self, let p = p else { return }
-          let picked = ((r["files"] as? [[String: Any]]) ?? []).compactMap { f -> (URL, String)? in
-            guard let tok = f["token"] as? String, let u = Picker.shared.url(tok) else { return nil }
-            return (u, f["name"] as? String ?? "File")
-          }
-          self.uploadToTask(p, picked)
+        let picked = ((r["files"] as? [[String: Any]]) ?? []).compactMap { f -> (URL, String)? in
+          guard let tok = f["token"] as? String, let u = Picker.shared.url(tok) else { return nil }
+          return (u, f["name"] as? String ?? "File")
         }
-      }, animated: true)
+        self.uploadToTask(p, picked)
+      }
     }
     p.onSubmitFiles = { [weak self, weak p] cd in
       guard let self = self, let p = p, let host = self.sheetHost() else { return }
@@ -853,8 +851,8 @@ extension Main {
 extension Main {
   // Attach Files from a task card (its touch-and-hold menu): iPhone's own picker over the list; what's picked uploads
   // into that task while the list stays — a short message while it goes and when it's in (Haris 2026-11-07, B)
-  func attachFromList(_ id: String, source: String?) {
-    Picker.shared.pick(from: topMost(), single: false, source: source) { [weak self] r in
+  func attachFromList(_ id: String, source: String?, title: String? = nil) {
+    Picker.shared.pick(from: topMost(), single: false, source: source, title: title.flatMap { $0.isEmpty ? nil : $0 }) { [weak self] r in
       guard let self = self else { return }
       let picked = ((r["files"] as? [[String: Any]]) ?? []).compactMap { f -> (URL, String)? in
         guard let tok = f["token"] as? String, let u = Picker.shared.url(tok) else { return nil }

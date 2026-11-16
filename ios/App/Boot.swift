@@ -405,7 +405,7 @@ extension Main {
     //  2026-11-07, B; it opened the task instead)
     case "attach":
       guard !id.isEmpty, AppData.shared.ready else { return false }
-      attachFromList(id, source: ev["source"] as? String); return true
+      attachFromList(id, source: ev["source"] as? String, title: ev["title"] as? String); return true
     case "me": selectTab("me"); return true
     // (a client in search results: its page comes in over this screen, ‹ back to the search — Haris 2026-11-05: without
     //  the website the tap did nothing)

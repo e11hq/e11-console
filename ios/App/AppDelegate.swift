@@ -10,6 +10,7 @@ import WebKit
 import UserNotifications
 import LocalAuthentication
 import PhotosUI
+import Photos
 import UniformTypeIdentifiers
 import AudioToolbox
 
@@ -2652,7 +2653,7 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
 
   // (the keyboard isn't put down here: iPhone hides it while a picker covers the screen and brings it back for the
   //  comment box afterwards)
-  func pick(from vc: UIViewController, single: Bool, source: String? = nil, _ done: @escaping ([String: Any]) -> Void) {
+  func pick(from vc: UIViewController, single: Bool, source: String? = nil, title: String? = nil, _ done: @escaping ([String: Any]) -> Void) {
     finish([])   // (a sheet still open from before answers "nothing")
     self.done = done
     let photos = {
@@ -2674,8 +2675,26 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
       p.allowsMultipleSelection = !single; p.delegate = self
       vc.present(p, animated: true)
     }
+    // the + sheet (canvas "Attach panel — Talk & Console", W5, Haris 2026-11-16): your recent photos to tick, then
+    // Camera · Files — Attach Files and Client Assets' Upload. Files: the originals up to 1 GB, or a scan.
+    let sheet = {
+      let v = AttachSheet(title: title ?? "Attach Files", rows: [.camera, .files], nextWord: "Add", tint: .tintColor)
+      v.onChoice = { [weak self, weak vc] c in
+        guard let self = self, let vc = vc else { return }
+        switch c {
+        case .photos(let a)?: self.keepAssets(a)
+        case .allPhotos?: photos()
+        case .camera?: if UIImagePickerController.isSourceTypeAvailable(.camera) { camera() } else { self.finish([]) }
+        case .files?: self.filesSheet(from: vc, files: files)
+        default: self.finish([])
+        }
+      }
+      vc.present(v, animated: true)
+    }
     // straight to one (the page's attach bar: Photos · Camera · Files)
     switch source {
+    case "sheet": return sheet()
+    case "filesheet": return filesSheet(from: vc, files: files)
     case "photos": return photos()
     case "camera": return UIImagePickerController.isSourceTypeAvailable(.camera) ? camera() : finish([])
     case "files": return files()
@@ -2694,6 +2713,37 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
     vc.present(sheet, animated: true)
   }
 
+  // Files (WhatsApp's): Choose from Files · Choose Photo or Video (the originals) · Scan Document
+  private func filesSheet(from vc: UIViewController, files: @escaping () -> Void) {
+    let f = FilesSheet()
+    f.onPick = { [weak self, weak vc] k in
+      guard let self = self, let vc = vc else { return }
+      switch k {
+      case "files": files()
+      case "originals": OriginalsPicker.present(from: vc) { [weak self] got in self?.finish(got.compactMap { self?.keep($0.url, name: $0.name) }) }
+      case "scan": DocScanner.present(from: vc) { [weak self] f in self?.finish([f].compactMap { $0 }.compactMap { self?.keep($0.url, name: $0.name) }) }
+      default: self.finish([])
+      }
+    }
+    vc.present(f, animated: true)
+  }
+  // photos ticked in the + sheet's row: as Photos gives them today (Compatible), in the order ticked
+  private func keepAssets(_ a: [PHAsset]) {
+    AttachExport.compatible(a) { [weak self] got in
+      guard let self = self else { return }
+      self.finish(got.compactMap { f in let r = self.keep(f.url, name: f.name); try? FileManager.default.removeItem(at: f.url); return r })
+    }
+  }
+  // (a picked or ticked photo sent from another screen — the comment box's own + sheet)
+  func pickAssets(_ a: [PHAsset], _ done: @escaping ([String: Any]) -> Void) { finish([]); self.done = done; keepAssets(a) }
+  func pickOriginals(from vc: UIViewController, _ done: @escaping ([String: Any]) -> Void) {
+    finish([]); self.done = done
+    OriginalsPicker.present(from: vc) { [weak self] got in self?.finish(got.compactMap { self?.keep($0.url, name: $0.name) }) }
+  }
+  func pickScan(from vc: UIViewController, _ done: @escaping ([String: Any]) -> Void) {
+    finish([]); self.done = done
+    DocScanner.present(from: vc) { [weak self] f in self?.finish([f].compactMap { $0 }.compactMap { self?.keep($0.url, name: $0.name) }) }
+  }
   private func keep(_ src: URL, name: String) -> [String: Any]? {
     let tok = UUID().uuidString
     let dest = dir.appendingPathComponent(tok + "-" + name.replacingOccurrences(of: "/", with: "-"))
@@ -2702,9 +2752,22 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
     let size = ((try? FileManager.default.attributesOfItem(atPath: dest.path))?[.size] as? NSNumber)?.int64Value ?? 0
     return ["token": tok, "name": name, "size": size]
   }
-  private func finish(_ out: [[String: Any]]) {
+  private func finish(_ all: [[String: Any]]) {
     guard let d = done else { return }
     done = nil
+    // (files up to 1 GB, in the iPhone apps — Haris 2026-11-16; one over it is let go)
+    var out = all
+    let big = out.filter { (($0["size"] as? NSNumber)?.int64Value ?? 0) > Int64(Attach.maxBytes) }
+    if !big.isEmpty {
+      for b in big { if let t = b["token"] as? String { lock.lock(); if let u = files[t] { try? FileManager.default.removeItem(at: u) }; files[t] = nil; lock.unlock() } }
+      out.removeAll { (($0["size"] as? NSNumber)?.int64Value ?? 0) > Int64(Attach.maxBytes) }
+      DispatchQueue.main.async {
+        guard var top = UIApplication.shared.connectedScenes.compactMap({ ($0 as? UIWindowScene)?.windows.first { $0.isKeyWindow } }).first?.rootViewController else { return }
+        while let p = top.presentedViewController { top = p }
+        let a = UIAlertController(title: "Too Large", message: big.count == 1 ? "Files up to 1 GB can be added." : "\(big.count) files over 1 GB were left out.", preferredStyle: .alert)
+        a.addAction(UIAlertAction(title: "OK", style: .default)); top.present(a, animated: true)
+      }
+    }
     FocusAfterPicker.allow()   // (the page puts the cursor back in the comment box, keyboard and all)
     DispatchQueue.main.async { d(["ok": true, "files": out]) }
   }
