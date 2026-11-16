@@ -308,8 +308,9 @@ extension Main {
       //  flying out of its picture and back into it)
       ("aFindC", {
         self.tab("today")
-        let files = (AppData.shared.meModel("assets", "assets", [""])?["files"] as? [[String: Any]]) ?? []
-        guard let cid = files.first?["client"] as? String else { self.apple("findC", ["none": "no client"]); return }
+        // (a client as search gives it — its Clients-list id, the one its page is opened by)
+        let rows = (AppData.shared.screen("clients", ServerHome.clientsJSON("view=list")).model?["rows"] as? [[String: Any]]) ?? []
+        guard let cid = rows.first?["id"] as? String else { self.apple("findC", ["none": "no client"]); return }
         AppleHomeBits.shared.search?.isActive = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.ev(self.homeIfMade, ["ev": "client", "id": cid]) }
       }),
@@ -320,7 +321,7 @@ extension Main {
                              "clientsNav": cn?.viewControllers.map { String(describing: type(of: $0)) } ?? [], "hereNav": hn?.viewControllers.map { String(describing: type(of: $0)) } ?? [],
                              "own": AppleTabs.shared?.ownNav.map { String(describing: type(of: $0.viewControllers.first as Any)) } ?? "",
                              "page": ["made": self.clientPageIfMade != nil, "hidden": self.clientPageIfMade?.isHidden ?? true, "window": self.clientPageIfMade?.window != nil],
-                             "query": self.serverClients.query, "on": self.serverClients.on])
+                             "query": self.serverClients.query, "on": self.serverClients.on, "off": self.serverClients.off])
         self.tab("today")
       }),
       ("aLink", {

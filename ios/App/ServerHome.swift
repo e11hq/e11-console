@@ -45,6 +45,7 @@ final class ServerHome {
   }
   static let photoCame = Notification.Name("E11PhotoCame")
   var on: Bool { !off && model != nil && server == serverURL() }
+
   var me: String? { model?["me"] as? String }
   // another server chosen (Settings, the App Review copy): that one's own Home and nothing of the other's
   private func checkServer() {
