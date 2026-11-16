@@ -180,6 +180,10 @@ if APPLE:
         elif kb and not kb.get('none'):
             b0 = kb.get('before') or {}
             check(kb.get('text') == b0.get('text') and kb.get('first') == b0.get('first') and abs((kb.get('y') or 0) - (b0.get('y') or 0)) <= 2 and kb.get('active'), f"{lab}: a comment being typed, away to another app and back — the words, the keyboard and the list as they were {kb}")
+        dy = ap.get('day') or {}
+        if dy:
+            b0 = dy.get('before') or {}
+            check((dy.get('gen') or 0) > (b0.get('gen') or 0) and dy.get('rows') == b0.get('rows'), f"{lab}: the day turning (iPhone's signal) works every screen out again — on the same day no row of E11 Day set again {dy}")
         up = ap.get('upload') or {}
         if up and not up.get('none'):
             dn = up.get('down') or {}

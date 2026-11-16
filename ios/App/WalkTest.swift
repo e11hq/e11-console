@@ -548,6 +548,14 @@ extension Main {
       // Uploads and downloads (the full test, Haris 2026-11-16): a 20 MB file up as the comment box sends one (three 8 MB pieces
       // side by side), its progress read as it goes and the bar at the bottom while it does; put on a comment; then fetched back
       // as the preview's Download does — every byte the same, its progress too
+      // Midnight (the full test, Haris 2026-11-16): iPhone's day-changed signal — every screen worked out again for the new day;
+      // on the same day nothing on E11 Day is set again (only what changed changes)
+      ("aDay", { self.tab(self.tabKeys.first ?? "today") }),
+      ("aDaySend", {
+        self.liveBefore = ["rows": self.homeView.rowsSet, "gen": AppData.shared.gen]
+        NotificationCenter.default.post(name: UIApplication.significantTimeChangeNotification, object: nil)
+      }),
+      ("aDayRead", { self.apple("day", ["before": self.liveBefore, "rows": self.homeView.rowsSet, "gen": AppData.shared.gen]) }),
       ("aUp", { self.liveBefore = [:]; self.tab(self.tabKeys.first ?? "today"); if let t = best?.0 ?? cards.first { self.openTaskPage(t, tab: "comments", focus: "") } }),
       ("aUpWait", {}),
       ("aUpSend", {

@@ -72,6 +72,11 @@ final class AppData: NSObject, URLSessionDataDelegate {
       //  current ones where the line answers in time, Haris 2026-11-16)
       NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in self?.wake() }
       NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in self?.sleep() }
+      // (midnight, or the phone's clock or time zone changed — iPhone's own signal, sent as it happens and on coming back if
+      //  it happened while away: every screen worked out again for the new day — E11 Day's date, Today and Overdue, the
+      //  Inbox's day groups — only the rows that changed set again. Nothing told them before: a day turning with nothing
+      //  else changing left yesterday on screen, the full test 2026-11-16)
+      NotificationCenter.default.addObserver(forName: UIApplication.significantTimeChangeNotification, object: nil, queue: .main) { [weak self] _ in self?.changed() }
     }
   }
   private var watching = false
@@ -210,7 +215,7 @@ final class AppData: NSObject, URLSessionDataDelegate {
     q.async { if self.stream == nil { self.backoff = 2; self.openStream() } }
     DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
       guard let self = self else { return done() }
-      if UIApplication.shared.applicationState == .background { self.saveNow(); self.stopStream() }
+      if UIApplication.shared.applicationState == .background { self.saveNow(); self.stopStream(); self.widgetsIfChanged() }
       done()
     }
   }
@@ -289,7 +294,13 @@ final class AppData: NSObject, URLSessionDataDelegate {
     }
   }
   private var scriptsAt = Date()
-  private func sleep() { q.async { self.inBackground = true }; saveNow(); stopStream() }
+  private func sleep() { q.async { self.inBackground = true }; saveNow(); stopStream(); widgetsIfChanged() }
+  // The home-screen widget (the full test, Haris 2026-11-16): it asked the server only on its own 20-minute round, so a task
+  // done in the app stayed on it until then. It's only seen with the app away — told once as the app leaves, and after a
+  // catch-up in the background, only when the copy changed since it was last told (iPhone counts no budget for an app
+  // that's open; one ask of /api/widget each time, nothing while the app is on screen)
+  private var widgetGen = 0
+  private func widgetsIfChanged() { guard me != nil, gen != widgetGen else { return }; widgetGen = gen; WidgetShare.reloadWidgets() }
 
   // ---------- keeping it ----------
   private var saveItem: DispatchWorkItem?
