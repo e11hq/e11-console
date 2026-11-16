@@ -144,9 +144,12 @@ enum VoiceHeard {
 final class VoiceView: UIView {
   private let btn = UIButton(type: .system), len = UILabel(), pic = Avatar(), badge = UIImageView(), dot = UIView()
   private var bars: [CGFloat] = []
-  private var id = "", fileId = "", secs: Double = 0, mine = false
+  private var id = "", fileId = "", secs: Double = 0, mine = false, size = 0, pending = false
+  // (downloading after ▶, or yours going up: the ▶ becomes the files' ring, filling — Haris 2026-11-16)
+  private let ring = DownloadRing()
+  private var ringOn = false
   private var played: UIColor = .label, rest: UIColor = .secondaryLabel
-  private var loading = false, shownOn = false
+  private var shownOn = false
   override init(frame: CGRect) {
     super.init(frame: frame)
     backgroundColor = .clear; isOpaque = false; contentMode = .redraw
@@ -156,13 +159,16 @@ final class VoiceView: UIView {
     badge.image = UIImage(systemName: "mic.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold)); badge.contentMode = .center
     badge.layer.shadowColor = UIColor.black.cgColor; badge.layer.shadowOpacity = 0.25; badge.layer.shadowRadius = 1; badge.layer.shadowOffset = .zero
     dot.layer.cornerRadius = 6; dot.isUserInteractionEnabled = false
-    [pic, badge, btn, len, dot].forEach { addSubview($0) }
+    [pic, badge, btn, len, dot, ring].forEach { addSubview($0) }
+    ring.isHidden = true
     NotificationCenter.default.addObserver(self, selector: #selector(update), name: VoicePlayer.changed, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(fileMoved(_:)), name: .talkFile, object: nil)
     let h = heightAnchor.constraint(equalToConstant: 56); h.priority = .init(999); h.isActive = true
   }
   required init?(coder: NSCoder) { fatalError() }
-  func set(id: String, file: Msg.FileRef, by: String, mine: Bool) {
-    self.id = id; fileId = file.id; secs = file.secs ?? 0; self.mine = mine
+  func set(id: String, file: Msg.FileRef, by: String, mine: Bool, pending: Bool = false) {
+    self.id = id; fileId = file.id; secs = file.secs ?? 0; self.mine = mine; size = file.size; self.pending = pending
+    ring.ink = mine ? .white : .label
     played = mine ? .white : Look.dyn(0x5AA9FF, 0x007AFF)
     rest = mine ? UIColor.white.withAlphaComponent(0.42) : Look.dyn(0x8E8E93, 0xB4B4B9)
     bars = VoiceRecorder.bars(file.wave)
@@ -172,25 +178,47 @@ final class VoiceView: UIView {
     len.textColor = mine ? Look.mineTime : Look.roleInk
     dot.backgroundColor = played
     shownOn = true; update()
+    showRing(animated: false)
+  }
+  // how far it is: yours going up, or this one downloading
+  private var going: Double? {
+    if pending, let u = Uploads.going[fileId] { return Double(u.0) / Double(max(u.1, 1)) }
+    if let g = Downloads.shared.got[fileId] { return Double(g.0) / Double(max(g.1, 1)) }
+    return nil
+  }
+  @objc private func fileMoved(_ n: Notification) {
+    guard (n.object as? String) == fileId else { return }
+    showRing(animated: true)
+  }
+  // (the ▶ and the ring crossfade into each other; the ring fills in place)
+  private func showRing(animated: Bool) {
+    let f = going, on = f != nil
+    if let f = f { ring.set(f) }
+    guard on != ringOn else { return }
+    ringOn = on
+    let put = { self.ring.isHidden = !on; self.btn.alpha = on ? 0 : 1 }
+    if animated && window != nil { UIView.transition(with: self, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction], animations: put) } else { put() }
   }
   private func tap() {
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     if !mine { VoiceHeard.add(id) }
     if VoicePlayer.shared.playing == id { VoicePlayer.shared.toggle(id, url: Net.local(fileId)); return }
-    loading = true; update()
-    Net.shared.file(fileId) { [weak self] url in
-      guard let self = self else { return }
-      self.loading = false
-      guard let url = url else { toast("That voice message isn’t on the server any more"); self.update(); return }
-      VoicePlayer.shared.toggle(self.id, url: url)
+    if pending { return }   // (still going up)
+    // (here already: plays; else downloaded with the ring filling, then plays — a tap on the ring stops it)
+    if Downloads.shared.running(fileId) { Downloads.shared.cancel(fileId); return }
+    let fid = fileId, mid = id
+    Downloads.shared.start(fid, size: size) { [weak self] ok in
+      guard ok else { if Downloads.shared.isGone(fid) { toast("That voice message isn’t on the server any more") }; return }
+      guard let self = self, self.fileId == fid else { return }
+      VoicePlayer.shared.toggle(mid, url: Net.local(fid))
     }
   }
   private var progress: CGFloat { VoicePlayer.shared.playing == id ? CGFloat(VoicePlayer.shared.progress) : 0 }
   @objc private func update() {
     let on = VoicePlayer.shared.playing == id
-    guard on || shownOn || loading else { return }   // (another bubble's playing: nothing here changes)
+    guard on || shownOn else { return }   // (another bubble's playing: nothing here changes)
     shownOn = on
-    let sym = loading ? "arrow.down.circle" : (on && VoicePlayer.shared.isPlaying ? "pause.fill" : "play.fill")
+    let sym = on && VoicePlayer.shared.isPlaying ? "pause.fill" : "play.fill"
     btn.setImage(UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 24, weight: .regular)), for: .normal)
     let shown = on ? secs * Double(progress) : secs
     len.text = String(format: "%d:%02d", Int(shown) / 60, Int(shown) % 60)
@@ -211,6 +239,7 @@ final class VoiceView: UIView {
     pic.frame = CGRect(x: 0, y: 2, width: 44, height: 44)
     badge.frame = CGRect(x: 28, y: 30, width: 18, height: 18)
     btn.frame = CGRect(x: 50, y: 4, width: 36, height: 36)
+    ring.frame = btn.frame.insetBy(dx: 4, dy: 4)
     len.frame = CGRect(x: x0, y: 36, width: 60, height: 16)
     placeDot()
   }

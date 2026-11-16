@@ -2432,7 +2432,7 @@ final class BubbleCell: UITableViewCell {
     shapePhoto()
     foot.isHidden = !(isPhoto && !caption)
     voice.isHidden = !isVoice
-    if isVoice, let f = m.file { voice.set(id: m.id, file: f, by: m.by, mine: mine) }
+    if isVoice, let f = m.file { voice.set(id: m.id, file: f, by: m.by, mine: mine, pending: m.pending && !m.failed) }
     // a document: the card, 4 from the bubble's edge
     cardWrap.isHidden = !isDoc
     cardWrap.reach(nameL.isHidden && fwdL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
