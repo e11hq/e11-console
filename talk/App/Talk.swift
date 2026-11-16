@@ -326,7 +326,10 @@ final class Talk {
       m.task = Msg.TaskCard(e["task"] as? [String: Any])
       m.contact = SharedContact(e["contact"] as? [String: Any]); m.place = SharedPlace(e["location"] as? [String: Any])
       // (their message is here: they've stopped typing)
-      DispatchQueue.main.async { Talk.shared.stoppedTyping(g, by) }
+      // (gone from the typers before the chat draws the message, so the message takes the dots' place in the same move —
+      //  told a moment later for the line under the group's name: Haris 2026-11-16)
+      Talk.shared.stoppedTyping(g, by, quiet: true)
+      DispatchQueue.main.async { NotificationCenter.default.post(name: .talkTyping, object: g) }
       if let k = e["link"] as? [String: Any], let u = k["url"] as? String {
         m.link = Msg.LinkPrev(url: u, title: k["title"] as? String, site: k["site"] as? String, video: (k["video"] as? Bool) == true,
                               img: (k["img"] as? [String: Any])?["id"] as? String, icon: (k["icon"] as? [String: Any])?["id"] as? String, e11: k["e11"] as? String,
@@ -1003,8 +1006,8 @@ extension Talk {
     if typers(g) != was { NotificationCenter.default.post(name: .talkTyping, object: g) }
     DispatchQueue.main.asyncAfter(deadline: .now() + 5.1) { [weak self] in self?.expireTyping(g) }
   }
-  func stoppedTyping(_ g: String, _ by: String) {
-    guard Talk.typingNow[g]?.removeValue(forKey: by) != nil else { return }
+  func stoppedTyping(_ g: String, _ by: String, quiet: Bool = false) {
+    guard Talk.typingNow[g]?.removeValue(forKey: by) != nil, !quiet else { return }
     NotificationCenter.default.post(name: .talkTyping, object: g)
   }
   private func expireTyping(_ g: String) {

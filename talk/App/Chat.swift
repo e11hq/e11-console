@@ -15,7 +15,7 @@ import ImageIO
    and + for any emoji), then Reply · Copy · Star · (yours: Edit for 15 minutes, Info) · Delete (for everyone about 2 days,
    for me). The message bar: + (Photos, Camera, Files), the box, camera and mic; while typing, the send button. */
 // (.intro — a group's own card at the very start of its chat, the design's board 4)
-enum ChatItem: Hashable { case msg(String); case intro }
+enum ChatItem: Hashable { case msg(String); case intro; case typing }   // (typing: the dots bubble — a row of the chat, so their message takes its place in one move)
 
 /* To a far end of a chat, Claude's way (Haris 2026-11-16, his recordings of Claude's app): one smooth run all the way —
    the same short time however far it goes, so a long chat simply flies by and lands softly. No jump and no crossfade.
@@ -157,7 +157,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     DispatchQueue.global(qos: .userInitiated).async { texts.forEach { _ = BubbleCell.found($0) } }
     table.backgroundColor = .clear; table.separatorStyle = .none; table.keyboardDismissMode = .interactive
     table.delegate = self; table.estimatedRowHeight = 60; table.rowHeight = UITableView.automaticDimension
-    table.register(BubbleCell.self, forCellReuseIdentifier: "b"); table.register(DayHeader.self, forHeaderFooterViewReuseIdentifier: "d"); table.register(IntroCell.self, forCellReuseIdentifier: "i")
+    table.register(BubbleCell.self, forCellReuseIdentifier: "b"); table.register(DayHeader.self, forHeaderFooterViewReuseIdentifier: "d"); table.register(IntroCell.self, forCellReuseIdentifier: "i"); table.register(TypingCell.self, forCellReuseIdentifier: "t")
     table.sectionHeaderTopPadding = 0
     table.frame = view.bounds; table.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     // (the room above and below the messages is ours to set: the bar at the top, the message bar at the bottom — fitBottom)
@@ -213,6 +213,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         c.onPic = { [weak self] in self?.editGroup() }
         c.onAdd = { [weak self] in self?.addMembers() }
         c.onDescribe = { [weak self] in self?.describe() }
+        return c
+      case .typing:
+        let c = tv.dequeueReusableCell(withIdentifier: "t", for: ip) as! TypingCell
+        UIView.performWithoutAnimation { c.dots.set(person: self.dotsFor.flatMap { Talk.shared.people[$0] }) }
         return c
       }
     }
@@ -471,6 +475,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   static let layoutV = 2
   func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat {
     if case .intro? = data.itemIdentifier(for: ip) { return introHeight() }
+    if case .typing? = data.itemIdentifier(for: ip) { return TypingCell.height }
     guard case .msg(let key)? = data.itemIdentifier(for: ip), let e = ChatVC.heights[hKey]?[key], let s = sigs[key], e.sig == s else { return UITableView.automaticDimension }
     return e.h
   }
@@ -498,6 +503,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
   func tableView(_ tv: UITableView, estimatedHeightForRowAt ip: IndexPath) -> CGFloat {
     if case .intro? = data.itemIdentifier(for: ip) { return introHeight() }
+    if case .typing? = data.itemIdentifier(for: ip) { return TypingCell.height }
     guard case .msg(let id)? = data.itemIdentifier(for: ip) else { return 60 }
     if let e = ChatVC.heights[hKey]?[id] { return e.h }
     // (not seen yet: a fair guess from what it is — a photo's own height, words by their length)
@@ -596,26 +602,14 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     setDots(Talk.shared.typers(group).first, animated: animated)
   }
   private var dotsFor: String?
+  // (the dots: a row at the chat's end — come, it fades in and the chat glides up to show it if you were at the end; gone,
+  //  it fades out with the rows sliding back: Apple's own row animation)
   private func setDots(_ who: String?, animated: Bool) {
     guard who != dotsFor else { return }
-    let was = dotsFor; dotsFor = who
-    if let who = who {
-      let v = (table.tableFooterView as? TypingDots) ?? TypingDots(frame: CGRect(x: 0, y: 0, width: table.bounds.width, height: 44))
-      v.set(person: Talk.shared.people[who])
-      if table.tableFooterView !== v {
-        let atEnd = table.contentOffset.y + table.bounds.height >= table.contentSize.height + table.adjustedContentInset.bottom - 60
-        v.alpha = 0; UIView.performWithoutAnimation { table.tableFooterView = v; table.layoutIfNeeded() }
-        UIView.animate(withDuration: animated ? 0.25 : 0) { v.alpha = 1 }
-        if atEnd { toBottom(animated) }
-      }
-    } else if was != nil, let v = table.tableFooterView as? TypingDots {
-      UIView.animate(withDuration: animated ? 0.2 : 0, animations: { v.alpha = 0 }) { [weak self] _ in
-        guard let self = self, self.dotsFor == nil, self.table.tableFooterView === v else { return }
-        let y = self.table.contentOffset.y
-        UIView.performWithoutAnimation { self.table.tableFooterView = nil; self.table.layoutIfNeeded() }
-        self.table.contentOffset.y = min(y, max(-self.table.adjustedContentInset.top, self.table.contentSize.height + self.table.adjustedContentInset.bottom - self.table.bounds.height))
-      }
-    }
+    let came = dotsFor == nil && who != nil
+    let atEnd = table.contentOffset.y + table.bounds.height >= table.contentSize.height + table.adjustedContentInset.bottom - 60
+    reload(animated: animated && view.window != nil)
+    if came && atEnd { toBottom(animated) }
   }
 
   // the pinned bar shown, changed (crossfading) or gone (fading) — the chat's top room with it
@@ -949,12 +943,19 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       newSigs[key] = h.finalize()
       items.append(.msg(key)); snap.appendItems([.msg(key)], toSection: section)
     }
+    // (someone typing: the dots bubble as the chat's last row — their message, coming, takes its place in the same move;
+    //  as a footer it went a moment after the message came, and the chat snapped down by its height: Haris 2026-11-16)
+    let typer = peek ? nil : Talk.shared.typers(group).first
+    let typerChanged = typer != dotsFor && typer != nil && dotsFor != nil
+    dotsFor = typer
+    if typer != nil, let last = snap.sectionIdentifiers.last { items.append(.typing); snap.appendItems([.typing], toSection: last) }
     runs = newRuns; dayOf = newDayOf; albums = newAlbums; notes = newNotes
     let old = data.snapshot()
     keyOf = newKeyOf; idOf = newIdOf
     if let g = grp, items.contains(.intro) { newSigs["#intro"] = IntroCell.sig(g) }
     snap.reconfigureItems(items.filter {
       if case .msg(let key) = $0 { return old.indexOfItem($0) != nil && sigs[key] != newSigs[key] }
+      if case .typing = $0 { return old.indexOfItem($0) != nil && typerChanged }
       return old.indexOfItem($0) != nil && sigs["#intro"] != newSigs["#intro"]
     })
     sigs = newSigs
@@ -3773,6 +3774,16 @@ final class BubblePreview: UIViewController {
 }
 
 // the dots bubble while someone types (the design's board 32): their picture, three dots breathing in turn
+final class TypingCell: UITableViewCell {
+  static let height: CGFloat = 44
+  let dots = TypingDots(frame: CGRect(x: 0, y: 0, width: 320, height: TypingCell.height))
+  override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+    super.init(style: style, reuseIdentifier: reuseIdentifier)
+    backgroundColor = .clear; contentView.backgroundColor = .clear; selectionStyle = .none
+    dots.autoresizingMask = [.flexibleWidth]; contentView.addSubview(dots)
+  }
+  required init?(coder: NSCoder) { fatalError() }
+}
 final class TypingDots: UIView {
   private let face = Avatar(frame: CGRect(x: 7, y: 9, width: 27, height: 27)), bub = UIView(), dots = (0..<3).map { _ in UIView() }
   override init(frame: CGRect) {
