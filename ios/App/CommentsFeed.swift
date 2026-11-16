@@ -1051,13 +1051,8 @@ final class CommentCell: UIView {
       for x in rx {
         let e = x["e"] as? String ?? ""
         var c = UIButton.Configuration.filled(); c.cornerStyle = .capsule; c.baseBackgroundColor = .tertiarySystemFill; c.baseForegroundColor = .label
-        // (the six as SF Symbols in iPhone's colours, Haris 2026-11-04; any other emoji as itself)
-        if let img = ReactionSym.image(e, size: 11.5) {
-          c.image = img; c.imagePadding = 4
-          c.attributedTitle = AttributedString("\(x["n"] as? Int ?? 1)", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 13.5, weight: .semibold)]))
-        } else {
-          c.attributedTitle = AttributedString("\(e) \(x["n"] as? Int ?? 1)", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 14, weight: .medium)]))
-        }
+        // (the emoji itself and its count, as E11 Talk's — Haris 2026-11-16)
+        c.attributedTitle = AttributedString("\(e) \(x["n"] as? Int ?? 1)", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 14, weight: .medium)]))
         c.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10)
         let b = UIButton(configuration: c); b.addAction(UIAction { [weak self] _ in UISelectionFeedbackGenerator().selectionChanged(); self?.onReact?(e) }, for: .touchUpInside)
         r.addArrangedSubview(b)
@@ -1738,29 +1733,20 @@ enum DiskPics {
   }
 }
 
-// The comment reactions as SF Symbols (Haris 2026-11-04 — mockup symbols-mockup.png): each emoji kept as it is in the data
-// (the website and the Mac app show the emoji), drawn in the app as its symbol in iPhone's own colour.
+// The comment reactions as the regular emoji, as E11 Talk's (Haris 2026-11-16 — the SF Symbols of 2026-11-04 taken off): the
+// emoji kept in the data as before (the website and the Mac app show the same), drawn as itself — a picture of the emoji
+// where Apple's palette or a button wants a picture.
 enum ReactionSym {
-  static let map: [String: (String, UIColor)] = [
-    "👍": ("hand.thumbsup.fill", .systemBlue), "✅": ("checkmark.circle.fill", .systemGreen), "🎉": ("party.popper.fill", .systemOrange),
-    "❤️": ("heart.fill", .systemRed), "👀": ("eyes", .systemPurple), "🙏": ("hands.clap.fill", .systemYellow),
-  ]
+  private static var made: [String: UIImage] = [:]
   static func image(_ emoji: String, size: CGFloat) -> UIImage? {
-    guard let v = map[emoji] else { return nil }
-    let name = v.0, c = v.1
-    // (drawn into a picture of its own, so its colours stay whatever a button or a sheet tints — Haris 2026-11-04: they
-    //  came out black on the cards and all blue in the sheet)
-    let cfg = UIImage.SymbolConfiguration(pointSize: size, weight: .semibold)
-    if name == "checkmark.circle.fill" {   // (the tick white on green)
-      guard let disc = UIImage(systemName: "circle.fill", withConfiguration: cfg)?.withTintColor(c, renderingMode: .alwaysOriginal),
-            let tick = UIImage(systemName: "checkmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: size * 0.5, weight: .heavy))?.withTintColor(.white, renderingMode: .alwaysOriginal) else { return nil }
-      return UIGraphicsImageRenderer(size: disc.size).image { _ in
-        disc.draw(at: .zero)
-        tick.draw(at: CGPoint(x: (disc.size.width - tick.size.width) / 2, y: (disc.size.height - tick.size.height) / 2))
-      }.withRenderingMode(.alwaysOriginal)
-    }
-    guard let img = UIImage(systemName: name, withConfiguration: cfg)?.withTintColor(c, renderingMode: .alwaysOriginal) else { return nil }
-    return UIGraphicsImageRenderer(size: img.size).image { _ in img.draw(at: .zero) }.withRenderingMode(.alwaysOriginal)
+    guard !emoji.isEmpty else { return nil }
+    let key = "\(emoji)|\(size)"
+    if let i = made[key] { return i }
+    let s = NSAttributedString(string: emoji, attributes: [.font: UIFont.systemFont(ofSize: size * 1.15)])
+    let box = s.size()
+    let img = UIGraphicsImageRenderer(size: CGSize(width: ceil(box.width), height: ceil(box.height))).image { _ in s.draw(at: .zero) }.withRenderingMode(.alwaysOriginal)
+    made[key] = img
+    return img
   }
 }
 
