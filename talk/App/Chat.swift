@@ -1829,19 +1829,24 @@ struct Run: Hashable { var first = true, last = true }
    colour follows light / dark (set again on the look's change: a layer's colour is the one thing Apple can't switch). */
 final class BubbleShape: UIView {
   private let shape = CAShapeLayer()
-  var fill: UIColor = .clear { didSet { shape.fillColor = fill.resolvedColor(with: traitCollection).cgColor } }
+  // (set at once, never eased: the shape is a layer of its own, and a row reused from one of yours eased from blue to grey
+  //  — gliding to the top or the end, everyone's bubbles showed blue on the way, Haris 2026-11-16)
+  var fill: UIColor = .clear { didSet { paint() } }
+  private func paint() { CATransaction.begin(); CATransaction.setDisableActions(true); shape.fillColor = fill.resolvedColor(with: traitCollection).cgColor; CATransaction.commit() }
   var tail: (mine: Bool, on: Bool) = (false, false) { didSet { setNeedsLayout() } }
   var fillTop: CGFloat = 0 { didSet { if fillTop != oldValue { setNeedsLayout() } } }
   override init(frame: CGRect) { super.init(frame: frame); backgroundColor = .clear; layer.insertSublayer(shape, at: 0) }
   required init?(coder: NSCoder) { fatalError() }
   override func layoutSubviews() {
     super.layoutSubviews()
+    CATransaction.begin(); CATransaction.setDisableActions(true)
     shape.frame = bounds
     shape.path = BubbleShape.path(bounds.size, mine: tail.mine, tail: tail.on, top: fillTop).cgPath
+    CATransaction.commit()
   }
   override func traitCollectionDidChange(_ p: UITraitCollection?) {
     super.traitCollectionDidChange(p)
-    if traitCollection.hasDifferentColorAppearance(comparedTo: p) { shape.fillColor = fill.resolvedColor(with: traitCollection).cgColor }
+    if traitCollection.hasDifferentColorAppearance(comparedTo: p) { paint() }
   }
   // a rectangle with its own radius at each corner (tl, tr, br, bl)
   static func rounded(_ r: CGRect, _ tl: CGFloat, _ tr: CGFloat, _ br: CGFloat, _ bl: CGFloat) -> UIBezierPath {
