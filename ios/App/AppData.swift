@@ -240,6 +240,12 @@ final class AppData: NSObject, URLSessionDataDelegate {
       // (the server's history is behind this copy — a restore: start again from a fresh download)
       if let srv = j["rev"] as? Int, let mine = (call("E11AppView.rev", []) as? NSNumber)?.intValue, srv < mine { download() }
       if let n = j["talkUnread"] as? Int { DispatchQueue.main.async { TalkLink.count = n } }
+    case "links":
+      // (a file's or folder's link turned off or on elsewhere — the Mac, the website: its Turn Link On / Off here at once,
+      //  Haris 2026-11-16)
+      guard let d = body.data(using: .utf8), let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any], let p = j["path"] as? String else { break }
+      let off = (j["off"] as? Bool) == true
+      DispatchQueue.main.async { if off { Main.linksOff.insert(p) } else { Main.linksOff.remove(p) } }
     case "talkUnread":
       // (E11 Talk's unread count for its button — as it changes)
       guard let d = body.data(using: .utf8), let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any], let n = j["n"] as? Int else { break }

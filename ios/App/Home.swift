@@ -55,7 +55,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   // the corner button tapped
   func cornerTap(_ kind: String) {
     switch kind {
-    case "read": UIImpactFeedbackGenerator(style: .light).impactOccurred(); send(["ev": "readAll"])
+    case "read":
+      UIImpactFeedbackGenerator(style: .light).impactOccurred()
+      // (marked read here: the ones on screen stay in Unread until another list is picked, as Mail)
+      content.forEach { if let r = $0 as? InboxRow, !r.read { keep.insert(r.id) } }
+      send(["ev": "readAll"])
     case "unread":
       // only the ones in the list on screen — and asked first (Haris, 2026-11-01)
       let ids = content.compactMap { ($0 as? InboxRow)?.id }
@@ -1167,7 +1171,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   private(set) var inboxTab = "unread"
   private var keepSet = false
   private var inboxRows: [String: InboxRow] = [:]
-  private var keep = Set<String>()     // (rows that were in the list when it was picked stay until it's left — read or not)
+  // (rows read or opened on this phone stay in Unread until another list is picked, as Mail; one read elsewhere — the Mac,
+  //  the website, another phone — leaves at once: it took two openings of the app to go, Haris 2026-11-16)
+  private var keep = Set<String>()
   private func makeInbox() {
     catsView.onPick = { [weak self] i in guard let self = self else { return }; self.pickTab(["all", "unread", "mentions"][i]) }
     catsView.choose(1, animated: false)
@@ -1185,7 +1191,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     UISelectionFeedbackGenerator().selectionChanged()
     inboxTab = k
     catsView.choose(["all", "unread", "mentions"].firstIndex(of: k) ?? 0, animated: true)
-    keep = Set((m["rows"] as? [[String: Any]] ?? []).filter { ($0["read"] as? Bool) != true }.compactMap { $0["id"] as? String }); keepSet = true
+    keep = []; keepSet = true
     drawInbox(m)
     send(["ev": "tab", "tab": k])
   }
@@ -1198,9 +1204,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     if !keepSet, (model["rows"] as? [[String: Any]]) != nil, inboxTab == "unread", ((model["unread"] as? Int) ?? 0) == 0 {
       inboxTab = "all"; catsView.choose(0, animated: false)
     }
-    if !keepSet, (model["rows"] as? [[String: Any]]) != nil {
-      keep = Set((model["rows"] as? [[String: Any]] ?? []).filter { ($0["read"] as? Bool) != true }.compactMap { $0["id"] as? String }); keepSet = true
-    }
+    if !keepSet, (model["rows"] as? [[String: Any]]) != nil { keepSet = true }
     content.forEach { if !($0 is InboxRow) { $0.removeFromSuperview() } }
     content = []
     var seen = Set<String>()
@@ -1210,8 +1214,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
       let v: InboxRow
       if let old = inboxRows[id] { v = old } else {
         v = InboxRow(); v.id = id
-        v.onTap = { [weak self] in self?.send(["ev": "open", "id": id]) }
-        v.onToggle = { [weak self, weak v] in guard let v = v else { return }; self?.send(["ev": v.read ? "unread" : "read", "id": id]) }
+        v.onTap = { [weak self] in self?.keep.insert(id); self?.send(["ev": "open", "id": id]) }
+        v.onToggle = { [weak self, weak v] in guard let v = v else { return }; self?.keep.insert(id); self?.send(["ev": v.read ? "unread" : "read", "id": id]) }
         inboxRows[id] = v
       }
       let p = people[r["from"] as? String ?? ""]

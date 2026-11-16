@@ -44,6 +44,8 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: E11 Console
+        # (a quiet note from the server when something is read elsewhere: its notifications off this iPhone — Haris 2026-11-16)
+        UIBackgroundModes: [remote-notification]
         # (the Talk button: is E11 Talk on this iPhone — Haris 2026-11-13)
         LSApplicationQueriesSchemes: [e11talk, comgooglemaps, waze]   # (+ a place opening in this iPhone's map apps — Haris 2026-11-16)
         CFBundleName: E11 Console

@@ -77,6 +77,14 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
     c.delegateClass = SceneDelegate.self
     return c
   }
+  // (a quiet note from the server — something read on the Mac, the website or another phone: those notifications off this
+  //  iPhone, the icon's count as it is now; Haris 2026-11-16. iPhone decides how soon it wakes the app for one)
+  func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any], fetchCompletionHandler done: @escaping (UIBackgroundFetchResult) -> Void) {
+    guard let e = userInfo["e11"] as? [String: Any], (e["quiet"] as? Bool) == true else { return done(.noData) }
+    if let n = e["badge"] as? Int { UNUserNotificationCenter.current().setBadgeCount(max(0, n)) { _ in } }
+    Main.clearDelivered(Set((e["read"] as? [String]) ?? []))
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { done(.newData) }
+  }
   func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
     Main.shared.gotToken(deviceToken.map { String(format: "%02x", $0) }.joined())
   }

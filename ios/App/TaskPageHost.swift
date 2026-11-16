@@ -1203,6 +1203,19 @@ extension Main {
     if n == lastOwnBadge { return }
     lastOwnBadge = n
     UNUserNotificationCenter.current().setBadgeCount(max(0, n)) { _ in }
+    // (the notifications on this iPhone for what's read now — here or anywhere else — taken off Notification Centre and the
+    //  Lock Screen: Haris 2026-11-16)
+    let rows = (AppData.shared.screen("inbox", "all").model?["rows"] as? [[String: Any]]) ?? []
+    Main.clearDelivered(Set(rows.filter { ($0["read"] as? Bool) == true }.compactMap { $0["id"] as? String }))
+  }
+  // the notifications already on this iPhone whose Inbox update is read (by its id — the server sends it with each one)
+  static func clearDelivered(_ read: Set<String>) {
+    guard !read.isEmpty else { return }
+    let c = UNUserNotificationCenter.current()
+    c.getDeliveredNotifications { list in
+      let gone = list.filter { n in ((n.request.content.userInfo["e11"] as? [String: Any])?["nid"] as? String).map { read.contains($0) } ?? false }.map { $0.request.identifier }
+      if !gone.isEmpty { c.removeDeliveredNotifications(withIdentifiers: gone) }
+    }
   }
   var ownsBadge: Bool { AppData.shared.tabsOn && AppData.shared.ready && AppData.shared.isStarted }
 }
