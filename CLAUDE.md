@@ -659,6 +659,19 @@ talk and console as RC, and release them to app store"):** commit 0455469, branc
 candidate). 1758 = 1754 + the preview's strip keeping the file on show in its middle + the preview flying back into the file
 swiped to by that file's own mark (Client Assets faded before). Quick build. **Submitted for App Review 2026-11-15 21:02 (manual release).** Nothing changes in its look, behaviour or code
 without telling Haris first and his yes.
+**THE iPHONE APP — STABLE, LOCKED: 1.2.1 build 1775 (Haris, 2026-11-16 15:51: "Both seems fine" → "Yes please"):** commit 68b524c,
+branches `stable/ios-1775` and `locked/ios-app-1775` (never moved or deleted; 1758's and earlier stay as history). 1775 = 1758 + the
++ sheet (V9: photo row, Camera · Files · Contact · Location, Files' second sheet up to 1 GB, contact / place cards, map apps); the
+newest 100 comments, older 100 a tap at a time; comment photos 2048 across and videos 720p (as files: untouched), a video's tile at
+once with one conversion behind it; uploads three 8 MB pieces side by side; maps kept on the phone; a contact / place card at its
+size at once; one upload bar (comments' tiles only); the clock / ↓ run landing in one movement (Glider); 120 Hz. With server 1.9.61.
+Quick builds. Nothing changes in its look, behaviour or code without telling Haris first and his yes.
+**E11 TALK — STABLE, LOCKED: build 162 (Haris, 2026-11-16 15:51):** commit 6f0000e on talk-chat-1, branches `stable/talk-162` and
+`locked/talk-162` (never moved or deleted; 148's and earlier stay as history). 162 = 148 + the + sheet (as Console's), cards sent at
+their own size (link previews, E11 links, known tasks, shimmer while reading), upload rings on photos, videos, files and voice,
+files' standard width, a video's bubble at once with its one 720p / 1080p copy behind it, pieces side by side (needs server
+1.9.61's at=), maps kept on the phone, the group card measured and row heights kept on the phone, the clock / ↓ run landing in
+one movement (Glider), 100 older a tap at a time. Nothing changes in its look, behaviour or code without telling Haris first and his yes.
 **E11 TALK — STABLE, LOCKED, the App Store release candidate: 1.0.2 build 148 (Haris, 2026-11-15 20:50):** commit f401cef on
 talk-chat-1, branches `stable/talk-148`, `locked/talk-148` and `candidate/appstore-talk-1.0.2-build-148` (never moved or deleted;
 147's and earlier stay as history — 148 replaces 147 as the candidate). 148 = 147 + the viewer's strip keeping the photo on show
