@@ -757,10 +757,33 @@ private final class NewContactDone: NSObject, CNContactViewControllerDelegate {
 enum MapThumb {
   private static let cache = NSCache<NSString, UIImage>()
   static func key(_ p: SharedPlace, _ size: CGSize, dark: Bool) -> String { "\(p.lat),\(p.lng),\(Int(size.width))x\(Int(size.height)),\(dark ? "d" : "l")" }
-  static func cached(_ p: SharedPlace, _ size: CGSize, dark: Bool) -> UIImage? { cache.object(forKey: key(p, size, dark: dark) as NSString) }
+  // (each map kept on the phone once drawn — Haris 2026-11-16, "why the maps reloads again?": only in memory, it was drawn
+  //  again from Apple's map service each time the app had started afresh. A small picture each, light and dark; one not
+  //  shown for 60 days let go)
+  private static let dir: URL = {
+    let d = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("maps", isDirectory: true)
+    try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+    DispatchQueue.global(qos: .utility).async {
+      let old = Date().addingTimeInterval(-60 * 86400)
+      for u in (try? FileManager.default.contentsOfDirectory(at: d, includingPropertiesForKeys: [.contentModificationDateKey])) ?? [] {
+        if ((try? u.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast) < old { try? FileManager.default.removeItem(at: u) }
+      }
+    }
+    return d
+  }()
+  private static func file(_ k: String) -> URL { dir.appendingPathComponent(k.replacingOccurrences(of: ",", with: "_").replacingOccurrences(of: ".", with: "-") + ".jpg") }
+  static func cached(_ p: SharedPlace, _ size: CGSize, dark: Bool) -> UIImage? {
+    let k = key(p, size, dark: dark)
+    if let i = cache.object(forKey: k as NSString) { return i }
+    let f = file(k)
+    guard let d = try? Data(contentsOf: f), let i = UIImage(data: d, scale: UIScreen.main.scale) else { return nil }
+    cache.setObject(i, forKey: k as NSString)
+    try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: f.path)   // (seen: kept another 60 days)
+    return i
+  }
   static func make(_ p: SharedPlace, _ size: CGSize, dark: Bool, done: @escaping (UIImage?) -> Void) {
     let k = key(p, size, dark: dark) as NSString
-    if let i = cache.object(forKey: k) { done(i); return }
+    if let i = cached(p, size, dark: dark) { done(i); return }
     let o = MKMapSnapshotter.Options()
     o.region = MKCoordinateRegion(center: p.coord, latitudinalMeters: 500, longitudinalMeters: 500)
     let scale = UIScreen.main.scale
@@ -779,6 +802,7 @@ enum MapThumb {
         UIColor.systemRed.setFill(); UIBezierPath(ovalIn: dot).fill()
       }
       cache.setObject(img, forKey: k)
+      try? img.jpegData(compressionQuality: 0.85)?.write(to: file(k as String), options: .atomic)
       DispatchQueue.main.async { done(img) }
     }
   }
