@@ -1975,6 +1975,10 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   }
   // e11console://open?task=<id> | ?plan=<id> | ?view=home|plans|fin-dash — a tap on the widget
   func openLink(_ u: URL, tries: Int = 0) {
+    // (a web link — a Client Assets file or folder, a task, a plan — while E11 Console isn't signed in on this phone: Safari
+    //  has it, as without the app — a link the app opens itself goes to the browser, never back here; it waited on the
+    //  sign-in page and was dropped. Signed in: the app's own, as before — Haris 2026-11-16)
+    if tries == 0, u.scheme == "https", DeviceKey.key == nil, Main.boot.state != .signedIn { UIApplication.shared.open(u); return }
     // (a link from another app — E11 Talk — while this app was in the background: handled once it's active and its own
     //  screens can open the task or file; at once it was dropped and the app stayed on Home — only the first tap worked,
     //  Haris 2026-11-12)
