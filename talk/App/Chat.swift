@@ -466,6 +466,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     DispatchQueue.global(qos: .utility).async { if let d = try? JSONSerialization.data(withJSONObject: out) { try? d.write(to: file, options: .atomic) } }
   }
   private var hKey: String { group + "|" + traitCollection.preferredContentSizeCategory.rawValue }
+  // (the rows' drawing changed in a way a kept height can't know: every kept height measured again once — 2: a turned-off
+  //  link's card kept a reused row's tall height, Haris 2026-11-16)
+  static let layoutV = 2
   func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat {
     if case .intro? = data.itemIdentifier(for: ip) { return introHeight() }
     guard case .msg(let key)? = data.itemIdentifier(for: ip), let e = ChatVC.heights[hKey]?[key], let s = sigs[key], e.sig == s else { return UITableView.automaticDimension }
@@ -934,7 +937,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       }
       msgs[m.id] = m
       var h = Hasher(); h.combine(m.text); h.combine(m.edited); h.combine(m.deleted); h.combine(m.pending); h.combine(m.failed); h.combine(m.reactions); h.combine(m.file?.id); h.combine(m.link.map { Talk.shared.liveLink($0) }); h.combine(m.task.map { Talk.shared.liveTask($0) }); h.combine(newAlbums[m.id]?.map { $0.id + ($0.file?.id ?? "") })
-      h.combine(Talk.shared.isStarred(group, m.id))
+      h.combine(Talk.shared.isStarred(group, m.id)); h.combine(ChatVC.layoutV)
       h.combine(newRuns[m.id]); h.combine(Talk.shared.people[m.by]?.color); h.combine(Talk.shared.people[m.by]?.role); h.combine(newNotes[m.id]?.count)
       if m.by == meId { h.combine(i <= readTo); h.combine(i <= gotTo) }
       let key: String = {
@@ -3916,7 +3919,7 @@ final class TaskCardView: UIView {
 final class E11CardView: UIView {
   private let pic = UIImageView(), head = UILabel(), title = UILabel(), sub = UILabel(), line = UIView(), open = UILabel()
   private let col = UIStackView(), quiet = UIStackView(), qIcon = UIImageView(), qTitle = UILabel(), qSub = UILabel()
-  private var picH: NSLayoutConstraint!, picOff: NSLayoutConstraint!
+  private var picH: NSLayoutConstraint!, picOff: NSLayoutConstraint!, colBottom: NSLayoutConstraint!
   private var url: URL?, live = true, picShown: String?
   override init(frame: CGRect) {
     super.init(frame: frame)
@@ -3933,9 +3936,10 @@ final class E11CardView: UIView {
     [pic, col, quiet].forEach { addSubview($0); $0.translatesAutoresizingMaskIntoConstraints = false }
     picH = pic.heightAnchor.constraint(equalTo: pic.widthAnchor, multiplier: 1 / 1.91); picH.priority = .init(999)
     picOff = pic.heightAnchor.constraint(equalToConstant: 0)
+    colBottom = col.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10)
     NSLayoutConstraint.activate([pic.topAnchor.constraint(equalTo: topAnchor), pic.leadingAnchor.constraint(equalTo: leadingAnchor), pic.trailingAnchor.constraint(equalTo: trailingAnchor), picOff,
       col.topAnchor.constraint(equalTo: pic.bottomAnchor, constant: 10), col.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12), col.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-      col.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10), line.heightAnchor.constraint(equalToConstant: 0.5),
+      colBottom, line.heightAnchor.constraint(equalToConstant: 0.5),
       quiet.topAnchor.constraint(equalTo: topAnchor, constant: 10), quiet.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12), quiet.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
       qIcon.widthAnchor.constraint(equalToConstant: 22), qIcon.heightAnchor.constraint(equalToConstant: 22)])
     addGestureRecognizer(QuickTap(target: self, action: #selector(tap)))
@@ -3951,7 +3955,9 @@ final class E11CardView: UIView {
     let reading = state == "reading"
     live = state == "ok" || reading; url = URL(string: l.url)
     col.isHidden = !live; quiet.isHidden = live
-    quietBottom?.isActive = false
+    // (the full card's words hold the card's height only while they show: hidden, they kept a reused row's card — a live
+    //  one's — at its tall size, the "turned off" line in the middle of it, Haris 2026-11-16)
+    quietBottom?.isActive = false; colBottom.isActive = live
     if !live {
       // (turned off or deleted: the name and a line saying so — nothing to open; a link no one made or one taken away:
       //  it doesn't exist — Haris 2026-11-16)
