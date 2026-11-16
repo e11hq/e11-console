@@ -55,6 +55,8 @@ struct Msg: Codable, Equatable {
   var album: String? = nil              // (photos and videos sent together: one album in the chat — Haris 2026-11-12)
   var link: LinkPrev? = nil               // (a link's preview, made on the sender's phone — option B, Haris 2026-11-12)
   var task: TaskCard? = nil               // (an E11 Console task shared with # — staff groups only; the card the server made)
+  var contact: SharedContact? = nil       // (a contact card, from the + sheet — Haris 2026-11-16)
+  var place: SharedPlace? = nil           // (a place: your current location or one nearby)
   struct TaskCard: Codable, Equatable, Hashable {
     var id: String; var title: String; var client: String; var status: String; var color: String; var due: String?; var done: Bool; var people: [String]
     init?(_ j: [String: Any]?) {
@@ -321,6 +323,7 @@ final class Talk {
                   file: f, reply: r, mentions: e["mentions"] as? [String] ?? [], fwd: (e["fwd"] as? Bool) == true ? true : nil)
       m.album = e["album"] as? String
       m.task = Msg.TaskCard(e["task"] as? [String: Any])
+      m.contact = SharedContact(e["contact"] as? [String: Any]); m.place = SharedPlace(e["location"] as? [String: Any])
       // (their message is here: they've stopped typing)
       DispatchQueue.main.async { Talk.shared.stoppedTyping(g, by) }
       if let k = e["link"] as? [String: Any], let u = k["url"] as? String {
@@ -360,13 +363,13 @@ final class Talk {
   }
 
   // ---------- sending from here: shown at once, then the server's copy takes its place ----------
-  func send(_ g: String, text: String, reply: Msg? = nil, mentions: [String] = [], file: Msg.FileRef? = nil, localFile: URL? = nil, upload: Data? = nil, fwd: Bool = false, album: String? = nil, task: Msg.TaskCard? = nil, link: LinkPrevMaker.Pick = .auto, progress: ((Double) -> Void)? = nil) {
+  func send(_ g: String, text: String, reply: Msg? = nil, mentions: [String] = [], file: Msg.FileRef? = nil, localFile: URL? = nil, upload: Data? = nil, fwd: Bool = false, album: String? = nil, task: Msg.TaskCard? = nil, link: LinkPrevMaker.Pick = .auto, contact: SharedContact? = nil, place: SharedPlace? = nil, progress: ((Double) -> Void)? = nil) {
     guard let me = me else { return }
     let cid = UUID().uuidString
     var l = log(g)
-    var m = Msg(id: "local-" + cid, cid: cid, seq: Int.max, by: me.id, at: Date().timeIntervalSince1970 * 1000, kind: file?.kind ?? "text", text: text, file: file,
+    var m = Msg(id: "local-" + cid, cid: cid, seq: Int.max, by: me.id, at: Date().timeIntervalSince1970 * 1000, kind: file?.kind ?? (contact != nil ? "contact" : place != nil ? "location" : "text"), text: text, file: file,
                 reply: reply.map { Msg.Reply(id: $0.id, by: $0.by, text: Talk.preview($0), kind: $0.kind) }, mentions: mentions, pending: true, fwd: fwd ? true : nil)
-    m.album = album; m.task = task
+    m.album = album; m.task = task; m.contact = contact; m.place = place
     if let lf = localFile, let f = file { try? FileManager.default.copyItem(at: lf, to: Net.local(f.id)) }
     // (a photo's or video's tiny picture goes with it — shown blurred on phones that haven't downloaded it yet)
     let thumb = file?.thumb ?? (file.flatMap { f in localFile.flatMap { Thumb.make($0, kind: f.kind) } })
@@ -378,6 +381,8 @@ final class Talk {
       if let lb = linkBody { b["link"] = lb }
       if let a = album { b["album"] = a }
       if let t = task { b["task"] = ["id": t.id] }
+      if let c = contact { b["contact"] = c.json }
+      if let p = place { b["location"] = p.json }
       if fwd { b["fwd"] = true }
       if let r = m.reply { b["reply"] = ["id": r.id, "by": r.by, "text": r.text, "kind": r.kind] }
       if let f = file, let fid = fileId { var fd: [String: Any] = ["id": fid, "kind": f.kind]; fd["w"] = f.w; fd["h"] = f.h; fd["secs"] = f.secs; fd["wave"] = f.wave; fd["thumb"] = thumb; b["file"] = fd }
@@ -394,7 +399,7 @@ final class Talk {
         m.file?.id = fid
         go(fid)
       }
-    } else if file == nil, !fwd, task == nil, let u = LinkPrevMaker.firstLink(text), !LinkPrevMaker.ours(u), { if case .none = link { return false }; return true }() {
+    } else if file == nil, !fwd, task == nil, contact == nil, place == nil, let u = LinkPrevMaker.firstLink(text), !LinkPrevMaker.ours(u), { if case .none = link { return false }; return true }() {
       // (words with a link: its preview — read in the box while it was typed, as far as it got (WhatsApp's), or else read
       //  here first — the picture and the site's icon sent up as files, then the message with it)
       let handle: (Msg.LinkPrev?, Data?, Data?) -> Void = { [weak self] prev, img, icon in
@@ -424,7 +429,7 @@ final class Talk {
   }
   func retry(_ g: String, _ m: Msg) {
     deleteForMe(g, m)
-    send(g, text: m.text, reply: nil)
+    send(g, text: m.text, reply: nil, contact: m.contact, place: m.place)
   }
   // what you do shows at once (the rule of every page): the change on this phone first, the server's answer after — a
   // refusal puts the message back as it was
@@ -487,7 +492,7 @@ final class Talk {
     var out: [(String, Msg)] = []
     for g in (only.map { [$0] } ?? Array(groups.keys)) {
       for m in log(g).msgs where !m.deleted && m.kind != "sys" {
-        var hay = m.text + " " + (m.file?.name ?? "")
+        var hay = m.text + " " + (m.file?.name ?? "") + " " + (m.contact?.name ?? "") + " " + (m.place.map { ($0.name ?? "") + " " + ($0.addr ?? "") } ?? "")
         // (staff: an E11 link card's file or folder name and client, and a task card's title, as they are now — Haris 2026-11-13)
         if !isContact {
           if let l = m.link.map({ liveLink($0) }), l.e11 != nil { hay += " " + (l.title ?? "") + " " + (l.client ?? "") }
@@ -569,6 +574,8 @@ final class Talk {
     case "video": return m.text.isEmpty ? "🎥 Video" : "🎥 " + m.text
     case "voice": return "🎤 Voice message"
     case "file": return "📄 " + (m.file?.name ?? "File")
+    case "contact": return "👤 " + (m.contact?.name ?? "Contact")
+    case "location": return "📍 " + (m.place?.name ?? "Location")
     default: if let t = m.task, m.text.isEmpty { return "☑️ " + t.title }; return m.text
     }
   }

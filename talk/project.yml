@@ -76,7 +76,11 @@ targets:
         #  reaction pill; without it iPhone holds an app's own animations to 60: the speed report, Haris 2026-11-14)
         CADisableMinimumFrameDurationOnPhone: true
         NSCameraUsageDescription: Take a photo or video to send in a group, or scan the code to link a Mac.
-        NSPhotoLibraryUsageDescription: Pick photos and videos to send in a group.
+        NSPhotoLibraryUsageDescription: Show your recent photos in the + sheet, and pick photos and videos to send in a group.
+        # (the + sheet — Haris 2026-11-16: send where you are, save a contact sent to you, open a place in your map app)
+        NSLocationWhenInUseUsageDescription: Send your current location, or a place near you, in a group.
+        NSContactsUsageDescription: Save a contact someone sent you to your contacts.
+        LSApplicationQueriesSchemes: [comgooglemaps, waze]
         NSPhotoLibraryAddUsageDescription: Save photos and videos from your groups to Photos.
         NSMicrophoneUsageDescription: Record voice messages and the sound of videos you send.
         TalkServerURL: https://talk-test.e11hq.com

@@ -172,6 +172,11 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         c.onRetry = { [weak self] m in guard let self = self else { return }; Talk.shared.retry(self.group, m) }
         c.onReactsTap = { [weak self] m in self?.whoReacted(m) }
         c.onForward = { [weak self] m in self?.forward(m) }
+        c.onShared = { [weak self] m, what, from in
+          guard let self = self else { return }
+          if let p = m.place { MapsChooser.show(p, from: self, source: from) }
+          else if let k = m.contact { if what == "save" { ContactOpen.save(k, from: self) } else { ContactOpen.card(k, from: self) } }
+        }
         return c
       case .intro:
         let c = tv.dequeueReusableCell(withIdentifier: "i", for: ip) as! IntroCell
@@ -423,6 +428,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       return min(330, max(120, w * ratio)) + (m.text.isEmpty ? 14 : 48)
     }
     if m.link != nil || m.task != nil { return 230 }
+    if m.place != nil { return 236 }
+    if m.contact != nil { return 150 }
     if m.file != nil { return 90 }
     return 40 + 22 * CGFloat(max(1, Int(ceil(Double(m.text.count) / 30))))
   }
@@ -963,6 +970,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private weak var sendPreview: SendPreviewVC?
   private func attach(_ kind: String) {
     switch kind {
+    case "sheet": plusSheet()
     case "photos":
       var c = PHPickerConfiguration(); c.selectionLimit = 10; c.filter = .any(of: [.images, .videos])
       let p = PHPickerViewController(configuration: c); p.delegate = self; present(p, animated: true)
@@ -972,6 +980,46 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     default:
       let p = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true); p.allowsMultipleSelection = true; p.delegate = self; present(p, animated: true)
     }
+  }
+  // the + sheet (V9): your recent photos to tick, then Camera · Files · Contact · Location; the keyboard back if it was up
+  // and nothing was chosen
+  private func plusSheet() {
+    let typing = bar.box.isFirstResponder
+    let v = AttachSheet(title: "Send to " + (Talk.shared.groups[group]?.name ?? "chat"), rows: [.camera, .files, .contact, .location], nextWord: "Next", tint: Look.accent)
+    v.onChoice = { [weak self] c in
+      guard let self = self else { return }
+      switch c {
+      case nil: if typing { self.bar.box.becomeFirstResponder() }
+      case .photos(let a)?:
+        AttachExport.compatible(a) { [weak self] files in self?.preview(files.map { SendPreviewVC.Item(url: $0.url, kind: $0.kind, name: $0.name) }) }
+      case .allPhotos?: self.attach("photos")
+      case .camera?: self.attach("camera")
+      case .files?: self.filesSheet()
+      case .contact?: ContactFlow.present(from: self, tint: Look.accent) { [weak self] c in self?.sendShared(contact: c) }
+      case .location?: PlacePicker.present(from: self, tint: Look.accent) { [weak self] p in self?.sendShared(place: p) }
+      }
+    }
+    present(v, animated: true)
+  }
+  // Files (WhatsApp's): Choose from Files · Choose Photo or Video (the originals) · Scan Document — up to 1 GB each
+  private func filesSheet() {
+    let f = FilesSheet()
+    f.onPick = { [weak self] k in
+      guard let self = self else { return }
+      switch k {
+      case "files": self.attach("files")
+      case "originals": OriginalsPicker.present(from: self) { [weak self] files in self?.preview(files.map { SendPreviewVC.Item(url: $0.url, kind: "file", name: $0.name) }) }
+      case "scan": DocScanner.present(from: self) { [weak self] f in if let f = f { self?.preview([SendPreviewVC.Item(url: f.url, kind: "file", name: f.name)]) } }
+      default: break
+      }
+    }
+    present(f, animated: true)
+  }
+  private func sendShared(contact: SharedContact? = nil, place: SharedPlace? = nil) {
+    Talk.shared.send(group, text: "", reply: replying, contact: contact, place: place)
+    replying = nil
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    toBottom(true)
   }
   // a voice message: sent as it was recorded, with its length and waveform
   private func sendVoice(_ url: URL, secs: Double, wave: String) {
@@ -1521,7 +1569,10 @@ extension ChatVC: PHPickerViewControllerDelegate, UIImagePickerControllerDelegat
   func documentPicker(_ c: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
     preview(urls.map { SendPreviewVC.Item(url: $0, kind: "file", name: $0.lastPathComponent) })
   }
-  private func preview(_ items: [SendPreviewVC.Item]) {
+  private func preview(_ all: [SendPreviewVC.Item]) {
+    // (files up to 1 GB — Haris 2026-11-16)
+    let items = all.filter { !Attach.tooBig($0.url) }
+    if items.count < all.count { toast(all.count == 1 ? "Files up to 1 GB can be sent" : "Files over 1 GB were left out") }
     guard !items.isEmpty else { return }
     if let open = sendPreview { open.add(items); return }
     let v = SendPreviewVC(items: items, to: Talk.shared.groups[group]?.name ?? "")
@@ -1930,6 +1981,10 @@ final class BubbleCell: UITableViewCell {
   private let e11Card = E11CardView()
   private lazy var e11Wrap = Bleed(e11Card)
   private lazy var taskWrap = Bleed(taskCard)
+  // (a contact card or a place, from the + sheet — Haris 2026-11-16)
+  private let sharedCard = SharedCardView()
+  private lazy var sharedWrap = Bleed(sharedCard)
+  var onShared: ((Msg, String, UIView) -> Void)?   // (what: "card", "save" or "place")
   private var link: URL?
   private let voice = VoiceView()
   private let reacts = InsetLabel(dx: 8, dy: 0), sysL = InsetLabel(dx: 12, dy: 3), retryB = UIButton(type: .system)
@@ -2071,8 +2126,9 @@ final class BubbleCell: UITableViewCell {
                                  linkFoot.topAnchor.constraint(equalTo: linkLine.bottomAnchor, constant: 8), linkFoot.leadingAnchor.constraint(equalTo: linkSite.leadingAnchor), linkFoot.trailingAnchor.constraint(equalTo: linkSite.trailingAnchor),
                                  linkFoot.bottomAnchor.constraint(equalTo: linkBox.bottomAnchor, constant: -9)])
     linkBox.addGestureRecognizer(QuickTap(target: self, action: #selector(linkTap)))
-    [nameL, roleL, fwdL, photoWrap, quoteWrap, cardWrap, voice, linkWrap, e11Wrap, taskWrap, textL, footL].forEach { stack.addArrangedSubview($0) }
-    stack.setCustomSpacing(7, after: taskWrap); stack.setCustomSpacing(7, after: e11Wrap)
+    [nameL, roleL, fwdL, photoWrap, quoteWrap, cardWrap, voice, linkWrap, e11Wrap, taskWrap, sharedWrap, textL, footL].forEach { stack.addArrangedSubview($0) }
+    stack.setCustomSpacing(7, after: taskWrap); stack.setCustomSpacing(7, after: e11Wrap); stack.setCustomSpacing(7, after: sharedWrap)
+    sharedCard.onTap = { [weak self] what, from in if let m = self?.msg { self?.onShared?(m, what, from) } }
     stack.setCustomSpacing(4, after: fwdL)
     stack.setCustomSpacing(2, after: roleL); stack.setCustomSpacing(6, after: photoWrap); stack.setCustomSpacing(7, after: quoteWrap)
     stack.setCustomSpacing(7, after: cardWrap); stack.setCustomSpacing(7, after: linkWrap); stack.setCustomSpacing(2, after: nameL)
@@ -2493,6 +2549,12 @@ final class BubbleCell: UITableViewCell {
       taskWrap.reach(nameL.isHidden && fwdL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
       taskCard.set(Talk.shared.liveTask(t), mine: mine, ink: ink, find: find); wideCard = true
     }
+    sharedWrap.isHidden = (m.contact == nil && m.place == nil) || m.deleted
+    if !sharedWrap.isHidden {
+      sharedWrap.reach(nameL.isHidden && fwdL.isHidden ? 4 : 0, 8, 0, mine ? 7 : 8)
+      sharedCard.set(contact: m.contact, place: m.place, mine: mine, ink: ink); wideCard = true
+      if !m.pending { fwdB.isHidden = false }
+    }
     let words = a.length > 0
     textL.isHidden = !words
     footL.isHidden = true
@@ -2528,7 +2590,7 @@ final class BubbleCell: UITableViewCell {
     reactsLead.isActive = !mine; reactsTrail.isActive = mine
     // ("Forwarded" over a card, a quote or a photo: as much room under it as above it — the card had come up to touch it,
     //  Haris 2026-11-13; over words, the usual line's room)
-    let boxed = [quoteWrap, cardWrap, linkWrap, e11Wrap, taskWrap, photoWrap].contains { !$0.isHidden }
+    let boxed = [quoteWrap, cardWrap, linkWrap, e11Wrap, taskWrap, sharedWrap, photoWrap].contains { !$0.isHidden }
     stack.setCustomSpacing(boxed ? 8 : 4, after: fwdL)
     // (a message of words: the bubble as wide as what's in it, worked out here — the words' own widest line with the time's
     //  room, the name, "Forwarded", a quote — never wider than the design's widest; the label's own size grew to that widest)
@@ -2940,11 +3002,8 @@ final class MessageBar: UIView, UITextViewDelegate {
       if !isEmoji { self.box.typing = now }
       if self.box.emoji != isEmoji { self.box.emoji = isEmoji; self.setSmiley() }
     }
-    plus.showsMenuAsPrimaryAction = true
-    plus.menu = UIMenu(children: [
-      UIAction(title: "Photos", image: UIImage(systemName: "photo.on.rectangle")) { [weak self] _ in self?.onPlus?("photos") },
-      UIAction(title: "Camera", image: UIImage(systemName: "camera")) { [weak self] _ in self?.onPlus?("camera") },
-      UIAction(title: "Files", image: UIImage(systemName: "folder")) { [weak self] _ in self?.onPlus?("files") }])
+    // (+ opens the + sheet — canvas "Attach panel — Talk & Console", V9, Haris 2026-11-16)
+    plus.addAction(UIAction { [weak self] _ in self?.onPlus?("sheet") }, for: .touchUpInside)
     cam.addAction(UIAction { [weak self] _ in self?.onPlus?("camera") }, for: .touchUpInside)
     // (hold the mic to record — let go to send, slide left to drop it; a tap says how)
     let hold = UILongPressGestureRecognizer(target: self, action: #selector(micHold(_:))); hold.minimumPressDuration = 0.18
@@ -3626,6 +3685,78 @@ final class TypingDots: UIView {
   }
   required init?(coder: NSCoder) { fatalError() }
   func set(person: Person?) { face.set(person: person) }
+}
+
+// a contact card or a place in a message (canvas "Attach panel — Talk & Console", T7, Haris 2026-11-16). A contact: its
+// initials, name and first number, then Message · Save Contact (iPhone's own contact card and New Contact). A place: Apple's
+// map around it with its pin, its name and address — tapped, the map apps on this iPhone
+final class SharedCardView: UIView {
+  private let map = UIImageView(), face = UILabel(), name = UILabel(), sub = UILabel(), line = UIView(), msgL = UILabel(), saveL = UILabel()
+  private let top = UIStackView(), acts = UIStackView(), col = UIStackView()
+  private var mapH: NSLayoutConstraint!
+  private var shown: SharedPlace?, dark = false
+  var onTap: ((String, UIView) -> Void)?
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    backgroundColor = UIColor.black.withAlphaComponent(0.22); layer.cornerRadius = 15; layer.cornerCurve = .continuous; clipsToBounds = true
+    map.contentMode = .scaleAspectFill; map.clipsToBounds = true; map.backgroundColor = UIColor.black.withAlphaComponent(0.12)
+    face.font = .systemFont(ofSize: 15, weight: .semibold); face.textAlignment = .center; face.layer.cornerRadius = 20; face.clipsToBounds = true
+    name.font = .systemFont(ofSize: 16, weight: .semibold); name.numberOfLines = 2; sub.font = .systemFont(ofSize: 13)
+    for l in [msgL, saveL] { l.font = .systemFont(ofSize: 15, weight: .semibold); l.textAlignment = .center; l.isUserInteractionEnabled = true }
+    msgL.text = "Message"; saveL.text = "Save Contact"
+    msgL.addGestureRecognizer(QuickTap(target: self, action: #selector(tapMsg))); saveL.addGestureRecognizer(QuickTap(target: self, action: #selector(tapSave)))
+    let words = UIStackView(arrangedSubviews: [name, sub]); words.axis = .vertical; words.spacing = 2
+    top.addArrangedSubview(face); top.addArrangedSubview(words); top.spacing = 10; top.alignment = .center
+    acts.addArrangedSubview(msgL); acts.addArrangedSubview(saveL); acts.distribution = .fillEqually
+    col.addArrangedSubview(top); col.addArrangedSubview(line); col.addArrangedSubview(acts); col.axis = .vertical; col.spacing = 9
+    for v in [map, col] as [UIView] { v.translatesAutoresizingMaskIntoConstraints = false; addSubview(v) }
+    mapH = map.heightAnchor.constraint(equalToConstant: 130)
+    NSLayoutConstraint.activate([
+      map.topAnchor.constraint(equalTo: topAnchor), map.leadingAnchor.constraint(equalTo: leadingAnchor), map.trailingAnchor.constraint(equalTo: trailingAnchor), mapH,
+      col.topAnchor.constraint(equalTo: map.bottomAnchor, constant: 10), col.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
+      col.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12), col.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+      face.widthAnchor.constraint(equalToConstant: 40), face.heightAnchor.constraint(equalToConstant: 40), line.heightAnchor.constraint(equalToConstant: 0.5),
+    ])
+    addGestureRecognizer(QuickTap(target: self, action: #selector(tapCard)))
+    isAccessibilityElement = false
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  func set(contact c: SharedContact?, place p: SharedPlace?, mine: Bool, ink: UIColor) {
+    let subInk: UIColor = mine ? UIColor.white.withAlphaComponent(0.8) : .secondaryLabel
+    name.textColor = ink; sub.textColor = subInk; line.backgroundColor = subInk.withAlphaComponent(0.3); msgL.textColor = ink; saveL.textColor = ink
+    if let p = p {
+      map.isHidden = false; mapH.constant = 130; face.isHidden = true; line.isHidden = true; acts.isHidden = true
+      name.text = p.title; sub.text = p.line; sub.numberOfLines = 2
+      accessibilityLabel = "Location: \(p.title), \(p.line)"
+      picture(p)
+    } else if let c = c {
+      map.isHidden = true; mapH.constant = 0; shown = nil; map.image = nil
+      face.isHidden = false; line.isHidden = false; acts.isHidden = false
+      face.text = c.name.split(separator: " ").prefix(2).compactMap { $0.first.map(String.init) }.joined().uppercased()
+      face.backgroundColor = mine ? UIColor.white.withAlphaComponent(0.25) : UIColor.systemGray4; face.textColor = mine ? .white : .label
+      name.text = c.name; sub.text = c.first; sub.numberOfLines = 1
+    }
+    isAccessibilityElement = p != nil; accessibilityTraits = p != nil ? .link : []
+  }
+  // (the map's picture follows the phone's look — made once for each look and kept; the same one already shown stays)
+  private func picture(_ p: SharedPlace) {
+    let d = traitCollection.userInterfaceStyle == .dark, size = CGSize(width: 260, height: 130)
+    if shown == p && dark == d && map.image != nil { return }
+    shown = p; dark = d
+    if let i = MapThumb.cached(p, size, dark: d) { map.image = i; return }
+    map.image = nil
+    MapThumb.make(p, size, dark: d) { [weak self] i in
+      guard let self = self, self.shown == p, self.dark == d, let i = i else { return }
+      UIView.transition(with: self.map, duration: 0.2, options: .transitionCrossDissolve) { self.map.image = i }
+    }
+  }
+  override func traitCollectionDidChange(_ prev: UITraitCollection?) {
+    super.traitCollectionDidChange(prev)
+    if let p = shown, prev?.userInterfaceStyle != traitCollection.userInterfaceStyle { picture(p) }
+  }
+  @objc private func tapCard() { if !map.isHidden { onTap?("place", self) } }
+  @objc private func tapMsg() { onTap?("card", msgL) }
+  @objc private func tapSave() { onTap?("save", saveL) }
 }
 
 // a task in a message (the design's board 37): "TASK · CLIENT", its title, the status in its colour, the due day and the

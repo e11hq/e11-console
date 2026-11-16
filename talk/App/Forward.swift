@@ -180,7 +180,7 @@ final class ForwardVC: UIViewController, UICollectionViewDelegate, UISearchResul
       guard i < all.count else { if !failed { done() } else { sendB.isEnabled = true }; return }
       let m = all[i]
       guard let f = m.file else {
-        for g in targets { Talk.shared.send(g, text: m.text, fwd: true, task: m.task) }
+        for g in targets { Talk.shared.send(g, text: m.text, fwd: true, task: m.task, contact: m.contact, place: m.place) }
         left -= 1; next(i + 1); return
       }
       Net.shared.file(f.id) { url in
