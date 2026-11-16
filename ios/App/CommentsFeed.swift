@@ -11,31 +11,48 @@ import AudioToolbox
    bottom a round glass ↓ shows; comments arriving meanwhile make it a "N new comments ↓" pill. Writing still goes
    through the comment box (CommentBar) and the comments screen behind it until step 3. */
 /* To a far end of the list, Claude's way (Haris 2026-11-16, his recordings of Claude's app — as E11 Talk's chat): one
-   smooth run all the way — Apple's own animated scroll, which takes the same short time however far it goes, so a long
-   list simply flies by and lands softly. No jump and no crossfade. Should the end have moved on the way, the last few
-   points follow at once as it lands — no pause, no second slide a moment later (Haris 2026-11-16, E11 Talk's: "takes
-   second adjustment after it settles"). */
+   smooth run all the way, the same short time however far it goes, so a long list simply flies by and lands softly. No
+   jump and no crossfade. */
 private var glideKey = 0
+// (one run to a far end: each frame it asks again where the end is, easing there from where it set off — a row taking its
+//  real height on the way moves the landing with it, so it lands exactly, in one movement, nothing after — Haris 2026-11-16
+//  "it still adjust": Apple's own animated scroll aims once at where the end was when it set off. At the screen's own rate,
+//  120 on the phones that have it.)
+private final class Glider: NSObject {
+  weak var s: UIScrollView?
+  let to: () -> CGFloat, from: CGFloat, began = CACurrentMediaTime(), time: CFTimeInterval
+  var link: CADisplayLink?
+  init(_ s: UIScrollView, to: @escaping () -> CGFloat) {
+    self.s = s; self.to = to; from = s.contentOffset.y
+    time = 0.38
+    super.init()
+    let l = CADisplayLink(target: self, selector: #selector(step))
+    if #available(iOS 15.0, *) { l.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120) }
+    l.add(to: .main, forMode: .common); link = l
+  }
+  func stop() { link?.invalidate(); link = nil }
+  @objc private func step() {
+    guard let s = s, !s.isTracking else { stop(); return }
+    let t = min(1, (CACurrentMediaTime() - began) / time)
+    let e = 1 - pow(1 - t, 3)   // (eases out, as Apple's own scroll)
+    let y = to()
+    s.contentOffset = CGPoint(x: s.contentOffset.x, y: from + (y - from) * CGFloat(e))
+    if t >= 1 { stop(); s.contentOffset = CGPoint(x: s.contentOffset.x, y: to()); s.delegate?.scrollViewDidEndScrollingAnimation?(s) }
+  }
+}
 extension UIScrollView {
-  private var glideTo: (() -> CGFloat)? {
-    get { objc_getAssociatedObject(self, &glideKey) as? () -> CGFloat }
-    set { objc_setAssociatedObject(self, &glideKey, newValue, .OBJC_ASSOCIATION_COPY_NONATOMIC) }
+  private var glider: Glider? {
+    get { objc_getAssociatedObject(self, &glideKey) as? Glider }
+    set { objc_setAssociatedObject(self, &glideKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
   }
   func glide(_ to: @escaping () -> CGFloat) {
+    glider?.stop()
     layoutIfNeeded()
-    glideTo = to
-    setContentOffset(CGPoint(x: contentOffset.x, y: to()), animated: true)
+    setContentOffset(contentOffset, animated: false)   // (a fling still going stops where it is)
+    glider = Glider(self, to: to)
   }
-  // (the list's delegate calls this as Apple's scroll ends — scrollViewDidEndScrollingAnimation)
-  func glideLanded() {
-    guard let to = glideTo else { return }
-    glideTo = nil
-    guard !isTracking, !isDecelerating else { return }
-    layoutIfNeeded()
-    let y = to()
-    if abs(contentOffset.y - y) > 0.5 { setContentOffset(CGPoint(x: contentOffset.x, y: y), animated: abs(contentOffset.y - y) > 6) }
-  }
-  func glideStop() { glideTo = nil }
+  // (a finger on the list, or another scroll, takes over — the run stops where it is)
+  func glideStop() { glider?.stop(); glider = nil }
 }
 
 final class FeedLoader {
@@ -587,7 +604,6 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     return false
   }
   func scrollViewDidEndScrollingAnimation(_ s: UIScrollView) {
-    s.glideLanded()
     if hasOlder && s.contentOffset.y <= -s.adjustedContentInset.top + 1 { older() }
   }
   func scrollViewWillBeginDragging(_ s: UIScrollView) { s.glideStop(); keepId = nil; focusId = nil }   // (moved by the finger: it's theirs again)
