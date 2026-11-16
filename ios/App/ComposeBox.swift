@@ -21,48 +21,70 @@ final class UploadCenter {
   func end(_ id: UUID) { jobs[id] = nil; Main.shared.paintUploadHUD() }
   func cancelled(_ id: UUID) -> Bool { jobs[id]?.cancelled ?? true }
   private(set) var cancels = 0   // (how many times Cancel was tapped — a run of uploads stops when it changes)
-  func cancelAll() { cancels += 1; for k in jobs.keys { jobs[k]?.cancelled = true }; running.values.forEach { $0.cancel() }; Main.shared.paintUploadHUD() }
-  var running: [UUID: URLSessionTask] = [:]   // (each upload's piece on its way — Cancel stops it at once)
+  func cancelAll() { cancels += 1; for k in jobs.keys { jobs[k]?.cancelled = true }; running.values.joined().forEach { $0.cancel() }; Main.shared.paintUploadHUD() }
+  var running: [UUID: [URLSessionTask]] = [:]   // (each upload's pieces on their way — Cancel stops them at once)
 }
 enum Uploader {
-  // a file on the phone → the server (2 MB at a time) → its path there. Cancel (the bar at the bottom): the piece on its way
-  // stops and it says it didn't go (done(nil)), as a failed upload. Each piece sent by iPhone itself (Transfers — it goes on
-  // with the app in the background or the phone locked: Haris 2026-11-10)
+  // a file on the phone → the server → its path there. The first piece makes the file; after it, three pieces of 8 MB go side
+  // by side, each written at its own place (Haris 2026-11-16, "uploads are super slow": one 2 MB piece after another, each
+  // handed to iPhone and waited for, left the line idle between pieces). Cancel (the bar at the bottom): the pieces on their
+  // way stop and it says it didn't go (done(nil)), as a failed upload. Each piece sent by iPhone itself (Transfers — it goes
+  // on with the app in the background or the phone locked: Haris 2026-11-10)
+  static let piece: Int64 = 8 * 1024 * 1024, together = 3
   static func send(_ url: URL, name: String, task: String, dest: String? = nil, bar: Bool = true, cookies: @escaping (@escaping (String) -> Void) -> Void, progress: @escaping (Double) -> Void, done: @escaping (String?) -> Void) {
     let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
     let job = UploadCenter.shared.begin(name, size, bar: bar)
-    let finish: (String?) -> Void = { p in UploadCenter.shared.running[job] = nil; UploadCenter.shared.end(job); done(p) }
-    func piece(_ offset: Int64, _ path: String?) {
-      if UploadCenter.shared.cancelled(job) { return finish(nil) }
+    var path: String?, next: Int64 = 0, going = 0, over = false
+    var gone: Int64 = 0, partly: [Int64: Int64] = [:]   // (pieces in, and how far each one on its way has gone)
+    let finish: (String?) -> Void = { p in
+      guard !over else { return }
+      over = true
+      if p == nil { UploadCenter.shared.running[job]?.forEach { $0.cancel() } }
+      UploadCenter.shared.running[job] = nil; UploadCenter.shared.end(job); done(p)
+    }
+    let report = {
+      let at = min(size, gone + partly.values.reduce(0, +))
+      UploadCenter.shared.step(job, at)
+      progress(size > 0 ? Double(at) / Double(size) : 1)
+    }
+    func go(_ offset: Int64, then: @escaping () -> Void) {
       guard let fh = try? FileHandle(forReadingFrom: url) else { return finish(nil) }
       try? fh.seek(toOffset: UInt64(offset))
-      let data = (try? fh.read(upToCount: 2 * 1024 * 1024)) ?? Data()
+      let data = (try? fh.read(upToCount: Int(piece))) ?? Data()
       try? fh.close()
       var q = URLComponents(string: serverURL() + "/api/host/writeChunkBin")!
       // (into a Client Assets folder: its place on the server, dest — Client Assets on the phone, shell 32)
       var qi = [URLQueryItem(name: dest == nil ? "taskId" : "dest", value: dest ?? task), URLQueryItem(name: "name", value: name), URLQueryItem(name: "offset", value: String(offset))]
       if let p = path { qi.append(URLQueryItem(name: "path", value: p)) }
       q.queryItems = qi
+      going += 1
       cookies { c in DispatchQueue.main.async {   // (Transfers is kept on the main thread)
+        guard !over else { return }
         var r = URLRequest(url: q.url!); r.httpMethod = "POST"   // (its body: the piece, from a file — Transfers)
         r.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type"); if !c.isEmpty { r.setValue(c, forHTTPHeaderField: "Cookie") }
-        // (as it goes: the bar and the file's ring move with the piece, not only once it's in)
-        let t = Transfers.shared.upload(r, body: data, sent: { n in
-          let at = offset + min(n, Int64(data.count))
-          UploadCenter.shared.step(job, at)
-          progress(size > 0 ? Double(at) / Double(size) : 1)
-        }) { resp, d in
+        // (as it goes: the bar and the file's ring move with the pieces, not only once each is in)
+        let t = Transfers.shared.upload(r, body: data, sent: { n in partly[offset] = min(n, Int64(data.count)); report() }) { resp, d in
+          going -= 1
+          guard !over else { return }
           let j = d.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
           guard resp?.statusCode == 200, let p = j?["path"] as? String else { return finish(nil) }
-          let next = offset + Int64(data.count)
-          UploadCenter.shared.step(job, next)
-          progress(size > 0 ? Double(next) / Double(size) : 1)
-          if next < size && !data.isEmpty { piece(next, p) } else { finish(p) }
+          if path == nil { path = p }
+          partly[offset] = nil; gone += Int64(data.count); report()
+          then()
         }
-        UploadCenter.shared.running[job] = t
+        if let t = t { UploadCenter.shared.running[job, default: []].append(t) }
       } }
     }
-    piece(0, nil)
+    // (as many on their way as there's room for; all in — its path)
+    func pump() {
+      guard !over else { return }
+      if UploadCenter.shared.cancelled(job) { return finish(nil) }
+      while going < together && next < size { let off = next; next += piece; go(off, then: pump) }
+      if going == 0 && next >= size { finish(path) }
+    }
+    // (the first piece alone: it makes the file the others are written into)
+    next = piece
+    go(0, then: pump)
   }
 }
 
@@ -379,7 +401,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       switch c {
       case nil: break
       case .photos(let a)?:
-        Picker.shared.pickAssets(a) { [weak self] r in
+        Picker.shared.pickAssets(a, small: true) { [weak self] r in
           for f in (r["files"] as? [[String: Any]]) ?? [] {
             guard let self = self, let tok = f["token"] as? String, let url = Picker.shared.url(tok) else { continue }
             self.addFile(url, name: f["name"] as? String ?? "File", voice: nil)
@@ -415,7 +437,8 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     guard let vc = window?.rootViewController else { return }
     var top = vc; while let p = top.presentedViewController { top = p }
-    Picker.shared.pick(from: top, single: false, source: source) { [weak self] r in
+    // (a comment's photos and videos made small, as E11 Talk's; "as files" untouched — Haris 2026-11-16)
+    Picker.shared.pick(from: top, single: false, source: source, small: source == "photos" || source == "camera") { [weak self] r in
       for f in (r["files"] as? [[String: Any]]) ?? [] {
         guard let self = self, let tok = f["token"] as? String, let url = Picker.shared.url(tok) else { continue }
         self.addFile(url, name: f["name"] as? String ?? "File", voice: nil)

@@ -1,7 +1,7 @@
 import UIKit
 
 /* Submit for CD review, the app's own (Haris, 2026-11-01 — mockup dm-mock 2): who the files go to, Camera · Photos ·
-   Files, each file uploading with its bar (sent by the app itself, 2 MB at a time, to /api/host/writeChunkBin), Submit
+   Files, each file uploading with its bar (sent by the app itself, Uploader's pieces, to /api/host/writeChunkBin), Submit
    once all are up → /api/home/act submitReview. Closed before Submit: nothing is sent. */
 final class SubmitSheetVC: UIViewController, UISheetPresentationControllerDelegate {
   private let taskId: String, cd: String
@@ -58,32 +58,21 @@ final class SubmitSheetVC: UIViewController, UISheetPresentationControllerDelega
       self.paint()
     }
   }
-  // 2 MB at a time, raw bytes; the first piece makes the file, the rest are added to it
-  private func upload(_ i: Int, offset: Int64 = 0) {
-    guard i < items.count, let url = Picker.shared.url(items[i].token), let fh = try? FileHandle(forReadingFrom: url) else { if i < items.count { items[i].error = "File no longer available"; paint() }; return }
-    defer { try? fh.close() }
-    try? fh.seek(toOffset: UInt64(offset))
-    let data = (try? fh.read(upToCount: 2 * 1024 * 1024)) ?? Data()
-    var q = URLComponents(string: serverURL() + "/api/host/writeChunkBin")!
-    var qi = [URLQueryItem(name: "taskId", value: taskId), URLQueryItem(name: "name", value: items[i].name), URLQueryItem(name: "offset", value: String(offset))]
-    if let p = items[i].path { qi.append(URLQueryItem(name: "path", value: p)) }
-    q.queryItems = qi
-    let total = max(1, items[i].size)
-    // (each piece sent by iPhone itself — Transfers: it goes on with the app in the background, Haris 2026-11-10)
-    cookies { [weak self] c in DispatchQueue.main.async {
-      var r = URLRequest(url: q.url!); r.httpMethod = "POST"
-      r.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type"); if !c.isEmpty { r.setValue(c, forHTTPHeaderField: "Cookie") }
-      Transfers.shared.upload(r, body: data, sent: { _ in }) { [weak self] resp, d in
-        let j = d.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-        guard let self = self, i < self.items.count else { return }
-        guard resp?.statusCode == 200, let path = j?["path"] as? String else { self.items[i].error = (j?["error"] as? String) ?? "Upload failed — try again"; self.paint(); return }
-        self.items[i].path = path
-        let next = offset + Int64(data.count)
-        self.items[i].progress = Double(next) / Double(total)
-        self.paint()
-        if next < self.items[i].size && !data.isEmpty { self.upload(i, offset: next) }
-      }
-    } }
+  // sent as every upload is (Uploader: the first piece makes the file, then three 8 MB pieces side by side — Haris 2026-11-16),
+  // each piece by iPhone itself (Transfers: it goes on with the app in the background, Haris 2026-11-10); its own bar here
+  private func upload(_ i: Int) {
+    guard i < items.count, let url = Picker.shared.url(items[i].token) else { if i < items.count { items[i].error = "File no longer available"; paint() }; return }
+    let tok = items[i].token
+    Uploader.send(url, name: items[i].name, task: taskId, bar: false, cookies: cookies, progress: { [weak self] p in
+      guard let self = self, let k = self.items.firstIndex(where: { $0.token == tok }) else { return }
+      // (drawn again only when its whole percent moves)
+      let was = Int(self.items[k].progress * 100); self.items[k].progress = min(p, 0.99)
+      if Int(self.items[k].progress * 100) != was { self.paint() }
+    }) { [weak self] path in
+      guard let self = self, let k = self.items.firstIndex(where: { $0.token == tok }) else { return }
+      if let path = path { self.items[k].path = path; self.items[k].progress = 1 } else { self.items[k].error = "Upload failed — try again" }
+      self.paint()
+    }
   }
   private var allUp: Bool { !items.isEmpty && items.allSatisfy { $0.path != nil && $0.error == nil && $0.progress >= 0.999 } }
   private func paint() {

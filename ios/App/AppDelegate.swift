@@ -10,6 +10,8 @@ import WebKit
 import UserNotifications
 import LocalAuthentication
 import PhotosUI
+import AVFoundation
+import ImageIO
 import Photos
 import UniformTypeIdentifiers
 import AudioToolbox
@@ -2650,12 +2652,15 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
   private var files: [String: URL] = [:]
   private let lock = NSLock()   // (photos are copied on background threads)
   private let dir: URL = { let d = FileManager.default.temporaryDirectory.appendingPathComponent("picked", isDirectory: true); try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true); return d }()
+  // (a comment's photos and videos made small before they go, as E11 Talk's — Haris 2026-11-16: photos 2048 across, videos
+  //  1080p; only for photos and videos picked as they are — "as files" (Choose Files, the originals, a scan) go untouched)
+  private var small = false
 
   // (the keyboard isn't put down here: iPhone hides it while a picker covers the screen and brings it back for the
   //  comment box afterwards)
-  func pick(from vc: UIViewController, single: Bool, source: String? = nil, title: String? = nil, _ done: @escaping ([String: Any]) -> Void) {
+  func pick(from vc: UIViewController, single: Bool, source: String? = nil, title: String? = nil, small: Bool = false, _ done: @escaping ([String: Any]) -> Void) {
     finish([])   // (a sheet still open from before answers "nothing")
-    self.done = done
+    self.done = done; self.small = small
     let photos = {
       var c = PHPickerConfiguration()
       c.selectionLimit = single ? 1 : 0
@@ -2718,6 +2723,7 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
     let f = FilesSheet()
     f.onPick = { [weak self, weak vc] k in
       guard let self = self, let vc = vc else { return }
+      self.small = false   // (as files: the originals, untouched)
       switch k {
       case "files": files()
       case "originals": OriginalsPicker.present(from: vc) { [weak self] got in self?.finish(got.compactMap { self?.keep($0.url, name: $0.name) }) }
@@ -2735,13 +2741,13 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
     }
   }
   // (a picked or ticked photo sent from another screen — the comment box's own + sheet)
-  func pickAssets(_ a: [PHAsset], _ done: @escaping ([String: Any]) -> Void) { finish([]); self.done = done; keepAssets(a) }
+  func pickAssets(_ a: [PHAsset], small: Bool = false, _ done: @escaping ([String: Any]) -> Void) { finish([]); self.done = done; self.small = small; keepAssets(a) }
   func pickOriginals(from vc: UIViewController, _ done: @escaping ([String: Any]) -> Void) {
-    finish([]); self.done = done
+    finish([]); self.done = done; small = false
     OriginalsPicker.present(from: vc) { [weak self] got in self?.finish(got.compactMap { self?.keep($0.url, name: $0.name) }) }
   }
   func pickScan(from vc: UIViewController, _ done: @escaping ([String: Any]) -> Void) {
-    finish([]); self.done = done
+    finish([]); self.done = done; small = false
     DocScanner.present(from: vc) { [weak self] f in self?.finish([f].compactMap { $0 }.compactMap { self?.keep($0.url, name: $0.name) }) }
   }
   private func keep(_ src: URL, name: String) -> [String: Any]? {
@@ -2754,6 +2760,7 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
   }
   private func finish(_ all: [[String: Any]]) {
     guard let d = done else { return }
+    if small { small = false; return shrink(all) { [weak self] out in self?.finish(out) } }
     done = nil
     // (files up to 1 GB, in the iPhone apps — Haris 2026-11-16; one over it is let go)
     var out = all
@@ -2810,9 +2817,55 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
   func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { picker.dismiss(animated: true); finish([]) }
   // Files
   func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+    small = false
     finish(urls.compactMap { u in let ok = u.startAccessingSecurityScopedResource(); defer { if ok { u.stopAccessingSecurityScopedResource() } }; return keep(u, name: u.lastPathComponent) })
   }
   func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { finish([]) }
+
+  // photos and videos made small, side by side, off the main thread: a photo 2048 across as a JPEG (as E11 Talk's), a video
+  // at 1080p as an MP4 — one already smaller stays as it is; one that can't be made smaller goes as it was
+  private func shrink(_ all: [[String: Any]], _ done: @escaping ([[String: Any]]) -> Void) {
+    var out = all
+    let g = DispatchGroup()
+    for (i, f) in all.enumerated() {
+      guard let tok = f["token"] as? String, let src = url(tok) else { continue }
+      let ext = src.pathExtension.lowercased(), base = ((f["name"] as? String ?? "File") as NSString).deletingPathExtension
+      let swap = { (made: URL, name: String) in
+        let size = ((try? FileManager.default.attributesOfItem(atPath: made.path))?[.size] as? NSNumber)?.int64Value ?? 0
+        self.lock.lock(); self.files[tok] = made; self.lock.unlock()
+        try? FileManager.default.removeItem(at: src)
+        out[i]["name"] = name; out[i]["size"] = size
+      }
+      if ["jpg", "jpeg", "heic", "heif", "png", "webp", "tif", "tiff"].contains(ext) {
+        g.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+          defer { DispatchQueue.main.async { g.leave() } }
+          guard let s = CGImageSourceCreateWithURL(src as CFURL, nil),
+                let props = CGImageSourceCopyPropertiesAtIndex(s, 0, nil) as? [CFString: Any],
+                let w = props[kCGImagePropertyPixelWidth] as? Int, let h = props[kCGImagePropertyPixelHeight] as? Int else { return }
+          let big = max(w, h) > 2048
+          // (already small and already a JPEG: as it is)
+          if !big && (ext == "jpg" || ext == "jpeg") { return }
+          guard let cg = CGImageSourceCreateThumbnailAtIndex(s, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
+                                                                   kCGImageSourceThumbnailMaxPixelSize: min(2048, max(w, h))] as CFDictionary) else { return }
+          let made = self.dir.appendingPathComponent(UUID().uuidString + "-" + base.replacingOccurrences(of: "/", with: "-") + ".jpg")
+          guard let d = CGImageDestinationCreateWithURL(made as CFURL, UTType.jpeg.identifier as CFString, 1, nil) else { return }
+          CGImageDestinationAddImage(d, cg, [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary)
+          guard CGImageDestinationFinalize(d) else { return }
+          DispatchQueue.main.async { swap(made, base + ".jpg") }
+        }
+      } else if ["mov", "mp4", "m4v"].contains(ext) {
+        let asset = AVURLAsset(url: src)
+        let side = asset.tracks(withMediaType: .video).first.map { t -> CGFloat in let z = t.naturalSize.applying(t.preferredTransform); return min(abs(z.width), abs(z.height)) } ?? 0
+        guard side > 1080, let ex = AVAssetExportSession(asset: asset, presetName: AVAssetExportPreset1920x1080) else { continue }
+        let made = dir.appendingPathComponent(UUID().uuidString + "-" + base.replacingOccurrences(of: "/", with: "-") + ".mp4")
+        ex.outputURL = made; ex.outputFileType = .mp4; ex.shouldOptimizeForNetworkUse = true
+        g.enter()
+        ex.exportAsynchronously { DispatchQueue.main.async { if ex.status == .completed { swap(made, base + ".mp4") }; g.leave() } }
+      }
+    }
+    g.notify(queue: .main) { done(out) }
+  }
 
   // (30: the app uploads a chosen file itself — SubmitSheet.swift)
   func url(_ tok: String) -> URL? { lock.lock(); defer { lock.unlock() }; return files[tok] }
