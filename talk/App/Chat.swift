@@ -18,22 +18,18 @@ import ImageIO
 enum ChatItem: Hashable { case msg(String); case intro }
 
 /* To a far end of a long chat, Claude's way (Haris 2026-11-15, his recording of Claude's app): never a long scroll through
-   everything — the chat put a screen away from where it's going, under a quick crossfade from how it looked, then the last
-   screen glides there smoothly (Apple's own scroll animation). Near enough already: just the glide. `to` is asked again
-   after the jump: messages coming into view take their real heights, and the end moves with them. */
+   everything — the chat put a screen away from where it's going, then the last screen glides there smoothly (Apple's own
+   scroll animation). No crossfade over the jump (Haris 2026-11-16: the old and new pages showed on top of each other for a
+   few frames). Near enough already: just the glide. `to` is asked again after the jump: messages coming into view take
+   their real heights, and the end moves with them. */
 extension UIScrollView {
   func glide(_ to: () -> CGFloat) {
     layoutIfNeeded()
     let y0 = to(), d = y0 - contentOffset.y, h = bounds.height
-    guard abs(d) > h * 1.5, let host = superview else { setContentOffset(CGPoint(x: contentOffset.x, y: y0), animated: true); return }
-    let shot = snapshotView(afterScreenUpdates: false)
+    guard abs(d) > h * 1.5 else { setContentOffset(CGPoint(x: contentOffset.x, y: y0), animated: true); return }
     UIView.performWithoutAnimation {
       setContentOffset(CGPoint(x: contentOffset.x, y: y0 - (d > 0 ? h : -h)), animated: false)
       layoutIfNeeded()
-    }
-    if let s = shot {
-      s.frame = frame; host.insertSubview(s, aboveSubview: self)
-      UIView.animate(withDuration: 0.2, delay: 0, options: [.curveEaseOut], animations: { s.alpha = 0 }, completion: { _ in s.removeFromSuperview() })
     }
     setContentOffset(CGPoint(x: contentOffset.x, y: to()), animated: true)
   }
