@@ -666,6 +666,16 @@ newest 100 comments, older 100 a tap at a time; comment photos 2048 across and v
 once with one conversion behind it; uploads three 8 MB pieces side by side; maps kept on the phone; a contact / place card at its
 size at once; one upload bar (comments' tiles only); the clock / ↓ run landing in one movement (Glider); 120 Hz. With server 1.9.61.
 Quick builds. Nothing changes in its look, behaviour or code without telling Haris first and his yes.
+**THE iPHONE APP — STABLE, LOCKED: 1.2.2 build 1802 (Haris, 2026-11-16 22:48: "First lock the current console ios version"):**
+commit 9eeb6a6, branches `stable/ios-1802` and `locked/ios-app-1802` (never moved or deleted; 1775's and earlier stay as history).
+1802 = 1775 + Content plans' own search (months in order); a review request's files opening; a trashed task fully view only;
+a client found by search opening its page (with and without a Clients tab — pushed once its navigation has settled); a file
+opened by a link flying out of its picture and back, its spot empty from the moment it's pulled down; the Inbox's Unread keeping
+only what's acted on this phone; read notifications taken off the iPhone (server 1.9.63's quiet note, remote-notification mode);
+a link turned off / on elsewhere shown at once. Version 1.2.2 — 1.2.1 build 1758 approved by Apple 2026-11-16, waiting for its
+manual release. Nothing changes in its look, behaviour or code without telling Haris first and his yes.
+**The full iPhone test (Haris 2026-11-16 22:47):** plan in project doc `claude/ios-full-test-plan.md`, his additions added as he
+tells them; run only on his word — then that night nothing asked of him, bugs found are fixed and checked again.
 **E11 TALK — STABLE, LOCKED: build 170 — not a release candidate yet (Haris, 2026-11-16 22:45: "talk is stable now but still not yet rc"):**
 commit 4740a08 on talk-chat-1, branches `stable/talk-170` and `locked/talk-170` (never moved or deleted; 162's and earlier stay as
 history). 170 = 162 + client contacts' two tabs (E11 Agency · Settings) and each tab's own count; Client Assets links opening in
