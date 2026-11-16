@@ -2653,7 +2653,7 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
   private let lock = NSLock()   // (photos are copied on background threads)
   private let dir: URL = { let d = FileManager.default.temporaryDirectory.appendingPathComponent("picked", isDirectory: true); try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true); return d }()
   // (a comment's photos and videos made small before they go, as E11 Talk's — Haris 2026-11-16: photos 2048 across, videos
-  //  1080p; only for photos and videos picked as they are — "as files" (Choose Files, the originals, a scan) go untouched)
+  //  720p (Haris 2026-11-16 13:40: "720p for console instead of 1080p"); only for photos and videos picked as they are — "as files" (Choose Files, the originals, a scan) go untouched)
   private var small = false
 
   // (the keyboard isn't put down here: iPhone hides it while a picker covers the screen and brings it back for the
@@ -2823,7 +2823,7 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
   func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { finish([]) }
 
   // photos and videos made small, side by side, off the main thread: a photo 2048 across as a JPEG (as E11 Talk's), a video
-  // at 1080p as an MP4 — one already smaller stays as it is; one that can't be made smaller goes as it was
+  // at 720p as an MP4 — one already smaller stays as it is; one that can't be made smaller goes as it was
   private func shrink(_ all: [[String: Any]], _ done: @escaping ([[String: Any]]) -> Void) {
     var out = all
     let g = DispatchGroup()
@@ -2857,7 +2857,7 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
       } else if ["mov", "mp4", "m4v"].contains(ext) {
         let asset = AVURLAsset(url: src)
         let side = asset.tracks(withMediaType: .video).first.map { t -> CGFloat in let z = t.naturalSize.applying(t.preferredTransform); return min(abs(z.width), abs(z.height)) } ?? 0
-        guard side > 1080, let ex = AVAssetExportSession(asset: asset, presetName: AVAssetExportPreset1920x1080) else { continue }
+        guard side > 720, let ex = AVAssetExportSession(asset: asset, presetName: AVAssetExportPreset1280x720) else { continue }
         let made = dir.appendingPathComponent(UUID().uuidString + "-" + base.replacingOccurrences(of: "/", with: "-") + ".mp4")
         ex.outputURL = made; ex.outputFileType = .mp4; ex.shouldOptimizeForNetworkUse = true
         g.enter()
