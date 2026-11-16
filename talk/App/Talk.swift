@@ -904,11 +904,11 @@ func toast(_ text: String, in v: UIView? = nil) {
   UIView.animate(withDuration: 0.18) { l.alpha = 1 }
   DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) { UIView.animate(withDuration: 0.2, animations: { l.alpha = 0 }) { _ in l.removeFromSuperview() } }
 }
-// a link tapped: an E11 Console file or folder link opens in E11 Console only while it's signed in on this phone; otherwise
+// a link tapped: an E11 Console file, folder or task link opens in E11 Console only while it's signed in on this phone; otherwise
 // in Apple's Safari sheet here, as without the app (Haris 2026-11-16 — a client contact with Console on the phone but not
 // signed in got its sign-in page and never the file). Every other link as before.
 func openLink(_ u: URL) {
-  if Talk.isE11(u.absoluteString), SignInKeys.consoleKey == nil,
+  if Talk.isE11Any(u.absoluteString), SignInKeys.consoleKey == nil,
      let top = topScreen(UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first?.rootViewController) {
     top.present(SFSafariViewController(url: u), animated: true); return
   }
@@ -1078,6 +1078,8 @@ extension Talk {
   }
   static func e11Base(_ text: String) -> String? { e11Hit(text).flatMap { $0.kind == "t" ? nil : $0.url } }
   static func e11Task(_ text: String) -> String? { e11Hit(text).flatMap { $0.kind == "t" ? $0.tok : nil } }
+  // (any of E11 Console's own links — a file's, a folder's or a task's: where it opens follows Console's sign-in)
+  static func isE11Any(_ url: String) -> Bool { e11Hit(url).map { url.lowercased().hasPrefix($0.url.lowercased()) } ?? false }
   static func isE11(_ url: String) -> Bool { e11Pattern.firstMatch(in: url, range: NSRange(location: 0, length: (url as NSString).length)) != nil }
   func liveLink(_ l: Msg.LinkPrev) -> Msg.LinkPrev { l.e11 == nil && !Talk.isE11(l.url) ? l : Talk.liveLinks[l.url] ?? l }
   static func linkCard(_ k: [String: Any]) -> Msg.LinkPrev? {
