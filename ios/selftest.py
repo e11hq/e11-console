@@ -152,7 +152,13 @@ try:
     print('measure clientRowHeights', json.dumps({'arrived': ca, 'scrolled': cs2, 'top': ct}))
     check(bool(ca) and not cmoved, f"a client's page: each row keeps its height — arrived, scrolled, back at the top (moved: {cmoved})")
     print('measure clAgainNotes', json.dumps(res.get('clAgainNotes')))
-    check(res.get('clRowsBefore') is not None and res.get('clRowsAfter') == res.get('clRowsBefore'), f"the Clients tab left and opened again: no row set again {res.get('clRowsBefore')} → {res.get('clRowsAfter')}")
+    # (a row set again only because what it shows changed meanwhile — a person's photo that arrived while the tab was away,
+    #  initials → photo — is right: only rows set again with nothing changed fail — the full test, 2026-11-16)
+    import re as _re
+    _same = [n for n in (res.get('clAgainNotes') or []) if ' set k:' in n and ' → ' in n and _re.sub(r'\+', '', n.split(' → ')[0].split(': ', 1)[-1]) == _re.sub(r'\+', '', n.split(' → ')[1]) and n.split(' → ')[0].split(': ', 1)[-1] == n.split(' → ')[1]]
+    _photo = [n for n in (res.get('clAgainNotes') or []) if ' set k:' in n and ' → ' in n and n.split(' → ')[0].split(': ', 1)[-1] != n.split(' → ')[1] and _re.sub(r'\+', '', n.split(' → ')[0].split(': ', 1)[-1]) == _re.sub(r'\+', '', n.split(' → ')[1])]
+    _diff = (res.get('clRowsAfter') or 0) - (res.get('clRowsBefore') or 0)
+    check(res.get('clRowsBefore') is not None and _diff <= len(_photo), f"the Clients tab left and opened again: no row set again unless what it shows changed {res.get('clRowsBefore')} → {res.get('clRowsAfter')} (a photo arrived for {len(_photo)}; set with nothing changed: {len(_same)})")
     check(cf.get('searching') is True and (cf.get('tasks') or 0) > 0 and cf.get('clients') == 0, f"a client's page searched for \"{res.get('clFindWord')}\": its tasks found {cf}")
     check(cw.get('title') is True and cw.get('washed') is False, f"a client's page, search closed: its task title without search's wash {cw}")
     hd = res.get('homeDateNative') or {}
