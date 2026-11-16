@@ -180,6 +180,14 @@ if APPLE:
         elif kb and not kb.get('none'):
             b0 = kb.get('before') or {}
             check(kb.get('text') == b0.get('text') and kb.get('first') == b0.get('first') and abs((kb.get('y') or 0) - (b0.get('y') or 0)) <= 2 and kb.get('active'), f"{lab}: a comment being typed, away to another app and back — the words, the keyboard and the list as they were {kb}")
+        up = ap.get('upload') or {}
+        if up and not up.get('none'):
+            dn = up.get('down') or {}
+            check(bool(up.get('path')) and up.get('top', 0) >= 0.999 and not up.get('backwards') and up.get('bar') and up.get('barGone'), f"{lab}: a 20 MB file uploads — its progress only forward to the end, the bar at the bottom while it goes and gone after {up}")
+            check(up.get('comment') and up.get('fileListed'), f"{lab}: the uploaded file put on a comment shows in the open task's comments {up}")
+            check(dn.get('same') is True and not dn.get('backwards'), f"{lab}: the file downloaded back — every byte the same, its progress only forward {dn}")
+            print('measure apple upload', lab, json.dumps({'upSecs': up.get('secs'), 'downSecs': dn.get('secs'), 'MB': 20}))
+        elif up: print(f'note {lab}: upload not tried {up}')
         ct = ap.get('contrast') or {}
         for scr, r in ct.items():
             if isinstance(r, dict) and r.get('checked') is not None:

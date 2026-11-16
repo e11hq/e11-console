@@ -545,6 +545,55 @@ extension Main {
                                  "copyUnread": AppData.shared.screen("inbox", "all").model?["unread"] ?? -1])
         self.tab(self.tabKeys.first ?? "today")
       }),
+      // Uploads and downloads (the full test, Haris 2026-11-16): a 20 MB file up as the comment box sends one (three 8 MB pieces
+      // side by side), its progress read as it goes and the bar at the bottom while it does; put on a comment; then fetched back
+      // as the preview's Download does — every byte the same, its progress too
+      ("aUp", { self.liveBefore = [:]; self.tab(self.tabKeys.first ?? "today"); if let t = best?.0 ?? cards.first { self.openTaskPage(t, tab: "comments", focus: "") } }),
+      ("aUpWait", {}),
+      ("aUpSend", {
+        guard let t = p()?.taskId else { self.apple("upload", ["none": "no task"]); return }
+        var bytes = Data(count: 20 * 1024 * 1024); bytes.withUnsafeMutableBytes { arc4random_buf($0.baseAddress!, $0.count) }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("selftest-up.bin")
+        guard (try? bytes.write(to: url)) != nil else { self.apple("upload", ["none": "couldn't write"]); return }
+        let name = "Selftest \(Int(Date().timeIntervalSince1970)).bin", t0 = CACurrentMediaTime()
+        var steps = 0, back = 0, top = 0.0, bar = false
+        Uploader.send(url, name: name, task: t, bar: true, cookies: self.serverTask.cookies, progress: { v in
+          steps += 1; if v + 0.0001 < top { back += 1 }; top = max(top, v); if !UploadCenter.shared.jobs.isEmpty { bar = true }
+        }) { path in
+          var a: [String: Any] = ["path": path ?? "", "secs": Double(Int((CACurrentMediaTime() - t0) * 100)) / 100, "steps": steps, "backwards": back,
+                                  "top": top, "bar": bar, "barGone": UploadCenter.shared.jobs.isEmpty, "size": bytes.count]
+          self.apple("upload", a)
+          guard let path = path else { return }
+          // (on a comment, as the box does — the server's own act; the file's address comes back with the comment)
+          self.serverTask.request("/api/home/act", body: ["act": "comment", "id": t, "html": "", "text": "", "from": "task", "copy": true, "op": UUID().uuidString,
+                                                          "files": [["name": name, "size": bytes.count, "path": path]]]) { j in
+            a["comment"] = (j?["ok"] as? Bool) == true; a["name"] = name; self.apple("upload", a)
+          }
+        }
+        self.liveBefore["upBytes"] = bytes
+      }),
+      ("aUpWait2", {}), ("aUpWait3", {}), ("aUpWait4", {}), ("aUpWait5", {}),
+      ("aUpDown", {
+        var a = ((self.selfResult["apple"] as? [String: Any])?["upload"] as? [String: Any]) ?? [:]
+        let t = p()?.taskId ?? "", name = a["name"] as? String ?? "-"
+        let items = (AppData.shared.screen("comments", t).model?["items"] as? [[String: Any]]) ?? []
+        let file = items.reversed().compactMap { ($0["files"] as? [[String: Any]])?.first { ($0["name"] as? String) == name } }.first
+        a["inFeed"] = p()?.feed?.selfOrder.count ?? -1; a["fileListed"] = file != nil; self.apple("upload", a)
+        guard let u = file?["url"] as? String, let url = URL(string: serverURL() + u.replacingOccurrences(of: "?view=1", with: "")) else { return }
+        let t0 = CACurrentMediaTime(); var steps = 0, back: Int64 = 0, last: Int64 = 0
+        self.serverTask.cookies { c in DispatchQueue.main.async {
+          var r = URLRequest(url: url); if !c.isEmpty { r.setValue(c, forHTTPHeaderField: "Cookie") }
+          _ = Transfers.shared.download(r, name: name, progress: { w, _ in steps += 1; if w < last { back += 1 }; last = w }) { dest in
+            let got = dest.flatMap { try? Data(contentsOf: $0) }
+            var b = ((self.selfResult["apple"] as? [String: Any])?["upload"] as? [String: Any]) ?? [:]
+            b["down"] = ["secs": Double(Int((CACurrentMediaTime() - t0) * 100)) / 100, "steps": steps, "backwards": back, "size": got?.count ?? -1,
+                         "same": got != nil && got == (self.liveBefore["upBytes"] as? Data)]
+            self.apple("upload", b); self.liveBefore["upBytes"] = nil
+          }
+        } }
+      }),
+      ("aUpDownWait", {}), ("aUpDownWait2", {}), ("aUpDownWait3", {}),
+      ("aUpDone", { for x in self.taskPages { self.closeTaskPage(x, animated: false) }; self.tab(self.tabKeys.first ?? "today") }),
     ]
   }
   // one variant pushed on the Clients tab's navigation, filmed for 3 s: when its search box gets Apple's fill, and
