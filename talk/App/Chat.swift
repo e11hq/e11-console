@@ -20,17 +20,31 @@ enum ChatItem: Hashable { case msg(String); case intro }
 /* To a far end of a chat, Claude's way (Haris 2026-11-16, his recordings of Claude's app): one smooth run all the way —
    Apple's own animated scroll, which takes the same short time however far it goes, so a long chat simply flies by and
    lands softly; at 120 Hz on the phones that have it (CADisableMinimumFrameDurationOnPhone). No jump and no crossfade.
-   Rows passing on the way take their real heights, so if the end moved meanwhile it glides the last few points there. */
+   The rows' heights are known up front (kept on the phone, the group's card measured), so it lands exactly; should a row
+   never seen on this phone still move the end, the last few points follow at once as it lands — no pause, no second slide
+   a moment later (Haris 2026-11-16: "takes second adjustment after it settles"). */
+private var glideKey = 0
 extension UIScrollView {
+  private var glideTo: (() -> CGFloat)? {
+    get { objc_getAssociatedObject(self, &glideKey) as? () -> CGFloat }
+    set { objc_setAssociatedObject(self, &glideKey, newValue, .OBJC_ASSOCIATION_COPY_NONATOMIC) }
+  }
   func glide(_ to: @escaping () -> CGFloat) {
     layoutIfNeeded()
+    glideTo = to
     setContentOffset(CGPoint(x: contentOffset.x, y: to()), animated: true)
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
-      guard let self, !self.isTracking, !self.isDecelerating else { return }
-      let y = to()
-      if abs(self.contentOffset.y - y) > 1 { self.setContentOffset(CGPoint(x: self.contentOffset.x, y: y), animated: true) }
-    }
   }
+  // (the list's delegate calls this as Apple's scroll ends — scrollViewDidEndScrollingAnimation)
+  func glideLanded() {
+    guard let to = glideTo else { return }
+    glideTo = nil
+    guard !isTracking, !isDecelerating else { return }
+    layoutIfNeeded()
+    let y = to()
+    if abs(contentOffset.y - y) > 0.5 { setContentOffset(CGPoint(x: contentOffset.x, y: y), animated: abs(contentOffset.y - y) > 6) }
+  }
+  // (a finger on the list takes over — nothing follows afterwards)
+  func glideStop() { glideTo = nil }
 }
 
 final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDataSource, QLPreviewControllerDelegate, UIGestureRecognizerDelegate {
@@ -317,6 +331,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
   override func viewWillDisappear(_ a: Bool) {
     super.viewWillDisappear(a); endFind(leaving: true); if ChatVC.open == group { ChatVC.open = nil }
+    ChatVC.keepHeights(tidy: group)
     // (going back, Apple puts the tab bar back at the first touch of the swipe — its icons fade in with the slide instead,
     //  following the finger, Haris 2026-11-12)
     if isMovingFromParent, let bar = tabBarController?.tabBar, let tc = transitionCoordinator {
@@ -404,11 +419,57 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   //  doesn't measure it again; a reaction, an edit or a tick changes the fingerprint, and it's measured afresh. Measuring
   //  the bubbles on screen was most of a chat's opening once they were quick to make: 58 ms for 9, Haris's phone 2026-11-13.
   //  Kept per text size too.)
-  private static var heights: [String: [String: (sig: Int, h: CGFloat)]] = [:]
+  // (…and kept on the phone too, so after the app was closed the list still knows each row's height up front — a tap on
+  //  the clock then lands exactly where it should, with nothing sliding a moment after: Haris 2026-11-16. Only the heights
+  //  are kept — a fingerprint is new each time the app starts, so a kept row is still measured as it shows, its height
+  //  only the list's guess; rows of messages gone and chats gone are dropped as it's saved)
+  private static var heights: [String: [String: (sig: Int, h: CGFloat)]] = loadHeights()
+  private static var heightsFile: URL {
+    FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("talk", isDirectory: true).appendingPathComponent("heights-\(Server.host).json")
+  }
+  private static func loadHeights() -> [String: [String: (sig: Int, h: CGFloat)]] {
+    NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in ChatVC.keepHeights() }
+    guard let d = try? Data(contentsOf: heightsFile), let j = try? JSONSerialization.jsonObject(with: d) as? [String: [String: Double]] else { return [:] }
+    return j.mapValues { rows in rows.mapValues { (v: Double) -> (sig: Int, h: CGFloat) in (sig: 0, h: CGFloat(v)) } }
+  }
+  // (tidy: the chat being left keeps only its messages' rows — read from its log, already in memory — and chats gone are
+  //  dropped; the others stay as they are)
+  static func keepHeights(tidy: String? = nil) {
+    let T = Talk.shared
+    var out: [String: [String: Double]] = [:]
+    var live: Set<String>? = nil
+    if let g = tidy { var s = Set<String>(); for m in T.log(g).msgs { s.insert(m.id); if let c = m.cid { s.insert("c:" + c) } }; live = s }
+    for (k, rows) in heights {
+      let g = String(k.split(separator: "|", maxSplits: 1).first ?? "")
+      guard T.groups[g] != nil else { heights[k] = nil; continue }
+      var kept = rows
+      if g == tidy, let live = live { kept = rows.filter { live.contains($0.key) }; heights[k] = kept }
+      if !kept.isEmpty { out[k] = kept.mapValues { Double($0.h) } }
+    }
+    let file = heightsFile
+    DispatchQueue.global(qos: .utility).async { if let d = try? JSONSerialization.data(withJSONObject: out) { try? d.write(to: file, options: .atomic) } }
+  }
   private var hKey: String { group + "|" + traitCollection.preferredContentSizeCategory.rawValue }
   func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat {
+    if case .intro? = data.itemIdentifier(for: ip) { return introHeight() }
     guard case .msg(let key)? = data.itemIdentifier(for: ip), let e = ChatVC.heights[hKey]?[key], let s = sigs[key], e.sig == s else { return UITableView.automaticDimension }
     return e.h
+  }
+  // the group's card: its exact height, worked out once for what it shows and the list's width (it was guessed at 60 —
+  // about 200 short — so reaching the top, the card took its room and the chat slid down a moment later)
+  private static let introSizer = IntroCell(style: .default, reuseIdentifier: nil)
+  private var introH: (sig: Int, w: CGFloat, h: CGFloat)?
+  private func introHeight() -> CGFloat {
+    guard let g = Talk.shared.groups[group] else { return UITableView.automaticDimension }
+    let s = IntroCell.sig(g), w = table.bounds.width
+    if let i = introH, i.sig == s, i.w == w { return i.h }
+    let c = ChatVC.introSizer
+    UIView.performWithoutAnimation { c.set(g) }
+    c.bounds = CGRect(x: 0, y: 0, width: w, height: 400)
+    let h = c.contentView.systemLayoutSizeFitting(CGSize(width: w, height: UIView.layoutFittingCompressedSize.height),
+                                                  withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
+    introH = (s, w, ceil(h))
+    return ceil(h)
   }
   func tableView(_ tv: UITableView, willDisplay cell: UITableViewCell, forRowAt ip: IndexPath) {
     if case .msg(let key)? = data.itemIdentifier(for: ip) { ChatVC.heights[hKey, default: [:]][key] = (sigs[key] ?? 0, cell.bounds.height) }
@@ -417,6 +478,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     cell.contentView.isUserInteractionEnabled = !keyUp
   }
   func tableView(_ tv: UITableView, estimatedHeightForRowAt ip: IndexPath) -> CGFloat {
+    if case .intro? = data.itemIdentifier(for: ip) { return introHeight() }
     guard case .msg(let id)? = data.itemIdentifier(for: ip) else { return 60 }
     if let e = ChatVC.heights[hKey]?[id] { return e.h }
     // (not seen yet: a fair guess from what it is — a photo's own height, words by their length)
@@ -468,7 +530,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     s.glide { -s.adjustedContentInset.top }
     return false
   }
+  func scrollViewWillBeginDragging(_ s: UIScrollView) { s.glideStop() }
   func scrollViewDidEndScrollingAnimation(_ s: UIScrollView) {
+    s.glideLanded()
     if hasOlder && s.contentOffset.y <= -s.adjustedContentInset.top + 1 { older() }
   }
   func scrollViewDidScroll(_ s: UIScrollView) {
@@ -729,7 +793,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private func bring(_ id: String) {
     reach(id)
     guard let ip = data.indexPath(for: item(id)) else { return }
-    table.scrollToRow(at: ip, at: .middle, animated: true)
+    table.glideStop(); table.scrollToRow(at: ip, at: .middle, animated: true)
     // (the match found: its bubble pulses once it's in view — Haris 2026-11-12)
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
       guard let self = self, self.findCur == id, let ip = self.data.indexPath(for: item(id)) else { return }
@@ -956,7 +1020,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   func jump(to id: String) {
     reach(id)
     guard let ip = data.indexPath(for: item(id)) else { toast("That message isn’t on this phone any more"); return }
-    table.scrollToRow(at: ip, at: .middle, animated: true)
+    table.glideStop(); table.scrollToRow(at: ip, at: .middle, animated: true)
     // (a quote tapped, or opened from a search: the message pulses once in view, as the chat's search does — Haris 2026-11-12)
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
       guard let self = self, let ip = self.data.indexPath(for: item(id)) else { return }
@@ -2518,14 +2582,20 @@ final class BubbleCell: UITableViewCell {
           }
         }
       }
-      let hasImg = pv?.img != nil || pv?.pic != nil
+      // (a preview still being read as it was sent: the card at its size already — its picture's place with a light
+      //  passing over it, two lines for the title — then the real one crossfades in; none found: back to the plain link,
+      //  Haris 2026-11-16)
+      let reading = pv?.state == "reading"
+      if reading { linkSite.text = site + "\n "; linkSite.numberOfLines = 2; linkURL.text = nil }
+      let hasImg = reading || pv?.img != nil || pv?.pic != nil
       linkImgOff.isActive = !hasImg; linkImgH.isActive = hasImg; linkPlay.isHidden = !(hasImg && pv?.video == true)
       wideCard = true
       if pv?.pic == nil { linkImg.contentMode = .scaleAspectFill }
-      if let id = pv?.img {
-        if let i = BubbleCell.cached(id) { linkImg.image = i; linkShown = id }
+      if reading { linkImg.image = nil; linkShown = nil; linkImg.coming(true) }
+      else if let id = pv?.img {
+        if let i = BubbleCell.cached(id) { linkImg.coming(false); linkImg.image = i; linkShown = id }
         else if linkShown != id || linkImg.image == nil {
-          linkImg.image = nil; linkShown = id
+          linkImg.image = nil; linkShown = id; linkImg.coming(true)
           let shrink = { (url: URL) in
             DispatchQueue.global(qos: .userInitiated).async {
               let i = BubbleCell.picture(url, id)
@@ -2533,7 +2603,7 @@ final class BubbleCell: UITableViewCell {
             }
           }
           if FileManager.default.fileExists(atPath: Net.local(id).path) { shrink(Net.local(id)) }
-          else { Net.shared.file(id) { url in if let url = url { shrink(url) } } }
+          else { Net.shared.file(id) { [weak self] url in if let url = url { shrink(url) } else { DispatchQueue.main.async { self?.linkImg.coming(false) } } } }
         }
       } else if let p = pv?.pic {
         // (an E11 link: its page's own picture, kept once fetched; a logo (SVG — its own file, /view) whole, smaller, with
@@ -2542,14 +2612,14 @@ final class BubbleCell: UITableViewCell {
         linkImg.contentMode = logo ? .scaleAspectFit : .scaleAspectFill
         // (the same picture already shown stays — set again it blinked; a new one fades in once it's here)
         if linkShown != p || linkImg.image == nil {
-          linkImg.image = nil; linkShown = p
+          linkImg.image = nil; linkShown = p; linkImg.coming(true)
           Net.shared.picture(p, max: logo ? 600 : 160) { [weak self] i in
             guard let self = self, self.msg?.id == m.id, self.linkShown == p else { return }
             guard logo, let i = i else { self.linkImg.land(i); return }
             BubbleCell.padded(i, key: p) { [weak self] pi in guard let self = self, self.msg?.id == m.id, self.linkShown == p else { return }; self.linkImg.land(pi) }
           }
         }
-      } else { linkImg.image = nil; linkShown = nil }
+      } else { linkImg.image = nil; linkShown = nil; linkImg.coming(false) }
     } else { linkImgOff.isActive = true; linkImgH.isActive = false }
     // (an E11 file or folder link: its live card, as a task's — the link's own box not shown)
     if let l = m.link.map({ Talk.shared.liveLink($0) }), l.e11 != nil, !m.deleted, !Talk.shared.isContact {
@@ -2698,6 +2768,8 @@ final class BubbleCell: UITableViewCell {
   // a photo, shrunk once to the bubble's size and kept
   private static let pictures = NSCache<NSString, UIImage>()
   static func cached(_ id: String) -> UIImage? { pictures.object(forKey: id as NSString) ?? frames.object(forKey: id as NSString) }
+  // (a picture sent up from here: kept under the server's name too, so the card doesn't fetch and fade it in again)
+  static func alias(_ from: String, _ to: String) { if let i = pictures.object(forKey: from as NSString) { pictures.setObject(i, forKey: to as NSString) } }
   static func picture(_ url: URL, _ id: String, max: Int = 800) -> UIImage? {
     if let i = pictures.object(forKey: id as NSString) { return i }
     guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
@@ -3743,7 +3815,7 @@ final class SharedCardView: UIView {
       accessibilityLabel = "Location: \(p.title), \(p.line)"
       picture(p)
     } else if let c = c {
-      map.isHidden = true; mapH.constant = 0; shown = nil; map.image = nil
+      map.isHidden = true; mapH.constant = 0; shown = nil; map.image = nil; map.coming(false)
       face.isHidden = false; line.isHidden = false; acts.isHidden = false
       face.text = c.name.split(separator: " ").prefix(2).compactMap { $0.first.map(String.init) }.joined().uppercased()
       face.backgroundColor = mine ? UIColor.white.withAlphaComponent(0.25) : UIColor.systemGray4; face.textColor = mine ? .white : .label
@@ -3756,10 +3828,12 @@ final class SharedCardView: UIView {
     let d = traitCollection.userInterfaceStyle == .dark, size = CGSize(width: 260, height: 130)
     if shown == p && dark == d && map.image != nil { return }
     shown = p; dark = d
-    if let i = MapThumb.cached(p, size, dark: d) { map.image = i; return }
-    map.image = nil
+    if let i = MapThumb.cached(p, size, dark: d) { map.coming(false); map.image = i; return }
+    map.image = nil; map.coming(true)
     MapThumb.make(p, size, dark: d) { [weak self] i in
-      guard let self = self, self.shown == p, self.dark == d, let i = i else { return }
+      guard let self = self, self.shown == p, self.dark == d else { return }
+      self.map.coming(false)
+      guard let i = i else { return }
       UIView.transition(with: self.map, duration: 0.2, options: .transitionCrossDissolve) { self.map.image = i }
     }
   }
@@ -3862,7 +3936,10 @@ final class E11CardView: UIView {
   func set(_ l: Msg.LinkPrev, mine: Bool, ink: UIColor, msg: String, find: (String, Bool)? = nil, still: @escaping () -> String?) {
     let subInk: UIColor = mine ? UIColor.white.withAlphaComponent(0.8) : .secondaryLabel
     let folder = l.e11 == "folder", state = l.state ?? "ok"
-    live = state == "ok"; url = URL(string: l.url)
+    // (just sent, the server not yet answered with its card: the card at its size already, its picture's place with a light
+    //  passing over it — then the real one crossfades in: Haris 2026-11-16)
+    let reading = state == "reading"
+    live = state == "ok" || reading; url = URL(string: l.url)
     col.isHidden = !live; quiet.isHidden = live
     quietBottom?.isActive = false
     if !live {
@@ -3876,13 +3953,15 @@ final class E11CardView: UIView {
       accessibilityLabel = "\(qTitle.text ?? ""). \(qSub.text ?? "")"
       return
     }
-    let hasPic = l.pic != nil
+    let hasPic = reading || l.pic != nil
     picOff.isActive = !hasPic; picH.isActive = hasPic
     let logo = l.pic?.hasSuffix("/view") == true
     pic.contentMode = logo ? .scaleAspectFit : .scaleAspectFill
+    if reading { pic.image = nil; picShown = nil; pic.coming(true) }
+    else if l.pic == nil { pic.coming(false) }
     // (the same picture already shown stays — set again it blinked; a new one fades in once it's here)
     if let p = l.pic, picShown != p || pic.image == nil {
-      pic.image = nil; picShown = p
+      pic.image = nil; picShown = p; pic.coming(true)
       Net.shared.picture(p, max: logo ? 600 : 160) { [weak self] i in
         guard let self = self, still() == msg, self.picShown == p else { return }
         guard logo, let i = i else { self.pic.land(i); return }
@@ -3894,10 +3973,10 @@ final class E11CardView: UIView {
     let c = (l.client ?? "").uppercased()
     h.append(NSAttributedString(string: "  " + (folder ? "FOLDER" : "FILE") + (c.isEmpty ? "" : " · " + c), attributes: [.foregroundColor: subInk, .kern: 0.4]))
     head.attributedText = h
-    title.text = l.title; title.textColor = ink
+    title.text = reading ? " " : l.title; title.textColor = ink
     // (searching the chat: the name marked in amber where it matches, as in a message's words)
     if let f = find, !f.0.isEmpty, let t = l.title { title.attributedText = BubbleCell.marked(t, font: title.font, ink: ink, find: f) }
-    sub.text = l.sub; sub.textColor = subInk; sub.isHidden = (l.sub ?? "").isEmpty
+    sub.text = reading ? " " : l.sub; sub.textColor = subInk; sub.isHidden = !reading && (l.sub ?? "").isEmpty
     line.backgroundColor = subInk.withAlphaComponent(0.3)
     open.text = "Open in E11 Console ›"; open.textColor = ink
     accessibilityLabel = "\(folder ? "Folder" : "File"): \(l.title ?? ""). Open in E11 Console"

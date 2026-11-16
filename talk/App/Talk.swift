@@ -370,6 +370,31 @@ final class Talk {
     var m = Msg(id: "local-" + cid, cid: cid, seq: Int.max, by: me.id, at: Date().timeIntervalSince1970 * 1000, kind: file?.kind ?? (contact != nil ? "contact" : place != nil ? "location" : "text"), text: text, file: file,
                 reply: reply.map { Msg.Reply(id: $0.id, by: $0.by, text: Talk.preview($0), kind: $0.kind) }, mentions: mentions, pending: true, fwd: fwd ? true : nil)
     m.album = album; m.task = task; m.contact = contact; m.place = place
+    // (a link's card goes out at its own size from the first moment — Haris 2026-11-16: "can the cards already be sent in
+    //  their own height"): our own file / folder link with the card this phone already has, else the card's place with a
+    //  light passing over it until the server's card comes; a task this phone knows, its card; a web link with the preview
+    //  read in the box, that preview at once (its picture from the phone, sent up behind it), else the card's place
+    //  while it's read — none found: the plain link again)
+    var given: LinkPrevMaker.Ready? = nil
+    if file == nil, !fwd, task == nil, contact == nil, place == nil, let u = LinkPrevMaker.firstLink(text) {
+      let s = u.absoluteString
+      if LinkPrevMaker.ours(u) {
+        if !isContact, let base = Talk.e11Base(text) {
+          m.link = Talk.liveLinks[base] ?? Msg.LinkPrev(url: base, title: nil, site: nil, video: false, img: nil, icon: nil, e11: base.lowercased().contains("/d/") ? "folder" : "file", state: "reading")
+        } else if !isContact, groups[g]?.withClient != true, let id = Talk.e11Task(text), let t = Talk.live[id] {
+          m.task = t
+        }
+      } else if case .given(let r) = link, r.prev.url == s {
+        given = r
+        var p = r.prev
+        if let d = r.img { let id = "lp-" + cid; try? d.write(to: Net.local(id)); p.img = id }
+        if let d = r.icon { let id = "li-" + cid; try? d.write(to: Net.local(id)); p.icon = id }
+        m.link = p
+      } else if case .none = link {
+      } else {
+        m.link = Msg.LinkPrev(url: s, title: nil, site: nil, video: false, img: nil, icon: nil, state: "reading")
+      }
+    }
     if let lf = localFile, let f = file { try? FileManager.default.copyItem(at: lf, to: Net.local(f.id)) }
     // (a photo's or video's tiny picture goes with it — shown blurred on phones that haven't downloaded it yet)
     let thumb = file?.thumb ?? (file.flatMap { f in localFile.flatMap { Thumb.make($0, kind: f.kind) } })
@@ -406,13 +431,28 @@ final class Talk {
       // (words with a link: its preview — read in the box while it was typed, as far as it got (WhatsApp's), or else read
       //  here first — the picture and the site's icon sent up as files, then the message with it)
       let handle: (Msg.LinkPrev?, Data?, Data?) -> Void = { [weak self] prev, img, icon in
-        guard let self = self, var prev = prev else { go(nil); return }
-        let up = { (d: Data?, name: String, done: @escaping (String?) -> Void) in
-          guard let d = d else { done(nil); return }
-          Net.shared.upload(d, name: name, progress: { _ in }) { fid in if let fid = fid { try? d.write(to: Net.local(fid)) }; done(fid) }
+        // (nothing found: the card's place goes and it's the plain link again)
+        guard let self = self, var prev = prev else { self?.local(g, m.id) { $0.link = nil }; go(nil); return }
+        // (read just now: its card shown at once, the picture and icon from the phone, while they're sent up)
+        if given == nil {
+          var shown = prev
+          if let d = img { let id = "lp-" + cid; try? d.write(to: Net.local(id)); shown.img = id }
+          if let d = icon { let id = "li-" + cid; try? d.write(to: Net.local(id)); shown.icon = id }
+          self.local(g, m.id) { $0.link = shown }
         }
-        up(img, "preview.jpg") { imgId in
-          up(icon, "icon.png") { iconId in
+        let up = { (d: Data?, name: String, local: String, done: @escaping (String?) -> Void) in
+          guard let d = d else { done(nil); return }
+          Net.shared.upload(d, name: name, progress: { _ in }) { fid in
+            // (the picture already shown under its phone name kept under its new one too — nothing blinks as it changes)
+            if let fid = fid {
+              try? d.write(to: Net.local(fid)); BubbleCell.alias(local, fid)
+              DispatchQueue.main.asyncAfter(deadline: .now() + 30) { try? FileManager.default.removeItem(at: Net.local(local)) }
+            }
+            done(fid)
+          }
+        }
+        up(img, "preview.jpg", "lp-" + cid) { imgId in
+          up(icon, "icon.png", "li-" + cid) { iconId in
             prev.img = imgId; prev.icon = iconId
             var lb: [String: Any] = ["url": prev.url, "video": prev.video]
             lb["title"] = prev.title; lb["site"] = prev.site
@@ -428,7 +468,7 @@ final class Talk {
   }
   private func mark(_ g: String, _ cid: String, failed: Bool) {
     var l = log(g)
-    if let i = l.msgs.firstIndex(where: { $0.cid == cid && $0.pending }) { l.msgs[i].failed = failed; logs[g] = l; saveSoon(g); NotificationCenter.default.post(name: .talkGroup, object: g) }
+    if let i = l.msgs.firstIndex(where: { $0.cid == cid && $0.pending }) { l.msgs[i].failed = failed; if failed, l.msgs[i].link?.state == "reading" { l.msgs[i].link = nil }; logs[g] = l; saveSoon(g); NotificationCenter.default.post(name: .talkGroup, object: g) }
   }
   func retry(_ g: String, _ m: Msg) {
     deleteForMe(g, m)
@@ -860,6 +900,7 @@ func topScreen(_ vc: UIViewController?) -> UIViewController? {
 // shown, it's just set
 extension UIImageView {
   func land(_ i: UIImage?) {
+    coming(false)   // (the light passing over its place goes as the picture fades in — or as it turns out not to come)
     guard window != nil, i != nil, image == nil else { image = i; return }
     UIView.transition(with: self, duration: Crossfade.time, options: [.transitionCrossDissolve, .allowUserInteraction]) { self.image = i }
   }
@@ -981,6 +1022,15 @@ extension Talk {
   private static var liveLinks: [String: Msg.LinkPrev] { get { cards.links } set { cards.links = newValue } }
   // (an E11 link sent before the cards came — its message has no card of its own — gets its live card too: Haris 2026-11-13)
   static let e11Pattern = try! NSRegularExpression(pattern: "^https?://files(-test)?\\.e11hq\\.com/[fd]/", options: [.caseInsensitive])
+  // (the link as the server reads it out of the words — its card is kept under that address: a file's or folder's, or a task's id)
+  private static let e11Any = try! NSRegularExpression(pattern: "https?://files(?:-test)?\\.e11hq\\.com/([tfd])/([A-Za-z0-9_%.-]{1,120})", options: [.caseInsensitive])
+  private static func e11Hit(_ text: String) -> (kind: String, tok: String, url: String)? {
+    let ns = text as NSString
+    guard let h = e11Any.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)) else { return nil }
+    return (ns.substring(with: h.range(at: 1)).lowercased(), ns.substring(with: h.range(at: 2)).removingPercentEncoding ?? ns.substring(with: h.range(at: 2)), ns.substring(with: h.range))
+  }
+  static func e11Base(_ text: String) -> String? { e11Hit(text).flatMap { $0.kind == "t" ? nil : $0.url } }
+  static func e11Task(_ text: String) -> String? { e11Hit(text).flatMap { $0.kind == "t" ? $0.tok : nil } }
   static func isE11(_ url: String) -> Bool { e11Pattern.firstMatch(in: url, range: NSRange(location: 0, length: (url as NSString).length)) != nil }
   func liveLink(_ l: Msg.LinkPrev) -> Msg.LinkPrev { l.e11 == nil && !Talk.isE11(l.url) ? l : Talk.liveLinks[l.url] ?? l }
   static func linkCard(_ k: [String: Any]) -> Msg.LinkPrev? {

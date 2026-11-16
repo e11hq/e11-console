@@ -771,3 +771,44 @@ enum MapThumb {
     }
   }
 }
+
+/* A picture still on its way (Haris 2026-11-16: "if they are still loading shows the shimmer while keeping their final
+   height"): its place already its own size, a soft light passing across it until the picture fades in. Apple has no part
+   for it, so it's ours — one thin layer on the picture's own view, nothing laid out. */
+final class ShimmerView: UIView {
+  private let g = CAGradientLayer()
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    isUserInteractionEnabled = false; autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    g.startPoint = CGPoint(x: 0, y: 0.5); g.endPoint = CGPoint(x: 1, y: 0.5); g.locations = [-0.3, -0.15, 0]
+    layer.addSublayer(g); paint()
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  private func paint() {
+    let w = UIColor.white.withAlphaComponent(traitCollection.userInterfaceStyle == .dark ? 0.09 : 0.32)
+    g.colors = [w.withAlphaComponent(0).cgColor, w.cgColor, w.withAlphaComponent(0).cgColor]
+  }
+  override func traitCollectionDidChange(_ p: UITraitCollection?) { super.traitCollectionDidChange(p); paint() }
+  override func layoutSubviews() { super.layoutSubviews(); CATransaction.begin(); CATransaction.setDisableActions(true); g.frame = bounds; CATransaction.commit() }
+  // (running whenever it's on the screen — a row scrolled away and back, or the app coming back, starts it again)
+  override func didMoveToWindow() { super.didMoveToWindow(); if window != nil { sweep() } }
+  func sweep() {
+    guard g.animation(forKey: "sweep") == nil else { return }
+    let a = CABasicAnimation(keyPath: "locations"); a.fromValue = [-0.3, -0.15, 0]; a.toValue = [1, 1.15, 1.3]
+    a.duration = 1.3; a.repeatCount = .infinity; a.isRemovedOnCompletion = false
+    g.add(a, forKey: "sweep")
+  }
+}
+extension UIView {
+  // on while the picture is coming; off fades it away as the picture fades in
+  func coming(_ on: Bool) {
+    let s = subviews.compactMap { $0 as? ShimmerView }.first
+    if on {
+      if let s = s { s.layer.removeAllAnimations(); s.alpha = 1; s.sweep(); return }
+      let n = ShimmerView(frame: bounds); addSubview(n); n.sweep()
+    } else if let s = s {
+      if window == nil { s.removeFromSuperview(); return }
+      UIView.animate(withDuration: 0.25, delay: 0, options: [.allowUserInteraction]) { s.alpha = 0 } completion: { _ in if s.alpha == 0 { s.removeFromSuperview() } }
+    }
+  }
+}
