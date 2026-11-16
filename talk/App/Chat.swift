@@ -1429,7 +1429,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       var acts: [UIMenuElement] = []
       // (an E11 file or folder card: Open in E11 Console first, and Copy Link — the mock-up, Haris 2026-11-13)
       let card = T.isContact ? nil : m.link.map { T.liveLink($0) }.flatMap { $0.e11 != nil && ($0.state ?? "ok") == "ok" ? $0 : nil }
-      if let c = card, let u = URL(string: c.url) { acts.append(UIAction(title: "Open in E11 Console", image: UIImage(systemName: c.e11 == "folder" ? "folder" : "doc")) { _ in UIApplication.shared.open(u) }) }
+      if let c = card, SignInKeys.consoleKey != nil, let u = URL(string: c.url) { acts.append(UIAction(title: "Open in E11 Console", image: UIImage(systemName: c.e11 == "folder" ? "folder" : "doc")) { _ in openLink(u) }) }
       acts.append(UIAction(title: "Reply", image: UIImage(systemName: "arrowshape.turn.up.left")) { [weak self] _ in self?.startReply(m) })
       if let c = card { acts.append(UIAction(title: "Copy Link", image: UIImage(systemName: "link")) { _ in UIPasteboard.general.string = c.url; toast("Copied") }) }
       let fwd = UIAction(title: "Forward", image: UIImage(systemName: "arrowshape.turn.up.right")) { [weak self] _ in self?.forward(m) }
@@ -2941,7 +2941,7 @@ final class BubbleCell: UITableViewCell {
       }
     }
   }
-  @objc private func linkTap() { if let u = link { UIApplication.shared.open(u) } }
+  @objc private func linkTap() { if let u = link { openLink(u) } }
   // a found message: the bubble swells a little and settles (on its layer, so a swipe's own move is never disturbed)
   func pulse() {
     let a = CAKeyframeAnimation(keyPath: "transform.scale")
@@ -3906,7 +3906,7 @@ final class TaskCardView: UIView {
     let o = DateFormatter(); o.dateFormat = "EEE, d MMM"
     return "Due " + o.string(from: day)
   }
-  @objc private func tap() { if let u = url { UIApplication.shared.open(u) } }
+  @objc private func tap() { if let u = url { openLink(u) } }
 }
 // an E11 file or folder link as a live card (mock-up "Talk — E11 link cards", Haris 2026-11-13: the picture across the
 // top, only the client): the picture, FILE / FOLDER · CLIENT, its name, what it is, Open in E11 Console ›. Turned off or
@@ -3990,7 +3990,7 @@ final class E11CardView: UIView {
     open.text = "Open in E11 Console ›"; open.textColor = ink
     accessibilityLabel = "\(folder ? "Folder" : "File"): \(l.title ?? ""). Open in E11 Console"
   }
-  @objc private func tap() { if live, let u = url { UIApplication.shared.open(u) } }
+  @objc private func tap() { if live, let u = url { openLink(u) } }
 }
 // a label with room around its words (the status pill)
 final class PadLabel: UILabel {

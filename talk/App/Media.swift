@@ -192,7 +192,7 @@ final class MediaVC: UIViewController, UICollectionViewDelegate, QLPreviewContro
     switch shown {
     case .media: openMedia(m)
     case .files: openFile(m, from: cv.cellForItem(at: ip))
-    case .links: if let s = m.link?.url, let u = URL(string: s) { UIApplication.shared.open(u) }
+    case .links: if let s = m.link?.url, let u = URL(string: s) { openLink(u) }
     }
   }
   private var chat: ChatVC? { navigationController?.viewControllers.last(where: { ($0 as? ChatVC)?.group == group }) as? ChatVC }

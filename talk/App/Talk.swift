@@ -1,5 +1,6 @@
 import UIKit
 import LinkPresentation
+import SafariServices
 
 /* What the app knows: the groups (from the server — who's in which, admins, pins, mutes) and the messages (on this
    phone only — WhatsApp's way: the server passes each one on and lets it go once every member's phone has it).
@@ -902,6 +903,16 @@ func toast(_ text: String, in v: UIView? = nil) {
   l.alpha = 0; host.addSubview(l)
   UIView.animate(withDuration: 0.18) { l.alpha = 1 }
   DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) { UIView.animate(withDuration: 0.2, animations: { l.alpha = 0 }) { _ in l.removeFromSuperview() } }
+}
+// a link tapped: an E11 Console file or folder link opens in E11 Console only while it's signed in on this phone; otherwise
+// in Apple's Safari sheet here, as without the app (Haris 2026-11-16 — a client contact with Console on the phone but not
+// signed in got its sign-in page and never the file). Every other link as before.
+func openLink(_ u: URL) {
+  if Talk.isE11(u.absoluteString), SignInKeys.consoleKey == nil,
+     let top = topScreen(UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first?.rootViewController) {
+    top.present(SFSafariViewController(url: u), animated: true); return
+  }
+  UIApplication.shared.open(u)
 }
 // the screen on show: through what's presented, a navigation's top and a tab's selected
 func topScreen(_ vc: UIViewController?) -> UIViewController? {
