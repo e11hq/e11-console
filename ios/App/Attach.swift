@@ -181,7 +181,8 @@ final class AttachSheet: UIViewController, UICollectionViewDataSource, UICollect
     var c: UIButton.Configuration
     if picked.isEmpty { c = .plain(); c.title = "All Photos"; c.baseForegroundColor = .label }
     else { c = .filled(); c.title = "\(nextWord) (\(picked.count))"; c.baseBackgroundColor = tint; c.baseForegroundColor = .white; c.cornerStyle = .capsule }
-    c.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { var a = $0; a.font = .systemFont(ofSize: 16, weight: picked.isEmpty ? .regular : .semibold); return a }
+    let weight: UIFont.Weight = picked.isEmpty ? .regular : .semibold
+    c.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { var a = $0; a.font = .systemFont(ofSize: 16, weight: weight); return a }
     if animated { UIView.transition(with: rightB, duration: 0.2, options: .transitionCrossDissolve) { self.rightB.configuration = c } }
     else { rightB.configuration = c }
   }
