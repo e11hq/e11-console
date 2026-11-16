@@ -2099,7 +2099,8 @@ final class BubbleCell: UITableViewCell {
     NotificationCenter.default.addObserver(self, selector: #selector(fileChanged(_:)), name: .talkFile, object: nil)
     // the card
     card.backgroundColor = UIColor.black.withAlphaComponent(0.22); card.layer.cornerRadius = 14; card.layer.cornerCurve = .continuous
-    cardName.font = .systemFont(ofSize: 16); cardName.lineBreakMode = .byTruncatingMiddle; cardSize.font = .systemFont(ofSize: 13)
+    cardName.font = .systemFont(ofSize: 16); cardName.lineBreakMode = .byTruncatingTail;   // (a long name: … at its end — Haris 2026-11-16)
+    cardSize.font = .systemFont(ofSize: 13)
     cardDown.image = UIImage(systemName: "arrow.down.circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22, weight: .light))
     let cs = UIStackView(arrangedSubviews: [cardName, cardSize]); cs.axis = .vertical
     [cardIcon, cs, cardDown].forEach { card.addSubview($0); $0.translatesAutoresizingMaskIntoConstraints = false }
