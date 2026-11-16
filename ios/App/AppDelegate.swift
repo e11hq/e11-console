@@ -2665,7 +2665,8 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
       var c = PHPickerConfiguration()
       c.selectionLimit = single ? 1 : 0
       c.filter = .any(of: [.images, .videos])
-      c.preferredAssetRepresentationMode = .compatible   // (JPEG and H.264, like a web page gets)
+      // (JPEG and H.264, like a web page gets; a comment's: the phone's own, at once — made small after, Haris 2026-11-16)
+      c.preferredAssetRepresentationMode = self.small ? .current : .compatible
       let p = PHPickerViewController(configuration: c); p.delegate = self
       vc.present(p, animated: true)
     }
@@ -2735,7 +2736,8 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
   }
   // photos ticked in the + sheet's row: as Photos gives them today (Compatible), in the order ticked
   private func keepAssets(_ a: [PHAsset]) {
-    AttachExport.compatible(a) { [weak self] got in
+    // (a comment's video: the phone's own, at once — the comment box makes its 720p copy behind its tile)
+    AttachExport.compatible(a, videoAsIs: small) { [weak self] got in
       guard let self = self else { return }
       self.finish(got.compactMap { f in let r = self.keep(f.url, name: f.name); try? FileManager.default.removeItem(at: f.url); return r })
     }
@@ -2822,8 +2824,8 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
   }
   func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { finish([]) }
 
-  // photos and videos made small, side by side, off the main thread: a photo 2048 across as a JPEG (as E11 Talk's), a video
-  // at 720p as an MP4 — one already smaller stays as it is; one that can't be made smaller goes as it was
+  // photos made small, side by side, off the main thread: 2048 across as a JPEG (as E11 Talk's) — one already smaller stays as
+  // it is. (A video: its 720p copy made by the comment box behind its tile, so the tile shows at once — video720.)
   private func shrink(_ all: [[String: Any]], _ done: @escaping ([[String: Any]]) -> Void) {
     var out = all
     let g = DispatchGroup()
@@ -2854,17 +2856,26 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
           guard CGImageDestinationFinalize(d) else { return }
           DispatchQueue.main.async { swap(made, base + ".jpg") }
         }
-      } else if ["mov", "mp4", "m4v"].contains(ext) {
-        let asset = AVURLAsset(url: src)
-        let side = asset.tracks(withMediaType: .video).first.map { t -> CGFloat in let z = t.naturalSize.applying(t.preferredTransform); return min(abs(z.width), abs(z.height)) } ?? 0
-        guard side > 720, let ex = AVAssetExportSession(asset: asset, presetName: AVAssetExportPreset1280x720) else { continue }
-        let made = dir.appendingPathComponent(UUID().uuidString + "-" + base.replacingOccurrences(of: "/", with: "-") + ".mp4")
-        ex.outputURL = made; ex.outputFileType = .mp4; ex.shouldOptimizeForNetworkUse = true
-        g.enter()
-        ex.exportAsynchronously { DispatchQueue.main.async { if ex.status == .completed { swap(made, base + ".mp4") }; g.leave() } }
       }
     }
     g.notify(queue: .main) { done(out) }
+  }
+
+  // a comment's video at 720p as an MP4 (as E11 Talk's — Haris 2026-11-16 13:40), made once: one already 720p or smaller and
+  // H.264 stays as it is; one that can't be made goes as it was
+  static func video720(_ src: URL, name: String, _ done: @escaping (URL, String) -> Void) {
+    let asset = AVURLAsset(url: src)
+    let t = asset.tracks(withMediaType: .video).first
+    let side = t.map { t -> CGFloat in let z = t.naturalSize.applying(t.preferredTransform); return min(abs(z.width), abs(z.height)) } ?? 0
+    let h264 = t.map { $0.formatDescriptions.contains { CMFormatDescriptionGetMediaSubType($0 as! CMFormatDescription) == kCMVideoCodecType_H264 } } ?? false
+    guard t != nil, side > 720 || !h264, let ex = AVAssetExportSession(asset: asset, presetName: AVAssetExportPreset1280x720) else { return done(src, name) }
+    let made = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mp4")
+    ex.outputURL = made; ex.outputFileType = .mp4; ex.shouldOptimizeForNetworkUse = true
+    ex.exportAsynchronously {
+      DispatchQueue.main.async {
+        if ex.status == .completed { done(made, (name as NSString).deletingPathExtension + ".mp4") } else { done(src, name) }
+      }
+    }
   }
 
   // (30: the app uploads a chosen file itself — SubmitSheet.swift)

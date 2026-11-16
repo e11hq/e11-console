@@ -404,7 +404,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
         Picker.shared.pickAssets(a, small: true) { [weak self] r in
           for f in (r["files"] as? [[String: Any]]) ?? [] {
             guard let self = self, let tok = f["token"] as? String, let url = Picker.shared.url(tok) else { continue }
-            self.addFile(url, name: f["name"] as? String ?? "File", voice: nil)
+            self.addFile(url, name: f["name"] as? String ?? "File", voice: nil, small: true)
           }
         }
       case .allPhotos?: self.attach("photos", refocus: false)
@@ -438,10 +438,11 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     guard let vc = window?.rootViewController else { return }
     var top = vc; while let p = top.presentedViewController { top = p }
     // (a comment's photos and videos made small, as E11 Talk's; "as files" untouched — Haris 2026-11-16)
-    Picker.shared.pick(from: top, single: false, source: source, small: source == "photos" || source == "camera") { [weak self] r in
+    let small = source == "photos" || source == "camera"
+    Picker.shared.pick(from: top, single: false, source: source, small: small) { [weak self] r in
       for f in (r["files"] as? [[String: Any]]) ?? [] {
         guard let self = self, let tok = f["token"] as? String, let url = Picker.shared.url(tok) else { continue }
-        self.addFile(url, name: f["name"] as? String ?? "File", voice: nil)
+        self.addFile(url, name: f["name"] as? String ?? "File", voice: nil, small: small)
       }
       if refocus { self?.text.becomeFirstResponder() }
     }
@@ -507,7 +508,9 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     }
     return added
   }
-  private func addFile(_ url: URL, name: String, voice: Double?) {
+  // (small: a comment's video picked as it is — its tile at once, from the phone's own video, while its 720p copy is made
+  //  behind it, then sent: Haris 2026-11-16, "it stays for long and nothing happens")
+  private func addFile(_ url: URL, name: String, voice: Double?, small: Bool = false) {
     let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
     // (a picture shows itself in its tile straight away)
     var thumb: UIImage?
@@ -521,6 +524,18 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     files.append((uid: uid, name: name, size: size, path: nil, progress: 0, failed: false, thumb: thumb))
     if let t = thumb { FeedLoader.shared.setLocal("local:" + uid, t) }   // (its card in the comments, if sent before it's up)
     paintTiles()
+    if small && CommentCell.isVideo(name) {
+      Picker.video720(url, name: name) { [weak self] made, madeName in
+        guard let self = self, let i = self.files.firstIndex(where: { $0.uid == uid }) else { return }
+        self.files[i].name = madeName
+        self.files[i].size = ((try? FileManager.default.attributesOfItem(atPath: made.path))?[.size] as? NSNumber)?.int64Value ?? size
+        self.upload(made, name: madeName, uid: uid)
+      }
+      return
+    }
+    upload(url, name: name, uid: uid)
+  }
+  private func upload(_ url: URL, name: String, uid: String) {
     Uploader.send(url, name: name, task: taskId, bar: false, cookies: cookies, progress: { [weak self] p in
       UploadRing.post(uid, p)
       guard let self = self, let i = self.files.firstIndex(where: { $0.uid == uid }) else { return }
