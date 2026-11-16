@@ -637,11 +637,11 @@ export function createServer(cfg) {
         req.on('close', () => { clearInterval(ping); stop(); });
         return;
       }
-      // a file piece (raw bytes, up to 8 MB): ?id= (none for the first) &name= &offset= &last=1
+      // a file piece (raw bytes, up to 8 MB): ?id= (none for the first) &name= &offset= &last=1 (&at=: written at its own place)
       if (p === '/api/talk/upload' && req.method === 'POST') {
         const bytes = await readRaw(req, 8 * 1024 * 1024 + 1024);
         const q = url.searchParams;
-        return out(t.upload(u, q.get('id') || '', q.get('name') || '', q.get('offset') || '0', bytes, q.get('last') === '1'));
+        return out(t.upload(u, q.get('id') || '', q.get('name') || '', q.get('offset') || '0', bytes, q.get('last') === '1', q.get('at')));
       }
       if (p.startsWith('/api/talk/file/') && (req.method === 'GET' || req.method === 'HEAD')) {
         const f = t.fileFor(dev, p.slice('/api/talk/file/'.length));

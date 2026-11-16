@@ -151,6 +151,23 @@ test('files: uploaded in pieces, sent in a message, read by the group only, gone
   assert.equal(fs.existsSync(file), false, 'the file is gone from the server once every phone has it');
 });
 
+test('files: pieces side by side — each at its own place, done only once every byte is in', async () => {
+  const post = (q, body) => fetch(base + '/api/talk/upload?' + q, { method: 'POST', headers: { 'X-Dev-Email': 'am@x.com', 'Content-Type': 'application/octet-stream' }, body }).then((r) => r.json());
+  const first = await post('name=clip.mp4&offset=0', Buffer.from('AAAA'));
+  assert.ok(first.ok && !first.done);
+  // (the third piece arrives before the second)
+  const [c, b] = await Promise.all([post(`id=${first.id}&name=clip.mp4&at=8`, Buffer.from('CC')), post(`id=${first.id}&name=clip.mp4&at=4`, Buffer.from('BBBB'))]);
+  assert.ok(c.ok && b.ok);
+  const short = await post(`id=${first.id}&name=clip.mp4&at=10&last=1`, Buffer.from('DD'));
+  assert.ok(short.ok && short.done);
+  assert.equal(fs.readFileSync(path.join(dir, 'talk-relay', first.id), 'utf8'), 'AAAABBBBCCDD');
+  // (a piece missing: the end isn't taken)
+  const gap = await post('name=gap.mp4&offset=0', Buffer.from('AAAA'));
+  await post(`id=${gap.id}&name=gap.mp4&at=8`, Buffer.from('CC'));
+  const end = await post(`id=${gap.id}&name=gap.mp4&at=10&last=1`, Buffer.alloc(0));
+  assert.equal(end.ok, false);
+});
+
 test('Auto-download off: a file nobody downloads is kept 30 days from sending, then gone', async () => {
   const up = await (await fetch(base + '/api/talk/upload?name=late.pdf&offset=0&last=1', { method: 'POST', headers: { 'X-Dev-Email': 'am@x.com', 'Content-Type': 'application/octet-stream' }, body: Buffer.from('LATE') })).json();
   assert.ok((await act('am', { act: 'send', group: G, file: { id: up.id, kind: 'file', thumb: 'abc+/=' } })).ok);

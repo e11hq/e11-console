@@ -996,7 +996,10 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   }
 
   // ---------- files: held until passed on ----------
-  function upload(u, id, name, offset, bytes, last) {
+  // at: a piece written at its own place (phones sending pieces side by side — Haris 2026-11-16, "uploads are super slow");
+  // the phone ends with an empty last piece at the file's whole length, done only once every byte before it is in.
+  // Without at (older phones), pieces are added in order, as before.
+  function upload(u, id, name, offset, bytes, last, at) {
     if (!id) {
       id = rid('f');
       Q.newFile.run(id, u.id, clip(name || 'File', 200).replace(/[\\/]/g, '-'), now());
@@ -1005,6 +1008,16 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     const f = Q.getFile.get(String(id));
     if (!f || f.by !== u.id) return bad('Upload not found — please try again', 404);
     if (f.done) return bad('Already uploaded');
+    if (at != null && at !== '' && id) {
+      const pos = Number(at);
+      if (!Number.isInteger(pos) || pos < 0) return bad('Bad offset');
+      if (pos + bytes.length > FILE_MAX) return bad('That file is too big (2 GB at most)');
+      if (bytes.length) { const fd = fs.openSync(path.join(relay, f.id), 'r+'); try { fs.writeSync(fd, bytes, 0, bytes.length, pos); } finally { fs.closeSync(fd); } }
+      const got = f.size + bytes.length;
+      if (last && got !== pos + bytes.length) return bad('Part of the file didn’t arrive — please try again');
+      Q.growFile.run(got, last ? 1 : 0, f.id);
+      return { ok: true, id: f.id, size: got, done: !!last };
+    }
     if (Number(offset) !== f.size) return { ok: false, error: 'Out of step', size: f.size, status: 409 };
     if (f.size + bytes.length > FILE_MAX) return bad('That file is too big (2 GB at most)');
     fs.appendFileSync(path.join(relay, f.id), bytes);
