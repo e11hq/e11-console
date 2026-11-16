@@ -304,6 +304,49 @@ extension Main {
         if let b = best { self.apple("focus", self.taskPages.last?.feed?.selfInView(b.1) ?? ["feed": false]) } else { self.apple("focus", ["none": true]) }
         for x in self.taskPages { self.closeTaskPage(x, animated: false) }
       }),
+      // (Haris 2026-11-16: a client tapped in My Day's search — where it goes; a Client Assets file's link — the preview
+      //  flying out of its picture and back into it)
+      ("aFindC", {
+        self.tab("today")
+        let files = (AppData.shared.meModel("assets", "assets", [""])?["files"] as? [[String: Any]]) ?? []
+        guard let cid = files.first?["client"] as? String else { self.apple("findC", ["none": "no client"]); return }
+        AppleHomeBits.shared.search?.isActive = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.ev(self.homeIfMade, ["ev": "client", "id": cid]) }
+      }),
+      ("aFindCWait", {}),
+      ("aFindCRead", {
+        let cn = AppleTabs.shared?.clientsNav, hn = self.clientsHereNav
+        self.apple("findC", ["tab": self.selectedTabKey, "clientsOn": self.clientsOn, "pushed": ClientVC.pushed, "wanted": self.clientsWanted,
+                             "clientsNav": cn?.viewControllers.map { String(describing: type(of: $0)) } ?? [], "hereNav": hn?.viewControllers.map { String(describing: type(of: $0)) } ?? [],
+                             "own": AppleTabs.shared?.ownNav.map { String(describing: type(of: $0.viewControllers.first as Any)) } ?? "",
+                             "page": ["made": self.clientPageIfMade != nil, "hidden": self.clientPageIfMade?.isHidden ?? true, "window": self.clientPageIfMade?.window != nil],
+                             "query": self.serverClients.query, "on": self.serverClients.on])
+        self.tab("today")
+      }),
+      ("aLink", {
+        let files = (AppData.shared.meModel("assets", "assets", [""])?["files"] as? [[String: Any]]) ?? []
+        guard let f = files.first(where: { ($0["file"] as? String) != nil && CommentCell.isPic($0["name"] as? String ?? "") }), let path = f["file"] as? String else { self.apple("link", ["none": "no picture file"]); return }
+        self.serverTask.request("/api/flink", body: ["path": path]) { j in
+          guard let u = (j?["url"] as? String).flatMap(URL.init) else { self.apple("link", ["none": "no link", "j": "\(j ?? [:])"]); return }
+          self.apple("link", ["url": u.absoluteString, "file": f["id"] ?? ""])
+          self.openLink(u)
+        }
+      }),
+      ("aLinkWait", {}), ("aLinkWait2", {}),
+      ("aLinkRead", {
+        var o = (((self.selfResult["apple"] as? [String: Any])?["link"]) as? [String: Any]) ?? [:]
+        o["preview"] = self.previewVC.map { $0.walkInfo } ?? ["shown": false]
+        o["marked"] = (o["file"] as? String).map { FileTouch.marked($0, in: self.screenWindow) != nil } ?? false
+        o["assets"] = ["open": self.assetsCtl.isOpen, "top": self.assetsCtl.top.map { String(describing: type(of: $0)) } ?? ""]
+        self.apple("link", o)
+        self.previewVC?.close()
+      }),
+      ("aLinkClosed", {
+        var o = (((self.selfResult["apple"] as? [String: Any])?["link"]) as? [String: Any]) ?? [:]
+        o["closedHow"] = PreviewVC.lastClose
+        self.apple("link", o)
+        self.assetsCtl.close(animated: false); self.tab("today")
+      }),
     ]
   }
   // one variant pushed on the Clients tab's navigation, filmed for 3 s: when its search box gets Apple's fill, and

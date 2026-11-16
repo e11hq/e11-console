@@ -364,6 +364,9 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
   private let toast = UILabel()
   private var barsHidden = false
   private var closed = false
+  // (the self-test's reading — ios/walktest.py --apple: how it opened and, once closed, how it went)
+  static var lastClose = ""
+  var walkInfo: [String: Any] { ["shown": true, "source": source != nil, "sourceWindow": source?.window != nil, "openedAt": openedAt, "at": at, "key": keys[safe: at] ?? "", "flies": flies] }
   private var pull: UIPanGestureRecognizer?
 
   init(_ a: [String: Any], event: @escaping ([String: Any]) -> Void) {
@@ -599,6 +602,7 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     let win = source?.window ?? presentingViewController?.view.window ?? view.window
     let back: UIImageView? = (at == openedAt ? source : nil) ?? keys[safe: at].flatMap { FileTouch.marked($0, in: win) }
     // (opened without flying — by a link — but its picture is on the page now: back into it all the same)
+    PreviewVC.lastClose = "back:\(back != nil) window:\(back?.window != nil) picture:\(current?.shownPicture != nil) openedAt:\(openedAt) source:\(source != nil)"
     if openedAt >= 0 || source == nil, let src = back, src.window != nil, let (pic, from) = current?.shownPicture {
       let fly = UIImageView(image: pic); fly.contentMode = .scaleAspectFill; fly.clipsToBounds = true; fly.layer.cornerCurve = src.layer.cornerCurve
       fly.frame = from
