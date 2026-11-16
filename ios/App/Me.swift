@@ -3194,8 +3194,9 @@ final class MeCtl {
       let items = ((g["items"] as? [[String: Any]]) ?? []).map { x -> SetItem in
         let pid = x["pid"] as? String ?? "", post = x["post"] as? String, plan = x["plan"] as? String
         var it = SetItem(key: "f.\(month).\(pid).\(post ?? "")", title: x["title"] as? String ?? "", sub: x["sub"] as? String ?? "", sym: post == nil ? nil : "photo.on.rectangle", col: post == nil ? nil : .systemOrange, tap: { [weak self] in
+          // (the list's own month left as it is: back from a December skeleton, the search showed December first — the
+          //  results stay in the order they came in, Haris 2026-11-16)
           guard let self = self else { return }
-          self.plMonth = month; self.send(["ev": "pl", "on": true, "month": month])
           self.open("plan", "\(pid)|\(month)")
           if let post = post, let plan = plan { DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.openPost(plan, post) } }
         })
