@@ -496,6 +496,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     return ceil(h)
   }
   func tableView(_ tv: UITableView, willDisplay cell: UITableViewCell, forRowAt ip: IndexPath) {
+    // (the dots: breathing again once the list has put the row in — it takes animations off a row it brings in)
+    if let t = cell as? TypingCell { DispatchQueue.main.async { t.dots.breathe() } }
     if case .msg(let key)? = data.itemIdentifier(for: ip) { ChatVC.heights[hKey, default: [:]][key] = (sigs[key] ?? 0, cell.bounds.height) }
     // (taps as the keyboard is now — a row made while it was up, out of sight then, kept them off: the first of two photos
     //  sent together wouldn't open, Haris 2026-11-12)
@@ -3792,10 +3794,24 @@ final class TypingDots: UIView {
     bub.frame = CGRect(x: 44, y: 4, width: 58, height: 34); addSubview(bub); addSubview(face)
     for (i, d) in dots.enumerated() {
       d.backgroundColor = .secondaryLabel; d.layer.cornerRadius = 3.5; d.frame = CGRect(x: 14 + CGFloat(i) * 12, y: 13.5, width: 7, height: 7); bub.addSubview(d)
-      let a = CABasicAnimation(keyPath: "opacity"); a.fromValue = 1; a.toValue = 0.3; a.duration = 0.45; a.autoreverses = true; a.repeatCount = .infinity
-      a.beginTime = CACurrentMediaTime() + Double(i) * 0.15; a.isRemovedOnCompletion = false; d.layer.add(a, forKey: "breath")
     }
     isAccessibilityElement = true; accessibilityLabel = "Typing"
+    // (back in the app: iPhone stops every animation while it's away)
+    NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in if self?.window != nil { self?.breathe() } }
+  }
+  // the dots breathing — started each time they come on screen: as a row of the chat, the list took their animation away as
+  // it put the row in (they stood still, Haris 2026-11-16)
+  override func didMoveToWindow() {
+    super.didMoveToWindow()
+    guard window != nil else { return }
+    breathe()
+  }
+  func breathe() {
+    let t = CACurrentMediaTime()
+    for (i, d) in dots.enumerated() where d.layer.animation(forKey: "breath") == nil {
+      let a = CABasicAnimation(keyPath: "opacity"); a.fromValue = 1; a.toValue = 0.3; a.duration = 0.45; a.autoreverses = true; a.repeatCount = .infinity
+      a.beginTime = t + Double(i) * 0.15; a.isRemovedOnCompletion = false; d.layer.add(a, forKey: "breath")
+    }
   }
   required init?(coder: NSCoder) { fatalError() }
   func set(person: Person?) { face.set(person: person) }
