@@ -105,33 +105,54 @@ final class Net {
   func act(_ b: [String: Any], _ done: @escaping ([String: Any]?) -> Void = { _ in }) { post("/api/talk/act", b, done) }
 
   // a file to send: in pieces of 4 MB, with its progress
+  // a file → the server, in 4 MB pieces: the first makes it; then three side by side, each written at its own place (at=),
+  // and an empty last one at its whole length (Haris 2026-11-16, "uploads are super slow": one piece after another left the
+  // line idle between them). The ring fills smoothly as the pieces go.
   func upload(_ data: Data, name: String, progress: @escaping (Double) -> Void, done: @escaping (String?) -> Void) {
-    let piece = 4 * 1024 * 1024
-    func next(_ id: String?, _ offset: Int) {
-      let end = min(data.count, offset + piece), last = end >= data.count
-      var q = "/api/talk/upload?offset=\(offset)&name=\(name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "file")"
+    let piece = 4 * 1024 * 1024, together = 3
+    let enc = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "file"
+    var id: String?, next = 0, going = 0, over = false, gone = 0
+    var partly: [Int: Int] = [:]   // (how far each piece on its way has gone)
+    var watches: [Int: NSKeyValueObservation] = [:]
+    let finish = { (fid: String?) in guard !over else { return }; over = true; watches.values.forEach { $0.invalidate() }; watches = [:]; done(fid) }
+    let report = { progress(data.isEmpty ? 1 : min(0.99, Double(gone + partly.values.reduce(0, +)) / Double(data.count))) }
+    // one piece; at nil: the first, made in order (it makes the file)
+    func send(_ offset: Int, last: Bool, at: Bool, then: @escaping (String) -> Void) {
+      let end = min(data.count, offset + piece)
+      var q = "/api/talk/upload?offset=\(offset)&name=\(enc)"
       if let id = id { q += "&id=\(id)" }
+      if at { q += "&at=\(offset)" }
       if last { q += "&last=1" }
-      var watch: NSKeyValueObservation?
+      going += 1
       let t = session.dataTask(with: request(q, method: "POST", body: data.subdata(in: offset..<end))) { d, _, _ in
         let j = d.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
         DispatchQueue.main.async {
-          watch?.invalidate(); watch = nil
-          guard (j?["ok"] as? Bool) == true, let fid = j?["id"] as? String else { done(nil); return }
-          progress(data.isEmpty ? 1 : Double(end) / Double(data.count))
-          if last { done(fid) } else { next(fid, end) }
+          going -= 1
+          watches[offset]?.invalidate(); watches[offset] = nil
+          guard !over else { return }
+          guard (j?["ok"] as? Bool) == true, let fid = j?["id"] as? String else { finish(nil); return }
+          partly[offset] = nil; gone += end - offset; report()
+          then(fid)
         }
       }
-      // (how far this piece has gone, as it goes — the ring fills smoothly, not a quarter at a time)
-      if !data.isEmpty {
-        watch = t.progress.observe(\.fractionCompleted) { p, _ in
-          let f = Double(offset) + p.fractionCompleted * Double(end - offset)
-          DispatchQueue.main.async { progress(min(0.99, f / Double(data.count))) }
+      if end > offset {
+        watches[offset] = t.progress.observe(\.fractionCompleted) { p, _ in
+          let n = Int(p.fractionCompleted * Double(end - offset))
+          DispatchQueue.main.async { guard !over else { return }; partly[offset] = n; report() }
         }
       }
       t.resume()
     }
-    next(nil, 0)
+    // (as many on their way as there's room for; all in — the empty last piece, which the server takes only if nothing is missing)
+    func pump() {
+      guard !over else { return }
+      while going < together && next < data.count { let off = next; next += piece; send(off, last: false, at: true) { _ in pump() } }
+      if going == 0 && next >= data.count { send(data.count, last: true, at: true) { fid in finish(fid) } }
+    }
+    // (a file of one piece goes as before, in one go)
+    if data.count <= piece { send(0, last: true, at: false) { fid in finish(fid) }; return }
+    next = piece
+    send(0, last: false, at: false) { fid in id = fid; pump() }
   }
 
   // a file the phone still has but the server has let go: sent again under its own id (for a Mac being linked)
