@@ -276,7 +276,11 @@ private final class StreamDelegate: NSObject, URLSessionDataDelegate {
     if text.contains("event: talk") { news() }
     // (someone typing: passed straight on by the server, nothing kept — step 5)
     // (tasks changed in E11 Console: the chat that's open asks for its cards again)
-    if text.contains("event: tasks") { DispatchQueue.main.async { NotificationCenter.default.post(name: .talkTasks, object: nil) } }
+    // (…and a link turned off or on, or Client Assets changed: its cards too — Haris 2026-11-16)
+    if text.contains("event: tasks") || text.contains("event: links") { DispatchQueue.main.async { NotificationCenter.default.post(name: .talkTasks, object: nil) } }
+    // (E11 Console's people or clients changed — a name, a photo, a role, a client renamed or gone: read again while Talk is
+    //  open, not only when it comes back; only what changed is drawn again — Haris 2026-11-16)
+    if text.contains("event: people") { DispatchQueue.main.async { Talk.shared.refresh() } }
     for block in text.components(separatedBy: "\n\n") where block.contains("event: typing") {
       guard let line = block.split(separator: "\n").first(where: { $0.hasPrefix("data: ") }),
             let j = try? JSONSerialization.jsonObject(with: Data(line.dropFirst(6).utf8)) as? [String: Any],
