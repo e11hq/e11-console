@@ -9,7 +9,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.2.1"   # (1.2.0 approved and released 2026-11-15 — 1.2.1: sign out on this device only)
+    MARKETING_VERSION: "1.2.2"   # (1.2.1 approved 2026-11-16, waiting for manual release — 1.2.2: live everywhere, the client from search, a link's preview flying)
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Automatic
 targets:
