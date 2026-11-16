@@ -648,6 +648,9 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     layoutIfNeeded()
     guard let y = focusY(id, inbox: fromInbox) else { return }
     focusId = id; focusInbox = fromInbox; endOnLayout = false
+    // (a run to the latest still going — the drawing just before started one — stops here: it carried on to the end after
+    //  the list had gone to this comment, the comment opened from the Inbox ending out of view: the full test, 2026-11-16)
+    scroll.glideStop()
     // (Apple's own smooth scroll there — it jumped, Haris 2026-11-08; the card lights up as it arrives)
     let moves = abs(scroll.contentOffset.y - y) > 1
     // (from the Inbox or a notification the comments are only just showing: they open right there, no scroll from the
@@ -687,6 +690,7 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
   // (the list drawn again or its room changed while opened to a comment: back to that comment, Apple's smooth scroll)
   private func refocus() {
     guard let id = focusId, !scroll.isTracking, !scroll.isDragging, !scroll.isDecelerating else { return }
+    scroll.glideStop()
     scroll.layoutIfNeeded()
     guard let y = focusY(id, inbox: focusInbox), abs(scroll.contentOffset.y - y) > 1 else { return }
     // (a small move: Apple's smooth scroll; a long one, opened from the Inbox — straight there, never through a black list)
