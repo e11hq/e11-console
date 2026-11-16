@@ -102,12 +102,12 @@ export function createApns({ store, keyFile = '', keyId = '', teamId = '', topic
     sessions[env] = n;
     return n;
   }
-  function post(env, token, payload, ttl) {
+  function post(env, token, payload, ttl, kind = 'alert', prio = '10') {
     return new Promise((resolve) => {
       let req;
       try {
         req = session(env).request({ ':method': 'POST', ':path': `/3/device/${token}`, authorization: `bearer ${bearer()}`, 'apns-topic': topic,
-          'apns-push-type': 'alert', 'apns-priority': '10', 'apns-expiration': String(Math.floor(now() / 1000) + ttl), 'content-type': 'application/json' });
+          'apns-push-type': kind, 'apns-priority': prio, 'apns-expiration': String(Math.floor(now() / 1000) + ttl), 'content-type': 'application/json' });
       } catch (e) { return resolve({ status: 0, reason: e.message }); }
       let status = 0, body = '';
       req.on('response', (h) => { status = h[':status']; });
@@ -154,5 +154,19 @@ export function createApns({ store, keyFile = '', keyId = '', teamId = '', topic
     if (gone.length) { const all = load(); all[userId] = (all[userId] || []).filter((s) => !gone.includes(s.token)); save(all); gone.forEach(dropPending); }
     return { sent, removed: gone.length, results };
   }
-  return { enabled, register, unregister, devices, sendTo, ack, pendingFor, close: () => { for (const s of Object.values(sessions)) try { s.close(); } catch { /* fine */ } } };
+  // a quiet note to someone's iPhones (Haris 2026-11-16): something read or unread on the Mac, the website or another phone —
+  // the icon's count set (a count-only notification: no banner, no sound, nothing in Notification Centre), and the app woken
+  // briefly to take the read ones' notifications off this iPhone (iPhone decides how soon)
+  async function quiet(userId, { badge, read = [] }) {
+    const list = load()[userId] || [];
+    if (!list.length || !enabled()) return { sent: 0 };
+    let sent = 0;
+    await Promise.all(list.map(async (s) => {
+      const a = Number.isInteger(badge) ? await post(s.env, s.token, { aps: { badge } }, 3600, 'alert', '5') : { status: 0 };
+      const b = await post(s.env, s.token, { aps: { 'content-available': 1 }, e11: { quiet: true, ...(Number.isInteger(badge) ? { badge } : {}), read: read.slice(0, 200) } }, 3600, 'background', '5');
+      if (a.status === 200 || b.status === 200) sent++;
+    }));
+    return { sent };
+  }
+  return { enabled, register, unregister, devices, sendTo, quiet, ack, pendingFor, close: () => { for (const s of Object.values(sessions)) try { s.close(); } catch { /* fine */ } } };
 }

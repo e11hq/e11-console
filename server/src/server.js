@@ -126,6 +126,38 @@ export function createServer(cfg) {
       const [a, b] = await Promise.all([webSend(userId, msg, opts), claim ? Promise.resolve({ sent: 0 }) : apns.sendTo(userId, phoneMsg, opts).catch((e) => { console.error('APNs:', e.message); return { sent: 0 }; })]);
       return { sent: (a.sent || 0) + (b.sent || 0), removed: (a.removed || 0) + (b.removed || 0), apns: b.results || [], apnsWhy: b.why || '' };
     }; }
+  // a file's or folder's link turned off or on (kept apart from the data the live stream carries): every open app told at
+  // once — the phones' Turn Link On / Off, and E11 Talk's link cards in open chats (Haris 2026-11-16)
+  function linksTold(path, off) {
+    for (const s of streams) { try { send(s, 'links', { path, off: !!off }); } catch { /* closed */ } }
+    if (talk) { try { talk.linksChanged(); } catch { /* fine */ } }
+  }
+  // Inbox updates read or unread anywhere (the Mac, the website, another phone): each of that person's iPhones told quietly —
+  // the icon's count as it is now, and which notifications to take off it (Haris 2026-11-16: the count stayed until the app
+  // was opened). A new update brings its own notification and count; a burst of changes, one note.
+  const quietWait = new Map(), quietRead = new Map(), quietLast = new Map();
+  function quietSoon(changed) {
+    const t = (cfg.now || Date.now)();
+    for (const r of changed) {
+      if (r.kind !== 'notifications' || !r.data || !r.data.to) continue;
+      const n = r.data, fresh = t - (Date.parse(n.at || 0) || 0) < 60_000;
+      if (!n.read && fresh) continue;   // (just made: its own notification carries the count)
+      const uid = String(n.to);
+      if (n.read) { if (!quietRead.has(uid)) quietRead.set(uid, new Set()); quietRead.get(uid).add(String(n.id)); }
+      if (quietWait.has(uid)) continue;
+      quietWait.set(uid, setTimeout(() => {
+        quietWait.delete(uid);
+        const read = [...(quietRead.get(uid) || [])]; quietRead.delete(uid);
+        const pu = store.get('users', uid);
+        if (!pu) return;
+        const badge = store.list('notifications').filter((x) => x.to === uid && !x.read && homeView.onPhone(x, pu)).length;
+        if (!read.length && quietLast.get(uid) === badge) return;
+        quietLast.set(uid, badge);
+        apns.quiet(uid, { badge, read }).catch((e) => console.error('APNs quiet:', e.message));
+      }, cfg.quietWait ?? 2500));
+      quietWait.get(uid).unref?.();
+    }
+  }
   const digest = createDigest({ store, webPush, now: cfg.now || (() => Date.now()), skip: (u) => dailyRole(u, access.isSuper) });
   if (cfg.digest !== false) digest.start();
   // Inbox clean-up: read updates go after 60 days, any update after 180 days, so opening the app stays quick as
@@ -454,8 +486,11 @@ export function createServer(cfg) {
   function broadcast(rev, results, fromClient, byUser) {
     const changed = results.filter((r) => !r.refused && !r.unchanged);
     if (!changed.length) return;
+    quietSoon(changed);
     // (E11 Talk's open chats hear which tasks changed, so their task cards keep up — Haris 2026-11-12; only if Talk has started)
     if (talk) { const ids = changed.filter((r) => r.kind === 'tasks').map((r) => String(r.id)); if (ids.length) talk.tasksChanged(ids); }
+    // (…and their people, clients and Client Assets: who's who, which groups, link cards — Haris 2026-11-16)
+    if (talk && changed.some((r) => r.kind === 'users' || r.kind === 'projects' || r.kind === 'clients')) { try { talk.peopleChanged(); if (changed.some((r) => r.kind === 'clients')) talk.linksChanged(); } catch { /* fine */ } }
     if (cfg.warmReviews !== false) warmReviews(changed.filter((r) => r.kind === 'tasks' && !r.del).map((r) => store.get('tasks', String(r.id))));
     for (const s of streams) {
       const u = streamUser(s);
@@ -1203,14 +1238,14 @@ export function createServer(cfg) {
         const c = store.get('clients', String(body.client)); const f = c && (c.folders || []).find((x) => x.id === String(body.folder));
         if (!c || !f) return json(res, 200, { ok: false, error: 'That folder isn’t in Client Assets any more' });
         if (!access.canReadFile(u, (f.dir || c.dir || 'Clients/x') + '/_')) return json(res, 403, { ok: false, error: 'Not allowed' });
-        if (typeof body.off === 'boolean') { if (!access.isAdm(u)) return json(res, 403, { ok: false, error: 'Only Admins can turn a link off or on' }); return json(res, 200, fileLinks.folderSetOff(u, c.id, f.id, body.off, origin)); }
+        if (typeof body.off === 'boolean') { if (!access.isAdm(u)) return json(res, 403, { ok: false, error: 'Only Admins can turn a link off or on' }); const r = fileLinks.folderSetOff(u, c.id, f.id, body.off, origin); linksTold(`d:${c.id}/${f.id}`, body.off); return json(res, 200, r); }
         if (body.state) { const r = fileLinks.folderLink(u, c.id, f.id, origin); return json(res, 200, r); }
         return json(res, 200, fileLinks.folderLink(u, c.id, f.id, origin));
       }
       const fp = String((body && body.path) || '');
       if (!fp || !access.canReadFile(u, fp)) return json(res, 403, { ok: false, error: 'Not allowed' });
       // (turning a link off or on: Admins only — Haris 2026-11-03)
-      if (body && typeof body.off === 'boolean') { if (!access.isAdm(u)) return json(res, 403, { ok: false, error: 'Only Admins can turn a link off or on' }); return json(res, 200, fileLinks.setOff(u, fp, body.off, origin)); }
+      if (body && typeof body.off === 'boolean') { if (!access.isAdm(u)) return json(res, 403, { ok: false, error: 'Only Admins can turn a link off or on' }); const r = fileLinks.setOff(u, fp, body.off, origin); linksTold(fp, body.off); return json(res, 200, r); }
       return json(res, 200, fileLinks.linkFor(u, fp, origin));
     }
     if (p === '/api/fthumb' && req.method === 'GET') {

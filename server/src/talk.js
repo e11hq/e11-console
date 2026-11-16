@@ -1053,6 +1053,17 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     const line = `event: tasks\ndata: ${JSON.stringify({ ids: ids.slice(0, 100) })}\n\n`;
     for (const set of listeners.values()) for (const s of set) { try { s.write(line); } catch { /* closed */ } }
   }
+  // E11 Console's people, clients or Client Assets changed, or a link turned off / on (Haris 2026-11-16): open apps read their
+  // people, clients and groups again (people), and open chats their link cards (links) — not only when the app comes back
+  function tellAll(ev, data) {
+    const line = `event: ${ev}\ndata: ${JSON.stringify(data || {})}\n\n`;
+    for (const set of listeners.values()) for (const s of set) { try { s.write(line); } catch { /* closed */ } }
+  }
+  // (a burst of changes — a client renamed with its folder, several people at once: one word, a second later)
+  const soon = {};
+  const later = (ev) => { if (soon[ev]) return; soon[ev] = setTimeout(() => { soon[ev] = null; tellAll(ev); }, 1000); soon[ev].unref?.(); };
+  const peopleChanged = () => later('people');
+  const linksChanged = () => later('links');
   function listen(uid, res) {
     if (!listeners.has(uid)) listeners.set(uid, new Set());
     listeners.get(uid).add(res);
@@ -1123,6 +1134,6 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   const isAdminOf = (u, gid) => { const g = Q.group.get(gid); return !!g && isAdmin(u, g); };
   // (whose E11 Console key — board 53's card: name, role, colour)
   function personByEmail(e) { const u = access.userByEmail(e); if (u) return personOf(u); const k = contactByEmail(e); return k ? { id: k.id, name: k.name, role: 'Client', photo: null, color: null } : null; }
-  return { state, act, sync, ack, unreadFor, reviewDemo, sample, upload, tasksChanged, contactByEmail, personByEmail, fileFor, filePath, fetched, listen, sweep, isAdminOf,
+  return { state, act, sync, ack, unreadFor, reviewDemo, sample, upload, tasksChanged, peopleChanged, linksChanged, contactByEmail, personByEmail, fileFor, filePath, fetched, listen, sweep, isAdminOf,
     linkCode, linkStatus, macFor, unlinkMac, macCode, macStatus, macByKey, userById, history, hasFiles, resend, close: () => { clearInterval(sweepTimer); for (const set of listeners.values()) for (const r of set) try { r.end(); } catch { /* fine */ } db.close(); } };
 }
