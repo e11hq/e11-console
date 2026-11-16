@@ -139,6 +139,20 @@ if APPLE:
         if not ok: fails.append(what)
     st, rv, rl, fc = a.get('start') or {}, a.get('review') or {}, a.get('roles') or {}, a.get('focus') or {}
     print('measure apple', json.dumps(a))
+    # live, for every role walked (the full test, Haris 2026-11-16): a change made elsewhere shows on the open page, nothing
+    # else set again; skipped where a role has nothing for it (no comments, nothing unread) — said so
+    for lab, rr in out.items():
+        ap = (rr or {}).get('apple') or {}
+        lc, li = ap.get('liveComment') or {}, ap.get('liveInbox') or {}
+        if lc and not lc.get('none'):
+            n0 = ((lc.get('before') or {}).get('n')) or 0
+            check(lc.get('after') == n0 + 1 and (lc.get('again') or 0) <= 2, f"{lab}: a comment made elsewhere arrives on the open task at once, the rest left as they were {lc}")
+        else: print(f'note {lab}: live comment not tried {lc}')
+        if li and not li.get('none'):
+            rid = (li.get('before') or {}).get('id'); af = li.get('after') or {}
+            check(rid not in (af.get('unread') or []) and (af.get('tab') == 'all' or rid not in (af.get('rows') or [])), f"{lab}: an update read elsewhere leaves Unread at once (to All when none is left) {li}")
+            check(str(li.get('badge')) in ('', str(li.get('copyUnread'))), f"{lab}: the Inbox tab's badge follows at once {li.get('badge')} vs {li.get('copyUnread')}")
+        else: print(f'note {lab}: live Inbox not tried {li}')
     # (Haris 2026-11-11: back from a client's Client Assets — what was set again, and the search box's fill frame by frame)
     print('measure apple caBack', json.dumps({'notes': (a.get('caBack') or {}).get('notes'), 'frames': (a.get('caBackFrames') or {}).get('frames')}))
     check(st.get('pageReady') is False, f"the Apple pages ran without the website {st}")

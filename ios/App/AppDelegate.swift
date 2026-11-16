@@ -2103,6 +2103,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   /* ---------- self-test on the build machine (simulator; E11_SELFTEST=1) ---------- */
   // Writes Documents/selftest.json in stages; the build machine takes a screenshot at each stage
   var selfResult: [String: Any] = [:]
+  var liveBefore: [String: Any] = [:]   // (the self-test's live checks: what showed before the change elsewhere)
   func writeSelf(_ stage: String) {
     selfResult["stage"] = stage
     selfResult["tabs"] = tabKeys

@@ -1231,6 +1231,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     if listOn { applyList(animated: window != nil && !isHidden); onAppleCorner?() }
   }
   func selfInboxTab(_ k: String) { pickTab(k) }
+  // (for the self-test: the Inbox's list as it shows, and which list)
+  var selfInbox: [String: Any] { ["tab": inboxTab, "rows": content.compactMap { ($0 as? InboxRow)?.id }, "unread": content.compactMap { $0 as? InboxRow }.filter { !$0.read }.map { $0.id }] }
   func selfSwipeRow() {
     // (Apple's list: the first row offers Apple's own Read / Unread swipe)
     if let r = content.first as? InboxRow, let ip = listDS?.indexPath(for: "r:" + r.id) { appleSwipeOK = swipeActions(ip, leading: true) != nil }

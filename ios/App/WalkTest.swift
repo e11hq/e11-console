@@ -87,6 +87,20 @@ extension Main {
   /* The Apple pages as the phone runs them — no website behind (Haris 2026-11-10: the self-test ran with the website and
      passed what failed on his phone). Each check's result in selfResult["apple"]; ios/walktest.py --apple fails the build
      on any one. */
+  // a change made elsewhere: straight to the server as this person on another device (the test server's dev sign-in)
+  private func elsewhere(_ path: String, _ body: [String: Any], _ done: @escaping (String) -> Void) {
+    guard let url = URL(string: serverURL() + path), let email = procEnv["E11_SELFTEST_EMAIL"], let d = try? JSONSerialization.data(withJSONObject: body) else { return done("no request") }
+    var r = URLRequest(url: url); r.httpMethod = "POST"; r.httpBody = d
+    r.setValue("application/json", forHTTPHeaderField: "Content-Type"); r.setValue(email, forHTTPHeaderField: "X-Dev-Email")
+    URLSession.shared.dataTask(with: r) { d, resp, _ in
+      let s = "\((resp as? HTTPURLResponse)?.statusCode ?? 0) " + String(decoding: (d ?? Data()).prefix(160), as: UTF8.self)
+      DispatchQueue.main.async { done(s) }
+    }.resume()
+  }
+  private func tabBadge(_ k: String) -> String {
+    guard let t = AppleTabs.shared, let i = tabKeys.firstIndex(of: k), let vcs = t.viewControllers, i < vcs.count else { return "?" }
+    return vcs[i].tabBarItem.badgeValue ?? ""
+  }
   private func apple(_ k: String, _ v: [String: Any]) { var a = (selfResult["apple"] as? [String: Any]) ?? [:]; a[k] = v; selfResult["apple"] = a }
   private func appleSteps() -> [(String, () -> Void)] {
     let home = AppData.shared.screen("home").model ?? [:]
@@ -351,6 +365,37 @@ extension Main {
         o["closedHow"] = PreviewVC.lastClose; o["trail"] = ClientTrail.link
         self.apple("link", o)
         self.assetsCtl.close(animated: false); self.tab("today")
+      }),
+      // Live (the full test, Haris 2026-11-16): a change made elsewhere — straight to the server, as the Mac or another phone
+      // would — while the page is open; read a few seconds later, without leaving the page
+      ("aLiveC", { self.tab(self.tabKeys.first ?? "today"); if let t = best?.0 ?? cards.first { self.openTaskPage(t, tab: "comments", focus: "") } }),
+      ("aLiveCWait", {}),
+      ("aLiveCSend", {
+        guard let f = p()?.feed, let t = p()?.taskId else { self.apple("liveComment", ["none": "no feed"]); return }
+        self.liveBefore = ["n": f.selfOrder.count, "again": f.setAgain]
+        self.elsewhere("/api/app/act", ["ev": "comment", "id": t, "text": "Live check \(Int(Date().timeIntervalSince1970))", "op": UUID().uuidString]) { r in self.liveBefore["sent"] = r }
+      }),
+      ("aLiveCWait2", {}),
+      ("aLiveCRead", {
+        let f = p()?.feed
+        self.apple("liveComment", ["before": self.liveBefore, "after": f?.selfOrder.count ?? -1, "again": (f?.setAgain ?? 0) - ((self.liveBefore["again"] as? Int) ?? 0)])
+        for x in self.taskPages { self.closeTaskPage(x, animated: false) }
+      }),
+      ("aLiveI", {
+        guard self.tabKeys.contains("inbox") else { self.apple("liveInbox", ["none": "no Inbox tab"]); return }
+        self.tab("inbox"); DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.inboxIfMade?.selfInboxTab("unread") }
+      }),
+      ("aLiveIWait", {}),
+      ("aLiveISend", {
+        guard let h = self.inboxIfMade, let first = (h.selfInbox["unread"] as? [String])?.first else { self.apple("liveInbox", ["none": "nothing unread", "inbox": self.inboxIfMade?.selfInbox ?? [:]]); return }
+        self.liveBefore = ["inbox": h.selfInbox, "badge": self.tabBadge("inbox"), "id": first]
+        self.elsewhere("/api/home/act", ["act": "read", "id": first, "from": "inbox", "copy": true, "op": UUID().uuidString]) { r in self.liveBefore["sent"] = r }
+      }),
+      ("aLiveIWait2", {}),
+      ("aLiveIRead", {
+        self.apple("liveInbox", ["before": self.liveBefore, "after": self.inboxIfMade?.selfInbox ?? [:], "badge": self.tabBadge("inbox"),
+                                 "copyUnread": AppData.shared.screen("inbox", "all").model?["unread"] ?? -1])
+        self.tab(self.tabKeys.first ?? "today")
       }),
     ]
   }

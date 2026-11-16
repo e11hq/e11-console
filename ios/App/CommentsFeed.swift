@@ -198,6 +198,9 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
   private var cells: [String: CommentCell] = [:]      // ours, kept per comment while it shows the same
   private var itemsById: [String: [String: Any]] = [:]
   private var order: [String] = []
+  // (for the self-test: the comments in order, and how many rows were set again in place since it opened)
+  var selfOrder: [String] { order }
+  private(set) var setAgain = 0
   private(set) var model: [String: Any]?
   var people: [String: [String: Any]] = [:]
   private let jump = UIButton(type: .custom)
@@ -455,6 +458,7 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     let had = Set(source.snapshot().itemIdentifiers)
     let again = changed.filter { had.contains($0) }
     if !again.isEmpty { snap.reconfigureItems(again) }
+    setAgain += again.count
     fading = animate ? Set(again) : []   // (a comment that changed in place — a reaction, an edit: its new look crossfades in)
     // (your own on its way, replaced by the real one: no fade — the real one is just where it was)
     let before = source.snapshot().itemIdentifiers, now = Set(next + schedOrder)
