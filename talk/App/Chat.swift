@@ -1067,7 +1067,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       switch c {
       case nil: break
       case .photos(let a)?:
-        AttachExport.compatible(a) { [weak self] files in self?.preview(files.map { SendPreviewVC.Item(url: $0.url, kind: $0.kind, name: $0.name) }) }
+        AttachExport.compatible(a, videoAsIs: true) { [weak self] files in self?.preview(files.map { SendPreviewVC.Item(url: $0.url, kind: $0.kind, name: $0.name) }) }
       case .allPhotos?: self.attach("photos")
       case .camera?: self.attach("camera")
       case .files?: self.filesSheet()
