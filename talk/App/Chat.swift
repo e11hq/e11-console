@@ -17,21 +17,19 @@ import ImageIO
 // (.intro — a group's own card at the very start of its chat, the design's board 4)
 enum ChatItem: Hashable { case msg(String); case intro }
 
-/* To a far end of a long chat, Claude's way (Haris 2026-11-15, his recording of Claude's app): never a long scroll through
-   everything — the chat put a screen away from where it's going, then the last screen glides there smoothly (Apple's own
-   scroll animation). No crossfade over the jump (Haris 2026-11-16: the old and new pages showed on top of each other for a
-   few frames). Near enough already: just the glide. `to` is asked again after the jump: messages coming into view take
-   their real heights, and the end moves with them. */
+/* To a far end of a chat, Claude's way (Haris 2026-11-16, his recordings of Claude's app): one smooth run all the way —
+   Apple's own animated scroll, which takes the same short time however far it goes, so a long chat simply flies by and
+   lands softly; at 120 Hz on the phones that have it (CADisableMinimumFrameDurationOnPhone). No jump and no crossfade.
+   Rows passing on the way take their real heights, so if the end moved meanwhile it glides the last few points there. */
 extension UIScrollView {
-  func glide(_ to: () -> CGFloat) {
+  func glide(_ to: @escaping () -> CGFloat) {
     layoutIfNeeded()
-    let y0 = to(), d = y0 - contentOffset.y, h = bounds.height
-    guard abs(d) > h * 1.5 else { setContentOffset(CGPoint(x: contentOffset.x, y: y0), animated: true); return }
-    UIView.performWithoutAnimation {
-      setContentOffset(CGPoint(x: contentOffset.x, y: y0 - (d > 0 ? h : -h)), animated: false)
-      layoutIfNeeded()
-    }
     setContentOffset(CGPoint(x: contentOffset.x, y: to()), animated: true)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+      guard let self, !self.isTracking, !self.isDecelerating else { return }
+      let y = to()
+      if abs(self.contentOffset.y - y) > 1 { self.setContentOffset(CGPoint(x: self.contentOffset.x, y: y), animated: true) }
+    }
   }
 }
 
@@ -882,7 +880,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     guard let last = s.sectionIdentifiers.last, s.numberOfItems(inSection: last) > 0 else { return }
     if !animated { table.scrollToRow(at: IndexPath(row: s.numberOfItems(inSection: last) - 1, section: s.numberOfSections - 1), at: .bottom, animated: false) }
     let end = { () -> CGPoint in self.table.layoutIfNeeded(); return CGPoint(x: 0, y: max(-self.table.adjustedContentInset.top, self.table.contentSize.height + self.table.adjustedContentInset.bottom - self.table.bounds.height)) }
-    guard !animated else { table.glide { end().y }; return }   // (far away: Claude's way — Haris 2026-11-15)
+    guard !animated else { table.glide { end().y }; return }   // (Claude's way — Haris 2026-11-16)
     // (the rows near the end take their real heights once they're in view — placed again until the end stays put, so
     //  the chat doesn't open a little short and then jump to its end)
     for _ in 0..<4 { let e = end(); if abs(table.contentOffset.y - e.y) < 0.5 { break }; table.contentOffset = e }
