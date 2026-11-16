@@ -1054,6 +1054,28 @@ extension Talk {
     guard let h = e11Any.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)) else { return nil }
     return (ns.substring(with: h.range(at: 1)).lowercased(), ns.substring(with: h.range(at: 2)).removingPercentEncoding ?? ns.substring(with: h.range(at: 2)), ns.substring(with: h.range))
   }
+  /* an E11 file or folder link being written: its card asked for already, so the message goes with it at its own size
+     — turned off, deleted, or no such link: the short card at once, never the tall one first (Haris 2026-11-16) */
+  private static var peeking = Set<String>(), peekSoon: DispatchWorkItem?
+  func peekE11(_ text: String, group g: String) {
+    Talk.peekSoon?.cancel()
+    guard !isContact, let base = Talk.e11Base(text), Talk.liveLinks[base] == nil, !Talk.peeking.contains(base) else { return }
+    // (once the words stop changing for a moment — a link typed by hand isn't asked for at every letter)
+    let w = DispatchWorkItem { [weak self] in self?.peekNow(base, g) }
+    Talk.peekSoon = w
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: w)
+  }
+  private func peekNow(_ base: String, _ g: String) {
+    guard Talk.liveLinks[base] == nil, !Talk.peeking.contains(base) else { return }
+    Talk.peeking.insert(base)
+    Net.shared.act(["act": "linkCards", "group": g, "urls": [base]]) { j in
+      let cards = ((j?["cards"] as? [[String: Any]]) ?? []).compactMap { Talk.linkCard($0) }
+      DispatchQueue.main.async {
+        Talk.peeking.remove(base)
+        for c in cards where Talk.liveLinks[c.url] == nil { Talk.liveLinks[c.url] = c }
+      }
+    }
+  }
   static func e11Base(_ text: String) -> String? { e11Hit(text).flatMap { $0.kind == "t" ? nil : $0.url } }
   static func e11Task(_ text: String) -> String? { e11Hit(text).flatMap { $0.kind == "t" ? $0.tok : nil } }
   static func isE11(_ url: String) -> Bool { e11Pattern.firstMatch(in: url, range: NSRange(location: 0, length: (url as NSString).length)) != nil }

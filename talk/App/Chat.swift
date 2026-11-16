@@ -246,6 +246,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     bar.onSend = { [weak self] t, ms, task, link in self?.send(t, mentions: ms, task: task, link: link) }
     // (step 5: the others see "… is typing"; # finds E11 Console's tasks for a staff group)
     bar.onTyping = { [weak self] in guard let self = self else { return }; Net.shared.act(["act": "typing", "group": self.group]) }
+    bar.onText = { [weak self] t in guard let self = self else { return }; Talk.shared.peekE11(t, group: self.group) }
     bar.onFindTasks = { [weak self] q, done in
       guard let self = self else { return }
       Net.shared.act(["act": "tasks", "group": self.group, "q": q]) { j in
@@ -3380,12 +3381,13 @@ final class MessageBar: UIView, UITextViewDelegate {
     }.withRenderingMode(.alwaysTemplate)
   }
   func textViewDidChange(_ t: UITextView) {
-    textChanged(); findMention()
+    textChanged(); findMention(); onText?(box.text)
     // (typing: the others told, at most every 3 seconds while words are going in — step 5)
     if !box.text.isEmpty, Date().timeIntervalSince(lastTyped) > 3 { lastTyped = Date(); onTyping?() }
   }
   private var lastTyped = Date.distantPast
   var onTyping: (() -> Void)?
+  var onText: ((String) -> Void)?
   // # (staff groups only): E11 Console's tasks, asked for as the words after # change; the one picked goes with the message
   var tasksAllowed = false
   var onFindTasks: ((String, @escaping ([Msg.TaskCard]) -> Void) -> Void)?
