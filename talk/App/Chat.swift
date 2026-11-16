@@ -1105,32 +1105,26 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     replying = nil
     toBottom(true)
   }
-  // a video from the camera or Photos: shrunk to 720p first (Haris 2026-11-05); one from Files goes as it is
+  // a video from the camera or Photos: shrunk to 720p (Haris 2026-11-05; HD: 1080p); one from Files goes as it is. Its bubble
+  // shows at once — the phone's own video in it, its ring at the start — while the copy is made behind it, then sent
+  // (Haris 2026-11-16: "it stays for long and nothing happens")
   fileprivate func sendVideo(_ url: URL, name: String, caption: String = "", hd: Bool = false, album: String? = nil) {
     let asset = AVURLAsset(url: url)
-    // (HD: 1080p; otherwise 720p)
-    guard let ex = AVAssetExportSession(asset: asset, presetName: hd ? AVAssetExportPreset1920x1080 : AVAssetExportPreset1280x720) else { sendFile(url, kind: "file", name: name, caption: caption); return }
-    let out = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mp4")
-    ex.outputURL = out; ex.outputFileType = .mp4; ex.shouldOptimizeForNetworkUse = true
-    toast("Getting the video ready…")
-    ex.exportAsynchronously { [weak self] in
-      DispatchQueue.main.async {
-        guard let self = self else { return }
-        let ok = ex.status == .completed
-        let src = ok ? out : url
-        let a2 = AVURLAsset(url: src)
-        var w: Double? = nil, h: Double? = nil
-        if let t = a2.tracks(withMediaType: .video).first { let sz = t.naturalSize.applying(t.preferredTransform); w = Double(abs(sz.width)); h = Double(abs(sz.height)) }
-        let secs = CMTimeGetSeconds(a2.duration)
-        guard let d = try? Data(contentsOf: src) else { toast("Couldn’t read that video"); return }
-        let tmpId = "local-" + UUID().uuidString
-        // (the name says what it really is — an MP4 when made into one, else the original's own kind)
-        let fname = ok ? (name as NSString).deletingPathExtension + ".mp4" : (name as NSString).deletingPathExtension + "." + (src.pathExtension.isEmpty ? "mov" : src.pathExtension.lowercased())
-        Talk.shared.send(self.group, text: caption, reply: self.replying, file: Msg.FileRef(id: tmpId, name: fname, size: d.count, kind: "video", w: w, h: h, secs: secs.isFinite ? secs : nil), localFile: src, upload: d, album: album)
-        self.replying = nil
-        self.toBottom(true)
-      }
-    }
+    var w: Double? = nil, h: Double? = nil
+    if let t = asset.tracks(withMediaType: .video).first { let sz = t.naturalSize.applying(t.preferredTransform); w = Double(abs(sz.width)); h = Double(abs(sz.height)) }
+    let secs = CMTimeGetSeconds(asset.duration)
+    let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.intValue ?? 0
+    let tmpId = "local-" + UUID().uuidString
+    let fname = (name as NSString).deletingPathExtension + ".mp4"
+    Talk.shared.send(group, text: caption, reply: replying, file: Msg.FileRef(id: tmpId, name: fname, size: size, kind: "video", w: w, h: h, secs: secs.isFinite ? secs : nil),
+                     localFile: url, album: album, prepare: { ready in
+      guard let ex = AVAssetExportSession(asset: asset, presetName: hd ? AVAssetExportPreset1920x1080 : AVAssetExportPreset1280x720) else { ready(url); return }
+      let out = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mp4")
+      ex.outputURL = out; ex.outputFileType = .mp4; ex.shouldOptimizeForNetworkUse = true
+      ex.exportAsynchronously { DispatchQueue.main.async { ready(ex.status == .completed ? out : url) } }
+    })
+    replying = nil
+    toBottom(true)
   }
   fileprivate func sendFile(_ url: URL, kind: String, name: String, caption: String = "", hd: Bool = false, album: String? = nil) {
     if kind == "video" { sendVideo(url, name: name, caption: caption, hd: hd, album: album); return }

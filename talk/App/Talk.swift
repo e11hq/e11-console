@@ -363,7 +363,10 @@ final class Talk {
   }
 
   // ---------- sending from here: shown at once, then the server's copy takes its place ----------
-  func send(_ g: String, text: String, reply: Msg? = nil, mentions: [String] = [], file: Msg.FileRef? = nil, localFile: URL? = nil, upload: Data? = nil, fwd: Bool = false, album: String? = nil, task: Msg.TaskCard? = nil, link: LinkPrevMaker.Pick = .auto, contact: SharedContact? = nil, place: SharedPlace? = nil, progress: ((Double) -> Void)? = nil) {
+  func send(_ g: String, text: String, reply: Msg? = nil, mentions: [String] = [], file: Msg.FileRef? = nil, localFile: URL? = nil, upload: Data? = nil, fwd: Bool = false, album: String? = nil, task: Msg.TaskCard? = nil, link: LinkPrevMaker.Pick = .auto, contact: SharedContact? = nil, place: SharedPlace? = nil, progress: ((Double) -> Void)? = nil,
+            prepare: ((@escaping (URL?) -> Void) -> Void)? = nil) {
+    // (prepare: the file made ready behind its bubble — a video's 720p / 1080p copy — the bubble shown at once with its ring
+    //  at the start, then sent up: Haris 2026-11-16, "it stays for long and nothing happens")
     guard let me = me else { return }
     let cid = UUID().uuidString
     var l = log(g)
@@ -417,7 +420,7 @@ final class Talk {
         if (j?["ok"] as? Bool) == true { DispatchQueue.main.async { ChatSound.send() }; self.sync() } else { self.mark(g, cid, failed: true) }
       }
     }
-    if let data = upload, let f = file {
+    let up = { (data: Data, f: Msg.FileRef) in
       Uploads.set(f.id, 0, total: data.count)
       var going = true   // (a late word of progress after it's up doesn't bring the ring back)
       Net.shared.upload(data, name: f.name, progress: { p in guard going else { return }; progress?(p); Uploads.set(f.id, p, total: data.count) }) { [weak self] fid in
@@ -427,6 +430,17 @@ final class Talk {
         m.file?.id = fid
         go(fid)
       }
+    }
+    if let prep = prepare, let f = file {
+      Uploads.set(f.id, 0, total: max(1, f.size))
+      prep { [weak self] made in
+        guard let made = made, let d = try? Data(contentsOf: made) else { Uploads.end(f.id); self?.mark(g, cid, failed: true); return }
+        // (what goes up is what the phone keeps for it)
+        if made != Net.local(f.id) { try? FileManager.default.removeItem(at: Net.local(f.id)); try? FileManager.default.copyItem(at: made, to: Net.local(f.id)) }
+        up(d, f)
+      }
+    } else if let data = upload, let f = file {
+      up(data, f)
     } else if file == nil, !fwd, task == nil, contact == nil, place == nil, let u = LinkPrevMaker.firstLink(text), !LinkPrevMaker.ours(u), { if case .none = link { return false }; return true }() {
       // (words with a link: its preview — read in the box while it was typed, as far as it got (WhatsApp's), or else read
       //  here first — the picture and the site's icon sent up as files, then the message with it)
