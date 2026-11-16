@@ -1244,7 +1244,16 @@ extension Main {
               if tries < 8 { openFile(tries + 1) } else { say("That file isn’t available") }; return
             }
             let list = all.filter { ($0["folder"] as? String) == (w["folder"] as? String) }
-            if let i = list.firstIndex(where: { ($0["id"] as? String) == fid }) { self?.openFiles(list, at: i) }
+            if let i = list.firstIndex(where: { ($0["id"] as? String) == fid }) {
+              // (once its picture is on the folder's page, so the preview flies out of it — as a tap on it; opened before
+              //  the picture was there, it came in with a fade: Haris 2026-11-16. At most a second, then as it is)
+              func whenShown(_ n: Int) {
+                guard let self = self else { return }
+                if n >= 10 || FileTouch.marked(FileTouch.key(list[i]), in: self.screenWindow) != nil { self.openFiles(list, at: i); return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { whenShown(n + 1) }
+              }
+              whenShown(0)
+            }
             else if tries < 8 { openFile(tries + 1) } else { say("That file isn’t available") }
           }
         }

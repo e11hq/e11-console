@@ -598,7 +598,8 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     //  for now, by the file's mark, as a swiped-to one: it faded instead of flying home, Haris 2026-11-16)
     let win = source?.window ?? presentingViewController?.view.window ?? view.window
     let back: UIImageView? = (at == openedAt ? source : nil) ?? keys[safe: at].flatMap { FileTouch.marked($0, in: win) }
-    if openedAt >= 0, let src = back, src.window != nil, let (pic, from) = current?.shownPicture {
+    // (opened without flying — by a link — but its picture is on the page now: back into it all the same)
+    if openedAt >= 0 || source == nil, let src = back, src.window != nil, let (pic, from) = current?.shownPicture {
       let fly = UIImageView(image: pic); fly.contentMode = .scaleAspectFill; fly.clipsToBounds = true; fly.layer.cornerCurve = src.layer.cornerCurve
       fly.frame = from
       view.insertSubview(fly, aboveSubview: pager); pager.alpha = 0; src.alpha = 0
