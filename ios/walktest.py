@@ -153,6 +153,10 @@ if APPLE:
             check(rid not in (af.get('unread') or []) and (af.get('tab') == 'all' or rid not in (af.get('rows') or [])), f"{lab}: an update read elsewhere leaves Unread at once (to All when none is left) {li}")
             check(str(li.get('badge')) in ('', str(li.get('copyUnread'))), f"{lab}: the Inbox tab's badge follows at once {li.get('badge')} vs {li.get('copyUnread')}")
         else: print(f'note {lab}: live Inbox not tried {li}')
+        ct = ap.get('contrast') or {}
+        for scr, r in ct.items():
+            if isinstance(r, dict) and r.get('checked') is not None:
+                check(not r.get('faint'), f"{lab}: {scr} — every text readable on what's behind it, light and dark ({r.get('checked')} read, {r.get('glass')} over glass): {r.get('faint')}")
     # (Haris 2026-11-11: back from a client's Client Assets — what was set again, and the search box's fill frame by frame)
     print('measure apple caBack', json.dumps({'notes': (a.get('caBack') or {}).get('notes'), 'frames': (a.get('caBackFrames') or {}).get('frames')}))
     check(st.get('pageReady') is False, f"the Apple pages ran without the website {st}")

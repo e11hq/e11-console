@@ -87,6 +87,53 @@ extension Main {
   /* The Apple pages as the phone runs them — no website behind (Haris 2026-11-10: the self-test ran with the website and
      passed what failed on his phone). Each check's result in selfResult["apple"]; ios/walktest.py --apple fails the build
      on any one. */
+  // every piece of text on screen against what's really behind it, in light and in dark (the full test, Haris 2026-11-16:
+  // nothing invisible from its colours, as the Sign-in Code's digits were) — the colours resolved for each look, nothing
+  // switched; text over glass or a blur is skipped (what's behind it isn't known), said so in the count
+  func selfContrast() -> [String: Any] {
+    guard let w = screenWindow else { return ["none": "no window"] }
+    func lum(_ c: UIColor) -> CGFloat {
+      var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0; c.getRed(&r, green: &g, blue: &b, alpha: &a)
+      let f = { (x: CGFloat) -> CGFloat in x <= 0.03928 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4) }
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+    }
+    func blend(_ top: UIColor, over bot: UIColor) -> UIColor {
+      var r1: CGFloat = 0, g1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0, r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0, a2: CGFloat = 0
+      top.getRed(&r1, green: &g1, blue: &b1, alpha: &a1); bot.getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
+      return UIColor(red: r1 * a1 + r2 * (1 - a1), green: g1 * a1 + g2 * (1 - a1), blue: b1 * a1 + b2 * (1 - a1), alpha: 1)
+    }
+    var bad: [String] = [], checked = 0, glass = 0
+    for style in [UIUserInterfaceStyle.light, .dark] {
+      let tc = UITraitCollection(userInterfaceStyle: style)
+      var q: [UIView] = [w]
+      while !q.isEmpty {
+        let v = q.removeFirst()
+        if v.isHidden || v.alpha < 0.05 { continue }
+        q += v.subviews
+        guard let l = v as? UILabel, let t = l.text, !t.trimmingCharacters(in: .whitespaces).isEmpty, l.bounds.width > 2,
+              l.convert(l.bounds, to: nil).intersects(w.bounds) else { continue }
+        // what's behind: the first ancestor painting a solid colour (half-see-through ones blended over it)
+        var layers: [UIColor] = [], x: UIView? = l.superview, solid: UIColor? = nil, overGlass = false
+        while let y = x {
+          if y is UIVisualEffectView { overGlass = true; break }
+          if let bg = y.backgroundColor?.resolvedColor(with: tc) {
+            var a: CGFloat = 0; bg.getRed(nil, green: nil, blue: nil, alpha: &a)
+            if a > 0.97 { solid = bg; break } else if a > 0.02 { layers.append(bg) }
+          }
+          if let c = y as? UICollectionViewListCell, let bg = c.backgroundConfiguration?.backgroundColor?.resolvedColor(with: tc) { solid = bg; break }
+          x = y.superview
+        }
+        if overGlass || solid == nil { glass += 1; continue }
+        var back = solid!
+        for c in layers.reversed() { back = blend(c, over: back) }
+        let fg = blend(l.textColor.resolvedColor(with: tc).withAlphaComponent(l.textColor.resolvedColor(with: tc).cgColor.alpha * l.alpha), over: back)
+        let a = lum(fg), b = lum(back), ratio = (max(a, b) + 0.05) / (min(a, b) + 0.05)
+        checked += 1
+        if ratio < 1.6 { bad.append("\(style == .light ? "light" : "dark") \(String(format: "%.2f", ratio)) “\(String(t.prefix(24)))”") }
+      }
+    }
+    return ["checked": checked, "glass": glass, "faint": Array(Set(bad)).sorted().prefix(12).map { $0 }]
+  }
   // a change made elsewhere: straight to the server as this person on another device (the test server's dev sign-in)
   private func elsewhere(_ path: String, _ body: [String: Any], _ done: @escaping (String) -> Void) {
     guard let url = URL(string: serverURL() + path), let email = procEnv["E11_SELFTEST_EMAIL"], let d = try? JSONSerialization.data(withJSONObject: body) else { return done("no request") }
@@ -365,6 +412,30 @@ extension Main {
         o["closedHow"] = PreviewVC.lastClose; o["trail"] = ClientTrail.link
         self.apple("link", o)
         self.assetsCtl.close(animated: false); self.tab("today")
+      }),
+      // Colours (the full test, Haris 2026-11-16): each tab's first screen and a task page, light and dark
+      ("aContrast", { self.tab(self.tabKeys.first ?? "today") }),
+      ("aContrastRead", {
+        var all: [String: Any] = [:]
+        all[self.selectedTabKey] = self.selfContrast()
+        self.apple("contrast", all)
+        let rest = Array(self.tabKeys.dropFirst())
+        func next(_ i: Int) {
+          guard i < rest.count else { if let t = best?.0 ?? cards.first { self.openTaskPage(t, tab: "details", focus: "") }; return }
+          self.tab(rest[i])
+          DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            var a = ((self.selfResult["apple"] as? [String: Any])?["contrast"] as? [String: Any]) ?? [:]
+            a[rest[i]] = self.selfContrast(); self.apple("contrast", a); next(i + 1)
+          }
+        }
+        next(0)
+      }),
+      ("aContrastWait", {}), ("aContrastWait2", {}), ("aContrastWait3", {}), ("aContrastWait4", {}),
+      ("aContrastTask", {
+        var a = ((self.selfResult["apple"] as? [String: Any])?["contrast"] as? [String: Any]) ?? [:]
+        a["task"] = self.selfContrast(); self.apple("contrast", a)
+        for x in self.taskPages { self.closeTaskPage(x, animated: false) }
+        self.tab(self.tabKeys.first ?? "today")
       }),
       // Live (the full test, Haris 2026-11-16): a change made elsewhere — straight to the server, as the Mac or another phone
       // would — while the page is open; read a few seconds later, without leaving the page
