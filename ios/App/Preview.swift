@@ -599,11 +599,11 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     // (swiped to another file: back into that file's own picture on the page when it's there — Haris 2026-11-15)
     // (opened by a link from another app: no picture found as it opened — the folder behind still coming in — so it's looked
     //  for now, by the file's mark, as a swiped-to one: it faded instead of flying home, Haris 2026-11-16)
-    let win = source?.window ?? presentingViewController?.view.window ?? view.window
-    let back: UIImageView? = (at == openedAt ? source : nil) ?? keys[safe: at].flatMap { FileTouch.marked($0, in: win) }
+    let back = homePicture()
     // (opened without flying — by a link — but its picture is on the page now: back into it all the same)
     PreviewVC.lastClose = "back:\(back != nil) window:\(back?.window != nil) picture:\(current?.shownPicture != nil) openedAt:\(openedAt) source:\(source != nil)"
     if openedAt >= 0 || source == nil, let src = back, src.window != nil, let (pic, from) = current?.shownPicture {
+      if pullHome !== src { pullHome?.alpha = 1 }
       let fly = UIImageView(image: pic); fly.contentMode = .scaleAspectFill; fly.clipsToBounds = true; fly.layer.cornerCurve = src.layer.cornerCurve
       fly.frame = from
       view.insertSubview(fly, aboveSubview: pager); pager.alpha = 0; src.alpha = 0
@@ -616,6 +616,7 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
       }
       return
     }
+    pullHome?.alpha = 1   // (no flight after all: the picture hidden as it was pulled shown again)
     UIView.animate(withDuration: 0.2, animations: { self.view.alpha = 0 }) { _ in
       if let p = self.presentingViewController { p.dismiss(animated: false) } else { self.dismiss(animated: false) }
     }
@@ -681,10 +682,20 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     return v.y > abs(v.x) * 1.2
   }
   func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { g !== pull }
+  // the picture on the page it flies back into: the one it came out of, else the file's own by its mark
+  private func homePicture() -> UIImageView? {
+    let win = source?.window ?? presentingViewController?.view.window ?? view.window
+    return (at == openedAt ? source : nil) ?? keys[safe: at].flatMap { FileTouch.marked($0, in: win) }
+  }
+  private weak var pullHome: UIImageView?
   @objc private func pulled(_ g: UIPanGestureRecognizer) {
     guard let page = current else { return }
     let t = g.translation(in: view), k = max(0, min(1, t.y / 400)), v = page.dragView
     switch g.state {
+    case .began:
+      // (its spot on the page empty from the moment it's pulled, as Photos — it showed behind while pulling, then went as
+      //  the flight began and came back as it landed: Haris 2026-11-16)
+      if openedAt >= 0 || source == nil, let h = homePicture(), h.window != nil, current?.shownPicture != nil { h.alpha = 0; pullHome = h }
     case .changed:
       v.transform = CGAffineTransform(translationX: t.x, y: t.y).scaledBy(x: 1 - k * 0.3, y: 1 - k * 0.3)
       view.backgroundColor = UIColor.black.withAlphaComponent(1 - k)
@@ -694,7 +705,7 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
       UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0) {
         v.transform = .identity; self.view.backgroundColor = .black
         self.topBar.alpha = self.barsHidden ? 0 : 1; self.bottomBar.alpha = self.topBar.alpha
-      }
+      } completion: { _ in self.pullHome?.alpha = 1; self.pullHome = nil }   // (let go short: back on the page, behind the black)
     default: break
     }
   }
