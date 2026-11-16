@@ -344,7 +344,8 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     if let c = m["creator"] as? String { CommentCell.creator = c }
     onLoaded?(m)
     if let pp = m["people"] as? [String: [String: Any]] { people.merge(pp) { _, b in b } }
-    let items = ((m["items"] as? [[String: Any]]) ?? []) + pending.map { $0.item }
+    let everything = ((m["items"] as? [[String: Any]]) ?? []) + pending.map { $0.item }
+    let items = shown(everything)
     let atEnd = mine || wantEnd || isAtEnd()   // (your own voice message, or a comment you've just sent: down to it)
     if wantEnd { keepId = nil; focusId = nil }   // (sent: the latest from now on, not the comment it replied to)
     wantEnd = false
@@ -352,7 +353,7 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     let keepTopY = keepTopId.flatMap { frameOf($0) }.map { $0.minY - scroll.contentOffset.y }
     // (Haris, 2026-11-02: a comment arriving while you're here fades in, one going fades out while the others close up —
     //  Apple's own row animations now. Not on the first drawing.)
-    let animate = !first && window != nil
+    let animate = !first && window != nil && !addingOlder
     var changed: [String] = []
     var next: [String] = [], seen = Set<String>()
     var byId: [String: [String: Any]] = [:]
@@ -388,9 +389,11 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
       nextSched[k] = schedById[k] ?? ScheduledCard(x); schedOrder.append(k)
     }
     schedById = nextSched
+    if addingOlder { seenIds.formUnion(next) }   // (older ones put in above: not new — no sound, no pill)
     let newOnes = next.filter { !seenIds.contains($0) }
     let countChanged = next.count != order.count
-    if countChanged || first { onCount?(next.count) }
+    let total = thread == nil ? Set(everything.compactMap { $0["id"] as? String }).count : next.count
+    if countChanged || first { onCount?(total) }
     order = next
     // the sections (Haris 2026-11-09, the mock-up): a day pill over each day's comments — Apple's own section headers, so
     // the day floats at the top as the list scrolls; a thread: its first comment, then "N REPLIES"
@@ -524,10 +527,57 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     if animated { scroll.glide(end); return }   // (Claude's way — Haris 2026-11-16)
     scroll.setContentOffset(CGPoint(x: 0, y: end()), animated: false)
   }
-  // a tap on the top of the screen (the clock / the notch): to the first comment Claude's way, not a long scroll through all
-  func scrollViewShouldScrollToTop(_ s: UIScrollView) -> Bool { s.glide { -s.adjustedContentInset.top }; return false }
+  // ---------- the newest 100 comments shown, older ones put in above 100 at a time (Haris 2026-11-16) — as E11 Talk's
+  // chats: scrolled up near the top, or a tap on the notch landing at the top. A comment opened to (the Inbox, a
+  // notification) further back: the comments from a little above it ----------
+  static let page = 100
+  private var shownFrom: String?, hasOlder = false, addingOlder = false
+  private func shown(_ all: [[String: Any]]) -> [[String: Any]] {
+    guard thread == nil, !all.isEmpty else { hasOlder = false; return all }
+    let ids = all.map { $0["id"] as? String ?? "" }
+    var start = shownFrom.flatMap { ids.firstIndex(of: $0) } ?? max(0, all.count - CommentsFeed.page)
+    if let f = focusId ?? pulseWaiting, let i = ids.firstIndex(of: f), i < start { start = max(0, i - 20) }
+    shownFrom = ids[start]; hasOlder = start > 0
+    return Array(all[start...])
+  }
+  private func older() {
+    guard hasOlder, !addingOlder, let m = model else { return }
+    let all = ((m["items"] as? [[String: Any]]) ?? []).compactMap { $0["id"] as? String }
+    guard let from = shownFrom, let i = all.firstIndex(of: from), i > 0 else { return }
+    addingOlder = true; keepId = nil; focusId = nil
+    let h = scroll.contentSize.height, y = scroll.contentOffset.y
+    shownFrom = all[max(0, i - CommentsFeed.page)]
+    UIView.performWithoutAnimation {
+      draw(m)
+      scroll.layoutIfNeeded()
+      scroll.contentOffset.y = y + (scroll.contentSize.height - h)
+    }
+    addingOlder = false
+  }
+  // (a comment further back than what's shown, asked for: the comments from a little above it, put in with nothing moving)
+  private func reach(_ id: String) {
+    guard cells[id] == nil, let m = model else { return }
+    let all = ((m["items"] as? [[String: Any]]) ?? []).compactMap { $0["id"] as? String }
+    guard let i = all.firstIndex(of: id) else { return }
+    addingOlder = true
+    shownFrom = all[max(0, i - 20)]
+    UIView.performWithoutAnimation { draw(m); scroll.layoutIfNeeded() }
+    addingOlder = false
+  }
+  // a tap on the top of the screen (the clock / the notch): one smooth run to the top of what's shown; there, the next
+  // 100 older are put in above, so the next tap runs on up through them
+  func scrollViewShouldScrollToTop(_ s: UIScrollView) -> Bool {
+    keepId = nil; focusId = nil   // (moved by a tap on the notch: the comments are theirs again, as with the finger)
+    if s.contentOffset.y <= -s.adjustedContentInset.top + 1 { older() }
+    s.glide { -s.adjustedContentInset.top }
+    return false
+  }
+  func scrollViewDidEndScrollingAnimation(_ s: UIScrollView) {
+    if hasOlder && s.contentOffset.y <= -s.adjustedContentInset.top + 1 { older() }
+  }
   func scrollViewWillBeginDragging(_ s: UIScrollView) { keepId = nil; focusId = nil }   // (moved by the finger: it's theirs again)
   func scrollViewDidScroll(_ s: UIScrollView) {
+    if hasOlder && s.contentOffset.y < -s.adjustedContentInset.top + 700 && (s.isDragging || s.isDecelerating) { older() }
     if isAtEnd() { if pendingNew > 0 || jump.alpha > 0 { pendingNew = 0; seenIds = Set(order) }; paintJump(newCount: 0) }
     else if jump.alpha == 0 { paintJump(newCount: pendingNew) }
     seenSoon()
@@ -550,6 +600,7 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
   private var pulseWaiting: String?, pulseFromInbox = false
   // fromInbox: opened from the Inbox or a notification — a long comment's top comes to the middle of the screen
   func pulse(_ id: String, fromInbox: Bool = false) {
+    reach(id)
     guard let c = cells[id] else { return }
     // (asked before the list knows its width — opened from a notification: shown once it does, instead of the latest —
     //  Haris 2026-11-10: "the notification from inbox is not scrolling to view")
@@ -576,7 +627,7 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     }
     if fromInbox { DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { light(0) } } else { light(moves ? 0.35 : 0.15) }
   }
-  func has(_ id: String) -> Bool { cells[id] != nil }
+  func has(_ id: String) -> Bool { cells[id] != nil || ((model?["items"] as? [[String: Any]]) ?? []).contains { ($0["id"] as? String) == id } }
   // (the self-test: the comment opened to, still in view once everything has come — Haris 2026-11-10 17:03)
   func selfInView(_ id: String) -> [String: Any] {
     guard let f = frameOf(id) else { return ["row": false] }
