@@ -229,8 +229,10 @@ final class ClientVC: ClientsPushedVC, UISearchResultsUpdating, UISearchControll
     // (going back with the search open: the page's list as it is, not its results — the same page is used for the next client)
     if isMovingFromParent || navigationController == nil, search?.isActive == true { h.appleSearchEnd() }
   }
+  override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); ClientTrail.note("client page appeared") }
   override func viewDidDisappear(_ a: Bool) {
     super.viewDidDisappear(a)
+    ClientTrail.note("client page disappeared moving=\(isMovingFromParent) nav=\(navigationController != nil)", stack: true)
     // (‹, the swipe back, the tab tapped again: gone — the app's own state follows)
     if isMovingFromParent || navigationController == nil { if ClientVC.pushed { Main.shared.clientPageGone() } }
   }

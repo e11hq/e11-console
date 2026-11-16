@@ -77,7 +77,7 @@ try:
         tag = re.sub(r'[^a-z]+', '-', label.lower()).strip('-')
         sh('xcrun', 'simctl', 'terminate', udid, BUNDLE); sh('xcrun', 'simctl', 'uninstall', udid, BUNDLE)
         sh('xcrun', 'simctl', 'install', udid, APP)
-        lenv = dict(os.environ, SIMCTL_CHILD_E11_SERVER=BASE, SIMCTL_CHILD_E11_SELFTEST='apple' if APPLE else 'walk', SIMCTL_CHILD_E11_SELFTEST_EMAIL=email)
+        lenv = dict(os.environ, SIMCTL_CHILD_E11_SERVER=BASE, SIMCTL_CHILD_E11_SELFTEST='apple' if APPLE else 'walk', SIMCTL_CHILD_E11_SELFTEST_EMAIL=email, SIMCTL_CHILD_E11_ONLY=os.environ.get('E11_ONLY', ''))
         t_role = time.time()
         r = subprocess.run(['xcrun', 'simctl', 'launch', udid, BUNDLE], env=lenv, capture_output=True, text=True)
         data = sh('xcrun', 'simctl', 'get_app_container', udid, BUNDLE, 'data').stdout.strip()

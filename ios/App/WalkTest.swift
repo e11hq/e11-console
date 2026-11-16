@@ -62,7 +62,10 @@ extension Main {
     selfResult["walkBooted"] = ["after": Double(n) / 4, "quick": quickBooted, "copy": AppData.shared.ready, "pageReady": false]
     // (the main self-test, the phone's way — Haris 2026-11-11: no website loaded; it starts once the app's own screens are up)
     if SELFTEST == "1" { if !started { started = true; selfTest() }; return }
-    walkRun(SELFTEST == "apple" ? appleSteps() : walkSteps(), 0)
+    // (E11_ONLY — a quick run of a few checks only, Haris 2026-11-16: the steps whose names start with one of these)
+    let only = (procEnv["E11_ONLY"] ?? "").split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    let steps = SELFTEST == "apple" ? appleSteps() : walkSteps()
+    walkRun(only.isEmpty ? steps : steps.filter { s in s.0 == "aStart" || only.contains { s.0.hasPrefix($0) } }, 0)
   }
   private func walkRun(_ steps: [(String, () -> Void)], _ i: Int) {
     if i >= steps.count { writeSelf("done"); return }
@@ -312,7 +315,8 @@ extension Main {
         let rows = (AppData.shared.screen("clients", ServerHome.clientsJSON("view=list")).model?["rows"] as? [[String: Any]]) ?? []
         guard let cid = rows.first?["id"] as? String else { self.apple("findC", ["none": "no client"]); return }
         AppleHomeBits.shared.search?.isActive = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.ev(self.homeIfMade, ["ev": "client", "id": cid]) }
+        ClientTrail.notes = []
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { ClientTrail.note("tap \(cid)"); self.ev(self.homeIfMade, ["ev": "client", "id": cid]) }
       }),
       ("aFindCWait", {}),
       ("aFindCRead", {
@@ -321,7 +325,7 @@ extension Main {
                              "clientsNav": cn?.viewControllers.map { String(describing: type(of: $0)) } ?? [], "hereNav": hn?.viewControllers.map { String(describing: type(of: $0)) } ?? [],
                              "own": AppleTabs.shared?.ownNav.map { String(describing: type(of: $0.viewControllers.first as Any)) } ?? "",
                              "page": ["made": self.clientPageIfMade != nil, "hidden": self.clientPageIfMade?.isHidden ?? true, "window": self.clientPageIfMade?.window != nil],
-                             "query": self.serverClients.query, "on": self.serverClients.on, "off": self.serverClients.off])
+                             "query": self.serverClients.query, "on": self.serverClients.on, "off": self.serverClients.off, "trail": ClientTrail.notes])
         self.tab("today")
       }),
       ("aLink", {
@@ -344,7 +348,7 @@ extension Main {
       }),
       ("aLinkClosed", {
         var o = (((self.selfResult["apple"] as? [String: Any])?["link"]) as? [String: Any]) ?? [:]
-        o["closedHow"] = PreviewVC.lastClose
+        o["closedHow"] = PreviewVC.lastClose; o["trail"] = ClientTrail.link
         self.apple("link", o)
         self.assetsCtl.close(animated: false); self.tab("today")
       }),
@@ -560,4 +564,21 @@ extension Main {
       }
     }
   }
+}
+
+// what a client tapped in search, and a file opened by a link, went through — kept only while the self-test runs (Haris
+// 2026-11-16: the two that weren't fixed, read step by step instead of guessed)
+enum ClientTrail {
+  static var notes: [String] = [], link: [String] = []
+  private static let t0 = CACurrentMediaTime()
+  private static func at() -> String { String(format: "%.2f", CACurrentMediaTime() - t0) }
+  // (who called: the app's own frames just above, by name)
+  static func callers() -> String {
+    Thread.callStackSymbols.dropFirst(2).prefix(8).compactMap { l -> String? in
+      guard let r = l.range(of: "E11Console") ?? l.range(of: "$s10E11Console") else { return nil }
+      return String(l[r.lowerBound...].prefix(110))
+    }.joined(separator: " < ")
+  }
+  static func note(_ s: String, stack: Bool = false) { guard !SELFTEST.isEmpty else { return }; notes.append("\(at()) \(s)" + (stack ? " ← " + callers() : "")) }
+  static func linkNote(_ s: String) { guard !SELFTEST.isEmpty else { return }; link.append("\(at()) \(s)") }
 }

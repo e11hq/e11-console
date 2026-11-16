@@ -664,6 +664,7 @@ extension Main {
       //  page by its mark when it's on screen, and back into it — Haris 2026-11-15)
       vc.keys = files.map { FileTouch.key($0) }
       vc.source = FileTouch.picture() ?? FileTouch.marked(vc.keys[i], in: host.view.window)
+      ClientTrail.linkNote("present: touch=\(FileTouch.picture() != nil) host=\(type(of: host)) hostWindow=\(host.view.window != nil) inHost=\(FileTouch.marked(vc.keys[i], in: host.view.window) != nil) inScreen=\(FileTouch.marked(vc.keys[i], in: self.screenWindow) != nil) flies=\(vc.flies)")
       host.present(vc, animated: !vc.flies)
     }
   }
@@ -1250,7 +1251,10 @@ extension Main {
               //  folder's pictures came after more than one — then as it is)
               func whenShown(_ n: Int) {
                 guard let self = self else { return }
-                if n >= 30 || FileTouch.marked(FileTouch.key(list[i]), in: self.screenWindow) != nil { self.openFiles(list, at: i); return }
+                if n >= 30 || FileTouch.marked(FileTouch.key(list[i]), in: self.screenWindow) != nil {
+                  ClientTrail.linkNote("picture \(n >= 30 ? "never marked" : "marked") after \(n) tries; host window same=\(self.sheetHost()?.view.window === self.screenWindow)")
+                  self.openFiles(list, at: i); return
+                }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { whenShown(n + 1) }
               }
               whenShown(0)

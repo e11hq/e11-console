@@ -1631,6 +1631,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   // a client's page gone from the Clients tab's Apple navigation (‹, the swipe back, the tab tapped again, another tab):
   // the app's own state as when ‹ was tapped before — the list asked for again, the website told
   func clientPageGone() {
+    ClientTrail.note("page gone", stack: true)
     ClientVC.pushed = false
     clientPageIfMade?.isHidden = true
     // (pushed on the tab it was found from — no Clients tab: gone with it, nothing of Clients left wanted)
@@ -1740,10 +1741,11 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   }
   func drawServerClients(_ m: [String: Any]) {
     defer { updateCorner() }
-    guard clientsPageMe != nil, (m["me"] as? String) == clientsPageMe else { return }
+    guard clientsPageMe != nil, (m["me"] as? String) == clientsPageMe else { ClientTrail.note("draw: not this person's"); return }
     let page = (m["kind"] as? String) == "client"
     // (only what's asked for now: an answer for the list while a client's page is wanted waits)
-    if page != (clientsOn == "client") { return }
+    if page != (clientsOn == "client") { ClientTrail.note("draw page=\(page): not what's asked (\(clientsOn))"); return }
+    ClientTrail.note("draw page=\(page) wanted=\(clientsWanted) hidden=\(clientPageIfMade?.isHidden ?? true)")
     let h = clientsScreen(page)
     var mm = m; mm["show"] = true
     mm["look"] = lookBoth
@@ -1767,6 +1769,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
         if !n.viewControllers.contains(where: { ($0 as? ClientVC)?.h === h }) {
           let vc = ClientVC(h)
           n.pushViewController(vc, animated: n.view.window != nil && AppleTabs.shared?.ownNav === n)
+          ClientTrail.note("pushed on \(n === AppleTabs.shared?.clientsNav ? "clientsNav" : n === AppleTabs.shared?.homeNav ? "homeNav" : "other") window=\(n.view.window != nil) presented=\(n.presentedViewController.map { String(describing: type(of: $0)) } ?? "-") now \(n.viewControllers.map { String(describing: type(of: $0)) })")
         } else { h.isHidden = false }
       } else {
         if h.superview == nil, !clientsFromMeApple, let vc = ClientsVC.shared { vc.adopt(h) }
@@ -1795,17 +1798,20 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   func clientsCommand(_ a0: [String: Any]) {
     defer { updateCorner() }
     var a = a0
+    ClientTrail.note("command show=\(a0["show"] ?? "-") view=\(a0["view"] ?? "-") tab=\(selectedTabKey) on=\(clientsOn) wanted=\(clientsWanted) here=\(clientsHereNav != nil) fromMe=\(clientsFromMeApple) search=\(AppleHomeBits.shared.search?.isActive ?? false)")
     // (a client's page asked for while Home's own screen is on — from Home's search: it opens on the Clients tab, where
     //  the app draws clients' pages; Home is its own screen now — AppleHome.swift)
     // (and from My Tasks' search, the same — Haris 2026-11-08)
     if APPLE_HOME, (a["show"] as? Bool) == true, (a["view"] as? String) == "client", !tabKeys.contains("projects"), !clientsFromMeApple, let n = AppleTabs.shared?.ownNav {
       clientsHereNav = n
       a["from"] = ""
+      ClientTrail.note("here nav \(n.viewControllers.map { String(describing: type(of: $0)) })")
     } else if APPLE_HOME, (a["show"] as? Bool) == true, (a["view"] as? String) == "client", AppleTabs.shared?.ownShown == true, selectedTabKey != "projects" {
       if (AppleHomeBits.shared.search?.isActive ?? false) { AppleHomeBits.shared.search?.isActive = false }
       MyTasksVC.shared?.closeSearch()
       a["from"] = ""
       selectTab("projects")
+      ClientTrail.note("tab switched → \(selectedTabKey) on=\(clientsOn)")
     }
     guard let show = a["show"] as? Bool else { return }
     if !show {
@@ -1837,6 +1843,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
       return
     }
     if page, !clientLeaving { clientFrom = (a["from"] as? String).flatMap { $0.isEmpty ? nil : $0 } } else if !page { clientFrom = nil }
+    ClientTrail.note("asked page=\(page) was=\(was) on=\(clientsOn)")
     s.query = page ? "view=client&id=\((a["id"] as? String ?? "").addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")&done=\((a["done"] as? Bool) == true ? 1 : 0)" : "view=list"
     if s.on, let m = s.shown, (m["kind"] as? String) == (page ? "client" : "clients"), !page || (m["id"] as? String) == (a["id"] as? String) { drawServerClients(m) }
     else if (page ? clientPageIfMade : clientsListIfMade)?.isHidden == false {
