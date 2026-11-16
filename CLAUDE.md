@@ -439,6 +439,9 @@ fading out of Waiting. D2's files swipe left / right between that request's file
 locally, dont build it yet").** Made locally (not built): the Reviews tab its own Apple screen (MeTabVC "reviews",
 APPLE_ROLE_TABS), the requests Apple's cells (Me.swift rvItem), the toolbar, back to the list after a decision; the skeletons
 from the engine's `plansForMe` (main, commit 5332db9 — needs the next server release, published together with the app).
+**Remind Haris about Console's comments scroll and 120 Hz (Haris 2026-11-16 08:05: "Leave console for now, but remind me"):**
+local commit 81d94da on ios-nav (not built) makes the comments' ↓ and the top edge one smooth run as E11 Talk's; and Console
+lacks `CADisableMinimumFrameDurationOnPhone` (its own animations held to 60) — both wait for his yes, after 1.2.1.
 **Remind Haris when the Clients pages' page-by-page work starts (Haris 2026-11-09 21:12):** background uploads and downloads
 go in with them — plan in project doc `claude/ios-background-transfers-plan.md`.
 
