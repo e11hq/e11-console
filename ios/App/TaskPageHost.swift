@@ -679,11 +679,15 @@ extension Main {
   static var isAdmin = false   // (from the page: only Admins turn file and folder links off and on — Haris 2026-11-03)
   // (the links turned off, as the server has them — asked for the files on screen, so a file's sheet says Turn on link)
   static var linksOff = Set<String>()
+  // (asked once per file — a link turned off or on later comes on the live line, AppData "links": it was asked again for a
+  //  whole folder every time anything in the app's copy changed — the full test, Haris 2026-11-16)
+  static var linksKnown = Set<String>()
   func loadLinkStates(_ paths: [String]) {
-    let ps = Array(Set(paths.filter { !$0.isEmpty })).prefix(400)
+    let ps = Array(Set(paths.filter { !$0.isEmpty && !Main.linksKnown.contains($0) })).prefix(400)
     guard !ps.isEmpty else { return }
+    ps.forEach { Main.linksKnown.insert($0) }
     serverTask.request("/api/flink", body: ["paths": Array(ps)]) { j in
-      guard (j?["ok"] as? Bool) == true, let off = j?["off"] as? [String] else { return }
+      guard (j?["ok"] as? Bool) == true, let off = j?["off"] as? [String] else { ps.forEach { Main.linksKnown.remove($0) }; return }
       for p in ps { if off.contains(p) { Main.linksOff.insert(p) } else { Main.linksOff.remove(p) } }
     }
   }

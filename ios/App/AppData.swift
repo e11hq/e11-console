@@ -276,6 +276,8 @@ final class AppData: NSObject, URLSessionDataDelegate {
     set { if let me = me { UserDefaults.standard.set(newValue, forKey: "app-copy-access-\(me)") } }
   }
   private func wake() {
+    // (a link turned off or on while the live line was closed isn't in the copy: each file's asked once again)
+    DispatchQueue.main.async { Main.linksKnown.removeAll() }
     q.async { self.inBackground = false; if self.started && self.stream == nil { self.backoff = 2; self.openStream() } }
     // (back in the app: the website's files again — a server update since, and the screens worked out by the new ones at
     //  once, not only after the app is closed and opened again: Overview still said "AED" — Haris 2026-11-05)
