@@ -2677,7 +2677,7 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
     }
     // the + sheet (canvas "Attach panel — Talk & Console", W5, Haris 2026-11-16): your recent photos to tick, then
     // Camera · Files — Attach Files and Client Assets' Upload. Files: the originals up to 1 GB, or a scan.
-    let sheet = {
+    let plusSheet = {
       let v = AttachSheet(title: title ?? "Attach Files", rows: [.camera, .files], nextWord: "Add", tint: .tintColor)
       v.onChoice = { [weak self, weak vc] c in
         guard let self = self, let vc = vc else { return }
@@ -2693,7 +2693,7 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
     }
     // straight to one (the page's attach bar: Photos · Camera · Files)
     switch source {
-    case "sheet": return sheet()
+    case "sheet": return plusSheet()
     case "filesheet": return filesSheet(from: vc, files: files)
     case "photos": return photos()
     case "camera": return UIImagePickerController.isSourceTypeAvailable(.camera) ? camera() : finish([])
