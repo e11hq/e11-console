@@ -139,14 +139,19 @@ final class FeedLoader {
       URLSession.shared.dataTask(with: r) { d, _, _ in DispatchQueue.main.async { done(d) } }.resume()
     }
   }
+  // (one ask per link however many rows show it at once — they waited on the same answer, asked twice: the full test, 2026-11-16)
+  private var linkWaiting: [String: [([String: Any]?) -> Void]] = [:]
   func link(_ u: String, _ done: @escaping ([String: Any]?) -> Void) {
     if let l = links[u] { return done(l) }
+    if linkWaiting[u] != nil { linkWaiting[u]?.append(done); return }
+    linkWaiting[u] = [done]
+    let finish = { (j: [String: Any]?) in let w = self.linkWaiting.removeValue(forKey: u) ?? []; w.forEach { $0(j) } }
     cookies { c in
-      guard let q = u.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed), let url = URL(string: serverURL() + "/api/link?u=" + q) else { return done(nil) }
+      guard let q = u.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed), let url = URL(string: serverURL() + "/api/link?u=" + q) else { return finish(nil) }
       var r = URLRequest(url: url); if !c.isEmpty { r.setValue(c, forHTTPHeaderField: "Cookie") }
       URLSession.shared.dataTask(with: r) { d, _, _ in
         let j = d.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-        DispatchQueue.main.async { if let j = j { self.links[u] = j }; done(j) }
+        DispatchQueue.main.async { if let j = j { self.links[u] = j }; finish(j) }
       }.resume()
     }
   }
