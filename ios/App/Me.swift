@@ -1822,7 +1822,7 @@ final class MeCtl {
     guard let s = stack.last else { return ["open": false] }
     let m = model["reviews"] as? [String: Any]
     var o: [String: Any] = ["kind": s.kind, "tab": tab, "apple": apple, "waiting": (m?["waiting"] as? [Any])?.count ?? -1, "reviewed": (m?["reviewed"] as? [Any])?.count ?? -1, "skeletons": rvSkeletons.count, "rows": s.h.meKeys.count]
-    if let e = s.h.assetsParts["wait"] as? AppleEmpty, e.superview != nil { o["loading"] = e.loading }
+    if let e = s.h.assetsParts["wait"] as? AppleEmpty, s.h.selfListed(e) { o["loading"] = e.loading }
     o["seg"] = s.h.assetsParts["seg"]?.superview != nil
     if let x = ((m?["waiting"] as? [[String: Any]]) ?? []).first, let menu = rvItem(x, decided: false).menu?() {
       o["menu"] = menu.children.flatMap { ($0 as? UIMenu)?.children ?? [$0] }.compactMap { ($0 as? UIAction)?.title }
@@ -1839,7 +1839,7 @@ final class MeCtl {
   func selfOffice() -> [String: Any] {
     guard let s = stack.last else { return ["open": false] }
     var o: [String: Any] = ["kind": s.kind, "tab": tab, "apple": apple, "rows": s.h.meKeys.count]
-    if let e = s.h.assetsParts["wait"] as? AppleEmpty, e.superview != nil { o["loading"] = e.loading }
+    if let e = s.h.assetsParts["wait"] as? AppleEmpty, s.h.selfListed(e) { o["loading"] = e.loading }
     let titles = { (m: UIMenu?) -> [String] in (m?.children ?? []).flatMap { ($0 as? UIMenu)?.children ?? [$0] }.compactMap { ($0 as? UIAction)?.title } }
     if let c = model["claims"] as? [String: Any] {
       let all = (c["all"] as? [[String: Any]]) ?? []
@@ -1879,11 +1879,11 @@ final class MeCtl {
     guard let s = stack.last else { return ["open": false] }
     let parts = s.h.assetsParts
     var o: [String: Any] = ["open": true, "kind": s.kind, "tab": tab, "kinds": stack.map { $0.kind }, "apple": apple, "line": plansLine]
-    if let e = parts["wait"] as? AppleEmpty, e.superview != nil { o["loading"] = e.loading }
-    if let e = parts["none"] as? AppleEmpty, e.superview != nil { o["empty"] = e.title }
+    if let e = parts["wait"] as? AppleEmpty, s.h.selfListed(e) { o["loading"] = e.loading }
+    if let e = parts["none"] as? AppleEmpty, s.h.selfListed(e) { o["empty"] = e.title }
     o["rows"] = ((model["plans"] as? [String: Any])?["rows"] as? [[String: Any]])?.count ?? -1
-    o["waitGroup"] = parts["g.plw"]?.superview != nil
-    o["status"] = parts["g.st"]?.superview != nil
+    o["waitGroup"] = s.h.selfListed(parts["g.plw"])
+    o["status"] = s.h.selfListed(parts["g.st"])
     if let vc = pageVCs[ObjectIdentifier(s.h)] { o["tools"] = vc.toolbarItems?.count ?? 0; o["title"] = vc.navigationItem.title ?? "" }
     if s.kind == "plan" { o["model"] = (model["plan"] as? [String: Any]).map { ["pid": $0["pid"] ?? "", "st": ($0["st"] as? [String: Any])?["t"] ?? "", "empty": $0["empty"] != nil, "trash": $0["trash"] ?? false] } ?? "none" }
     return o

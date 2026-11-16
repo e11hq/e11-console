@@ -585,6 +585,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   private var mottoOn = false
   private var stats: [UIView] = []
   private var content: [UIView] = []
+  // (for the self-test: is this block among what the page shows — on Me's Apple pages a group's rows are Apple's cells and
+  //  the group view itself is never on screen, so being on screen isn't the test)
+  func selfListed(_ v: UIView?) -> Bool { guard let v = v else { return false }; return content.contains { $0 === v } }
   private var cards: [String: HomeCard] = [:]
   private var m: [String: Any] = [:]
   private var L = HomeLook(nil)
