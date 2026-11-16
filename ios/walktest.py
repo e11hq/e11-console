@@ -82,7 +82,7 @@ try:
         r = subprocess.run(['xcrun', 'simctl', 'launch', udid, BUNDLE], env=lenv, capture_output=True, text=True)
         data = sh('xcrun', 'simctl', 'get_app_container', udid, BUNDLE, 'data').stdout.strip()
         res, seen, t0, last = {}, set(), time.time(), time.time()
-        while time.time() - t0 < 420:
+        while time.time() - t0 < 900:   # (more time per role — the full test, Haris 2026-11-16)
             try: res = json.load(open(os.path.join(data, 'Documents', 'selftest.json')))
             except Exception: pass
             st = res.get('stage')

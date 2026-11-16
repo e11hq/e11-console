@@ -34,7 +34,7 @@ jobs:
   ios:
     # (Haris's own Mac, the GitHub runner on it — or GitHub's Mac when his is off: mac=github, Haris 2026-11-08)
     runs-on: ${{ inputs.mac == 'github' && fromJSON('["macos-26"]') || fromJSON('["self-hosted","macOS","ARM64"]') }}
-    timeout-minutes: 100
+    timeout-minutes: 300   # (the full test, Haris 2026-11-16: time enough so a slow moment never cuts a check short)
     steps:
       - uses: actions/checkout@v4
       - name: The live server's code for the self-tests
@@ -72,7 +72,7 @@ jobs:
         id: applecheck
         if: inputs.checks == 'full' || inputs.checks == '' || inputs.checks == 'apple'
         continue-on-error: true
-        timeout-minutes: 20
+        timeout-minutes: 90
         env:
           E11_ONLY: ${{ inputs.only }}
         run: python3 ios/walktest.py build/Build/Products/Debug-iphonesimulator/E11Console.app --apple 2>&1 | tee "$RUNNER_TEMP/ios-apple.log"; exit ${PIPESTATUS[0]}
@@ -89,7 +89,7 @@ jobs:
         # (ios/walktest.py — Haris 2026-11-05: every button, every role; read from the release below)
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.walk != 'no'   # (ios-nav branch: no walk-through on branch pushes — quicker checks while the frame is built)
         continue-on-error: true
-        timeout-minutes: 50
+        timeout-minutes: 120
         run: python3 ios/walktest.py build/Build/Products/Debug-iphonesimulator/E11Console.app 2>&1 | tee "$RUNNER_TEMP/ios-walk.log"; true
       - name: Results for checking from Claude's workspace
         if: always()
