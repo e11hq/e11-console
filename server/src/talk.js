@@ -627,8 +627,11 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   const kindOf = (x) => { const e = ext(x); return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'heic', 'svg'].includes(e) ? (e === 'svg' ? 'Logo' : 'Photo') : ['mp4', 'mov', 'm4v', 'webm', 'avi', 'mkv'].includes(e) ? 'Video' : e ? e.toUpperCase() : 'File'; };
   function linkCard(L, kind, tok, url) {
     const base = url.replace(/\/+$/, '');
+    // (a link no one made, or one taken away: the card says it doesn't exist — never a plain link to a dead page, Haris
+    //  2026-11-16)
+    const none = (k) => ({ url, title: k === 'folder' ? 'Folder' : 'File', site: `E11 Console · ${k === 'folder' ? 'Folder' : 'File'}`, video: false, img: null, icon: null, e11: k, state: 'none' });
     if (kind === 'd') {
-      const r = L.resolveFolder(tok); if (!r) return null;
+      const r = L.resolveFolder(tok); if (!r) return none('folder');
       if (!r.hit) return { url, title: 'Folder', site: 'E11 Console · Folder', video: false, img: null, icon: null, e11: 'folder', state: 'gone' };
       const { c, f } = r.hit, all = [], subs = [], walk = (x, d) => { all.push(...(x.files || [])); if (d < 8) for (const k of (c.folders || []).filter((y) => y.parentId === x.id)) { subs.push(k); walk(k, d + 1); } };
       walk(f, 0);
@@ -639,7 +642,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       return { url, title: f.name, site: 'E11 Console · Folder', video: false, img: null, icon: null, e11: 'folder', client: c.name || '', sub: line,
         state: r.off ? 'off' : r.live ? 'ok' : 'gone', ...(cover && r.live ? { pic: `${base}/f/${cover.id}/${ext(cover) === 'svg' ? 'view' : 'thumb'}` } : {}) };
     }
-    const r = L.resolveToken(tok); if (!r) return null;
+    const r = L.resolveToken(tok); if (!r) return none('file');
     const a = (r.hit && r.hit.att) || {};
     if (!r.hit) return { url, title: 'File', site: 'E11 Console · File', video: false, img: null, icon: null, e11: 'file', state: 'gone' };
     const w = r.hit.where || {};

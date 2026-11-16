@@ -544,7 +544,18 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     if (!ts[0]) return null;
     const m = E11AppView.taskPage(R, Object.assign({}, data, { tasks: (data.tasks || []).concat(ts) }), meId, typeof nowMs === 'function' ? nowMs : () => (nowMs == null ? Date.now() : Number(nowMs)), ts[0].id);
     if (!m) return null;
-    Object.keys(m).forEach((k) => { if (/^can[A-Z]/.test(k)) m[k] = false; });
+    // (nothing can be changed — at every level, not only the top: the due date's, the status', a checklist item's and a
+    //  subtask's own switches stayed on, and the due date could be set on a deleted task: Haris 2026-11-16)
+    const off = (x, d) => {
+      if (!x || typeof x !== 'object' || d > 6) return;
+      if (Array.isArray(x)) { x.forEach((y) => off(y, d + 1)); return; }
+      Object.keys(x).forEach((k) => { if (/^can[A-Z]/.test(k)) x[k] = false; else off(x[k], d + 1); });
+    };
+    off(m, 0);
+    if (m.status) m.status.next = null;
+    if (m.parts) m.parts.mine = null;
+    Object.assign(m, { review2: null, pool: [], allTags: [], clients: [], mentionable: [], financeOpts: [] });
+    (m.prio || []).forEach((p) => { if (p && p.taken) p.taken = []; });
     const left = W.trashDaysLeft(it);
     return Object.assign(m, { readOnly: true, complete: null, completed: null, lock: null, trashNote: `In the Trash — view only. ${left} day${left === 1 ? '' : 's'} left to restore it.` });
   };

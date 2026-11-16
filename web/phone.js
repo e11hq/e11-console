@@ -3082,7 +3082,8 @@ const NativeMe = (() => {
   const ovAtt = (id) => { for (const c of db.clients || []) for (const f of c.folders || []) { const a = (f.files || []).find((x) => x.id === id); if (a) return a; } return null; };
   // ---------- the CD's Reviews (shell 38) ----------
   const rvPic = (a, n) => { const e = fileExt(a.name); return isImage(a) && e !== 'svg' ? imgUrl(a, n) : a.thumb ? '/__file/' + a.thumb.split('/').map(encodeURIComponent).join('/') + '?view=1' : a.path && /^(pdf|mp4|mov|m4v|webm|avi|mkv|doc|docx|ppt|pptx|xls|xlsx)$/.test(e) ? '/api/fthumb?path=' + encodeURIComponent(a.path) + '&id=' + encodeURIComponent(a.id || '') : null; };
-  const rvFile = (a, mark) => ({ id: a.id, name: a.name || 'File', pic: rvPic(a, 160), big: rvPic(a, 1000), video: fileKind(a) === 'video', ext: (fileExt(a.name) || 'file').slice(0, 4).toUpperCase(), mark: mark || '' });
+  const rvFile = (a, mark) => ({ id: a.id, name: a.name || 'File', pic: rvPic(a, 160), big: rvPic(a, 1000), video: fileKind(a) === 'video', ext: (fileExt(a.name) || 'file').slice(0, 4).toUpperCase(), mark: mark || '',
+    path: a.path || null, size: a.size || 0, type: a.type || '', thumb: a.thumb || null });   // (as appme-money.js's: the app opens the request's own files — Haris 2026-11-16)
   function reviewItem(t, r, decided) {
     const p = proj(t.projectId), u = userById(r.by);
     const files = (r.files || []).map((id) => attOf(t, id)).filter(Boolean);

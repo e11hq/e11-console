@@ -219,7 +219,10 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
   M.reviews = function (R, data, me, nowMs) {
     const W = world(R, data, me, nowMs);
     const fileKind = (a) => { const e = fileExt(a.name); return IMG_EXT.includes(e) ? 'image' : VID_EXT.includes(e) ? 'video' : 'other'; };
-    const rvFile = (a, mark) => ({ id: a.id, name: a.name || 'File', pic: picOf(a, 160), big: picOf(a, 1000), video: fileKind(a) === 'video', ext: (fileExt(a.name) || 'file').slice(0, 4).toUpperCase(), mark: mark || '' });
+    // (where each file is, its size and type: the app opens the request's own files — files still with the CD aren't in
+    //  the task's own list, so a tap on them opened nothing: Haris 2026-11-16)
+    const rvFile = (a, mark) => ({ id: a.id, name: a.name || 'File', pic: picOf(a, 160), big: picOf(a, 1000), video: fileKind(a) === 'video', ext: (fileExt(a.name) || 'file').slice(0, 4).toUpperCase(), mark: mark || '',
+      path: a.path || null, size: a.size || 0, type: a.type || '', thumb: a.thumb || null });
     const epochOf = (t) => t.reviewEpoch || 0;
     const needsCD = (t) => !!t && !t.parentId && !!t.needsCD;
     const attOf = (t, id) => (t.attachments || []).find((a) => a.id === id) || null;
