@@ -666,6 +666,13 @@ newest 100 comments, older 100 a tap at a time; comment photos 2048 across and v
 once with one conversion behind it; uploads three 8 MB pieces side by side; maps kept on the phone; a contact / place card at its
 size at once; one upload bar (comments' tiles only); the clock / ↓ run landing in one movement (Glider); 120 Hz. With server 1.9.61.
 Quick builds. Nothing changes in its look, behaviour or code without telling Haris first and his yes.
+**E11 TALK — STABLE, LOCKED: build 170 — not a release candidate yet (Haris, 2026-11-16 22:45: "talk is stable now but still not yet rc"):**
+commit 4740a08 on talk-chat-1, branches `stable/talk-170` and `locked/talk-170` (never moved or deleted; 162's and earlier stay as
+history). 170 = 162 + client contacts' two tabs (E11 Agency · Settings) and each tab's own count; Client Assets links opening in
+Apple's Safari sheet when E11 Console isn't signed in on the phone; a link that doesn't exist (or turned off) said in its card,
+at its own height; bubbles keeping their colour while scrolling; the typing dots a row of the chat (their message takes its
+place in one move) and breathing; people, clients and link cards live while Talk is open (server 1.9.63). The App Store
+candidate is still 1.0.2 build 148 (in review). Nothing changes in its look, behaviour or code without telling Haris first and his yes.
 **E11 TALK — STABLE, LOCKED: build 162 (Haris, 2026-11-16 15:51):** commit 6f0000e on talk-chat-1, branches `stable/talk-162` and
 `locked/talk-162` (never moved or deleted; 148's and earlier stay as history). 162 = 148 + the + sheet (as Console's), cards sent at
 their own size (link previews, E11 links, known tasks, shimmer while reading), upload rings on photos, videos, files and voice,
