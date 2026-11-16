@@ -1205,6 +1205,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
       inboxTab = "all"; catsView.choose(0, animated: false)
     }
     if !keepSet, (model["rows"] as? [[String: Any]]) != nil { keepSet = true }
+    // (on Unread, the last unread ones read elsewhere — the Mac, the website, another phone: to All by itself, the buttons'
+    //  choice and the list moving as when it's picked; ones read here stay until another list is picked — Haris 2026-11-16)
+    if keepSet, inboxTab == "unread", keep.isEmpty, (model["rows"] as? [[String: Any]]) != nil, ((model["unread"] as? Int) ?? 0) == 0 {
+      inboxTab = "all"; catsView.choose(0, animated: window != nil); send(["ev": "tab", "tab": "all"])
+    }
     content.forEach { if !($0 is InboxRow) { $0.removeFromSuperview() } }
     content = []
     var seen = Set<String>()

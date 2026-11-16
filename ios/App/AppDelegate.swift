@@ -83,7 +83,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
     guard let e = userInfo["e11"] as? [String: Any], (e["quiet"] as? Bool) == true else { return done(.noData) }
     if let n = e["badge"] as? Int { UNUserNotificationCenter.current().setBadgeCount(max(0, n)) { _ in } }
     Main.clearDelivered(Set((e["read"] as? [String]) ?? []))
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { done(.newData) }
+    // (and the changes since the copy's place taken in, so the app opens on what's current)
+    AppData.shared.catchUpInBackground { done(.newData) }
   }
   func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
     Main.shared.gotToken(deviceToken.map { String(format: "%02x", $0) }.joined())

@@ -68,6 +68,9 @@ final class AppData: NSObject, URLSessionDataDelegate {
     if !watching {
       watching = true
       NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in self?.wake() }
+      // (coming back: the catch-up starts as the app comes forward, not only once it's active — the first frames are the
+      //  current ones where the line answers in time, Haris 2026-11-16)
+      NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in self?.wake() }
       NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in self?.sleep() }
     }
   }
@@ -198,6 +201,18 @@ final class AppData: NSObject, URLSessionDataDelegate {
         let t = ses.dataTask(with: r); self.stream = t; t.resume()
       }
     } }
+  }
+  // woken in the background by the server's quiet note (something changed elsewhere): the changes since the copy's place
+  // taken in now, the line closed again after a few seconds — so the app is up to date when it's next opened (Haris
+  // 2026-11-16). iPhone gives the app about 30 seconds; this keeps well inside them.
+  func catchUpInBackground(_ done: @escaping () -> Void) {
+    guard started, me != nil else { return done() }
+    q.async { if self.stream == nil { self.backoff = 2; self.openStream() } }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
+      guard let self = self else { return done() }
+      if UIApplication.shared.applicationState == .background { self.saveNow(); self.stopStream() }
+      done()
+    }
   }
   private func stopStream() { q.async { self.stream?.cancel(); self.stream = nil; self.session?.invalidateAndCancel(); self.session = nil } }
   func urlSession(_ s: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
