@@ -119,14 +119,22 @@ extension Main {
         var layers: [UIColor] = [], x: UIView? = l.superview, solid: UIColor? = nil, overGlass = false
         while let y = x {
           if y is UIVisualEffectView { overGlass = true; break }
-          if let bg = y.backgroundColor?.resolvedColor(with: tc) {
+          // (a view's own colour, or its layer's — chips and badges paint the layer; a cell's background as Apple's
+          //  configuration has it — a clear one is no background: what's behind the cell shows, as on the Inbox)
+          var own: [UIColor] = []
+          if let c = y as? UICollectionViewListCell, let bg = c.backgroundConfiguration?.resolvedBackgroundColor(for: c.tintColor).resolvedColor(with: tc) { own.append(bg) }
+          if let bg = y.backgroundColor?.resolvedColor(with: tc) { own.append(bg) }
+          else if let cg = y.layer.backgroundColor { own.append(UIColor(cgColor: cg)) }
+          var done = false
+          for bg in own {
             var a: CGFloat = 0; bg.getRed(nil, green: nil, blue: nil, alpha: &a)
-            if a > 0.97 { solid = bg; break } else if a > 0.02 { layers.append(bg) }
+            if a > 0.97 { solid = bg; done = true; break } else if a > 0.02 { layers.append(bg) }
           }
-          if let c = y as? UICollectionViewListCell, let bg = c.backgroundConfiguration?.backgroundColor?.resolvedColor(with: tc) { solid = bg; break }
+          if done { break }
           x = y.superview
         }
-        if overGlass || solid == nil { glass += 1; continue }
+        if !overGlass, solid == nil { solid = TaskPage.page.resolvedColor(with: tc) }
+        if overGlass { glass += 1; continue }
         var back = solid!
         for c in layers.reversed() { back = blend(c, over: back) }
         let fg = blend(l.textColor.resolvedColor(with: tc).withAlphaComponent(l.textColor.resolvedColor(with: tc).cgColor.alpha * l.alpha), over: back)
@@ -492,16 +500,26 @@ extension Main {
         self.elsewhere("/api/home/act", { () -> [String: Any] in let w = "Live check \(Int(Date().timeIntervalSince1970))"; return ["act": "comment", "id": t, "html": "<p>\(w)</p>", "text": w, "from": "task", "copy": true, "op": UUID().uuidString] }()) { r in self.liveBefore["sent"] = r }
         // (frame by frame while it arrives: each comment already there — the biggest move it made in one frame; a glide moves a
         //  few points a frame, a snap tens at once)
-        var last: [String: CGFloat] = [:], worst: [String: CGFloat] = [:], frames = 0
+        // (each row's move frame by frame; a glide eases — its steps grow and shrink gradually — a snap is one step far bigger
+        //  than the frames either side of it: the snap is what's flagged, with the steps around it and the list's own scroll)
+        var last: [String: CGFloat] = [:], steps: [String: [CGFloat]] = [:], scrolls: [CGFloat] = [], lastY: CGFloat? = nil, frames = 0
         SelfFrames.run(3.0, {
           let now = f.selfRowTops; frames += 1
-          for (id, y) in now { if let y0 = last[id] { worst[id] = max(worst[id] ?? 0, abs(y - y0)) } }
+          for (id, y) in now { steps[id, default: []].append(last[id].map { abs(y - $0) } ?? 0) }
+          let oy = f.scroll.contentOffset.y; scrolls.append(lastY.map { oy - $0 } ?? 0); lastY = oy
           last = now; return [:]
         }) { _ in
-          let top = worst.values.max() ?? 0
-          var a = ((self.selfResult["apple"] as? [String: Any])?["liveCommentFrames"] as? [String: Any]) ?? [:]
-          a = ["frames": frames, "biggestStep": Int(top.rounded()), "rows": worst.count]
-          self.apple("liveCommentFrames", a)
+          var top: CGFloat = 0, snap: CGFloat = 0, around: [Int] = []
+          for (_, st) in steps {
+            for (i, d) in st.enumerated() where d > 0 {
+              top = max(top, d)
+              let prev = i > 0 ? st[i - 1] : 0, nxt = i + 1 < st.count ? st[i + 1] : 0
+              if d > 12, max(prev, nxt) < d * 0.35, d > snap { snap = d; around = st[max(0, i - 3)...min(st.count - 1, i + 3)].map { Int($0.rounded()) } }
+            }
+          }
+          let moving = scrolls.filter { abs($0) > 0.3 }.map { Int($0.rounded()) }
+          self.apple("liveCommentFrames", ["frames": frames, "biggestStep": Int(top.rounded()), "snap": Int(snap.rounded()), "around": around,
+                                            "scrollSteps": Array(moving.prefix(40)), "rows": steps.count])
         }
       }),
       ("aLiveCWait2", {}),
