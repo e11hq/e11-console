@@ -1116,8 +1116,8 @@ html.mac-chrome[data-theme="light"] .mib-sp-oh, html.mac-chrome[data-theme="ligh
 .mib-hs-row::-webkit-scrollbar { display: none; }
 .mib-hs-t { flex: none; width: 72px; border: 0; padding: 0; background: none; color: var(--mc-fg); font: inherit; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: default; }
 .mib-hs-p { position: relative; width: 64px; height: 64px; border-radius: 8px; overflow: hidden; background: var(--mib-fill); display: grid; place-items: center; transition: box-shadow .15s; }
-.mib-hs-p img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.mib-hs-p .mib-play { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-size: 14px; text-shadow: 0 1px 4px rgba(0, 0, 0, .5); }
+.mib-hs-p img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.mib-hs-p .mib-play { width: 24px; height: 24px; font-size: 10px; }
 .mib-hs-ic { display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--k); }
 .mib-hs-ic .ic, .mib-hs-ic svg { width: 22px; height: 22px; }
 .mib-hs-ic b { font-size: 9px; letter-spacing: .04em; color: var(--mc-dim); }

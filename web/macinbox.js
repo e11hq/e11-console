@@ -160,7 +160,8 @@ const MacInbox = (() => {
     const k = fileKind(a);
     if (k === 'image') return imgUrl(a, 480);
     if (a.thumb) return posterUrl(a);
-    if (k === 'video' && a.path) return '/api/fthumb?path=' + encodeURIComponent(a.path) + '&id=' + encodeURIComponent(a.id || '');
+    // (the server's own picture of a video, a PDF's first page, or a Word / PowerPoint / Excel file's first page — Haris 2026-11-17)
+    if (a.path && (k === 'video' || k === 'pdf' || /^(docx?|pptx?|xlsx?)$/.test(fileExt(a.name)))) return '/api/fthumb?path=' + encodeURIComponent(a.path) + '&id=' + encodeURIComponent(a.id || '');
     return '';
   }
   function tiles(list, big) {
@@ -168,8 +169,10 @@ const MacInbox = (() => {
     return `<div class="mib-tiles ${big ? 'big' : ''}">${list.map((a, i) => {
       const k = fileKind(a), u = picOf(a);
       const ext = fileExt(a.name), page = k === 'pdf' || k === 'text' || ['doc', 'docx', 'pages', 'rtf'].includes(ext);
-      const pic = u ? `<img src="${u}" alt="" decoding="sync">` : page ? '<span class="mib-page"><i></i><i></i><i></i><i></i><i></i><i></i></span>'
+      // (its kind's drawing under the picture — what shows if the server has no picture of it)
+      const fb = page ? '<span class="mib-page"><i></i><i></i><i></i><i></i><i></i><i></i></span>'
         : `<span class="mib-ficon">${icon(k === 'image' ? 'image' : k === 'video' ? 'play' : 'clip')}<b>${esc(ext.slice(0, 4).toUpperCase() || 'FILE')}</b></span>`;
+      const pic = u ? (k === 'image' ? '' : fb) + `<img src="${u}" alt="" decoding="sync">` : fb;
       return `<button type="button" class="mib-tile" data-mib="pv" data-set="${set}" data-i="${i}" data-att="${esc((withFileId(a) || {}).id || '')}"><span class="mib-tpic">${pic}${k === 'video' ? '<span class="mib-play">▶</span>' : ''}</span><span class="mib-tn">${esc(a.name)}</span><span class="mib-ts">${esc(fmtSize(a.size) || '')}</span></button>`;
     }).join('')}</div>`;
   }
@@ -536,7 +539,7 @@ const MacInbox = (() => {
     if (!pending.length && !lk) return '<div class="mib-up" hidden></div>';
     return `<div class="mib-up">${lk ? `<div class="mib-up-lks">${lk}</div>` : ''}${pending.map((x) => {
       const pic = x.url || (x.att ? picOf(x.att) : '');
-      return `<span class="mib-upt ${x.att ? 'done' : ''}" data-key="up:${x.k}"${x.att ? ` data-mib="up-pv" data-k="${x.k}" data-att="${esc((withFileId(x.att) || {}).id || '')}"` : ''}>${pic ? `<img src="${esc(pic)}" alt="">` : `<span class="mib-ficon">${icon(fileKind(x) === 'video' ? 'play' : 'clip')}<b>${esc((fileExt(x.name) || 'file').slice(0, 4).toUpperCase())}</b></span>`}${pic && fileKind(x) === 'video' && x.att ? '<span class="mib-play">▶</span>' : ''}${ring(x)}<button type="button" class="mib-upx" data-mib="up-x" data-k="${x.k}" title="Remove" aria-label="Remove ${esc(x.name)}">${icon('x')}</button></span>`;
+      return `<span class="mib-upt ${x.att ? 'done' : ''}" data-key="up:${x.k}"${x.att ? ` data-mib="up-pv" data-k="${x.k}" data-att="${esc((withFileId(x.att) || {}).id || '')}"` : ''}>${pic && (x.url || fileKind(x) === 'image') ? '' : `<span class="mib-ficon">${icon(fileKind(x) === 'video' ? 'play' : 'clip')}<b>${esc((fileExt(x.name) || 'file').slice(0, 4).toUpperCase())}</b></span>`}${pic ? `<img src="${esc(pic)}" alt="">` : ''}${pic && fileKind(x) === 'video' && x.att ? '<span class="mib-play">▶</span>' : ''}${ring(x)}<button type="button" class="mib-upx" data-mib="up-x" data-k="${x.k}" title="Remove" aria-label="Remove ${esc(x.name)}">${icon('x')}</button></span>`;
     }).join('')}</div>`;
   }
   // (the reply box exactly as tall as its words: measured on a copy laid out the same way — the textarea's own
@@ -734,6 +737,8 @@ const MacInbox = (() => {
     else x.sig.cancelled = true;                                                              // (still going up: stopped)
     upDraw(); sendState();
   }
+  // (a picture the server doesn't have: out of sight, its kind's drawing under it shows)
+  document.addEventListener('error', (e) => { const im = e.target; if (im && im.tagName === 'IMG' && im.closest && im.closest('.mib-tpic, .mib-hs-p, .mib-upt')) im.style.visibility = 'hidden'; }, true);
   // @ and # in the reply box, as the website's: @ the team (picked: "@Name", told when it's sent), # this task's files
   // (picked: added to the reply as the same file — no upload). Apple's menu look; ↑ ↓, Enter or Tab, Esc.
   let mpop = null, mItems = [], mIdx = 0, mQ = null, picked = new Set();
@@ -778,8 +783,8 @@ const MacInbox = (() => {
       const KIND = { image: ['image', '#30d158'], video: ['play', '#bf5af2'], pdf: ['details', '#ff453a'] };
       mpop.innerHTML = '<div class="mib-am-h">Files in this task</div><div class="mib-hs-row">' + mItems.map((it, i) => {
         const a = it.a, u = picOf(a), k = KIND[fileKind(a)] || ['clip', '#ff9f0a'];
-        const pic = u ? `<img src="${u}" alt="" decoding="async" draggable="false">${fileKind(a) === 'video' ? '<span class="mib-play">▶</span>' : ''}`
-          : `<span class="mib-hs-ic" style="--k:${k[1]}">${icon(k[0])}<b>${esc((fileExt(a.name) || 'file').slice(0, 4).toUpperCase())}</b></span>`;
+        const fb = `<span class="mib-hs-ic" style="--k:${k[1]}">${icon(k[0])}<b>${esc((fileExt(a.name) || 'file').slice(0, 4).toUpperCase())}</b></span>`;
+        const pic = u ? (fileKind(a) === 'image' ? '' : fb) + `<img src="${u}" alt="" decoding="async" draggable="false">${fileKind(a) === 'video' ? '<span class="mib-play">▶</span>' : ''}` : fb;
         return `<button type="button" class="mib-hs-t" data-mib-m="${i}"><span class="mib-hs-p">${pic}</span><span class="mib-hs-n">${esc(a.name)}</span><span class="mib-hs-s">${esc(fmtSize(a.size) || '')}</span></button>`;
       }).join('') + '</div>';
     }
