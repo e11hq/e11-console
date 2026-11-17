@@ -870,13 +870,12 @@ html.mac-chrome[data-theme="light"] .mib-row.sel { background: color-mix(in srgb
 .mib-page { position: absolute; left: 18px; right: 18px; top: 12px; bottom: 26px; background: #fff; border-radius: 2px; box-shadow: 0 1px 4px rgba(0, 0, 0, .3); padding: 8px 7px; box-sizing: border-box; }
 .mib-page i { display: block; height: 3px; margin-bottom: 4px; border-radius: 2px; background: #d4d4d8; }
 .mib-page i:nth-child(1) { width: 70%; } .mib-page i:nth-child(2) { width: 95%; } .mib-page i:nth-child(3) { width: 88%; } .mib-page i:nth-child(4) { width: 92%; } .mib-page i:nth-child(5) { width: 60%; } .mib-page i:nth-child(6) { width: 85%; }
-.mib-ext { font-size: 13px; font-weight: 600; color: var(--mc-dim); }
+.mib-ficon { display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--mc-dim); }
+.mib-ficon .ic, .mib-ficon svg { width: 30px; height: 30px; }
+.mib-ficon b { font-size: 11px; font-weight: 600; letter-spacing: .04em; }
 .mib-tn { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mib-ts { font-size: 11px; color: var(--mc-dim); margin-top: -4px; }
 .mib-tile:hover .mib-tpic { filter: brightness(1.08); }
-.mib-thumb { position: relative; width: 120px; height: 80px; border-radius: 9px; overflow: hidden; border: 0; padding: 0; background: var(--mc-field); cursor: default; }
-.mib-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.mib-thumb span { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 8px 6px; font-size: 10.5px; font-weight: 600; color: #fff; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: linear-gradient(transparent, rgba(0, 0, 0, .45)); }
 .mib-occ { display: flex; gap: 8px; flex-wrap: wrap; }
 .mib-more { font-size: 12px; color: var(--mc-dim); padding: 4px 10px; }
 .mib-pday { width: 44px; text-align: center; flex: none; }
@@ -913,10 +912,12 @@ html.mac-chrome .mib .mention { color: var(--mc-blue); background: none; padding
 .mib-rx { display: flex; gap: 6px; align-items: center; margin: -2px 0 6px 40px; }
 .mib-rx:not(:has(.mib-pill)) { margin-top: -4px; }
 .mib-pill b { font-size: 12px; }
-.mib-pill { border: 0; font: inherit; font-size: 13px; height: 30px; padding: 0 10px; border-radius: 15px; background: var(--mc-field); cursor: default; }
+.mib-pill { border: 0; font: inherit; font-size: 13px; height: 24px; padding: 0 9px; border-radius: 12px; background: var(--mc-field); cursor: default; }
 .mib-pill.still { pointer-events: none; }
 .mib-pill.mine { background: color-mix(in srgb, var(--mc-blue) 22%, transparent); box-shadow: inset 0 0 0 1px var(--mc-blue); }
-.mib-smile { border: 0; width: 30px; height: 30px; border-radius: 15px; background: var(--mc-field); color: var(--mc-dim); font-size: 17px; line-height: 30px; padding: 0; cursor: default; }
+.mib-smile { border: 0; width: 24px; height: 24px; border-radius: 12px; background: var(--mc-field); color: var(--mc-dim); padding: 0; display: inline-grid; place-items: center; cursor: default; }
+.mib-smile .ic { width: 16px; height: 16px; display: grid; place-items: center; margin: 0; }
+.mib-smile svg { width: 16px; height: 16px; display: block; }
 .mib-smile:hover { color: var(--mc-text, inherit); }
 .mib-pop { position: fixed; z-index: 1000; display: flex; gap: 2px; padding: 4px 6px; border-radius: 18px; background: rgba(58, 58, 62, .98); box-shadow: 0 0 0 .5px rgba(255, 255, 255, .12), 0 8px 24px rgba(0, 0, 0, .3); animation: mibIn .12s ease; }
 html[data-theme="light"] .mib-pop { background: rgba(255, 255, 255, .98); box-shadow: 0 0 0 .5px rgba(0, 0, 0, .1), 0 8px 24px rgba(0, 0, 0, .18); }

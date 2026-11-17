@@ -141,20 +141,15 @@ const MacInbox = (() => {
     const set = tileSets.push(list) - 1;
     return `<div class="mib-tiles ${big ? 'big' : ''}">${list.map((a, i) => {
       const k = fileKind(a), u = picOf(a);
-      const pic = u ? `<img src="${u}" alt="" loading="lazy">` : k === 'pdf' || k === 'doc' ? '<span class="mib-page"><i></i><i></i><i></i><i></i><i></i><i></i></span>' : `<span class="mib-ext">${esc(fileExt(a.name).slice(0, 4).toUpperCase() || 'FILE')}</span>`;
+      const ext = fileExt(a.name), page = k === 'pdf' || k === 'text' || ['doc', 'docx', 'pages', 'rtf'].includes(ext);
+      const pic = u ? `<img src="${u}" alt="" loading="lazy">` : page ? '<span class="mib-page"><i></i><i></i><i></i><i></i><i></i><i></i></span>'
+        : `<span class="mib-ficon">${icon(k === 'image' ? 'image' : k === 'video' ? 'play' : 'clip')}<b>${esc(ext.slice(0, 4).toUpperCase() || 'FILE')}</b></span>`;
       return `<button type="button" class="mib-tile" data-mib="pv" data-set="${set}" data-i="${i}"><span class="mib-tpic">${pic}${k === 'video' ? '<span class="mib-play">▶</span>' : ''}</span><span class="mib-tn">${esc(a.name)}</span><span class="mib-ts">${esc(fmtSize(a.size) || '')}</span></button>`;
     }).join('')}</div>`;
   }
-  // a comment's files: pictures as small thumbnails with their names on them, anything else a chip
-  function commentFiles(list) {
-    if (!list.length) return '';
-    const set = tileSets.push(list) - 1;
-    return `<div class="mib-files">${list.map((a, i) => {
-      const u = ['image', 'video'].includes(fileKind(a)) ? picOf(a) : '';
-      return u ? `<button type="button" class="mib-thumb" data-mib="pv" data-set="${set}" data-i="${i}"><img src="${u}" alt="" loading="lazy"><span>${esc(a.name)}</span></button>`
-        : `<button type="button" class="mib-file" data-mib="pv" data-set="${set}" data-i="${i}">${esc(a.name)}</button>`;
-    }).join('')}</div>`;
-  }
+  // a comment's files: the same tiles as everywhere — one size, the name under, an icon when there's no picture
+  function commentFiles(list) { return list.length ? tiles(list, false) : ''; }
+
 
   function paneHTML(g) {
     tileSets = [];
@@ -208,7 +203,7 @@ const MacInbox = (() => {
     const items = g.items.slice().sort((a, b) => a.at.localeCompare(b.at));
     let lastComment = null;
     const cOf = (n) => (t && n.commentId && COMMENTS.has(n.kind) ? (t.comments || []).find((x) => x.id === n.commentId) : null);
-    const newestC = items.map(cOf).filter(Boolean).pop() || null;   // (only the newest comment takes a reaction — the earlier ones show theirs, still)
+    const notifiedC = cOf(ibTarget(g.items));   // (only the comment this notification is about takes a reaction — the others show theirs, still)
     const ups = items.map((n, i) => {
       const c = t && n.commentId && COMMENTS.has(n.kind) ? (t.comments || []).find((x) => x.id === n.commentId) : null;
       if (c) lastComment = c;
@@ -217,9 +212,9 @@ const MacInbox = (() => {
       const parent = c.parentId ? (t.comments || []).find((x) => x.id === c.parentId) : null;
       const text = mentionMark(esc(fullComment(n, t) || n.snippet || ''));
       const reacts = Object.entries(c.reactions || {}).filter(([, v]) => v);
-      const live = c === newestC;
+      const live = !!notifiedC && c === notifiedC;
       const rx = !live ? (reacts.length ? `<div class="mib-rx">${reacts.map(([e, v]) => `<span class="mib-pill still">${e} <b>${typeof v === 'number' ? v : 1}</b></span>`).join('')}</div>` : '')
-        : `<div class="mib-rx">${reacts.map(([e, v]) => `<button type="button" class="mib-pill ${mineReact(g) === e ? 'mine' : ''}" data-mib="react" data-tid="${esc(t.id)}" data-cid="${esc(c.id)}" data-e="${esc(e)}">${e} <b>${typeof v === 'number' ? v : 1}</b></button>`).join('')}<button type="button" class="mib-smile" data-mib="react-menu" data-tid="${esc(t.id)}" data-cid="${esc(c.id)}" title="React">☺︎</button></div>`;
+        : `<div class="mib-rx">${reacts.map(([e, v]) => `<button type="button" class="mib-pill ${mineReact(g) === e ? 'mine' : ''}" data-mib="react" data-tid="${esc(t.id)}" data-cid="${esc(c.id)}" data-e="${esc(e)}">${e} <b>${typeof v === 'number' ? v : 1}</b></button>`).join('')}<button type="button" class="mib-smile" data-mib="react-menu" data-tid="${esc(t.id)}" data-cid="${esc(c.id)}" title="React" aria-label="React">${icon('smile')}</button></div>`;
       const box = upd({ ...n, from: c.authorId, at: c.at }, text, commentFiles(c.attachments || []), faded, rx);
       return parent ? `<div class="mib-thread"><div class="mib-thread-l">In ${esc(nameOf(parent.authorId))}’s thread</div>${box}</div>` : box;
     }).join('');
