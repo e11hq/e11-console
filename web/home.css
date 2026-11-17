@@ -1041,3 +1041,17 @@ html[data-theme="light"] .mib-pop { background: rgba(255, 255, 255, .98); box-sh
 /* your reply's Edit · Delete: the symbols alone, round pills (the minutes left on Edit's tooltip) */
 .mib-btn.sm.ico { width: 26px; height: 26px; padding: 0; justify-content: center; border-radius: 13px; }
 .mib-btn.sm.ico .ic, .mib-btn.sm.ico svg { width: 14px; height: 14px; }
+/* links: a card each as a tile (a file's look), read once; a dead link of ours red */
+.mib-u-b > .mib-tiles.mib-lks { margin-top: 5px; }
+.mib-u-b > .mib-tiles + .mib-tiles.mib-lks { margin-top: 12px; }
+.mib-lk .mib-tpic img.mib-lk-ic { position: static; width: 28px; height: 28px; object-fit: contain; border-radius: 6px; }
+.mib-lk .mib-tpic .mib-upx { z-index: 2; }
+.mib-lk-wait { position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, .07) 50%, transparent 70%) var(--mc-field); background-size: 200% 100%; animation: mibShine 1.2s linear infinite; }
+@keyframes mibShine { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+.mib-up-lks { display: flex; gap: 8px; }
+.mib-up-lks .mib-tile { width: 120px; }
+.mib-url { color: var(--mc-blue); cursor: default; }
+.mib-url:hover { text-decoration: underline; }
+.mib-url.dead, .mib-hl .mib-url.dead { color: #ff453a; text-decoration: line-through; text-decoration-color: rgba(255, 69, 58, .5); }
+.mib-btn.sm.ico-t { gap: 6px; padding: 0 11px 0 9px; }
+.mib-btn.sm.ico-t .ic, .mib-btn.sm.ico-t svg { width: 14px; height: 14px; }

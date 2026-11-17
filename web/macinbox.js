@@ -254,7 +254,7 @@ const MacInbox = (() => {
       const live = !!notifiedC && c === notifiedC;
       const rx = !live ? (reacts.length ? `<div class="mib-rx">${reacts.map(([e, v]) => `<span class="mib-pill still">${e} <b>${typeof v === 'number' ? v : 1}</b></span>`).join('')}</div>` : '')
         : `<div class="mib-rx">${reacts.map(([e, v]) => `<button type="button" class="mib-pill ${mineReact(g) === e ? 'mine' : ''}" data-mib="react" data-tid="${esc(t.id)}" data-cid="${esc(c.id)}" data-e="${esc(e)}">${e} <b>${typeof v === 'number' ? v : 1}</b></button>`).join('')}<button type="button" class="mib-smile" data-mib="react-menu" data-tid="${esc(t.id)}" data-cid="${esc(c.id)}" title="React" aria-label="React">${icon('smile')}</button></div>`;
-      return upd({ ...n, from: c.authorId, at: c.at }, text, commentFiles(c.attachments || []), faded, rx);
+      return upd({ ...n, from: c.authorId, at: c.at }, linkWords(text), commentFiles(c.attachments || []) + lkTiles(urlsIn(c.text).filter((u) => !(c.noPreview || []).includes(u)), false), faded, rx);
     }
     // your answers from here — each one a reply in the same thread, in order, the newest last (Haris 2026-11-17: "if you
     // comment twice, both will be added"); Edit while the website allows it (10 minutes, the minutes left beside it), and
@@ -262,10 +262,10 @@ const MacInbox = (() => {
     const mineAll = myReplies(g, t);
     mineAll.forEach((m) => {
       const myC = m.c, editing = myC && editingId === myC.id;
-      const acts = myC && !editing ? `<span class="mib-acts">${canEditComment(myC) ? `<button type="button" class="mib-btn sm ico" data-mib="my-edit" data-cid="${esc(myC.id)}" title="Edit — ${esc(editLeftText(myC))}" aria-label="Edit, ${esc(editLeftText(myC))}">${icon('edit')}</button>` : ''}<button type="button" class="mib-btn sm ico" data-mib="my-del" data-tid="${esc(t.id)}" data-cid="${esc(myC.id)}" title="Delete" aria-label="Delete">${icon('trash')}</button></span>` : '';
+      const acts = myC && !editing ? `<span class="mib-acts">${canEditComment(myC) ? `<button type="button" class="mib-btn sm ico-t" data-mib="my-edit" data-cid="${esc(myC.id)}" title="Edit" aria-label="Edit, ${esc(editLeftText(myC))}">${icon('edit')}<i>${esc(editLeftText(myC))}</i></button>` : ''}<button type="button" class="mib-btn sm ico" data-mib="my-del" data-tid="${esc(t.id)}" data-cid="${esc(myC.id)}" title="Delete" aria-label="Delete">${icon('trash')}</button></span>` : '';
       const body = editing ? `<div class="mib-edit"><textarea rows="2" class="mib-ein" data-tid="${esc(t.id)}" data-cid="${esc(myC.id)}">${esc(myC.text || '')}</textarea><div class="mib-ebtns"><button type="button" class="mib-btn" data-mib="my-cancel">Cancel</button><button type="button" class="mib-btn primary" data-mib="my-save" data-tid="${esc(t.id)}" data-cid="${esc(myC.id)}">Save</button></div></div>`
-        : mentionMark(esc(myC ? myC.text || '' : m.text)) + (myC && myC.editedAt ? ' <span class="mib-dim">(edited)</span>' : '');
-      const yours = `<div class="mib-yours">${upd({ id: 'mine-' + (myC ? myC.id : m.at), from: currentUserId, at: myC ? myC.at : m.at }, body, myC ? commentFiles(myC.attachments || []) : '')
+        : linkWords(mentionMark(esc(myC ? myC.text || '' : m.text))) + (myC && myC.editedAt ? ' <span class="mib-dim">(edited)</span>' : '');
+      const yours = `<div class="mib-yours">${upd({ id: 'mine-' + (myC ? myC.id : m.at), from: currentUserId, at: myC ? myC.at : m.at }, body, myC ? commentFiles(myC.attachments || []) + (editing ? '' : lkTiles(urlsIn(myC.text).filter((u) => !(myC.noPreview || []).includes(u)), false)) : '')
         .replace(`<b>${esc(nameOf(currentUserId))}</b>`, '<b>You replied</b>').replace('</span></div><div class="mib-u-t">', `</span>${acts}</div><div class="mib-u-t">`)}</div>`;
       const last = blocks[blocks.length - 1];
       if (last && last.replies) last.replies.push(yours);
@@ -443,6 +443,8 @@ const MacInbox = (() => {
     const files = pending.splice(0).map((x) => { if (x.blob) URL.revokeObjectURL(x.url); return x.att; });
     files.forEach((a) => { if (!(t.attachments || []).some((x) => x.path === a.path)) (t.attachments = t.attachments || []).push(a); });
     const cid = postComment(t, ta.dataset.root, text, html, files);
+    const off = urlsIn(text).filter((u) => noCard.has(u)); noCard = new Set();
+    if (off.length) { const c = (t.comments || []).find((x) => x.id === cid); if (c) c.noPreview = off; }
     t.updatedAt = nowISO();
     const g = rows().list.find((x) => x.key === pick);
     if (g) { const was = g.items.find((x) => x.mine && (x.mine.cids || x.mine.cid)), cids = was ? (was.mine.cids || (was.mine.cid ? [was.mine.cid] : [])) : []; g.items.forEach((x) => { x.mine = { reply: text, at: nowISO(), cid, cids: [...cids, cid] }; }); }
@@ -470,9 +472,59 @@ const MacInbox = (() => {
   // only here — every other upload shows as it always has (Haris 2026-11-17)
   let pending = [], upN = 0;
   const ring = (x) => x.att ? '' : `<svg class="mib-ring" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15"/><circle class="on" cx="18" cy="18" r="15" style="stroke-dashoffset:${(94.25 * (1 - (x.p || 0))).toFixed(1)}"/></svg>`;
+  // ---------- links: a card each, as a tile (Haris 2026-11-17) ----------
+  // A link in the words — typed or sent — is read once (8 s at most): a Client Assets file or folder link of ours from the
+  // server's own record (a dead one — deleted, or its link turned off — never read further, its words red), any other site
+  // through the server's link reader (the site never sees who's looking). Each shows as a tile: its picture, its name, where.
+  const LK = new Map();          // url → { s: 'loading' | 'ok' | 'dead' | 'none', title, site, pic, att, folder }
+  const OURS = /\/(f|d)\/([A-Za-z0-9]{6,16})\/?$/;
+  const urlsIn = (txt) => { const out = []; String(txt || '').replace(/https?:\/\/[^\s<>"']+/gi, (m) => { m = m.replace(/[),.;:!?'"\]]+$/, ''); if (!out.includes(m)) out.push(m); return m; }); return out.slice(0, 6); };
+  const timed = (p) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error('slow')), 8000))]);
+  function lkLook(url) {
+    if (LK.has(url)) return LK.get(url);
+    const x = { s: 'loading' }; LK.set(url, x);
+    let path = '', host = url;
+    try { const u = new URL(url); path = u.pathname; host = u.hostname.replace(/^www\./, ''); } catch (e) { x.s = 'none'; return x; }
+    const m = OURS.exec(path);
+    const own = (() => { try { return new URL(url).host === location.host; } catch (e) { return false; } })();
+    const done = () => { if (ui.view === 'inbox') renderContent(); };
+    if (m) {
+      timed(api('GET', '/api/flink?token=' + encodeURIComponent(m[2]))).then((r) => {
+        if (!r || !r.ok || r.off) { x.s = 'dead'; return done(); }
+        if (r.where && r.where.kind === 'folder') Object.assign(x, { s: 'ok', folder: true, title: r.name || 'Folder', site: 'Client Assets · folder' });
+        else if (r.att) Object.assign(x, { s: 'ok', att: { ...r.att, addedAt: r.att.addedAt || null }, title: r.att.name, site: ['Client Assets', fmtSize(r.att.size)].filter(Boolean).join(' · '), pic: picOf(r.att) });
+        else x.s = 'dead';
+        done();
+      }).catch((e) => { x.s = e && e.message === 'slow' ? 'none' : 'dead'; done(); });   // (the server said no: deleted, or not ours to see — dead)
+    } else if (own) { x.s = 'none'; }
+    else {
+      timed(api('GET', '/api/link?u=' + encodeURIComponent(url))).then((p) => {
+        if (!p || !p.ok || (!p.title && !p.image)) { x.s = 'none'; return done(); }
+        Object.assign(x, { s: 'ok', title: p.title || host, site: p.site || host, pic: p.image ? '/api/link/img?u=' + encodeURIComponent(p.image) : '', icon: p.icon ? '/api/link/img?u=' + encodeURIComponent(p.icon) : '' });
+        done();
+      }).catch(() => { x.s = 'none'; done(); });
+    }
+    return x;
+  }
+  // a link's tile: as a file's (its picture, the name and where under it); a tap opens it — a file in the preview
+  function lkTile(url, removable) {
+    const x = lkLook(url);
+    if (x.s !== 'ok' && x.s !== 'loading') return '';
+    const pic = x.s === 'loading' ? '<span class="mib-lk-wait"></span>'
+      : x.pic ? `<img src="${esc(x.pic)}" alt="" decoding="sync">`
+        : `<span class="mib-ficon">${x.icon ? `<img class="mib-lk-ic" src="${esc(x.icon)}" alt="">` : icon(x.folder ? 'folder' : 'link')}<b>${esc(x.folder ? 'FOLDER' : (x.site || '').split(' ')[0].slice(0, 12).toUpperCase())}</b></span>`;
+    return `<button type="button" class="mib-tile mib-lk" data-mib="lk-open" data-url="${esc(url)}"${x.att ? ` data-att="${esc((withFileId(x.att) || {}).id || '')}"` : ''} title="${esc(url)}"><span class="mib-tpic">${pic}${removable ? `<span class="mib-upx" data-mib="lk-x" data-url="${esc(url)}" title="Remove the card (the link stays)">${icon('x')}</span>` : ''}</span><span class="mib-tn">${esc(x.s === 'loading' ? url.replace(/^https?:\/\//, '') : x.title)}</span><span class="mib-ts">${esc(x.s === 'loading' ? 'Reading…' : x.site || '')}</span></button>`;
+  }
+  function lkTiles(urls, removable) { const h = urls.map((u) => lkTile(u, removable)).join(''); return h ? `<div class="mib-tiles mib-lks">${h}</div>` : ''; }
+  // the words of a comment with its links: a live one blue, a dead one of ours red
+  const linkWords = (h) => h.replace(/https?:\/\/[^\s<>"']+/gi, (m) => { const u = m.replace(/&amp;/g, '&').replace(/[),.;:!?'"\]]+$/, ''), x = lkLook(u); return x.s === 'dead' ? `<span class="mib-url dead">${m}</span>` : `<a class="mib-url" data-action="open-url" data-url="${esc(u)}">${m}</a>`; });
+  let noCard = new Set(), lkT = null;        // links typed whose card was taken off before sending
   function upHTML() {
-    if (!pending.length) return '<div class="mib-up" hidden></div>';
-    return `<div class="mib-up">${pending.map((x) => {
+    const ta = document.querySelector('.mib-in');
+    const links = ta ? urlsIn(ta.value).filter((u) => !noCard.has(u)) : [];
+    const lk = links.map((u) => lkTile(u, true)).join('');
+    if (!pending.length && !lk) return '<div class="mib-up" hidden></div>';
+    return `<div class="mib-up">${lk ? `<div class="mib-up-lks">${lk}</div>` : ''}${pending.map((x) => {
       const pic = x.url || (x.att ? picOf(x.att) : '');
       return `<span class="mib-upt ${x.att ? 'done' : ''}" data-key="up:${x.k}"${x.att ? ` data-mib="up-pv" data-k="${x.k}" data-att="${esc((withFileId(x.att) || {}).id || '')}"` : ''}>${pic ? `<img src="${esc(pic)}" alt="">` : `<span class="mib-ficon">${icon(fileKind(x) === 'video' ? 'play' : 'clip')}<b>${esc((fileExt(x.name) || 'file').slice(0, 4).toUpperCase())}</b></span>`}${pic && fileKind(x) === 'video' && x.att ? '<span class="mib-play">▶</span>' : ''}${ring(x)}<button type="button" class="mib-upx" data-mib="up-x" data-k="${x.k}" title="Remove" aria-label="Remove ${esc(x.name)}">${icon('x')}</button></span>`;
     }).join('')}</div>`;
@@ -485,6 +537,7 @@ const MacInbox = (() => {
     if (!hl) return;
     let h = esc(ta.value);
     [...picked].map((id) => userById(id)).filter(Boolean).sort((a, b) => fullName(b).length - fullName(a).length).forEach((u) => { const n = esc('@' + fullName(u)); h = h.split(n).join(`<span class="mention">${n}</span>`); });
+    h = h.replace(/https?:\/\/[^\s<>"']+/gi, (m0) => { const u = m0.replace(/&amp;/g, '&').replace(/[),.;:!?'"\]]+$/, ''), x = LK.get(u); return x && x.s === 'dead' ? `<span class="mib-url dead">${m0}</span>` : m0; });
     hl.innerHTML = h + '\u200b';
     hl.scrollTop = ta.scrollTop;
     if (!ta.__hlScroll) { ta.__hlScroll = true; ta.addEventListener('scroll', () => { hl.scrollTop = ta.scrollTop; }); }
@@ -650,6 +703,8 @@ const MacInbox = (() => {
     else if (a === 'dy-sec') { dyOpen = dyOpen === el.dataset.k ? '' : el.dataset.k; renderContent(); }
     else if (a === 'more-ups') { openAll = true; renderContent(); }
     else if (a === 'up-x') unAdd(el.dataset.k);
+    else if (a === 'lk-x') { e.stopPropagation(); noCard.add(el.dataset.url); renderContent(); }
+    else if (a === 'lk-open') { const x = LK.get(el.dataset.url); if (x && x.att) previewFile(x.att, [x.att]); else Host.call('openURL', { url: el.dataset.url }).catch(() => { try { window.open(el.dataset.url); } catch (_) { /* ignore */ } }); }
     else if (a === 'up-pv') { const done = pending.filter((y) => y.att).map((y) => y.att), x = pending.find((y) => String(y.k) === el.dataset.k); if (x && x.att) previewFile(x.att, done); }
     else if (a === 'my-tasks') { ui.myTasksTab = 'todo'; go('mytasks'); }
     else if (a === 'my-edit') { editingId = el.dataset.cid; renderContent(); setTimeout(() => { const x = document.querySelector('.mib-ein'); if (x) { x.focus(); x.setSelectionRange(x.value.length, x.value.length); } }, 0); }
@@ -664,6 +719,7 @@ const MacInbox = (() => {
     if (!ta) return;
     fitBox(ta);
     mUpdate(ta);
+    clearTimeout(lkT); lkT = setTimeout(() => { const before = document.querySelector('.mib-up') && document.querySelector('.mib-up').outerHTML; urlsIn(ta.value).forEach(lkLook); if (ui.view === 'inbox') renderContent(); }, 400);
     sendState();
   });
   document.addEventListener('keydown', (e) => {
@@ -748,6 +804,6 @@ const MacInbox = (() => {
     // (a notification opened: a long run opens at its end, the newest update in view — Haris 2026-11-17)
     if (wasFresh && sc && sc.scrollHeight > sc.clientHeight) sc.scrollTop = sc.scrollHeight;
     more(c.querySelector('.mib-list')); under(sc); sendState();
-    const ta = c.querySelector('.mib-in'); if (ta) paintBox(ta);
+    const ta = c.querySelector('.mib-in'); if (ta) fitBox(ta);   // (drawn again: the box keeps its height and its painted words)
   }, reset: () => { pick = undefined; shown = null; } };
 })();
