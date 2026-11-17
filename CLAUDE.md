@@ -689,7 +689,7 @@ Amendments, + / ✕) + sheets sized to their list measured as they come up (no j
 as rc"):** commit 91aa88f, branches `stable/ios-1850`, `locked/ios-app-1850` and `candidate/appstore-ios-1.2.2-build-1850` (never moved
 or deleted; 1835's and earlier stay as history — 1850 replaces 1835 as the candidate). 1850 = 1835 + Recently added / search files flying
 out of their sharp picture (the file's own best picture) + the phone's look followed only while the app is in front (Control Center no
-longer redraws the page and drops the keyboard — to be confirmed on the phone) + every swapping icon (mic ↔ ↑, + ↔ ✕, ▶ ↔ ⏸ in the
+longer redraws the page and drops the keyboard — confirmed on his phone, Haris 2026-11-17 12:16) + every swapping icon (mic ↔ ↑, + ↔ ✕, ▶ ↔ ⏸ in the
 preview and voice notes, ○ ↔ ✓) with no empty moment: the old shrinking in its own colour as the new grows in, together, 0.25 s on
 Apple's spring (SymSwap — ours, said plainly: Apple's replace effect left the circle empty between the two, filmed in the simulator;
 the self-test films it every run, aSwapLab → ios-swap.mp4). With server **1.9.65** (live: e11hq.com's E11. logo and blue heading).
