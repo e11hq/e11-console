@@ -86,7 +86,8 @@ const MacInbox = (() => {
     const lead = ['comment', 'mention', 'review-amend', 'review-ok', 'review', 'claim', 'claim-ok', 'claim-paid', 'claim-hand', 'asset', 'plan', 'plan-ok', 'plan-changes', 'plan-tasks', 'plan-client', 'birthday', 'signin'].includes(shownN.kind)
       ? avatarHTML(shownN.from, 26) : `<span class="mib-kic">${icon(NOTIF_ICON[shownN.kind] || 'bell')}</span>`;
     const mineN = items.find((x) => x.mine);
-    const mine = mineN ? (mineN.mine.react ? `<b>You reacted</b> ${esc(mineN.mine.react)}` : `<b>You replied:</b> ${esc(trunc(mineN.mine.reply || '', 120))}`) : '';
+    const myLast = mineN && !mineN.mine.react ? myReplies(g, t).pop() : null;   // (only your latest reply, as it now reads)
+    const mine = mineN ? (mineN.mine.react ? `<b>You reacted</b> ${esc(mineN.mine.react)}` : myLast ? `<b>You replied:</b> ${esc(trunc(myLast.c ? myLast.c.text || '' : myLast.text || '', 120))}` : '') : '';
     return `<div class="mib-row ${unread ? 'unread' : ''} ${g.key === pick ? 'sel' : ''}" data-mib="pick" data-k="${esc(g.key)}" data-key="r:${esc(g.key)}">
       <span class="mib-dot"></span><span class="mib-lead">${lead}</span>
       <span class="mib-t"><span class="mib-tt">${titleIcon(n, t)}<span>${esc(titleOf(n, t))}</span></span>
@@ -231,24 +232,26 @@ const MacInbox = (() => {
         : `<div class="mib-rx">${reacts.map(([e, v]) => `<button type="button" class="mib-pill ${mineReact(g) === e ? 'mine' : ''}" data-mib="react" data-tid="${esc(t.id)}" data-cid="${esc(c.id)}" data-e="${esc(e)}">${e} <b>${typeof v === 'number' ? v : 1}</b></button>`).join('')}<button type="button" class="mib-smile" data-mib="react-menu" data-tid="${esc(t.id)}" data-cid="${esc(c.id)}" title="React" aria-label="React">${icon('smile')}</button></div>`;
       return upd({ ...n, from: c.authorId, at: c.at }, text, commentFiles(c.attachments || []), faded, rx);
     }
-    // your answer from here: a reply under the last comment, in its thread — Edit while the website allows it (10 minutes,
-    // the minutes left beside it), and Delete (the website's own: to the Trash, with Undo)
-    const minen = g.items.find((x) => x.mine && x.mine.reply);
-    const myC = minen && minen.mine.cid ? (t.comments || []).find((x) => x.id === minen.mine.cid) : null;
-    if (minen && (myC || !minen.mine.cid)) {
-      const editing = myC && editingId === myC.id;
+    // your answers from here — each one a reply in the same thread, in order, the newest last (Haris 2026-11-17: "if you
+    // comment twice, both will be added"); Edit while the website allows it (10 minutes, the minutes left beside it), and
+    // Delete (the website's own: to the Trash, with Undo)
+    const mineAll = myReplies(g, t);
+    mineAll.forEach((m) => {
+      const myC = m.c, editing = myC && editingId === myC.id;
       const acts = myC && !editing ? `<span class="mib-acts">${canEditComment(myC) ? `<button type="button" class="mib-btn sm" data-mib="my-edit" data-cid="${esc(myC.id)}">Edit <i>${esc(editLeftText(myC))}</i></button>` : ''}<button type="button" class="mib-btn sm" data-mib="my-del" data-tid="${esc(t.id)}" data-cid="${esc(myC.id)}">Delete</button></span>` : '';
       const body = editing ? `<div class="mib-edit"><textarea rows="2" class="mib-ein" data-tid="${esc(t.id)}" data-cid="${esc(myC.id)}">${esc(myC.text || '')}</textarea><div class="mib-ebtns"><button type="button" class="mib-btn" data-mib="my-cancel">Cancel</button><button type="button" class="mib-btn primary" data-mib="my-save" data-tid="${esc(t.id)}" data-cid="${esc(myC.id)}">Save</button></div></div>`
-        : mentionMark(esc(myC ? myC.text || '' : minen.mine.reply)) + (myC && myC.editedAt ? ' <span class="mib-dim">(edited)</span>' : '');
-      const yours = `<div class="mib-yours">${upd({ id: 'mine-' + (myC ? myC.id : ''), from: currentUserId, at: myC ? myC.at : minen.mine.at }, body, myC ? commentFiles(myC.attachments || []) : '')
+        : mentionMark(esc(myC ? myC.text || '' : m.text)) + (myC && myC.editedAt ? ' <span class="mib-dim">(edited)</span>' : '');
+      const yours = `<div class="mib-yours">${upd({ id: 'mine-' + (myC ? myC.id : m.at), from: currentUserId, at: myC ? myC.at : m.at }, body, myC ? commentFiles(myC.attachments || []) : '')
         .replace(`<b>${esc(nameOf(currentUserId))}</b>`, '<b>You replied</b>').replace('</span></div><div class="mib-u-t">', `</span>${acts}</div><div class="mib-u-t">`)}</div>`;
       const last = blocks[blocks.length - 1];
       if (last && last.replies) last.replies.push(yours);
       else if (last && last.cid) blocks[blocks.length - 1] = { pid: last.cid, head: last.html, replies: [yours] };
       else blocks.push({ html: yours });
-      // (the minutes left counted down, and Edit gone when the time's up — only that line changes)
-      if (myC && canEditComment(myC)) { clearTimeout(tick); tick = setTimeout(() => { if (ui.view === 'inbox') renderContent(); }, (editLeft(myC) % 60000 || 60000) + 200); }
-    }
+    });
+    // (the minutes left counted down, and Edit gone when the time's up — only that line changes)
+    const soonest = mineAll.map((m) => m.c).filter((c) => c && canEditComment(c)).map(editLeft).sort((a, b) => a - b)[0];
+    clearTimeout(tick);
+    if (soonest) tick = setTimeout(() => { if (ui.view === 'inbox') renderContent(); }, (soonest % 60000 || 60000) + 200);
     const ups = blocks.map((b) => (b.replies ? `<div class="mib-th" data-key="th:${esc(b.pid)}"><div class="mib-th-head">${b.head}</div>${b.replies.map((r) => `<div class="mib-th-r">${r}</div>`).join('')}</div>` : b.html)).join('');
     let reply = '';
     if (lastComment) {
@@ -263,6 +266,14 @@ const MacInbox = (() => {
       + cap(`${items.length} update${items.length === 1 ? '' : 's'} · newest last`) + `<div class="mib-ups">${ups}</div>${reply}`;
   }
   let editingId = null, tick = null;
+  // your replies from this pane, still there (each comment's id kept; an older one without, its words)
+  function myReplies(g, t) {
+    const x = g.items.find((n) => n.mine && n.mine.reply);
+    if (!x || !t) return [];
+    const ids = x.mine.cids || (x.mine.cid ? [x.mine.cid] : []);
+    if (!ids.length) return [{ c: null, text: x.mine.reply, at: x.mine.at }];
+    return ids.map((id) => (t.comments || []).find((c) => c.id === id)).filter(Boolean).map((c) => ({ c, at: c.at }));
+  }
   // your reply saved as the website saves an edit: within its 10 minutes (and the server's minute of grace), new @mentions told
   function saveMine(tid, cid) {
     const t = task(tid), c = t && (t.comments || []).find((x) => x.id === cid), ein = document.querySelector('.mib-ein');
@@ -394,7 +405,7 @@ const MacInbox = (() => {
     const cid = postComment(t, ta.dataset.root, text, html, files);
     t.updatedAt = nowISO();
     const g = rows().list.find((x) => x.key === pick);
-    if (g) g.items.forEach((x) => { x.mine = { reply: text, at: nowISO(), cid }; });
+    if (g) { const was = g.items.find((x) => x.mine && x.mine.reply), cids = was ? (was.mine.cids || (was.mine.cid ? [was.mine.cid] : [])) : []; g.items.forEach((x) => { x.mine = { reply: text, at: nowISO(), cid, cids: [...cids, cid] }; }); }
     commit();
   }
   function react(tid, cid, e) {
