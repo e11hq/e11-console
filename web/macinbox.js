@@ -216,6 +216,37 @@ const MacInbox = (() => {
     return [cdot(proj(t.projectId)), t.due ? `due ${esc(fmtDue(t.due))}` : '', t.done ? 'completed' : ''].filter(Boolean).join(' · ')
       + (st && !t.done ? ` · ${solid(st.name, st.color)}` : '') + (pr === 'urgent' ? solid('Urgent', '#e5484d') : typeof pr === 'number' ? solid('P' + pr, '#636366') : '');
   }
+  // an "attached …" update: the files themselves, as tiles under it (Haris 2026-11-17) — those that person added to the task
+  // around then, else the one it names
+  function attachedFiles(n, t) {
+    const at = Date.parse(n.at), all = t.attachments || [];
+    let fs = all.filter((a) => a.addedBy === n.from && a.addedAt && Math.abs(Date.parse(a.addedAt) - at) < 3 * 60000);
+    if (!fs.length) { const m = /<b>([^<]+)<\/b>/.exec(n.text || ''); const nm = m && m[1].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'"); fs = nm ? all.filter((a) => a.name === nm).slice(-1) : []; }
+    return fs.length ? commentFiles(fs) : '';
+  }
+  // every update that has files shows them as tiles under it (Haris 2026-11-17): what was attached, a review's files, and
+  // the files of the amendments asked
+  function updFiles(n, t) {
+    if (n.kind === 'attach') return attachedFiles(n, t);
+    if (/^review/.test(n.kind || '')) {
+      const r = reviewFor(t, n), fs = r ? reviewFiles(t, r) : [];
+      const c = n.commentId ? (t.comments || []).find((x) => x.id === n.commentId) : null;
+      const all = fs.concat((c && c.attachments) || []);
+      return all.length ? commentFiles(all) : '';
+    }
+    return '';
+  }
+  // (the review an update is about: one submitted by whoever sent a submission or withdrew it; for approvals and
+  //  amendments, the submission they answered — the newest one up to then)
+  function reviewFor(t, n) {
+    const rs = (t.reviews || []).filter((r) => r.at <= n.at || !n.at);
+    const by = n.kind === 'review' || n.kind === 'review-wd' ? n.from : n.to;
+    return rs.filter((r) => r.by === by).pop() || rs.pop() || (t.reviews || []).slice(-1)[0] || null;
+  }
+  function reviewFiles(t, r) {
+    const files = (r.files || []).map((id) => (t.attachments || []).find((a) => a.id === id)).filter(Boolean);
+    return files.length ? files : (t.attachments || []).filter((a) => a.reviewId === r.id);
+  }
   function reviewOf(t, n0) {
     const rs = (t.reviews || []).filter((r) => r.by === n0.from && r.state !== 'withdrawn');
     return rs.filter((x) => x.at <= n0.at).pop() || rs[rs.length - 1] || null;
@@ -254,7 +285,7 @@ const MacInbox = (() => {
       const c = t && n.commentId && COMMENTS.has(n.kind) ? (t.comments || []).find((x) => x.id === n.commentId) : null;
       if (c) lastComment = c;
       const faded = i < items.length - 1;
-      if (!c) return upd(n, bodyOf(n, t), '', faded);
+      if (!c) return upd(n, bodyOf(n, t), t ? updFiles(n, t) : '', faded);
       const text = mentionMark(esc(fullComment(n, t) || n.snippet || ''));
       const reacts = Object.entries(c.reactions || {}).filter(([, v]) => v);
       const live = !!notifiedC && c === notifiedC;
@@ -355,12 +386,15 @@ const MacInbox = (() => {
     const chName = Object.fromEntries((typeof Cal !== 'undefined' && Cal.CHANNELS ? Cal.CHANNELS : []).map(([k, name]) => [k, name]));
     const pic = (x) => { const gr = Plans.progress(x); const img = (gr.files || []).find((r) => fileKind(r) === 'image') || (x.refs || []).find((r) => r.path && fileKind(r) === 'image'); return img ? `<img src="${imgUrl(img, 160)}" alt="" decoding="sync">` : ''; };
     const shownPosts = posts.slice(0, 3);
+    // (the posts' files — their references and the finished work — as tiles, Haris 2026-11-17)
+    const seen = new Set(), pfiles = posts.flatMap((x) => (Plans.progress(x).files || []).concat((x.refs || []).filter((r) => r.path))).filter((a) => { const k = a.path || a.id; if (!k || seen.has(k)) return false; seen.add(k); return true; });
     const row = (x) => { const d = x.day ? parseYmd(x.day) : null; const s = x.check && POST_ST[x.check.state];
       return `<div class="mib-post ${x.check && x.check.state === 'changes' ? 'chg' : ''}"><span class="mib-pday"><b>${d ? d.getDate() : '–'}</b><span>${d ? d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase() : ''}</span></span><span class="mib-ppic">${pic(x)}</span><span class="mib-pt"><b>${esc(x.title || 'Untitled post')}</b><span>${esc([fmt[x.format] || 'Post', (x.channels || []).map((k) => chName[k] || k).join(', ')].filter(Boolean).join(' · '))}</span></span>${s ? soft(s[0], s[1]) : ''}</div>`; };
     const dot = p ? `<i class="mib-cdot" style="background:${esc(p.color || '#87909e')}"></i>` : '';
     return head(hic('cal', 'purple'), Plans.nameOf(pl), `${dot}content skeleton by ${esc(nameOf(pl.createdBy))} · ${st}`, openBtn(g, 'Open Plan', false))
       + (occ.length ? cap('OCCASIONS') + `<div class="mib-occ">${occ.map((o) => soft(`${o.name} · ${parseYmd(String(o.date).slice(0, 10)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`, '#0a84ff')).join('')}</div>` : '')
       + cap(`${posts.length} POST${posts.length === 1 ? '' : 'S'} · BY DAY`) + `<div class="mib-posts">${shownPosts.map(row).join('')}${posts.length > shownPosts.length ? `<div class="mib-more">+ ${posts.length - shownPosts.length} more</div>` : ''}</div>`
+      + (pfiles.length ? cap(`${pfiles.length} FILE${pfiles.length === 1 ? '' : 'S'}`) + tiles(pfiles) : '')
       + (waiting ? foot(btn('Send Back', `data-mib="plan-back" data-id="${esc(pl.id)}"`) + `<span class="${(pl.posts || []).some((x) => x.check && x.check.state === 'changes') ? 'mib-faded' : ''}">${btn('Approve', `data-mib="plan-ok" data-id="${esc(pl.id)}"`, true)}</span>`) : '');
   }
   // I8 — files added to Client Assets: the folder, and the files the update names; Open Folder
@@ -384,6 +418,7 @@ const MacInbox = (() => {
   function claimHTML(g, n) {
     const c = n.claimId && typeof Claims !== 'undefined' ? Claims.byId(n.claimId) : null;
     const items = c ? (c.groups || []).flatMap((gr) => (gr.items || []).map((i) => ({ d: gr.date, x: i.desc || gr.title || '', a: i.amount }))) : [];
+    const rcpts = c ? (c.groups || []).flatMap((gr) => (gr.items || []).map((i) => i.receipt).filter((r) => r && r.path)) : [];   // (the receipts, as tiles — Haris 2026-11-17)
     const amt = (v) => '⃃ ' + (Number(v) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const month = c && c.month ? new Date(c.month + '-01T00:00:00').toLocaleDateString('en-US', { month: 'long' }) : '';
     const whose = c && c.userId === currentUserId ? 'Your' : c ? `${firstName(c.userId)}’s` : '';
@@ -391,19 +426,19 @@ const MacInbox = (() => {
     const line = c ? `${items.length} item${items.length === 1 ? '' : 's'} · ${amt(Claims.totalOf(c))} · ${Claims.pill(c)}` : '';
     return head(hic('coin', 'green'), title, line, openBtn(g, 'Open Claims'))
       + cap(`${CLAIM_DID[n.kind] || 'UPDATED'} BY ${esc(nameOf(n.from).toUpperCase())} · ${esc(clock(n.at).toUpperCase())}`)
-      + (items.length ? `<div class="mib-claim">${items.map((i) => `<div><span>${esc(i.d ? parseYmd(i.d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '')}</span><span>${esc(i.x)}</span><b>${amt(i.a)}</b></div>`).join('')}<div class="tot"><span>Total</span><b>${amt(Claims.totalOf(c))}</b></div></div>` : '');
+      + (items.length ? `<div class="mib-claim">${items.map((i) => `<div><span>${esc(i.d ? parseYmd(i.d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '')}</span><span>${esc(i.x)}</span><b>${amt(i.a)}</b></div>`).join('')}<div class="tot"><span>Total</span><b>${amt(Claims.totalOf(c))}</b></div></div>` : '')
+      + (rcpts.length ? cap(`${rcpts.length} RECEIPT${rcpts.length === 1 ? '' : 'S'}`) + tiles(rcpts) : '');
   }
   // I12 — a scheduled comment that wasn't sent: its text and files; Open Task
   function schedHTML(g, n) {
     const t = task(n.taskId), s = (db.scheduled || []).find((x) => x.id === n.schedId) || {};
     const when = s.sendAt ? new Date(s.sendAt).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).replace(/, (\d+:\d+)/, ' · $1') : '';
     const what = s.replyTo || /scheduled reply/.test(n.text || '') ? 'REPLY' : 'COMMENT';
-    const files = (s.attachments || []).map((a) => `<span class="mib-qf"><b>${esc(a.name)}</b><span>${esc(fmtSize(a.size) || '')}</span></span>`).join('');
     const title = t ? (t.title || 'Untitled task') : (String(n.text || '').match(/<b>(.*?)<\/b>/) || [])[1] || titleOf(n, null);
     const line = t ? [cdot(proj(t.projectId)), t.done ? 'completed' : esc(statusInfo(t).name)].filter(Boolean).join(' · ') : esc(n.reason || '');
     return head(t ? statusIcon(t, 16) : hic('clock'), title, line, n.taskId ? openBtn(g, 'Open Task') : '')
       + cap(`YOUR SCHEDULED ${what}${when ? ` · WAS FOR ${esc(when.toUpperCase())}` : ''}`)
-      + `<div class="mib-quote">${esc(s.text || n.snippet || '')}${files ? `<span class="mib-qfs">${files}</span>` : ''}</div>`;
+      + `<div class="mib-quote">${esc(s.text || n.snippet || '')}</div>` + ((s.attachments || []).length ? tiles(s.attachments) : '');
   }
   // I11 — the morning round-up, worked out again: its sections, the first with tasks open
   const DY_TONE = { red: '#ff453a', amber: '#ff9f0a', accent: '#0a84ff' };

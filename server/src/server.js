@@ -1465,7 +1465,8 @@ export function createServer(cfg) {
       if (!people.length || !tasks.length) return json(res, 400, { ok: false, error: 'Add some people and tasks first (Start fresh with sample data)' });
       const pick = (l, i) => l[i % l.length];
       const by = (i) => pick(people, i).id;
-      const T = (i) => pick(tasks, i), TC = (i) => pick(withC.length ? withC : tasks, i), TF = (i) => pick(withF.length ? withF : tasks, i);
+      const withR = tasks.filter((t) => (t.reviews || []).length);
+      const T = (i) => pick(tasks, i), TC = (i) => pick(withC.length ? withC : tasks, i), TF = (i) => pick(withF.length ? withF : tasks, i), TR = (i) => pick(withR.length ? withR : withF.length ? withF : tasks, i);
       const esc2 = (v) => String(v || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
       const t0 = Date.now();
       let k = 0;
@@ -1491,10 +1492,10 @@ export function createServer(cfg) {
       add({ from: by(14), taskId: T(14).id, kind: 'edit', text: 'changed the description on' });
       add({ from: by(15), taskId: T(15).id, kind: 'restore', text: 'restored from the Trash' });
       // the CD's reviews
-      add({ from: by(16), taskId: TF(16).id, kind: 'review', text: 'submitted 2 files for your review on' });
-      add({ from: by(17), taskId: TF(17).id, kind: 'review-ok', text: 'approved your files for' });
-      add({ from: by(18), taskId: TF(18).id, kind: 'review-amend', text: 'requested amendments on your submission for', snippet: 'Make the logo bigger and swap the photo on slide 2.' });
-      add({ from: by(19), taskId: TF(19).id, kind: 'review-wd', text: 'withdrew their submission for' });
+      add({ from: by(16), taskId: TR(16).id, kind: 'review', text: 'submitted 2 files for your review on' });
+      add({ from: by(17), taskId: TR(17).id, kind: 'review-ok', text: 'approved your files for' });
+      add({ from: by(18), taskId: TR(18).id, kind: 'review-amend', text: 'requested amendments on your submission for', snippet: 'Make the logo bigger and swap the photo on slide 2.' });
+      add({ from: by(19), taskId: TR(19).id, kind: 'review-wd', text: 'withdrew their submission for' });
       // Client Assets
       { const c = store.list('clients').find((x) => (x.folders || []).length); if (c) { const f = c.folders[0]; add({ from: by(20), kind: 'asset', clientId: c.id, folderId: f.id, text: `added a file to ${esc2(c.name)} · ${esc2(f.name)}`, snippet: ((f.files || [])[0] || {}).name || '' }); } }
       // content plans
