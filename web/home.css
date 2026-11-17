@@ -1118,3 +1118,19 @@ html.mac-chrome .mention-pop .asg-n small { margin-left: auto; font-size: 12px; 
 /* the Mac: the thumbnail of the file in the preview, out of sight while the preview is up (it flies out of and back into it) */
 [data-live-pvhide] { visibility: hidden; }
 html.mac-chrome[data-theme="light"] .mib-sp-oh, html.mac-chrome[data-theme="light"] .mib-sp-note { color: #b25e00; }
+/* # in the Mac Inbox's reply box: this task's files as a strip of tiles above the box (Haris 2026-11-17, A) */
+.mib-hstrip { padding: 8px 8px 6px; }
+.mib-hstrip .mib-am-h { padding: 0 4px 6px; }
+.mib-hs-row { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px; }
+.mib-hs-row::-webkit-scrollbar { display: none; }
+.mib-hs-t { flex: none; width: 72px; border: 0; padding: 0; background: none; color: var(--mc-fg); font: inherit; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: default; }
+.mib-hs-p { position: relative; width: 64px; height: 64px; border-radius: 8px; overflow: hidden; background: var(--mib-fill); display: grid; place-items: center; transition: box-shadow .15s; }
+.mib-hs-p img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mib-hs-p .mib-play { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-size: 14px; text-shadow: 0 1px 4px rgba(0, 0, 0, .5); }
+.mib-hs-ic { display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--k); }
+.mib-hs-ic .ic, .mib-hs-ic svg { width: 22px; height: 22px; }
+.mib-hs-ic b { font-size: 9px; letter-spacing: .04em; color: var(--mc-dim); }
+.mib-hs-t:hover .mib-hs-p { box-shadow: 0 0 0 2px rgba(127, 127, 127, .45); }
+.mib-hs-t.on .mib-hs-p { box-shadow: 0 0 0 2px #0a84ff; }
+.mib-hs-n { width: 68px; font-size: 10.5px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+.mib-hs-s { font-size: 9.5px; color: var(--mc-dim); }

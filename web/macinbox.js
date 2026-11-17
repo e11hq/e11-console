@@ -741,13 +741,15 @@ const MacInbox = (() => {
     if (!q || !t) return mClose();
     mItems = q.kind === '@'
       ? activeUsers().filter((u) => u.id !== currentUserId && (fullName(u).toLowerCase().includes(q.q) || u.email.toLowerCase().includes(q.q))).slice(0, 8).map((u) => ({ u }))
-      : taskFilesList(t).filter((a) => (a.name || '').toLowerCase().includes(q.q)).slice(0, 8).map((a) => ({ a }));
+      : taskFilesList(t).filter((a) => (a.name || '').toLowerCase().includes(q.q)).slice(0, 40).map((a) => ({ a }));
     if (!mItems.length) return mClose();
     if (!mQ || mQ.kind !== q.kind) mIdx = 0;
     mQ = q; if (mIdx >= mItems.length) mIdx = 0;
     // (the Mac's own menu, as Haris picked — A, 2026-11-17: frosted panel, compact rows, the chosen one in Apple's blue;
     //  @ a photo, the name and the role; # the kind's symbol in its colour, the name and the size)
-    if (!mpop) { mpop = document.createElement('div'); mpop.className = 'mib-amenu mib-mpop'; document.body.appendChild(mpop); }
+    if (q.kind === '#') return mStrip(ta);
+    if (mpop && mpop.dataset.kind !== '@') mClose();
+    if (!mpop) { mpop = document.createElement('div'); mpop.className = 'mib-amenu mib-mpop'; mpop.dataset.kind = '@'; document.body.appendChild(mpop); }
     const KIND = { image: ['image', '#30d158'], video: ['play', '#bf5af2'], pdf: ['details', '#ff453a'] };
     mpop.innerHTML = `<div class="mib-am-h">${q.kind === '@' ? 'People' : 'Files in this task'}</div>` + mItems.map((it, i) => {
       if (it.u) return `<div class="mib-am-r ${i === mIdx ? 'on' : ''}" data-mib-m="${i}">${avatarHTML(it.u.id, 18)}<span class="mib-am-n">${esc(fullName(it.u))}</span><small>${esc(roleOf(it.u))}</small></div>`;
@@ -756,6 +758,28 @@ const MacInbox = (() => {
     }).join('');
     const box = ta.closest('.mib-box').getBoundingClientRect(), h = mpop.offsetHeight;
     mpop.style.left = box.left + 'px'; mpop.style.top = Math.max(8, box.top - h - 6) + 'px';
+  }
+  // # — this task's files as a strip of tiles just above the reply box, the same tiles as an upload (Haris 2026-11-17, A):
+  // ← → (or ↑ ↓) move, Return / Tab pick, typing after # narrows it. The one chosen has Apple's blue ring on its picture
+  // only — no tint behind it. Drawn again only when the files shown change (the pictures never load twice).
+  function mStrip(ta) {
+    const key = mItems.map((it) => it.a.id || it.a.path).join('|');
+    if (mpop && mpop.dataset.kind !== '#') { mpop.remove(); mpop = null; }
+    if (!mpop) { mpop = document.createElement('div'); mpop.className = 'mib-amenu mib-mpop mib-hstrip'; mpop.dataset.kind = '#'; document.body.appendChild(mpop); }
+    if (mpop.dataset.key !== key) {
+      mpop.dataset.key = key;
+      const KIND = { image: ['image', '#30d158'], video: ['play', '#bf5af2'], pdf: ['details', '#ff453a'] };
+      mpop.innerHTML = '<div class="mib-am-h">Files in this task</div><div class="mib-hs-row">' + mItems.map((it, i) => {
+        const a = it.a, u = picOf(a), k = KIND[fileKind(a)] || ['clip', '#ff9f0a'];
+        const pic = u ? `<img src="${u}" alt="" decoding="async" draggable="false">${fileKind(a) === 'video' ? '<span class="mib-play">▶</span>' : ''}`
+          : `<span class="mib-hs-ic" style="--k:${k[1]}">${icon(k[0])}<b>${esc((fileExt(a.name) || 'file').slice(0, 4).toUpperCase())}</b></span>`;
+        return `<button type="button" class="mib-hs-t" data-mib-m="${i}"><span class="mib-hs-p">${pic}</span><span class="mib-hs-n">${esc(a.name)}</span><span class="mib-hs-s">${esc(fmtSize(a.size) || '')}</span></button>`;
+      }).join('') + '</div>';
+    }
+    mpop.querySelectorAll('.mib-hs-t').forEach((b, i) => b.classList.toggle('on', i === mIdx));
+    const on = mpop.querySelector('.mib-hs-t.on'); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    const box = ta.closest('.mib-box').getBoundingClientRect();
+    mpop.style.left = box.left + 'px'; mpop.style.width = box.width + 'px'; mpop.style.top = Math.max(8, box.top - mpop.offsetHeight - 6) + 'px';
   }
   function mPick(i) {
     const ta = document.querySelector('.mib-in'), it = mItems[i], q = mQ;
@@ -858,7 +882,8 @@ const MacInbox = (() => {
     if (!on() || ui.view !== 'inbox' || ui.taskId) return;
     const ta = e.target.closest && e.target.closest('.mib-in');
     if (ta && mpop) {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); mIdx = (mIdx + (e.key === 'ArrowDown' ? 1 : -1) + mItems.length) % mItems.length; mUpdate(ta); return; }
+      const fwd = e.key === 'ArrowDown' || (mQ && mQ.kind === '#' && e.key === 'ArrowRight'), back = e.key === 'ArrowUp' || (mQ && mQ.kind === '#' && e.key === 'ArrowLeft');
+      if (fwd || back) { e.preventDefault(); mIdx = (mIdx + (fwd ? 1 : -1) + mItems.length) % mItems.length; mUpdate(ta); return; }
       if ((e.key === 'Enter' || e.key === 'Tab') && !e.metaKey) { e.preventDefault(); mPick(mIdx); return; }
       if (e.key === 'Escape') { e.preventDefault(); mClose(); return; }
     }
