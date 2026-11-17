@@ -797,7 +797,7 @@ html.mac-chrome .mib { --text: var(--mc-fg); --text-2: var(--mc-dim); --text-3: 
 .mib-tab { border: 0; background: none; font: inherit; font-size: 12.5px; color: var(--mc-fg); padding: 3px 12px; border-radius: 6px; cursor: default; }
 .mib-tab.on { background: var(--mc-win); font-weight: 600; box-shadow: 0 .5px 2px rgba(0, 0, 0, .25); }
 .mib-tab i { font-style: normal; color: var(--mc-dim); }
-.mib-btn { height: 28px; padding: 0 12px; border-radius: 7px; font: inherit; font-size: 13px; border: 0; background: var(--mc-glass); box-shadow: inset 0 0 0 .5px var(--mc-glass-line); color: var(--mc-fg); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; cursor: default; }
+.mib-btn { height: 28px; padding: 0 14px; border-radius: 14px; font: inherit; font-size: 13px; border: 0; background: var(--mc-glass); box-shadow: none; color: var(--mc-fg); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; cursor: default; }
 .mib-btn:hover { background: linear-gradient(var(--mc-sel), var(--mc-sel)), var(--mc-glass); }
 .mib-btn.primary { background: var(--mc-blue); box-shadow: none; color: #fff; font-weight: 500; }
 .mib-chev { font-size: 9px; color: var(--mc-dim); }
@@ -900,9 +900,24 @@ html.mac-chrome[data-theme="light"] .mib-row.sel { background: color-mix(in srgb
 .mib-u-h span { font-size: 12px; color: var(--mc-dim); }
 .mib-u-t { font-size: 13px; line-height: 19px; margin-top: 3px; overflow-wrap: anywhere; }
 html.mac-chrome .mib .mention { color: var(--mc-blue); background: none; padding: 0; border-radius: 0; font-weight: 500; }
-.mib-thread { margin-left: 40px; padding-left: 12px; box-shadow: inset 2px 0 0 var(--mc-line); }
-.mib-thread .mib-u { border-top: 0; }
-.mib-thread-l { font-size: 11.5px; color: var(--mc-dim); padding-top: 8px; }
+/* a thread (as the task page's): the comment answered, then its replies, a line from its picture curving into each reply's */
+.mib-th { --rail: color-mix(in srgb, var(--mc-fg) 16%, transparent); }
+.mib-th-head { position: relative; }
+.mib-th-head::after { content: ""; position: absolute; left: 14px; top: 48px; bottom: 0; border-left: 2px solid var(--rail); }
+.mib-th-r { position: relative; margin-left: 40px; }
+.mib-th-r::before { content: ""; position: absolute; left: -26px; top: 0; width: 20px; height: 27px; border-left: 2px solid var(--rail); border-bottom: 2px solid var(--rail); border-bottom-left-radius: 12px; }
+.mib-th-r:not(:last-child)::after { content: ""; position: absolute; left: -26px; top: 0; bottom: 0; border-left: 2px solid var(--rail); }
+.mib-th-r .mib-u { border-top: 0; }
+.mib-th-r .mib-yours .mib-u { margin: 0; }
+.mib-th-r:has(> .mib-yours)::before { height: 25px; }
+.mib-lead .mib-u-t { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* your reply: Edit (the minutes left) · Delete, pills as every button */
+.mib-acts { margin-left: auto; display: inline-flex; gap: 6px; }
+.mib-btn.sm { height: 24px; padding: 0 11px; border-radius: 12px; font-size: 12px; }
+.mib-btn.sm i { font-style: normal; color: var(--mc-dim); }
+.mib-edit { display: flex; flex-direction: column; gap: 8px; margin-top: 2px; }
+.mib-ein { font: inherit; font-size: 13px; line-height: 19px; color: var(--mc-fg); background: var(--mc-field); border: 0; outline: none; border-radius: 10px; padding: 8px 10px; resize: none; field-sizing: content; min-height: 38px; }
+.mib-ebtns { display: flex; justify-content: flex-end; gap: 8px; }
 .mib-yours .mib-u { border-top: 0; border-radius: 10px; padding: 10px; background: color-mix(in srgb, var(--mc-blue) 12%, transparent); margin: 4px 0 4px 40px; }
 .mib-files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .mib-file { border: 0; font: inherit; font-size: 12px; padding: 5px 9px; border-radius: 8px; background: var(--mc-field); color: var(--mc-fg); cursor: default; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

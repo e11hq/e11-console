@@ -6435,8 +6435,7 @@ function commentMenu(anchor, cid) {
   ]);
 }
 
-async function deleteComment(cid) {
-  const t = task(ui.taskId);
+async function deleteComment(cid, t = task(ui.taskId)) {   // (t: the Mac Inbox deletes your reply from its own pane)
   const group = t.comments.filter((x) => x.id === cid || x.parentId === cid);
   const files = group.flatMap((x) => x.attachments || []).filter((a) => !a.linked);
   const replies = group.length - 1;

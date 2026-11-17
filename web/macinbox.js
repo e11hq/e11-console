@@ -205,22 +205,51 @@ const MacInbox = (() => {
     let lastComment = null;
     const cOf = (n) => (t && n.commentId && COMMENTS.has(n.kind) ? (t.comments || []).find((x) => x.id === n.commentId) : null);
     const notifiedC = cOf(ibTarget(g.items));   // (only the comment this notification is about takes a reaction — the others show theirs, still)
-    const ups = items.map((n, i) => {
+    // (a reply sits in its thread, as the task page's: the comment it answers above it — in full when it's one of these
+    //  updates, else a faded two-line lead — and a line from that comment's picture curving into each reply's; Haris
+    //  2026-11-17 "have a similar design for the threaded notifications and replies")
+    const blocks = [];
+    const lead = (pc) => upd({ id: 'lead-' + pc.id, from: pc.authorId, at: pc.at }, mentionMark(esc(pc.text || '')), '', true).replace('class="mib-u faded"', 'class="mib-u faded mib-lead"');
+    items.forEach((n, i) => {
+      const c = cOf(n), html = one(n, i);
+      const pid = c && c.parentId, last = blocks[blocks.length - 1];
+      if (!pid) { blocks.push({ cid: c ? c.id : null, html }); return; }
+      if (last && last.pid === pid) { last.replies.push(html); return; }
+      if (last && last.cid === pid) { blocks[blocks.length - 1] = { pid, head: last.html, replies: [html] }; return; }
+      const pc = (t.comments || []).find((x) => x.id === pid);
+      blocks.push(pc ? { pid, head: lead(pc), replies: [html] } : { cid: c.id, html });
+    });
+    function one(n, i) {
       const c = t && n.commentId && COMMENTS.has(n.kind) ? (t.comments || []).find((x) => x.id === n.commentId) : null;
       if (c) lastComment = c;
       const faded = i < items.length - 1;
       if (!c) return upd(n, bodyOf(n, t), '', faded);
-      const parent = c.parentId ? (t.comments || []).find((x) => x.id === c.parentId) : null;
       const text = mentionMark(esc(fullComment(n, t) || n.snippet || ''));
       const reacts = Object.entries(c.reactions || {}).filter(([, v]) => v);
       const live = !!notifiedC && c === notifiedC;
       const rx = !live ? (reacts.length ? `<div class="mib-rx">${reacts.map(([e, v]) => `<span class="mib-pill still">${e} <b>${typeof v === 'number' ? v : 1}</b></span>`).join('')}</div>` : '')
         : `<div class="mib-rx">${reacts.map(([e, v]) => `<button type="button" class="mib-pill ${mineReact(g) === e ? 'mine' : ''}" data-mib="react" data-tid="${esc(t.id)}" data-cid="${esc(c.id)}" data-e="${esc(e)}">${e} <b>${typeof v === 'number' ? v : 1}</b></button>`).join('')}<button type="button" class="mib-smile" data-mib="react-menu" data-tid="${esc(t.id)}" data-cid="${esc(c.id)}" title="React" aria-label="React">${icon('smile')}</button></div>`;
-      const box = upd({ ...n, from: c.authorId, at: c.at }, text, commentFiles(c.attachments || []), faded, rx);
-      return parent ? `<div class="mib-thread"><div class="mib-thread-l">In ${esc(nameOf(parent.authorId))}’s thread</div>${box}</div>` : box;
-    }).join('');
+      return upd({ ...n, from: c.authorId, at: c.at }, text, commentFiles(c.attachments || []), faded, rx);
+    }
+    // your answer from here: a reply under the last comment, in its thread — Edit while the website allows it (10 minutes,
+    // the minutes left beside it), and Delete (the website's own: to the Trash, with Undo)
     const minen = g.items.find((x) => x.mine && x.mine.reply);
-    const yours = minen ? `<div class="mib-yours">${upd({ from: currentUserId, at: minen.mine.at }, esc(minen.mine.reply)).replace(`<b>${esc(nameOf(currentUserId))}</b>`, '<b>You replied</b>')}</div>` : '';
+    const myC = minen && minen.mine.cid ? (t.comments || []).find((x) => x.id === minen.mine.cid) : null;
+    if (minen && (myC || !minen.mine.cid)) {
+      const editing = myC && editingId === myC.id;
+      const acts = myC && !editing ? `<span class="mib-acts">${canEditComment(myC) ? `<button type="button" class="mib-btn sm" data-mib="my-edit" data-cid="${esc(myC.id)}">Edit <i>${esc(editLeftText(myC))}</i></button>` : ''}<button type="button" class="mib-btn sm" data-mib="my-del" data-tid="${esc(t.id)}" data-cid="${esc(myC.id)}">Delete</button></span>` : '';
+      const body = editing ? `<div class="mib-edit"><textarea rows="2" class="mib-ein" data-tid="${esc(t.id)}" data-cid="${esc(myC.id)}">${esc(myC.text || '')}</textarea><div class="mib-ebtns"><button type="button" class="mib-btn" data-mib="my-cancel">Cancel</button><button type="button" class="mib-btn primary" data-mib="my-save" data-tid="${esc(t.id)}" data-cid="${esc(myC.id)}">Save</button></div></div>`
+        : mentionMark(esc(myC ? myC.text || '' : minen.mine.reply)) + (myC && myC.editedAt ? ' <span class="mib-dim">(edited)</span>' : '');
+      const yours = `<div class="mib-yours">${upd({ id: 'mine-' + (myC ? myC.id : ''), from: currentUserId, at: myC ? myC.at : minen.mine.at }, body, myC ? commentFiles(myC.attachments || []) : '')
+        .replace(`<b>${esc(nameOf(currentUserId))}</b>`, '<b>You replied</b>').replace('</span></div><div class="mib-u-t">', `</span>${acts}</div><div class="mib-u-t">`)}</div>`;
+      const last = blocks[blocks.length - 1];
+      if (last && last.replies) last.replies.push(yours);
+      else if (last && last.cid) blocks[blocks.length - 1] = { pid: last.cid, head: last.html, replies: [yours] };
+      else blocks.push({ html: yours });
+      // (the minutes left counted down, and Edit gone when the time's up — only that line changes)
+      if (myC && canEditComment(myC)) { clearTimeout(tick); tick = setTimeout(() => { if (ui.view === 'inbox') renderContent(); }, (editLeft(myC) % 60000 || 60000) + 200); }
+    }
+    const ups = blocks.map((b) => (b.replies ? `<div class="mib-th" data-key="th:${esc(b.pid)}"><div class="mib-th-head">${b.head}</div>${b.replies.map((r) => `<div class="mib-th-r">${r}</div>`).join('')}</div>` : b.html)).join('');
     let reply = '';
     if (lastComment) {
       const root = lastComment.parentId || lastComment.id;
@@ -231,7 +260,24 @@ const MacInbox = (() => {
         <button type="button" class="mib-send" data-mib="send" title="Send" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button></div></div>`;
     }
     return head(t ? statusIcon(t, 16) : '', t ? (t.title || 'Untitled task') : 'Deleted task', taskLine(t), unreadBtn(g) + openBtn(g, 'Open Task'))
-      + cap(`${items.length} update${items.length === 1 ? '' : 's'} · newest last`) + `<div class="mib-ups">${ups}${yours}</div>${reply}`;
+      + cap(`${items.length} update${items.length === 1 ? '' : 's'} · newest last`) + `<div class="mib-ups">${ups}</div>${reply}`;
+  }
+  let editingId = null, tick = null;
+  // your reply saved as the website saves an edit: within its 10 minutes (and the server's minute of grace), new @mentions told
+  function saveMine(tid, cid) {
+    const t = task(tid), c = t && (t.comments || []).find((x) => x.id === cid), ein = document.querySelector('.mib-ein');
+    if (!c || !ein) return;
+    const v = ein.value.trim();
+    if (!v && !(c.attachments || []).length) return;
+    editingId = null;
+    if (Date.now() - Date.parse(c.at) > EDIT_WINDOW + 60000) { renderContent(); toast('Too late to edit'); return; }
+    const html = esc(v).replace(/\n/g, '<br>');
+    if (v !== c.text) {
+      const before = mentionsIn(c.html);
+      mentionsIn(html).forEach((u) => { if (!before.has(u)) pushNotif(u, t, 'mention', 'mentioned you in a comment on', { snippet: trunc(v, 160), commentId: c.id }); });
+      c.text = v; c.html = html; c.editedAt = nowISO();
+    }
+    commit();
   }
   const mineReact = (g) => { const x = g.items.find((n) => n.mine && n.mine.react); return x ? x.mine.react : null; };
 
@@ -345,10 +391,10 @@ const MacInbox = (() => {
     const html = esc(text).replace(/\n/g, '<br>');
     const files = pending.splice(0);
     files.forEach((a) => { if (!(t.attachments || []).some((x) => x.path === a.path)) (t.attachments = t.attachments || []).push(a); });
-    postComment(t, ta.dataset.root, text, html, files);
+    const cid = postComment(t, ta.dataset.root, text, html, files);
     t.updatedAt = nowISO();
     const g = rows().list.find((x) => x.key === pick);
-    if (g) g.items.forEach((x) => { x.mine = { reply: text, at: nowISO() }; });
+    if (g) g.items.forEach((x) => { x.mine = { reply: text, at: nowISO(), cid }; });
     commit();
   }
   function react(tid, cid, e) {
@@ -408,6 +454,10 @@ const MacInbox = (() => {
     else if (a === 'plan-ok') { const pl = Plans.planById(el.dataset.id); if (pl) Promise.resolve(Plans.approve(pl)).then(() => renderContent()); }
     else if (a === 'plan-back') { const pl = Plans.planById(el.dataset.id); if (pl) Plans.sendBack(pl); }
     else if (a === 'dy-sec') { dyOpen = dyOpen === el.dataset.k ? '' : el.dataset.k; renderContent(); }
+    else if (a === 'my-edit') { editingId = el.dataset.cid; renderContent(); setTimeout(() => { const x = document.querySelector('.mib-ein'); if (x) { x.focus(); x.setSelectionRange(x.value.length, x.value.length); } }, 0); }
+    else if (a === 'my-cancel') { editingId = null; renderContent(); }
+    else if (a === 'my-save') saveMine(el.dataset.tid, el.dataset.cid);
+    else if (a === 'my-del') { const t = task(el.dataset.tid); if (t) deleteComment(el.dataset.cid, t); }
     else if (a === 'dy-all') { if (window.__e11Daily) window.__e11Daily({ ev: 'all', k: el.dataset.k }); }
     else if (a === 'file') { const t = task(el.dataset.tid), c = t && (t.comments || []).find((x) => x.id === el.dataset.cid); const f = c && (c.attachments || []).find((x) => x.id === el.dataset.id); if (f) previewFile(f, c.attachments); }
   });
@@ -421,6 +471,8 @@ const MacInbox = (() => {
     if (!on() || ui.view !== 'inbox' || ui.taskId) return;
     const ta = e.target.closest && e.target.closest('.mib-in');
     if (ta) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(ta.parentElement.querySelector('.mib-send')); } return; }
+    const ein = e.target.closest && e.target.closest('.mib-ein');
+    if (ein) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveMine(ein.dataset.tid, ein.dataset.cid); } else if (e.key === 'Escape') { e.preventDefault(); editingId = null; renderContent(); } return; }
     if (e.target.closest && e.target.closest('input, textarea, [contenteditable="true"], .dialog, .menu')) return;
     if (document.getElementById('overlay-root') && document.getElementById('overlay-root').children.length) return;
     if (e.key === 'Escape') { if (pick) { pick = null; renderContent(); e.preventDefault(); } return; }
