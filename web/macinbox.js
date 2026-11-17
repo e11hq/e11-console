@@ -573,5 +573,10 @@ const MacInbox = (() => {
     if (pane) { pane.classList.remove('fresh'); void pane.offsetWidth; pane.classList.add('fresh'); }
     return true;
   }
-  return { on, view, patch, drawn: (c) => { more(c.querySelector('.mib-list')); under(c.querySelector('.mib-scroll')); }, reset: () => { pick = undefined; shown = null; } };
+  return { on, view, patch, drawn: (c) => {
+    const sc = c.querySelector('.mib-scroll');
+    // (a notification opened: a long run opens at its end, the newest update in view — Haris 2026-11-17)
+    if (wasFresh && sc && sc.scrollHeight > sc.clientHeight) sc.scrollTop = sc.scrollHeight;
+    more(c.querySelector('.mib-list')); under(sc);
+  }, reset: () => { pick = undefined; shown = null; } };
 })();
