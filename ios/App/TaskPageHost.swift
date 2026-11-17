@@ -663,6 +663,9 @@ extension Main {
       // (no finger on a picture — opened by a link from another app, E11 Talk's card: out of the file's own picture on the
       //  page by its mark when it's on screen, and back into it — Haris 2026-11-15)
       vc.keys = files.map { FileTouch.key($0) }
+      // (the best picture of it the phone already holds, read from the file as its row has it — the preview's own copy of
+      //  the file names its picture differently, so it was never found and the thumbnail flew out: Haris 2026-11-17 10:15)
+      if let p = CommentCell.picURL(files[i]) { vc.startImage = FeedLoader.shared.kept(p, px: 600) ?? FeedLoader.shared.kept(p, px: 132) }
       // (looked for on the screen on show — Apple's tabs' window; the app's own screen behind them has none, so a file opened
       //  by a link never found its picture and faded in: Haris 2026-11-16)
       vc.source = FileTouch.picture() ?? FileTouch.marked(vc.keys[i], in: host.view.window ?? self.screenWindow)

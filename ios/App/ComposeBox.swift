@@ -143,10 +143,10 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     text.textContainerInset = UIEdgeInsets(top: 4, left: 0, bottom: 4, right: 0); text.textContainer.lineFragmentPadding = 0
     text.isScrollEnabled = false
     placeholder.text = "Comment"; placeholder.font = .systemFont(ofSize: 17); placeholder.textColor = .secondaryLabel
-    for (b, sym) in [(plus, "plus"), (right, "mic")] {
-      b.setImage(UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)), for: .normal)
-      b.tintColor = .label; b.backgroundColor = .tertiarySystemFill; b.layer.cornerRadius = 18
-    }
+    // (+ draws its own picture; the mic / ↑ is drawn only by `rightSym` — the button's own mic left in it stayed under the
+    //  arrow, the two overlapping: Haris 2026-11-17 10:15)
+    plus.setImage(UIImage(systemName: "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)), for: .normal)
+    for b in [plus, right] { b.tintColor = .label; b.backgroundColor = .tertiarySystemFill; b.layer.cornerRadius = 18 }
     // (+ opens the + sheet — your recent photos, Camera · Files · Contact · Location: canvas "Attach panel — Talk &
     //  Console", W4, Haris 2026-11-16)
     plus.addAction(UIAction { [weak self] _ in self?.plusSheet() }, for: .touchUpInside)

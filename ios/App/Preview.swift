@@ -485,13 +485,13 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
   }
   // opening: the picture flies from where it was tapped to its place, the black and the buttons coming in with it, the page
   // fading in over it once it has landed (E11 Talk's "Opening a photo" — Haris 2026-11-15)
+  var startImage: UIImage?   // (the best picture of the opened file already on the phone — set by whoever opens it)
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
     guard flies, let src = source, var img = src.image else { return }
     // (the best picture of it the phone already holds, in its own shape: a Recently added or search row's picture is a small
     //  square cut, and it flew out as a big blurry square before the file came — Haris 2026-11-17 09:38)
-    if let f = files[safe: at], let p = CommentCell.picURL(f),
-       let better = FeedLoader.shared.kept(p, px: 600) ?? FeedLoader.shared.kept(p, px: 132),
+    if let better = startImage,
        better.size.width * better.scale > img.size.width * img.scale * 1.3 || abs(better.size.width / max(1, better.size.height) - img.size.width / max(1, img.size.height)) > 0.05 { img = better }
     openedAt = at
     view.layoutIfNeeded()
