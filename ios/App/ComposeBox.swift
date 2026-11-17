@@ -1193,7 +1193,7 @@ final class PickList: UITableView, UITableViewDataSource, UITableViewDelegate {
 // A button's symbol is drawn by its own image view on top (the button's own image left empty), as the comment box's.
 enum SymSwap {
   static func set(_ v: UIImageView, _ img: UIImage?, animated: Bool) {
-    if animated, v.window != nil, v.image != nil, let img = img { v.setSymbolImage(img, contentTransition: .replace.downUp, options: .speed(1.6)) }
+    if #available(iOS 17.0, *), animated, v.window != nil, v.image != nil, let img = img { v.setSymbolImage(img, contentTransition: .replace.downUp, options: .speed(1.6)) }
     else { v.image = img }
   }
   static func set(_ b: UIButton, _ img: UIImage?, animated: Bool) {
