@@ -7,6 +7,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { execFile } from 'node:child_process';
+// (poppler-data on this machine: PDF text in Chinese / Japanese / Korean-ordered fonts — Kia's — can be drawn)
+const CJK = fs.existsSync('/usr/share/poppler/cMap');
 
 export const MIME = {
   html: 'text/html; charset=utf-8', css: 'text/css; charset=utf-8', js: 'text/javascript; charset=utf-8', json: 'application/json', webmanifest: 'application/manifest+json',
@@ -284,16 +286,19 @@ export function createFiles(root) {
       if (!fs.existsSync(src)) return { ok: true, thumb: null };
       const id = safeName(a.id || crypto.createHash('sha1').update(a.path).digest('hex').slice(0, 12));
       const dir = resolve('.thumbs/' + id);
-      const out = path.join(dir, 'thumb.png');
+      const ext = src.split('.').pop().toLowerCase();
+      // (a PDF's or Office file's first page under a new name: the ones made before the image had poppler-data lost
+      //  the words in Korean-ordered fonts — Kia's — so they're made again once — Haris 2026-11-17)
+      const paged = (ext === 'pdf' || OFFICE.includes(ext)) && CJK, stem = paged ? 'page1' : 'thumb';
+      const out = path.join(dir, stem + '.png');
       if (fs.existsSync(out)) return { ok: true, thumb: rel(out) };
       fs.mkdirSync(dir, { recursive: true });
-      const ext = src.split('.').pop().toLowerCase();
       let ok = false;
       if (ext === 'pdf') {
-        ok = await run('pdftoppm', ['-png', '-singlefile', '-f', '1', '-l', '1', '-scale-to', '640', src, path.join(dir, 'thumb')]);
+        ok = await run('pdftoppm', ['-png', '-singlefile', '-f', '1', '-l', '1', '-scale-to', '640', src, path.join(dir, stem)]);
       } else if (OFFICE.includes(ext)) {
         const r = await commands.docPreview(a);
-        if (r.pdf) ok = await run('pdftoppm', ['-png', '-singlefile', '-f', '1', '-l', '1', '-scale-to', '640', resolve(r.pdf), path.join(dir, 'thumb')]);
+        if (r.pdf) ok = await run('pdftoppm', ['-png', '-singlefile', '-f', '1', '-l', '1', '-scale-to', '640', resolve(r.pdf), path.join(dir, stem)]);
       } else if (['mp4', 'mov', 'm4v', 'webm', 'avi', 'mkv'].includes(ext)) {
         ok = await run('ffmpeg', ['-y', '-v', 'error', '-ss', '1', '-i', src, '-frames:v', '1', '-vf', 'scale=640:-2', out]);
         if (!ok) ok = await run('ffmpeg', ['-y', '-v', 'error', '-i', src, '-frames:v', '1', '-vf', 'scale=640:-2', out]);
