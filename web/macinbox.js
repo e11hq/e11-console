@@ -99,7 +99,7 @@ const MacInbox = (() => {
       ? avatarHTML(shownN.from, 26) : `<span class="mib-kic">${icon(NOTIF_ICON[shownN.kind] || 'bell')}</span>`;
     const mineN = items.find((x) => x.mine);
     const myLast = mineN && !mineN.mine.react ? myReplies(g, t).pop() : null;   // (only your latest reply, as it now reads)
-    const mine = mineN ? (mineN.mine.react ? `<b>You reacted</b> ${esc(mineN.mine.react)}` : myLast ? `<b>You replied:</b> ${esc(trunc(myLast.c ? myLast.c.text || '' : myLast.text || '', 120))}` : '') : '';
+    const mine = mineN ? (mineN.mine.react ? `<b>You reacted</b> ${esc(mineN.mine.react)}` : myLast ? `<b>You replied:</b> ${esc(trunc((myLast.c ? myLast.c.text : myLast.text) || (myLast.c && (myLast.c.attachments || []).length ? `${myLast.c.attachments.length} file${myLast.c.attachments.length === 1 ? '' : 's'}` : ''), 120))}` : '') : '';
     return `<div class="mib-row ${unread ? 'unread' : ''} ${g.key === pick ? 'sel' : ''}" data-mib="pick" data-k="${esc(g.key)}" data-key="r:${esc(g.key)}">
       <span class="mib-dot"></span><span class="mib-lead">${lead}</span>
       <span class="mib-t"><span class="mib-tt">${titleIcon(n, t)}<span>${esc(titleOf(n, t))}</span></span>
@@ -262,7 +262,7 @@ const MacInbox = (() => {
     const mineAll = myReplies(g, t);
     mineAll.forEach((m) => {
       const myC = m.c, editing = myC && editingId === myC.id;
-      const acts = myC && !editing ? `<span class="mib-acts">${canEditComment(myC) ? `<button type="button" class="mib-btn sm" data-mib="my-edit" data-cid="${esc(myC.id)}">Edit <i>${esc(editLeftText(myC))}</i></button>` : ''}<button type="button" class="mib-btn sm" data-mib="my-del" data-tid="${esc(t.id)}" data-cid="${esc(myC.id)}">Delete</button></span>` : '';
+      const acts = myC && !editing ? `<span class="mib-acts">${canEditComment(myC) ? `<button type="button" class="mib-btn sm ico" data-mib="my-edit" data-cid="${esc(myC.id)}" title="Edit — ${esc(editLeftText(myC))}" aria-label="Edit, ${esc(editLeftText(myC))}">${icon('edit')}</button>` : ''}<button type="button" class="mib-btn sm ico" data-mib="my-del" data-tid="${esc(t.id)}" data-cid="${esc(myC.id)}" title="Delete" aria-label="Delete">${icon('trash')}</button></span>` : '';
       const body = editing ? `<div class="mib-edit"><textarea rows="2" class="mib-ein" data-tid="${esc(t.id)}" data-cid="${esc(myC.id)}">${esc(myC.text || '')}</textarea><div class="mib-ebtns"><button type="button" class="mib-btn" data-mib="my-cancel">Cancel</button><button type="button" class="mib-btn primary" data-mib="my-save" data-tid="${esc(t.id)}" data-cid="${esc(myC.id)}">Save</button></div></div>`
         : mentionMark(esc(myC ? myC.text || '' : m.text)) + (myC && myC.editedAt ? ' <span class="mib-dim">(edited)</span>' : '');
       const yours = `<div class="mib-yours">${upd({ id: 'mine-' + (myC ? myC.id : m.at), from: currentUserId, at: myC ? myC.at : m.at }, body, myC ? commentFiles(myC.attachments || []) : '')
@@ -302,7 +302,7 @@ const MacInbox = (() => {
   let editingId = null, tick = null, openAll = false;
   // your replies from this pane, still there (each comment's id kept; an older one without, its words)
   function myReplies(g, t) {
-    const x = g.items.find((n) => n.mine && n.mine.reply);
+    const x = g.items.find((n) => n.mine && (n.mine.cids || n.mine.reply));
     if (!x || !t) return [];
     const ids = x.mine.cids || (x.mine.cid ? [x.mine.cid] : []);
     if (!ids.length) return [{ c: null, text: x.mine.reply, at: x.mine.at }];
@@ -445,7 +445,7 @@ const MacInbox = (() => {
     const cid = postComment(t, ta.dataset.root, text, html, files);
     t.updatedAt = nowISO();
     const g = rows().list.find((x) => x.key === pick);
-    if (g) { const was = g.items.find((x) => x.mine && x.mine.reply), cids = was ? (was.mine.cids || (was.mine.cid ? [was.mine.cid] : [])) : []; g.items.forEach((x) => { x.mine = { reply: text, at: nowISO(), cid, cids: [...cids, cid] }; }); }
+    if (g) { const was = g.items.find((x) => x.mine && (x.mine.cids || x.mine.cid)), cids = was ? (was.mine.cids || (was.mine.cid ? [was.mine.cid] : [])) : []; g.items.forEach((x) => { x.mine = { reply: text, at: nowISO(), cid, cids: [...cids, cid] }; }); }
     // (sent: the box empty again, and the reply just added scrolled into view, smoothly — Haris 2026-11-17)
     ta.value = ''; fitBox(ta);
     commit();
@@ -462,7 +462,7 @@ const MacInbox = (() => {
     c.reactions[e] = c.reactions[e] ? 0 : 1;
     if (!c.reactions[e]) delete c.reactions[e];
     const g = rows().list.find((x) => x.key === pick);
-    if (g) g.items.forEach((x) => { if (c.reactions[e]) x.mine = { ...(x.mine && x.mine.reply ? x.mine : {}), react: e, at: nowISO() }; else if (x.mine && x.mine.react === e) { const { react: _r, ...rest } = x.mine; x.mine = rest.reply ? rest : undefined; if (!x.mine) delete x.mine; } });
+    if (g) g.items.forEach((x) => { if (c.reactions[e]) x.mine = { ...(x.mine && (x.mine.reply || x.mine.cids) ? x.mine : {}), react: e, at: nowISO() }; else if (x.mine && x.mine.react === e) { const { react: _r, ...rest } = x.mine; x.mine = rest.reply || rest.cids ? rest : undefined; if (!x.mine) delete x.mine; } });
     commit();
   }
   // + in the reply box (the Mac's own file picker) or files dropped on the pane: each goes up at once as a square tile under

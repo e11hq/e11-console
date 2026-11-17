@@ -1037,3 +1037,7 @@ html[data-theme="light"] .mib-pop { background: rgba(255, 255, 255, .98); box-sh
 .mib-nextup { display: flex; flex-direction: column; }
 .mib-pane > .mib-foot:has(> [data-mib="my-tasks"]) { border-top: 0; }
 .mib-upt .mib-play { width: 24px; height: 24px; font-size: 10px; }
+
+/* your reply's Edit · Delete: the symbols alone, round pills (the minutes left on Edit's tooltip) */
+.mib-btn.sm.ico { width: 26px; height: 26px; padding: 0; justify-content: center; border-radius: 13px; }
+.mib-btn.sm.ico .ic, .mib-btn.sm.ico svg { width: 14px; height: 14px; }
