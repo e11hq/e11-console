@@ -289,7 +289,7 @@ const MacInbox = (() => {
     // your replies waiting to go out (scheduled here or on the website): last in the thread, Send Now · Cancel
     const waiting = (db.scheduled || []).filter((x) => x.taskId === t.id && x.authorId === currentUserId && x.state === 'waiting').sort((a, b) => String(a.sendAt).localeCompare(String(b.sendAt)));
     waiting.forEach((x) => {
-      const html = `<div class="mib-yours mib-sched">${upd({ id: 'sch-' + x.id, from: currentUserId, at: x.createdAt || nowISO() }, linkWords(mentionMark(esc(x.text || ''))), commentFiles(x.attachments || []))
+      const html = `<div class="mib-yours mib-sched" data-sch="${esc(x.id)}">${upd({ id: 'sch-' + x.id, from: currentUserId, at: x.createdAt || nowISO() }, linkWords(mentionMark(esc(x.text || ''))), commentFiles(x.attachments || []))
         .replace(`<b>${esc(nameOf(currentUserId))}</b>`, '<b>You</b>')
         .replace(/<span>[^<]*<\/span><\/div><div class="mib-u-t">/, `<span class="mib-sch-at">${icon('clock')}Scheduled · ${esc(Sched.when(Date.parse(x.sendAt)))}</span><span class="mib-acts"><button type="button" class="mib-btn sm ico" data-mib="sch-now" data-id="${esc(x.id)}" title="Send now" aria-label="Send now">${icon('send')}</button><button type="button" class="mib-btn sm ico" data-mib="sch-x" data-id="${esc(x.id)}" title="Cancel" aria-label="Cancel">${icon('trash')}</button></span></div><div class="mib-u-t">`)}</div>`;
       const last = blocks[blocks.length - 1];
@@ -303,7 +303,7 @@ const MacInbox = (() => {
       const to = firstName(lastComment.authorId);
       const where = lastComment.parentId || mineAll.length ? `Replies in ${esc(nameOf(rootC ? rootC.authorId : lastComment.authorId))}’s thread` : `Starts a thread under ${esc(to)}’s comment`;
       reply = `<!--foot--><div class="mib-reply"><div class="mib-where">↳ ${where}</div>${upHTML()}<div class="mib-box"><button type="button" class="mib-add" data-mib="attach" title="Attach files" aria-label="Attach files">${icon('plus')}</button><span class="mib-field"><span class="mib-hl" aria-hidden="true"></span><textarea rows="1" class="mib-in" placeholder="Reply to ${esc(to)}…" data-tid="${esc(t.id)}" data-root="${esc(root)}"></textarea></span>
-        <button type="button" class="mib-clock" data-mib="sched" data-tip="Schedule" aria-label="Schedule">${icon('clock')}</button><button type="button" class="mib-send" data-mib="send" title="Send" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button></div></div>`;
+        <button type="button" class="mib-clock" data-mib="sched" title="Schedule this reply" aria-label="Schedule this reply">${icon('clock')}</button><button type="button" class="mib-send" data-mib="send" title="Send" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button></div></div>`;
     }
     return head(t ? statusIcon(t, 16) : '', t ? (t.title || 'Untitled task') : 'Deleted task', taskLine(t), unreadBtn(g) + openBtn(g, 'Open Task'))
       + cap(`${items.length} update${items.length === 1 ? '' : 's'} · newest last`) + `<!--body--><div class="mib-ups">${ups}</div>${reply}`;
@@ -557,7 +557,7 @@ const MacInbox = (() => {
     measure.style.width = ta.clientWidth + 'px';
     measure.textContent = (ta.value || ' ') + '\u200b';
     const h = Math.min(measure.offsetHeight, 133);
-    ta.style.height = h + 6 + 'px';
+    ta.style.height = h + 11 + 'px';
     ta.style.overflowY = measure.offsetHeight > 133 ? 'auto' : 'hidden';
     paintBox(ta);
   }
@@ -615,11 +615,17 @@ const MacInbox = (() => {
     html = html.replace(/\n/g, '<br>');
     const files = pending.splice(0).map((x) => { if (x.blob) URL.revokeObjectURL(x.url); return x.att; });
     db.scheduled = db.scheduled || [];
-    db.scheduled.push({ id: 's-' + uid(), taskId: t.id, taskTitle: t.title || '', authorId: currentUserId, replyTo: ta.dataset.root || null, text, html, attachments: files, sendAt: new Date(ms).toISOString(), createdAt: nowISO(), state: 'waiting' });
+    const sid = 's-' + uid();
+    db.scheduled.push({ id: sid, taskId: t.id, taskTitle: t.title || '', authorId: currentUserId, replyTo: ta.dataset.root || null, text, html, attachments: files, sendAt: new Date(ms).toISOString(), createdAt: nowISO(), state: 'waiting' });
     ta.value = ''; picked = new Set(); fitBox(ta); spClose();
     commit();
     if (ui.view === 'inbox') renderContent();
     toast(`Reply scheduled for ${Sched.when(ms)}`);
+    // (the scheduled reply scrolled into view, smoothly, as a sent one — Haris 2026-11-17)
+    requestAnimationFrame(() => {
+      const sc = document.querySelector('.mib-scroll'), el = sc && sc.querySelector(`[data-sch="${sid}"]`);
+      if (el) sc.scrollTo({ top: sc.scrollTop + el.getBoundingClientRect().bottom - sc.getBoundingClientRect().bottom + 18, behavior: 'smooth' });
+    });
   }
   document.addEventListener('mousedown', (e) => { if (sp && !sp.el.contains(e.target) && !e.target.closest('[data-mib="sched"]')) spClose(); }, true);
   document.addEventListener('click', (e) => {
