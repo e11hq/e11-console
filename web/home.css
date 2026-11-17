@@ -975,7 +975,7 @@ html[data-theme="light"] .mib-pop { background: rgba(255, 255, 255, .98); box-sh
 .mib-pane > .mib-foot { margin-top: 0; }
 .mib-where { font-size: 11.5px; color: var(--mc-dim); margin: 0 0 6px 4px; }
 .mib-box { display: flex; align-items: flex-end; gap: 8px; padding: 6px 6px 6px 14px; border-radius: 18px; background: var(--mc-field); }
-.mib-in { flex: 1; border: 0; outline: 0; resize: none; background: none; color: var(--mc-fg); font: inherit; font-size: 13px; line-height: 19px; padding: 5.5px 0; max-height: 140px; }
+.mib-in { flex: 1; border: 0; outline: 0; resize: none; overflow-y: hidden; min-height: 30px; box-sizing: border-box; background: none; color: var(--mc-fg); font: inherit; font-size: 13px; line-height: 19px; padding: 5.5px 0; max-height: 140px; }
 .mib-in::placeholder { color: var(--mc-dim); }
 /* (the words drawn just behind the box's own clear ones, so an @name picked from the list shows in the list's blue) */
 .mib-field { flex: 1; min-width: 0; position: relative; display: flex; }
