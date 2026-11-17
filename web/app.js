@@ -6702,7 +6702,11 @@ document.addEventListener('click', async (e) => {
         if (i >= list.length - 1) { toast('Already at the last status'); return; }
         changeStatus(t, list[Math.max(0, i) + 1].id); return;
       }
-      case 'ib-filter': e.stopPropagation(); inboxFilterMenu(actEl); return;
+      case 'ib-filter': {   // (the Mac app: Apple's own pull-down menu, just under the button — Haris 2026-11-17)
+        e.stopPropagation();
+        if (typeof MacInbox !== 'undefined' && MacInbox.on() && MacBar.on()) { const r = actEl.getBoundingClientRect(); actEl.__pt = { x: r.left, y: r.bottom + 5 }; }
+        inboxFilterMenu(actEl); return;
+      }
       case 'notif-clear': e.stopPropagation(); clearTaskNotifs(id, actEl.dataset.read !== '1'); return;
       case 'mw-group': ui.mytasksCollapsed[id] = !ui.mytasksCollapsed[id]; renderContent(); return;
       case 'desc-open': {

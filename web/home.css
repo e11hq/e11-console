@@ -797,10 +797,15 @@ html.mac-chrome .mib { --text: var(--mc-fg); --text-2: var(--mc-dim); --text-3: 
 .mib-tab { border: 0; background: none; font: inherit; font-size: 12.5px; color: var(--mc-fg); padding: 3px 12px; border-radius: 6px; cursor: default; }
 .mib-tab.on { background: var(--mc-win); font-weight: 600; box-shadow: 0 .5px 2px rgba(0, 0, 0, .25); }
 .mib-tab i { font-style: normal; color: var(--mc-dim); }
-.mib-btn { height: 28px; padding: 0 14px; border-radius: 14px; font: inherit; font-size: 13px; border: 0; background: var(--mc-glass); box-shadow: none; color: var(--mc-fg); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; cursor: default; }
-.mib-btn:hover { background: linear-gradient(var(--mc-sel), var(--mc-sel)), var(--mc-glass); }
+/* (a pill with no border, filled as Apple's bordered buttons — clear on the page and on a card, light and dark: Haris 2026-11-17) */
+.mib { --mib-fill: rgba(120, 120, 128, .2); --mib-fill-h: rgba(120, 120, 128, .3); }
+html.mac-chrome[data-theme="light"] .mib { --mib-fill: rgba(120, 120, 128, .12); --mib-fill-h: rgba(120, 120, 128, .2); }
+.mib-btn { height: 28px; padding: 0 14px; border-radius: 14px; font: inherit; font-size: 13px; border: 0; background: var(--mib-fill); box-shadow: none; color: var(--mc-fg); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; cursor: default; }
+.mib-btn:hover { background: var(--mib-fill-h); }
+.mib-btn.primary:hover { background: color-mix(in srgb, var(--mc-blue) 88%, #000); }
 .mib-btn.primary { background: var(--mc-blue); box-shadow: none; color: #fff; font-weight: 500; }
-.mib-chev { font-size: 9px; color: var(--mc-dim); }
+.mib-chev { display: inline-grid; color: var(--mc-dim); margin-right: -3px; }
+.mib-chev svg { width: 12px; height: 12px; stroke-width: 1.8; }
 .mib-body { flex: 1; min-height: 0; display: flex; gap: 16px; }
 .mib-list { width: 400px; flex: none; overflow: auto; margin-top: -8px; padding-bottom: 8px; }
 .mib-group { padding: 14px 4px 6px; font-size: 13px; font-weight: 600; color: var(--mc-dim); }

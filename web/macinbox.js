@@ -69,7 +69,7 @@ const MacInbox = (() => {
     return `<div class="mib">
       <header class="mib-head"><div><div class="mib-line">${unreadN ? `${unreadN} unread` : 'All caught up'}</div><h1>Inbox</h1></div>
         <div class="mib-tools"><span class="mib-seg">${seg}</span>
-          <button type="button" class="mib-btn" data-action="ib-filter">${esc(f === 'all' ? 'All updates' : IB_FILTERS[f])}<span class="mib-chev">⌄</span></button>
+          <button type="button" class="mib-btn" data-action="ib-filter">${esc(f === 'all' ? 'All updates' : IB_FILTERS[f])}<span class="mib-chev">${icon('chev')}</span></button>
           ${unreadN ? `<button type="button" class="mib-btn" data-action="mark-all-read">✓ Clear All</button>` : ''}</div></header>
       <div class="mib-body">
         <div class="mib-list">${groups.map((x) => `<div class="mib-group" data-key="g:${x.name}">${x.name}</div><div class="mib-card" data-key="c:${x.name}">${x.rows.map(rowHTML).join('')}</div>`).join('')
@@ -143,7 +143,7 @@ const MacInbox = (() => {
     return `<div class="mib-tiles ${big ? 'big' : ''}">${list.map((a, i) => {
       const k = fileKind(a), u = picOf(a);
       const ext = fileExt(a.name), page = k === 'pdf' || k === 'text' || ['doc', 'docx', 'pages', 'rtf'].includes(ext);
-      const pic = u ? `<img src="${u}" alt="" loading="lazy">` : page ? '<span class="mib-page"><i></i><i></i><i></i><i></i><i></i><i></i></span>'
+      const pic = u ? `<img src="${u}" alt="" decoding="sync">` : page ? '<span class="mib-page"><i></i><i></i><i></i><i></i><i></i><i></i></span>'
         : `<span class="mib-ficon">${icon(k === 'image' ? 'image' : k === 'video' ? 'play' : 'clip')}<b>${esc(ext.slice(0, 4).toUpperCase() || 'FILE')}</b></span>`;
       return `<button type="button" class="mib-tile" data-mib="pv" data-set="${set}" data-i="${i}" data-att="${esc(a.id || '')}"><span class="mib-tpic">${pic}${k === 'video' ? '<span class="mib-play">▶</span>' : ''}</span><span class="mib-tn">${esc(a.name)}</span><span class="mib-ts">${esc(fmtSize(a.size) || '')}</span></button>`;
     }).join('')}</div>`;
@@ -293,7 +293,7 @@ const MacInbox = (() => {
     const occ = m && typeof Occasions !== 'undefined' ? Occasions.between(m + '-01', m + '-31').filter((o) => String(o.date || '').slice(0, 7) === m) : [];
     const fmt = Object.fromEntries((Plans.FORMATS || []).map(([k, name]) => [k, name]));
     const chName = Object.fromEntries((typeof Cal !== 'undefined' && Cal.CHANNELS ? Cal.CHANNELS : []).map(([k, name]) => [k, name]));
-    const pic = (x) => { const gr = Plans.progress(x); const img = (gr.files || []).find((r) => fileKind(r) === 'image') || (x.refs || []).find((r) => r.path && fileKind(r) === 'image'); return img ? `<img src="${imgUrl(img, 160)}" alt="" loading="lazy">` : ''; };
+    const pic = (x) => { const gr = Plans.progress(x); const img = (gr.files || []).find((r) => fileKind(r) === 'image') || (x.refs || []).find((r) => r.path && fileKind(r) === 'image'); return img ? `<img src="${imgUrl(img, 160)}" alt="" decoding="sync">` : ''; };
     const shownPosts = posts.slice(0, 3);
     const row = (x) => { const d = x.day ? parseYmd(x.day) : null; const s = x.check && POST_ST[x.check.state];
       return `<div class="mib-post ${x.check && x.check.state === 'changes' ? 'chg' : ''}"><span class="mib-pday"><b>${d ? d.getDate() : '–'}</b><span>${d ? d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase() : ''}</span></span><span class="mib-ppic">${pic(x)}</span><span class="mib-pt"><b>${esc(x.title || 'Untitled post')}</b><span>${esc([fmt[x.format] || 'Post', (x.channels || []).map((k) => chName[k] || k).join(', ')].filter(Boolean).join(' · '))}</span></span>${s ? soft(s[0], s[1]) : ''}</div>`; };
@@ -493,6 +493,7 @@ const MacInbox = (() => {
     if (a.nodeType !== b.nodeType || a.nodeName !== b.nodeName) { a.replaceWith(b); return; }
     if (a.nodeType !== 1) { if (a.nodeValue !== b.nodeValue) a.nodeValue = b.nodeValue; return; }
     if (a.isEqualNode(b)) return;
+    if (a.nodeName === 'IMG') { a.replaceWith(b); return; }
     [...a.attributes].forEach((x) => { if (!b.hasAttribute(x.name)) a.removeAttribute(x.name); });
     [...b.attributes].forEach((x) => { if (a.getAttribute(x.name) !== x.value) a.setAttribute(x.name, x.value); });
     if (a.nodeName === 'TEXTAREA') return;   // (what's being typed stays)
@@ -507,14 +508,27 @@ const MacInbox = (() => {
     });
     while (a.childNodes.length > neu.length) a.lastChild.remove();
   }
+  // (pictures kept once seen: each one held in memory, so a notification picked again shows its pictures at once, not
+  //  loaded and drawn again — Haris 2026-11-17 "images are loading again … cache them"; the newest 300)
+  const held = new Map();
+  function hold(root) {
+    root.querySelectorAll('.mib img').forEach((im) => {
+      const u = im.getAttribute('src');
+      if (!u || held.has(u)) { if (u) { const x = held.get(u); held.delete(u); held.set(u, x); } return; }
+      const keep = new Image(); keep.decoding = 'async'; keep.src = u; held.set(u, keep);
+      if (held.size > 300) held.delete(held.keys().next().value);
+    });
+  }
   function patch(c) {
     const cur = c.firstElementChild;
+    hold(c);
     if (!cur || c.children.length !== 1 || !cur.classList.contains('mib')) return false;
     const t = document.createElement('template');
     t.innerHTML = view().trim();
     const nb = t.content.firstElementChild;
     if (!nb) return false;
     morph(cur, nb);
+    hold(c);
     // (another notification picked: its pane fades in, as when it was drawn afresh)
     const pane = wasFresh && cur.querySelector('.mib-pane');
     if (pane) { pane.classList.remove('fresh'); void pane.offsetWidth; pane.classList.add('fresh'); }
