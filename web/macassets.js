@@ -144,7 +144,6 @@ const MacAssets = (() => {
     return `<div class="mca" data-key="mca-f-${f.id}" data-page="folder">${fontFaces(files)}
       <div class="mca-head f" data-key="head"><button type="button" class="mca-pill ico mca-back" ${parentFolder(c, f) ? `data-action="open-cfolder" data-id="${parentFolder(c, f).id}" title="Back to ${esc(parentFolder(c, f).name)}"` : `data-action="open-client" data-id="${c.id}" title="Back to ${esc(c.name)}"`} aria-label="Back">${svg('<path d="m10 3-5 5 5 5"/>')}</button>${lg(c, 44)}<div class="mca-ht"><h1>${esc(f.name)}</h1><div class="mca-meta">${where} · ${count}${f.finalOf ? ` · <span class="mca-fin">Final files</span>${src && !src.deleted ? ` · <a data-action="open-task" data-id="${src.id}">Open Task</a>` : ''}` : ''}</div></div>
         ${pill('Info', `data-mca="info-folder" data-id="${f.id}"`, SV.info)}${files.length ? pill('Download All', 'data-action="ca-download-all"', SV.down) : ''}${mk ? pill('New Folder', `data-mca="new-folder" data-parent="${f.id}"`, SV.plus, !up) : ''}${up ? pill('Upload Files', 'data-action="ca-upload"', SV.up, true) : ''}</div>
-      <div class="ca-uploads mca-ups" id="ca-uploads" data-key="ups" data-keep></div>
       ${subs.length || nfH ? `<div class="mca-cap" data-key="sc">FOLDERS</div><div class="mca-subs" data-key="subs">${subs.map((x) => folderCard(c, x, true)).join('')}${nfH}</div>` : ''}
       ${files.length ? `<div class="mca-cap" data-key="ac">${plural(files.length, 'FILE')}</div><div class="mca-tgrid" data-key="ag">${files.map((a) => tile(c, f, a)).join('')}</div>` : ''}${empty}
     </div>`;
@@ -531,6 +530,33 @@ const MacAssets = (() => {
     setTimeout(() => put(src, m.fo), 0);
     toast(`Moved “${a.name}” to ${m.fo.name}`, { label: 'Undo', run: () => { const c = clientById(mv.cid), s2 = c && c.folders.find((x) => x.id === mv.fid), d2 = c && c.folders.find((x) => x.id === m.fo.id); if (s2 && d2 && d2.files.some((x) => x.id === a.id)) put(d2, s2); } }, 8000);
   }, true);
+
+  // ---------- uploads under way: small cards floating at the window's bottom right, one stacked on another, each with its
+  //  ✕; one done fades out by itself (Haris 19:37). Kept on the window, not the page: going elsewhere doesn't stop them. ----------
+  function upBox() {
+    let box = document.getElementById('ca-uploads');
+    if (box && !box.classList.contains('mca-ups')) return box;   // (another page's own box)
+    if (!box) { box = document.createElement('div'); box.id = 'ca-uploads'; box.className = 'ca-uploads mca-ups'; document.body.appendChild(box); watch(box); }
+    return box;
+  }
+  const bye = (row, ms) => { if (row.__bye) return; row.__bye = setTimeout(() => { row.classList.add('gone'); setTimeout(() => row.remove(), 320); }, ms); };
+  function settle(row) {
+    if (row.classList.contains('ok')) bye(row, 1200);
+    else if (row.classList.contains('err') && !row.querySelector('.mca-upx')) {
+      // (failed or cancelled: stays a while to be read, its ✕ takes it away now)
+      const x = document.createElement('button'); x.type = 'button'; x.className = 'icon-btn sm up-cx mca-upx'; x.title = 'Close'; x.innerHTML = icon('x');
+      x.addEventListener('click', (e) => { e.stopPropagation(); clearTimeout(row.__bye); row.__bye = null; bye(row, 0); });
+      row.appendChild(x); bye(row, 6000);
+    }
+  }
+  function watch(box) {
+    new MutationObserver((list) => list.forEach((m) => {
+      if (m.type === 'attributes' && m.target.classList && m.target.classList.contains('sr-item')) settle(m.target);
+      m.addedNodes && m.addedNodes.forEach((n) => { if (n.classList && n.classList.contains('sr-item')) settle(n); });
+    })).observe(box, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+  }
+  if (on()) upBox(); else setTimeout(() => { if (on()) upBox(); }, 1500);
+  document.addEventListener('click', () => { if (on()) upBox(); }, true);
 
   return { on, view, draw, results, info };
 })();
