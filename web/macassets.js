@@ -190,7 +190,7 @@ const MacAssets = (() => {
     morph(cur, nb);
     return true;
   }
-  function draw(c) { if (!patch(c)) c.innerHTML = view(); }
+  function draw(c) { if (!patch(c)) c.innerHTML = view(); if (natWins.size) natRefresh(); }
 
   // ---------- C7: New Folder in place ----------
   function startNew(c, parent) {
@@ -314,42 +314,83 @@ const MacAssets = (() => {
   const wins = new Map();
   let zTop = 900;
   const front = (w) => { w.style.zIndex = ++zTop; };
-  function info(kind, id) {
+  // (what an Info shows, as plain words — drawn by the page's window, or by the Mac's own: Haris 19:53)
+  function infoData(kind, id) {
     let c = null, f = null, a = null;
     for (const cl of db.clients || []) for (const fo of cl.folders) {
       if (kind === 'folder' && fo.id === id) { c = cl; f = fo; }
       if (kind === 'file') { const x = fo.files.find((y) => y.id === id); if (x) { c = cl; f = fo; a = x; } }
     }
-    if (!f) return;
-    const key = kind + ':' + id;
-    if (wins.has(key)) { front(wins.get(key)); return; }
-    const who = (u) => (u && userById(u) ? esc(fullName(userById(u))) : u ? 'Former team member' : '—');
-    const when = (iso) => (iso ? esc(fmtDateTime(iso)) : '—');
-    const row = (k2, v) => `<div class="mca-k"><span>${k2}</span><b>${v}</b></div>`;
-    const loc = esc([c.name, ...folderAncestors(c, f).map((x) => x.name), ...(a ? [f.name] : [])].join(' › '));
-    let title, sub, pic, rows, fin = '', taskId = null;
+    if (!f) return null;
+    const who = (u) => (u && userById(u) ? fullName(userById(u)) : u ? 'Former team member' : '—');
+    const when = (iso) => (iso ? fmtDateTime(iso) : '—');
+    const loc = [c.name, ...folderAncestors(c, f).map((x) => x.name), ...(a ? [f.name] : [])].join(' › ');
+    const d = { key: kind + ':' + id, kind, c, f, a, fin: '', taskId: null };
     if (a) {
       const k = fileKind(a), ext = (fileExt(a.name) || 'file').toUpperCase();
-      title = a.name;
-      sub = `${esc(ext)} ${isFont(a) ? 'font' : k === 'image' ? 'image' : k === 'video' ? 'video' : k === 'pdf' ? 'document' : 'file'} · ${esc(fmtSize(a.size) || '—')}`;
-      pic = `<div class="mib-tpic mca-iw-pic ${isFont(a) ? 'font' : ''}">${picHTML(a)}</div>`;
+      d.title = a.name; d.ext = fileExt(a.name) || '';
+      d.draw = isFont(a) ? 'font' : picOf(a) ? 'pic' : 'icon';
+      d.pic = isFont(a) ? '' : picOf(a);
+      d.sub = `${ext} ${isFont(a) ? 'font' : k === 'image' ? 'image' : k === 'video' ? 'video' : k === 'pdf' ? 'document' : 'file'} · ${fmtSize(a.size) || '—'}`;
       if (a.final) {
         const m = a.final, t = task(m.taskId);
-        fin = '<div class="mca-fin big">Final files of a completed task</div>';
+        d.fin = 'Final files of a completed task';
         const client = m.clientNone ? 'not needed' : m.clientBy ? `recorded by ${who(m.clientBy)}` : 'not recorded';
-        rows = [row('Completed', when(m.completedAt)), row('Task', esc(m.taskTitle || f.name)), row('Created by', who(m.createdBy)), row('Assignee', who(m.assignee)),
-          row('Approved by', `${who(m.cdBy)} (CD)${m.clientBy ? ' &amp; the client' : ''}`), row('Client approval', m.clientBy ? when(m.clientAt) + ' · ' + client : client), row('Where', loc)];
-        if (t && !t.deleted && db.tasks.includes(t)) taskId = t.id;
-      } else rows = [row('Added by', who(a.addedBy)), row('Date added', when(a.addedAt)), row('Where', loc)];
+        d.rows = [['Completed', when(m.completedAt)], ['Task', m.taskTitle || f.name], ['Created by', who(m.createdBy)], ['Assignee', who(m.assignee)],
+          ['Approved by', `${who(m.cdBy)} (CD)${m.clientBy ? ' & the client' : ''}`], ['Client approval', m.clientBy ? when(m.clientAt) + ' · ' + client : client], ['Where', loc]];
+        if (t && !t.deleted && db.tasks.includes(t)) d.taskId = t.id;
+      } else d.rows = [['Added by', who(a.addedBy)], ['Date added', when(a.addedAt)], ['Where', loc]];
     } else {
       const tree = folderTree(c, f), all = f.files.concat(...tree.map((x) => x.files));
-      title = f.name;
-      sub = `Folder · ${esc(fmtSize(all.reduce((n, x) => n + (x.size || 0), 0)) || '0 KB')}`;
-      pic = `<div class="mca-iw-pic fold">${folderSVG(!!f.finalOf, 'mca-iw-fi')}</div>`;
-      if (f.finalOf) { fin = '<div class="mca-fin big">Final files of a completed task</div>'; const t = task(f.finalOf); if (t && !t.deleted && db.tasks.includes(t)) taskId = t.id; }
-      rows = [row('Created by', isAutoFolder(c, f) && !f.finalOf ? 'Made with the client' : who(f.createdBy)), row('Date', when(f.createdAt || c.createdAt)),
-        ...(isFilesTop(c, f) || tree.length ? [row('Folders', String(tree.length))] : []), row('Files', String(all.length)), row('Where', loc)];
+      d.title = f.name; d.draw = f.finalOf ? 'final-folder' : 'folder';
+      d.sub = `Folder · ${fmtSize(all.reduce((n, x) => n + (x.size || 0), 0)) || '0 KB'}`;
+      if (f.finalOf) { d.fin = 'Final files of a completed task'; const t = task(f.finalOf); if (t && !t.deleted && db.tasks.includes(t)) d.taskId = t.id; }
+      d.rows = [['Created by', isAutoFolder(c, f) && !f.finalOf ? 'Made with the client' : who(f.createdBy)], ['Date', when(f.createdAt || c.createdAt)],
+        ...(isFilesTop(c, f) || tree.length ? [['Folders', String(tree.length)]] : []), ['Files', String(all.length)], ['Where', loc]];
     }
+    return d;
+  }
+  // ---------- the Mac's own Get Info window (Mac app with it: Info.swift); the page's window on Macs without it ----------
+  const natWins = new Map();   // key → what was sent (sent again only when it changes)
+  let natOK = null;            // (null: not asked yet; false: this Mac app has no window of its own for it)
+  const abs = (u) => (u ? new URL(u, location.href).href : '');
+  const natLoad = (d) => ({ key: d.key, title: d.title, sub: d.sub, fin: d.fin, rows: d.rows, task: !!d.taskId, draw: d.draw, ext: d.ext || '', pic: abs(d.pic || ''),
+    font: d.draw === 'font' && d.a ? abs(fileUrl(d.a)) : '' });
+  function natSend(d, update) {
+    const load = natLoad(d), json = JSON.stringify(load);
+    if (update && natWins.get(d.key) === json) return Promise.resolve(true);
+    natWins.set(d.key, json);
+    return NativeMac.call('infoWindow', { ...load, update: !!update }).then((r) => !!(r && r.ok), () => false);
+  }
+  window.__e11Info = (e) => {
+    if (!e || !e.key) return;
+    if (e.act === 'closed') natWins.delete(e.key);
+    if (e.act === 'task') { const [kind, id] = e.key.split(':'); const d = infoData(kind, id); if (d && d.taskId) openTask(d.taskId); }
+  };
+  // (what's open is kept as it is now: changed elsewhere, it changes; gone, its window goes)
+  function natRefresh() {
+    natWins.forEach((_, key) => {
+      const [kind, id] = key.split(':'), d = infoData(kind, id);
+      if (!d) { natWins.delete(key); NativeMac.call('infoClose', { key }).catch(() => {}); } else natSend(d, true);
+    });
+  }
+  setInterval(() => { if (natWins.size) natRefresh(); }, 3000);   // (changes made while another page is on show too)
+  function info(kind, id) {
+    const d = infoData(kind, id);
+    if (!d) return;
+    if (natOK !== false && typeof NativeMac !== 'undefined') {
+      natSend(d, false).then((ok) => { if (ok) { natOK = true; return; } natWins.delete(d.key); natOK = false; webInfo(d); });
+      return;
+    }
+    webInfo(d);
+  }
+  function webInfo(d) {
+    const { key, a, f } = d;
+    if (wins.has(key)) { front(wins.get(key)); return; }
+    const pic = a ? `<div class="mib-tpic mca-iw-pic ${isFont(a) ? 'font' : ''}">${picHTML(a)}</div>` : `<div class="mca-iw-pic fold">${folderSVG(!!f.finalOf, 'mca-iw-fi')}</div>`;
+    const rows = d.rows.map(([k, v]) => `<div class="mca-k"><span>${esc(k)}</span><b>${esc(v)}</b></div>`);
+    const fin = d.fin ? `<div class="mca-fin big">${esc(d.fin)}</div>` : '';
+    const title = d.title, sub = esc(d.sub), taskId = d.taskId;
     const w = document.createElement('div');
     w.className = 'mca-iw';
     w.setAttribute('role', 'dialog');
