@@ -124,7 +124,7 @@ const MacAssets = (() => {
     const q = ui.caScope === c.id ? ui.caQ || '' : '';
     const grid = `<div class="mca-fgrid" data-key="grid">${pinSort(topFolders(c)).map((f) => folderCard(c, f)).join('')}${nfCard(c, null)}</div>`;
     return `<div class="mca" data-key="mca-c-${c.id}" data-page="client">
-      <div class="mca-head c" data-key="head">${lg(c, 64)}<div class="mca-ht"><h1>${esc(c.name)}</h1><div class="mca-meta">${plural(topFolders(c).length, 'folder')} · ${plural(clientFileCount(c), 'file')}${projects.length ? ` · Clients ${projects.map((p) => `<a class="mca-chip" data-action="go-project" data-id="${p.id}"><i style="background:${esc(p.color || '#87909e')}"></i>${esc(p.name)}</a>`).join('')}` : ''}</div></div>
+      <div class="mca-head c" data-key="head">${canAssets() ? `<span class="mca-lgb" data-mca="client-more" title="Client options">${lg(c, 64)}</span>` : lg(c, 64)}<div class="mca-ht"><h1>${esc(c.name)}</h1><div class="mca-meta">${plural(topFolders(c).length, 'folder')} · ${plural(clientFileCount(c), 'file')}${projects.length ? ` · Clients ${projects.map((p) => `<a class="mca-chip" data-action="go-project" data-id="${p.id}"><i style="background:${esc(p.color || '#87909e')}"></i>${esc(p.name)}</a>`).join('')}` : ''}</div></div>
         ${canAssets() ? pill('New Folder', 'data-mca="new-folder"', SV.plus) + `<button type="button" class="mca-pill ico" data-mca="client-more" title="Client options" aria-label="Client options">${SV.more}</button>` : ''}</div>
       ${bar(c)}
       <div id="ca-body" data-scope="${c.id}" data-key="body">${q.trim() ? results(q, c) : grid}</div>

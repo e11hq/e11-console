@@ -1172,6 +1172,9 @@ html.mac-chrome[data-theme="light"] .mca-x { background: rgba(0, 0, 0, .25); col
 #ca-body:empty { display: none; }
 /* logos: the client's own square */
 .mca-lg { display: grid; flex: none; }
+/* (C2: the client's picture opens the same options as ••• — Haris 19:04) */
+.mca-lgb { display: grid; flex: none; transition: filter .15s ease; }
+.mca-lgb:hover { filter: brightness(1.08); }
 .mca-lg .cl-logo { box-shadow: 0 1px 2px rgba(0, 0, 0, .4); }
 .mca-lg .cl-logo:not(.mono) img { box-sizing: border-box; padding: 11%; }
 .mca-lg.s112 .cl-logo { border-radius: 22px; }
