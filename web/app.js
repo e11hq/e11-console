@@ -9686,7 +9686,7 @@ function meMenu(anchor) {
     ...(Host.isServer ? [{ label: 'What’s new', icon: 'info', run: () => whatsNewDialog(false) }] : []),
     ...(Host.isServer && !Host.isMacApp ? [{ label: 'Get the Mac app', icon: 'download', run: macAppDialog }] : []),
     ...(Host.isMacApp && !MacUpdate.store() ? [{ label: 'Get the App Store app', icon: 'download', run: macAppDialog }] : []),
-    ...(isTestCopy() && (AppIcon.isOwner ? AppIcon.isOwner() : isAdm(me())) && !(typeof ViewAs !== 'undefined' && ViewAs.viewing()) ? [{ label: 'Start fresh with sample data…', icon: 'trash', run: resetSampleData }] : []),
+    ...(isTestCopy() && (AppIcon.isOwner ? AppIcon.isOwner() : isAdm(me())) && !(typeof ViewAs !== 'undefined' && ViewAs.viewing()) ? [{ label: 'Add every kind of Inbox update', icon: 'inbox', run: sampleInbox }, { label: 'Start fresh with sample data…', icon: 'trash', run: resetSampleData }] : []),
     ...(typeof ViewAs !== 'undefined' && ViewAs.available() ? [{ label: ViewAs.viewing() ? 'View as someone else…' : 'View as… (test site)', icon: 'users', run: ViewAs.pick }, ...(ViewAs.viewing() ? [{ label: 'Back to me', icon: 'reply', run: ViewAs.back }] : [])] : []),
     ...Fin.addItems(),
     '-',
@@ -9809,6 +9809,10 @@ function enterApp() {
 }
 // The test copy (test.e11hq.com) can be filled with sample people, tasks and comments
 const isTestCopy = () => Host.isServer && /-test\./.test(String(Sync.version || ''));
+// Test copy, owner only: one Inbox update of every kind, from the test copy's own tasks and people (Haris 2026-11-17)
+async function sampleInbox() {
+  try { const r = await api('POST', '/api/sample/inbox', {}); toast(`${r.added} updates added to your Inbox`); } catch (e) { toast('Could not add them: ' + e.message); }
+}
 // Test copy, owner only: wipe everything (except your own account) and start again with fresh sample data
 async function resetSampleData() {
   const ok = await dialog({ title: 'Start fresh with sample data?', danger: true, okText: 'Wipe and start fresh',

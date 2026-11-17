@@ -32,7 +32,7 @@ import { createHomeView } from './homeview.js';
 import { createOccasionReminders } from './occremind.js';
 import { createBirthdays } from './birthdays.js';
 import { createScheduled } from './scheduled.js';
-import { createDaily, dailyRole } from './amdaily.js';
+import { createDaily, dailyRole, dailyFor, dailyText } from './amdaily.js';
 import { createLinks } from './links.js';
 import { createViewCopies } from './viewcopy.js';
 import { createOffice } from './office.js';
@@ -1450,6 +1450,76 @@ export function createServer(cfg) {
       const { rev } = store.importAll(data, owner.id);
       for (const st of streams) send(st, 'resync', { rev, wiped: true });    // every open app reloads its data (its unsaved old changes dropped)
       return json(res, 200, { ok: true, rev, tasks: data.tasks.length, people: data.users.length, clients: data.projects.length });
+    }
+
+    // Test copy only, owner only: one Inbox update of every kind for the owner, from the test copy's own tasks, people,
+    // clients, plans and claims — to try each one in the Inbox (Haris 2026-11-17). Nothing else is changed.
+    if (p === '/api/sample/inbox' && req.method === 'POST') {
+      if (!/-test\.|-dev$/.test(version)) return json(res, 403, { ok: false, error: 'Only on the test copy' });
+      if (!isOwner(req.realUser || u)) return json(res, 403, { ok: false, error: 'Only the owner can do this' });
+      const me = req.realUser || u;
+      const people = store.list('users').filter((x) => x.id !== me.id && x.active !== false && !x.removed);
+      const tasks = store.list('tasks').filter((t) => !t.parentId && !t.deleted);
+      const withC = tasks.filter((t) => (t.comments || []).some((c) => !c.parentId));
+      const withF = tasks.filter((t) => (t.attachments || []).length || (t.comments || []).some((c) => (c.attachments || []).length));
+      if (!people.length || !tasks.length) return json(res, 400, { ok: false, error: 'Add some people and tasks first (Start fresh with sample data)' });
+      const pick = (l, i) => l[i % l.length];
+      const by = (i) => pick(people, i).id;
+      const T = (i) => pick(tasks, i), TC = (i) => pick(withC.length ? withC : tasks, i), TF = (i) => pick(withF.length ? withF : tasks, i);
+      const esc2 = (v) => String(v || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      const t0 = Date.now();
+      let k = 0;
+      const out = [];
+      const add = (n) => { const id = 'n-tst' + crypto.randomBytes(5).toString('hex'); out.push({ kind: 'notifications', id, data: { id, to: me.id, read: false, commentId: null, snippet: '', at: new Date(t0 - (k++) * 7 * 60000).toISOString(), ...n } }); };
+      const cOf = (t) => (t.comments || []).filter((c) => !c.parentId).slice(-1)[0];
+      // comments, mentions, replies
+      { const t = TC(0), c = cOf(t); add({ from: by(0), taskId: t.id, kind: 'comment', text: 'commented on', snippet: 'Here are the latest files, please take a look.', commentId: c ? c.id : null }); }
+      { const t = TC(1), c = cOf(t); add({ from: by(1), taskId: t.id, kind: 'mention', text: 'mentioned you in a comment on', snippet: `@${me.name || 'you'} can you check this before it goes to the client?`, commentId: c ? c.id : null }); }
+      { const t = TC(2), c = cOf(t); add({ from: by(2), taskId: t.id, kind: 'comment', text: 'replied to a comment on', snippet: 'Done — updated the headline as asked.', commentId: c ? c.id : null }); }
+      // task changes
+      add({ from: by(3), taskId: T(3).id, kind: 'assigned', text: 'assigned you to' });
+      add({ from: by(4), taskId: T(4).id, kind: 'unassigned', text: 'removed you from' });
+      add({ from: by(5), taskId: T(5).id, kind: 'status', text: 'changed the status to <b>In progress</b> on' });
+      add({ from: by(6), taskId: T(6).id, kind: 'priority', text: 'changed the priority to <b>Urgent</b> on' });
+      add({ from: by(7), taskId: T(7).id, kind: 'due', text: 'changed the due date to <b>Thursday</b> on' });
+      add({ from: by(8), taskId: T(8).id, kind: 'done', text: 'completed' });
+      add({ from: by(9), taskId: T(9).id, kind: 'part', text: 'finished their part of' });
+      add({ from: by(10), taskId: T(10).id, kind: 'allparts', text: 'marked the last part done — all parts are done, ready for review:' });
+      { const t = TF(11); const f = (t.attachments || [])[0] || ((t.comments || []).find((c) => (c.attachments || []).length) || { attachments: [{}] }).attachments[0]; add({ from: by(11), taskId: t.id, kind: 'attach', text: `attached <b>${esc2(f.name || 'a file')}</b> to` }); }
+      add({ from: by(12), taskId: T(12).id, kind: 'cd', text: 'set CD Status to <b>Internal Review</b> on' });
+      add({ from: by(13), taskId: T(13).id, kind: 'update', text: 'set the Task Update to <b>Waiting for client</b> on' });
+      add({ from: by(14), taskId: T(14).id, kind: 'edit', text: 'changed the description on' });
+      add({ from: by(15), taskId: T(15).id, kind: 'restore', text: 'restored from the Trash' });
+      // the CD's reviews
+      add({ from: by(16), taskId: TF(16).id, kind: 'review', text: 'submitted 2 files for your review on' });
+      add({ from: by(17), taskId: TF(17).id, kind: 'review-ok', text: 'approved your files for' });
+      add({ from: by(18), taskId: TF(18).id, kind: 'review-amend', text: 'requested amendments on your submission for', snippet: 'Make the logo bigger and swap the photo on slide 2.' });
+      add({ from: by(19), taskId: TF(19).id, kind: 'review-wd', text: 'withdrew their submission for' });
+      // Client Assets
+      { const c = store.list('clients').find((x) => (x.folders || []).length); if (c) { const f = c.folders[0]; add({ from: by(20), kind: 'asset', clientId: c.id, folderId: f.id, text: `added a file to ${esc2(c.name)} · ${esc2(f.name)}`, snippet: ((f.files || [])[0] || {}).name || '' }); } }
+      // content plans
+      { const pl = store.list('plans')[0]; if (pl) {
+        add({ from: by(21), kind: 'plan', planId: pl.id, text: 'sent the content skeleton for your review' });
+        add({ from: by(22), kind: 'plan-ok', planId: pl.id, text: 'approved the content skeleton' });
+        add({ from: by(23), kind: 'plan-changes', planId: pl.id, text: 'asked for changes on the content skeleton', snippet: 'Post 3: swap the photo · Post 5: shorter caption' });
+        add({ from: by(24), kind: 'plan-client', planId: pl.id, text: 'completed the last post: the client approved the content plan' });
+      } }
+      // expense claims
+      { const c = store.list('claims')[0]; if (c) {
+        const sn = c.total ? 'AED ' + Number(c.total).toFixed(2) : '';
+        add({ from: c.userId || by(25), kind: 'claim', claimId: c.id, month: c.month, text: 'submitted their expense claim', snippet: sn });
+        add({ from: by(26), kind: 'claim-ok', claimId: c.id, month: c.month, text: 'marked your expense claim HR approved', snippet: sn });
+        add({ from: by(27), kind: 'claim-paid', claimId: c.id, month: c.month, text: 'marked your expense claim paid', snippet: sn });
+        add({ from: by(28), kind: 'claim-hand', claimId: c.id, month: c.month, text: 'added an expense claim for you by hand', snippet: sn });
+      } }
+      // the system's own
+      { const f = pick(people, 29); add({ from: f.id, kind: 'birthday', text: `Today is <b>${esc2(String(f.name || '').split(' ')[0])}</b>’s birthday` }); }
+      { const f = pick(people, 30); add({ from: by(31), kind: 'signin', text: `made a sign-in code for ${esc2(f.name || f.email)}`, snippet: `${esc2(String(f.name || f.email).split(' ')[0])}’s password was changed` }); }
+      { const t = T(32); add({ from: me.id, taskId: t.id, kind: 'sched-cancel', text: `Your scheduled reply wasn’t sent: <b>${esc2(t.title)}</b> was completed before 9:00 AM`, snippet: 'Final files attached, please post from 10.' }); }
+      { const day = new Date(t0 + 4 * 3600000).toISOString().slice(0, 10); try { const n = dailyFor(store, access, me, day); add({ from: me.id, kind: 'daily', day, team: n.team, counts: n, title: `Good morning, ${String(me.name || '').split(' ')[0]}`, text: `<b>${n.team ? 'Your team’s day' : 'Your day'}</b>: ${dailyText(n)}` }); } catch (e) { /* none */ } }
+      const r = store.apply(out, 'sample-inbox');
+      broadcast(r.rev, r.results, null, null);
+      return json(res, 200, { ok: true, added: out.length });
     }
 
     // Test copy only: fill it with sample people, projects, tasks, comments and replies for trying things out
