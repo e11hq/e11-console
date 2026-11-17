@@ -953,6 +953,11 @@ html[data-theme="light"] .mib-pop { background: rgba(255, 255, 255, .98); box-sh
 .mib-pop button:hover { background: rgba(127, 127, 127, .2); }
 /* the reply box (and a decision's buttons) stay at the pane's foot while a long pane scrolls, the updates fading out under them */
 .mib-scroll { flex: 1; min-height: 0; overflow: auto; padding: 18px 20px; display: flex; flex-direction: column; }
+.mib-top { flex: none; position: relative; z-index: 2; padding: 18px 20px 0; }
+.mib-top > .mib-cap:last-child { margin-bottom: 2px; }
+.mib-top::after { content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 26px; background: linear-gradient(var(--mc-card), transparent); pointer-events: none; opacity: 0; transition: opacity .2s; }
+.mib-pane[data-live-under] .mib-top::after { opacity: 1; }   /* (what scrolls under the header fades under it, only once something is under it) */
+.mib-top + .mib-scroll { padding-top: 8px; }
 .mib-reply, .mib-pane > .mib-foot { flex: none; position: relative; z-index: 2; margin: 0 20px; padding-bottom: 18px; }
 .mib-reply { margin-top: -26px; padding-top: 26px; background: linear-gradient(to bottom, transparent, var(--mc-card) 26px); pointer-events: none; }
 .mib-reply > * { pointer-events: auto; }   /* (its fade over the end of the updates lets clicks through) */

@@ -80,9 +80,14 @@ const MacInbox = (() => {
 
   // (the pane: what it says scrolls in its own box; the reply box or a decision's buttons sit under that box, outside it —
   //  so the scroll's spring at either end never moves them: Haris 2026-11-17 "dont have the comment stuck box spring")
+  //  The header too (the title, its line and buttons — and a task's "N updates" line) stays above that box, never sprung.
   function paneParts(html) {
+    let top = '';
+    const b = html.indexOf('<!--body-->'), h = html.indexOf('<!--head-->');
+    const cut = b >= 0 ? b + 11 : h >= 0 ? h + 11 : 0;
+    if (cut) { top = `<div class="mib-top">${html.slice(0, cut).replace(/<!--(head|body)-->/g, '')}</div>`; html = html.slice(cut).replace(/<!--(head|body)-->/g, ''); }
     const at = html.indexOf('<!--foot-->');
-    return at < 0 ? `<div class="mib-scroll">${html}</div>` : `<div class="mib-scroll">${html.slice(0, at)}</div>${html.slice(at + 11)}`;
+    return top + (at < 0 ? `<div class="mib-scroll">${html}</div>` : `<div class="mib-scroll">${html.slice(0, at)}</div>${html.slice(at + 11)}`);
   }
   // a row: the website's own (its title, who did what, the time, how many), two lines, the unread dot; your answer under it
   function rowHTML(g) {
@@ -125,7 +130,7 @@ const MacInbox = (() => {
   // (each kind exactly as its board — I1 B, I5–I17; Haris 2026-11-17 12:37: "not like the mockups")
   const btn = (label, attrs, primary) => `<button type="button" class="mib-btn ${primary ? 'primary' : ''}" ${attrs}>${label}</button>`;
   function head(ic, title, line, buttons) {
-    return `<div class="mib-ph"><div class="mib-ph-t"><div class="mib-ph-h">${ic}<h2>${esc(title)}</h2></div>${line ? `<div class="mib-ph-l">${line}</div>` : ''}</div>${buttons ? `<div class="mib-ph-b">${buttons}</div>` : ''}</div>`;
+    return `<div class="mib-ph"><div class="mib-ph-t"><div class="mib-ph-h">${ic}<h2>${esc(title)}</h2></div>${line ? `<div class="mib-ph-l">${line}</div>` : ''}</div>${buttons ? `<div class="mib-ph-b">${buttons}</div>` : ''}</div><!--head-->`;
   }
   const hic = (name, tone) => `<span class="mib-hic ${tone || ''}">${icon(name)}</span>`;
   const cap = (s) => `<div class="mib-cap">${s}</div>`;
@@ -279,7 +284,7 @@ const MacInbox = (() => {
         <button type="button" class="mib-send" data-mib="send" title="Send" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button></div></div>`;
     }
     return head(t ? statusIcon(t, 16) : '', t ? (t.title || 'Untitled task') : 'Deleted task', taskLine(t), unreadBtn(g) + openBtn(g, 'Open Task'))
-      + cap(`${items.length} update${items.length === 1 ? '' : 's'} · newest last`) + `<div class="mib-ups">${ups}</div>${reply}`;
+      + cap(`${items.length} update${items.length === 1 ? '' : 's'} · newest last`) + `<!--body--><div class="mib-ups">${ups}</div>${reply}`;
   }
   let editingId = null, tick = null, openAll = false;
   // your replies from this pane, still there (each comment's id kept; an older one without, its words)
@@ -550,7 +555,9 @@ const MacInbox = (() => {
   }
   // (the list's foot fades only while there's more under it)
   function more(l) { if (!l) return; const m = l.scrollTop + l.clientHeight < l.scrollHeight - 2; if (m !== l.hasAttribute('data-live-more')) l.toggleAttribute('data-live-more', m); }
-  document.addEventListener('scroll', (e) => { if (e.target && e.target.classList && e.target.classList.contains('mib-list')) more(e.target); }, true);
+  // (the pane's header fades what's under it once something has scrolled under it)
+  function under(sc) { const p = sc && sc.parentElement; if (!p) return; const u = sc.scrollTop > 1; if (u !== p.hasAttribute('data-live-under')) p.toggleAttribute('data-live-under', u); }
+  document.addEventListener('scroll', (e) => { const t = e.target; if (!t || !t.classList) return; if (t.classList.contains('mib-list')) more(t); else if (t.classList.contains('mib-scroll')) under(t); }, true);
   function patch(c) {
     const cur = c.firstElementChild;
     hold(c);
@@ -566,5 +573,5 @@ const MacInbox = (() => {
     if (pane) { pane.classList.remove('fresh'); void pane.offsetWidth; pane.classList.add('fresh'); }
     return true;
   }
-  return { on, view, patch, drawn: (c) => more(c.querySelector('.mib-list')), reset: () => { pick = undefined; shown = null; } };
+  return { on, view, patch, drawn: (c) => { more(c.querySelector('.mib-list')); under(c.querySelector('.mib-scroll')); }, reset: () => { pick = undefined; shown = null; } };
 })();
