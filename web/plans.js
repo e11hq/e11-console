@@ -1143,5 +1143,5 @@ const Plans = (() => {
     }
     return { list, plan, post, act, search, shift: (m, n) => shiftMonth(m, n) };
   })();
-  return { on, owns, canSee, render, title, isMgr, socialsOf, planById, monthLabel, FORMATS, waiting, nameOf, open, socialManages, progress, native: N };
+  return { on, owns, canSee, render, title, isMgr, socialsOf, planById, monthLabel, FORMATS, waiting, nameOf, open, socialManages, progress, native: N, canApprove, approve, sendBack };   // (the last three: the Mac app's Inbox answers a skeleton right there — Haris 2026-11-17)
 })();

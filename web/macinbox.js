@@ -108,50 +108,96 @@ const MacInbox = (() => {
   }
 
   // ---------- the right side: what the website would open for the row, with its own buttons ----------
+  // (each kind exactly as its board — I1 B, I5–I17; Haris 2026-11-17 12:37: "not like the mockups")
   const btn = (label, attrs, primary) => `<button type="button" class="mib-btn ${primary ? 'primary' : ''}" ${attrs}>${label}</button>`;
   function head(ic, title, line, buttons) {
-    return `<div class="mib-ph"><div class="mib-ph-t"><div class="mib-ph-h">${ic}<h2>${esc(title)}</h2></div><div class="mib-ph-l">${line}</div></div><div class="mib-ph-b">${buttons}</div></div>`;
+    return `<div class="mib-ph"><div class="mib-ph-t"><div class="mib-ph-h">${ic}<h2>${esc(title)}</h2></div>${line ? `<div class="mib-ph-l">${line}</div>` : ''}</div>${buttons ? `<div class="mib-ph-b">${buttons}</div>` : ''}</div>`;
   }
+  const hic = (name, tone) => `<span class="mib-hic ${tone || ''}">${icon(name)}</span>`;
+  const cap = (s) => `<div class="mib-cap">${s}</div>`;
+  const soft = (label, color) => `<span class="mib-sp" style="--c:${color}">${esc(label)}</span>`;
+  const solid = (label, bg) => `<span class="mib-solid" style="background:${bg};color:${textOn(bg)}">${esc(label)}</span>`;
+  const foot = (buttons) => `<div class="mib-foot"><span></span>${buttons}</div>`;
+  const cdot = (p) => (p ? `<i class="mib-cdot" style="background:${esc(p.color || '#87909e')}"></i>${esc(p.name)}` : '');
   const unreadBtn = (g) => btn('Mark Unread', `data-action="notif-clear" data-id="${esc(g.key)}" data-read="1"`);
-  const openBtn = (g, label) => btn(label, `data-action="open-notif" data-id="${esc(ibTarget(g.items).id)}"`, true);
+  const openBtn = (g, label, primary = true) => btn(label, `data-action="open-notif" data-id="${esc(ibTarget(g.items).id)}"`, primary);
+
+  // files as the boards draw them: a picture (a photo its own, a video its cover with ▶, a PDF a page), its name, its size
+  let tileSets = [];
+  function picOf(a) {
+    const k = fileKind(a);
+    if (k === 'image') return imgUrl(a, 480);
+    if (a.thumb) return posterUrl(a);
+    if (k === 'video' && a.path) return '/api/fthumb?path=' + encodeURIComponent(a.path) + '&id=' + encodeURIComponent(a.id || '');
+    return '';
+  }
+  function tiles(list, big) {
+    const set = tileSets.push(list) - 1;
+    return `<div class="mib-tiles ${big ? 'big' : ''}">${list.map((a, i) => {
+      const k = fileKind(a), u = picOf(a);
+      const pic = u ? `<img src="${u}" alt="" loading="lazy">` : k === 'pdf' || k === 'doc' ? '<span class="mib-page"><i></i><i></i><i></i><i></i><i></i><i></i></span>' : `<span class="mib-ext">${esc(fileExt(a.name).slice(0, 4).toUpperCase() || 'FILE')}</span>`;
+      return `<button type="button" class="mib-tile" data-mib="pv" data-set="${set}" data-i="${i}"><span class="mib-tpic">${pic}${k === 'video' ? '<span class="mib-play">▶</span>' : ''}</span><span class="mib-tn">${esc(a.name)}</span><span class="mib-ts">${esc(fmtSize(a.size) || '')}</span></button>`;
+    }).join('')}</div>`;
+  }
+  // a comment's files: pictures as small thumbnails with their names on them, anything else a chip
+  function commentFiles(list) {
+    if (!list.length) return '';
+    const set = tileSets.push(list) - 1;
+    return `<div class="mib-files">${list.map((a, i) => {
+      const u = ['image', 'video'].includes(fileKind(a)) ? picOf(a) : '';
+      return u ? `<button type="button" class="mib-thumb" data-mib="pv" data-set="${set}" data-i="${i}"><img src="${u}" alt="" loading="lazy"><span>${esc(a.name)}</span></button>`
+        : `<button type="button" class="mib-file" data-mib="pv" data-set="${set}" data-i="${i}">${esc(a.name)}</button>`;
+    }).join('')}</div>`;
+  }
 
   function paneHTML(g) {
+    tileSets = [];
     const n = ibTarget(g.items), t = task(n.taskId), k = n.kind;
     if (k === 'birthday') return `<div class="mib-greet">${avatarHTML(n.from, 88)}<span>Today is</span><b>${esc(firstName(n.from))}’s birthday</b><span>Wish them a happy birthday</span></div>`;
     if (k === 'daily') return dailyHTML(g);
-    if (k === 'signin') return `${head(`<span class="mib-hic">${icon('lock')}</span>`, 'Sign-in code used', esc(clock(n.at)), '')}<div class="mib-ups">${upd(n, notifMsg(n, null))}</div>`;
+    if (k === 'signin') return head(hic('lock', 'dim'), 'Sign-in code used', esc(clock(n.at)), '')
+      + `<div class="mib-ups"><div class="mib-u">${avatarHTML(n.from, 30)}<div class="mib-u-t"><b>${esc(nameOf(n.from))}</b> ${String(n.text || '').replace(/<(?!\/?b>)/g, '&lt;')}${n.snippet ? `<div class="mib-dim2">${esc(n.snippet)}</div>` : ''}</div></div></div>`;
     if (n.planId) return planHTML(g, n);
     if (k === 'asset') return assetHTML(g, n);
     if (/^claim/.test(k)) return claimHTML(g, n);
     if (k === 'sched-cancel') return schedHTML(g, n);
+    const rq = t && isCD() ? g.items.find((x) => x.kind === 'review') : null;   // (the CD's review request shows as I6, whatever else came on that task)
+    if (rq) { const r = reviewOf(t, rq); if (r) return reviewHTML(g, t, r); }
     return taskHTML(g, t);
   }
   // one update: who, when, what — a comment in full, in its thread, its files and reactions
-  function upd(n, body, extra = '', faded = false) {
-    return `<div class="mib-u ${faded ? 'faded' : ''}">${avatarHTML(n.from, 30)}<div class="mib-u-b"><div class="mib-u-h"><b>${esc(nameOf(n.from))}</b><span>${esc(clock(n.at))}</span></div><div class="mib-u-t">${body}</div>${extra}</div></div>`;
+  function upd(n, body, extra = '', faded = false, after = '') {
+    return `<div class="mib-u ${faded ? 'faded' : ''}">${avatarHTML(n.from, 30)}<div class="mib-u-b"><div class="mib-u-h"><b>${esc(nameOf(n.from))}</b><span>${esc(clock(n.at))}</span></div><div class="mib-u-t">${body}</div>${extra}</div></div>${after}`;
   }
   function bodyOf(n, t) {
     const who = `<b>${esc(fullName(userById(n.from)))}</b> `;
     const m = notifMsg(n, t);
     return m.startsWith(who) ? m.slice(who.length) : m;
   }
+  // a task's line: its client, when it's due, its status and its priority (the board's coloured pills)
+  function taskLine(t) {
+    if (!t) return 'This task is no longer here';
+    const st = statusInfo(t), pr = t.done ? 'none' : prioOf(t);
+    return [cdot(proj(t.projectId)), t.due ? `due ${esc(fmtDue(t.due))}` : '', t.done ? 'completed' : ''].filter(Boolean).join(' · ')
+      + (st && !t.done ? ` · ${solid(st.name, st.color)}` : '') + (pr === 'urgent' ? solid('Urgent', '#e5484d') : typeof pr === 'number' ? solid('P' + pr, '#636366') : '');
+  }
+  function reviewOf(t, n0) {
+    const rs = (t.reviews || []).filter((r) => r.by === n0.from && r.state !== 'withdrawn');
+    return rs.filter((x) => x.at <= n0.at).pop() || rs[rs.length - 1] || null;
+  }
+  // I6 — a review request, as the CD sees it: the note, the files, Request Amendments… · Approve
+  function reviewHTML(g, t, r) {
+    const files = (r.files || []).map((id) => (t.attachments || []).find((a) => a.id === id)).filter(Boolean);
+    const all = files.length ? files : (t.attachments || []).filter((a) => a.reviewId === r.id);
+    const pending = r.state === 'pending';
+    const pill = pending ? solid('Waiting for CD review', '#bf5af2') : r.state === 'approved' ? soft('Approved', '#30d158') : soft('Amendments asked', '#ff9f0a');
+    return head(statusIcon(t, 16), t.title || 'Untitled task', `${cdot(proj(t.projectId))} · submitted by ${esc(nameOf(r.by))} · ${esc(clock(r.at))} · ${pill}`, openBtn(g, 'Open Review Requests', false))
+      + (r.message ? `<div class="mib-note">“${esc(r.message)}”</div>` : '')
+      + (all.length ? cap(`${all.length} FILE${all.length === 1 ? '' : 'S'}`) + tiles(all, true) : '')
+      + (pending ? foot(btn('Request Amendments…', `data-mib="rv-amend" data-id="${esc(r.id)}"`) + btn('Approve', `data-mib="rv-ok" data-id="${esc(r.id)}"`, true)) : '');
+  }
   function taskHTML(g, t) {
     const items = g.items.slice().sort((a, b) => a.at.localeCompare(b.at));
-    const p = t ? proj(t.projectId) : null;
-    const st = t ? statusList(t).find((x) => x.name === t.status) : null;
-    const line = t ? `${p ? `<i class="mib-cdot" style="background:${esc(p.color || '#87909e')}"></i>${esc(p.name)}` : ''}${t.due ? ` · due ${esc(fmtDay(t.due))}` : ''}${st ? ` · <span class="ib-chip" style="background:${st.color};color:${textOn(st.color)}">${esc(st.name)}</span>` : ''}` : 'This task is no longer here';
-    // the CD's review request: the website's own "Review decision" and the request's files
-    const n0 = ibTarget(g.items);
-    let review = '';
-    if (t && (n0.kind === 'review') && isCD()) {
-      const rs = (t.reviews || []).filter((r) => r.by === n0.from && r.state !== 'withdrawn');
-      const r = rs.filter((x) => x.at <= n0.at).pop() || rs[rs.length - 1];
-      if (r) {
-        const files = (t.attachments || []).filter((a) => a.reviewId === r.id);
-        review = `<div class="mib-review">${r.message ? `<p>“${esc(r.message)}”</p>` : ''}<div class="mib-files">${files.map((a) => `<button type="button" class="mib-file" data-action="rr-file" data-id="${esc(a.id)}" data-task-id="${esc(t.id)}">${esc(a.name)}</button>`).join('')}</div>
-          ${r.state === 'pending' ? `<div class="mib-review-b">${btn('Review decision', `data-action="rr-decide" data-id="${esc(r.id)}"`, true)}</div>` : ''}</div>`;
-      }
-    }
     let lastComment = null;
     const ups = items.map((n, i) => {
       const c = t && n.commentId && COMMENTS.has(n.kind) ? (t.comments || []).find((x) => x.id === n.commentId) : null;
@@ -160,65 +206,109 @@ const MacInbox = (() => {
       if (!c) return upd(n, bodyOf(n, t), '', faded);
       const parent = c.parentId ? (t.comments || []).find((x) => x.id === c.parentId) : null;
       const text = mentionMark(esc(fullComment(n, t) || n.snippet || ''));
-      const files = (c.attachments || []).length ? `<div class="mib-files">${c.attachments.map((a) => `<button type="button" class="mib-file" data-mib="file" data-tid="${esc(t.id)}" data-cid="${esc(c.id)}" data-id="${esc(a.id)}">${esc(a.name)}</button>`).join('')}</div>` : '';
       const reacts = Object.entries(c.reactions || {}).filter(([, v]) => v);
-      const rx = `<div class="mib-rx">${reacts.map(([e]) => `<button type="button" class="mib-pill ${mineReact(g) === e ? 'mine' : ''}" data-mib="react" data-tid="${esc(t.id)}" data-cid="${esc(c.id)}" data-e="${esc(e)}">${e}</button>`).join('')}<button type="button" class="mib-smile" data-mib="react-menu" data-tid="${esc(t.id)}" data-cid="${esc(c.id)}" title="React">☺︎</button></div>`;
-      const box = upd({ ...n, from: c.authorId, at: c.at }, text, files + rx, faded);
+      const rx = `<div class="mib-rx">${reacts.map(([e, v]) => `<button type="button" class="mib-pill ${mineReact(g) === e ? 'mine' : ''}" data-mib="react" data-tid="${esc(t.id)}" data-cid="${esc(c.id)}" data-e="${esc(e)}">${e} <b>${typeof v === 'number' ? v : 1}</b></button>`).join('')}<button type="button" class="mib-smile" data-mib="react-menu" data-tid="${esc(t.id)}" data-cid="${esc(c.id)}" title="React">☺︎</button></div>`;
+      const box = upd({ ...n, from: c.authorId, at: c.at }, text, commentFiles(c.attachments || []), faded, rx);
       return parent ? `<div class="mib-thread"><div class="mib-thread-l">In ${esc(nameOf(parent.authorId))}’s thread</div>${box}</div>` : box;
     }).join('');
     const minen = g.items.find((x) => x.mine && x.mine.reply);
-    const yours = minen ? `<div class="mib-yours">${upd({ from: currentUserId, at: minen.mine.at }, esc(minen.mine.reply))}</div>` : '';
+    const yours = minen ? `<div class="mib-yours">${upd({ from: currentUserId, at: minen.mine.at }, esc(minen.mine.reply)).replace(`<b>${esc(nameOf(currentUserId))}</b>`, '<b>You replied</b>')}</div>` : '';
     let reply = '';
     if (lastComment) {
       const root = lastComment.parentId || lastComment.id;
       const rootC = (t.comments || []).find((x) => x.id === root);
       const to = firstName(lastComment.authorId);
       const where = lastComment.parentId ? `Replies in ${esc(nameOf(rootC ? rootC.authorId : lastComment.authorId))}’s thread` : `Starts a thread under ${esc(to)}’s comment`;
-      reply = `<div class="mib-reply"><div class="mib-where">↳ ${where}</div><div class="mib-box"><textarea rows="1" class="mib-in" placeholder="Reply to ${esc(to)}…" data-tid="${esc(t.id)}" data-root="${esc(root)}"></textarea>
+      reply = `<div class="mib-reply"><div class="mib-where">↳ ${where}</div><div class="mib-up" hidden></div><div class="mib-box"><button type="button" class="mib-add" data-mib="attach" title="Attach files" aria-label="Attach files">${icon('plus')}</button><textarea rows="1" class="mib-in" placeholder="Reply to ${esc(to)}…" data-tid="${esc(t.id)}" data-root="${esc(root)}"></textarea>
         <button type="button" class="mib-send" data-mib="send" title="Send" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button></div></div>`;
     }
-    return head(t ? statusIcon(t, 18) : '', t ? (t.title || 'Untitled task') : 'Deleted task', line, unreadBtn(g) + openBtn(g, 'Open Task'))
-      + `<div class="mib-cap">${items.length} update${items.length === 1 ? '' : 's'} · newest last</div><div class="mib-ups">${review}${ups}${yours}</div>${reply}`;
+    return head(t ? statusIcon(t, 16) : '', t ? (t.title || 'Untitled task') : 'Deleted task', taskLine(t), unreadBtn(g) + openBtn(g, 'Open Task'))
+      + cap(`${items.length} update${items.length === 1 ? '' : 's'} · newest last`) + `<div class="mib-ups">${ups}${yours}</div>${reply}`;
   }
   const mineReact = (g) => { const x = g.items.find((n) => n.mine && n.mine.react); return x ? x.mine.react : null; };
 
+  // I5 — a content skeleton: its occasions, its posts by day; Send Back · Approve when it's waiting for you
+  const POST_ST = { ok: ['Ready', '#30d158'], changes: ['Changes asked', '#ff9f0a'] };
   function planHTML(g, n) {
     const pl = Plans.planById(n.planId), p = pl ? proj(pl.projectId) : null;
-    const posts = pl ? (pl.posts || []).slice().sort((a, b) => String(a.day).localeCompare(String(b.day))) : [];
-    const body = pl ? `<div class="mib-cap">${posts.length} post${posts.length === 1 ? '' : 's'} · by day</div><div class="mib-posts">${posts.slice(0, 40).map((x) => `<div class="mib-post"><b>${esc(String(x.day || '').slice(8, 10) || '–')}</b><span>${esc(x.title || 'Untitled post')}</span></div>`).join('')}</div>`
-      : '<p class="mib-dim">Content skeleton not found</p>';
-    return head(`<span class="mib-hic">${icon('cal')}</span>`, planTitle(n), p ? `<i class="mib-cdot" style="background:${esc(p.color || '#87909e')}"></i>${esc(p.name)}` : '', unreadBtn(g) + openBtn(g, 'Open Plan'))
-      + `<div class="mib-ups">${upd(n, bodyOf(n, null))}</div>${body}`;
+    if (!pl) return head(hic('cal', 'purple'), planTitle(n), '', openBtn(g, 'Open Plan', false)) + '<p class="mib-dim">Content skeleton not found</p>';
+    const posts = (pl.posts || []).slice().sort((a, b) => String(a.day).localeCompare(String(b.day)));
+    const waiting = pl.status === 'review' && Plans.canApprove(pl);
+    const st = waiting ? soft('Waiting for you', '#ff9f0a') : pl.status === 'approved' ? soft('Approved', '#30d158') : pl.status === 'changes' ? soft('Changes asked', '#ff9f0a') : pl.status === 'review' ? soft('Waiting for approval', '#0a84ff') : soft('Draft', '#98989d');
+    const m = String(pl.month || '');
+    const occ = m && typeof Occasions !== 'undefined' ? Occasions.between(m + '-01', m + '-31').filter((o) => String(o.date || '').slice(0, 7) === m) : [];
+    const fmt = Object.fromEntries((Plans.FORMATS || []).map(([k, name]) => [k, name]));
+    const chName = Object.fromEntries((typeof Cal !== 'undefined' && Cal.CHANNELS ? Cal.CHANNELS : []).map(([k, name]) => [k, name]));
+    const pic = (x) => { const gr = Plans.progress(x); const img = (gr.files || []).find((r) => fileKind(r) === 'image') || (x.refs || []).find((r) => r.path && fileKind(r) === 'image'); return img ? `<img src="${imgUrl(img, 160)}" alt="" loading="lazy">` : ''; };
+    const shownPosts = posts.slice(0, 3);
+    const row = (x) => { const d = x.day ? parseYmd(x.day) : null; const s = x.check && POST_ST[x.check.state];
+      return `<div class="mib-post ${x.check && x.check.state === 'changes' ? 'chg' : ''}"><span class="mib-pday"><b>${d ? d.getDate() : '–'}</b><span>${d ? d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase() : ''}</span></span><span class="mib-ppic">${pic(x)}</span><span class="mib-pt"><b>${esc(x.title || 'Untitled post')}</b><span>${esc([fmt[x.format] || 'Post', (x.channels || []).map((k) => chName[k] || k).join(', ')].filter(Boolean).join(' · '))}</span></span>${s ? soft(s[0], s[1]) : ''}</div>`; };
+    const dot = p ? `<i class="mib-cdot" style="background:${esc(p.color || '#87909e')}"></i>` : '';
+    return head(hic('cal', 'purple'), Plans.nameOf(pl), `${dot}content skeleton by ${esc(nameOf(pl.createdBy))} · ${st}`, openBtn(g, 'Open Plan', false))
+      + (occ.length ? cap('OCCASIONS') + `<div class="mib-occ">${occ.map((o) => soft(`${o.name} · ${parseYmd(String(o.date).slice(0, 10)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`, '#0a84ff')).join('')}</div>` : '')
+      + cap(`${posts.length} POST${posts.length === 1 ? '' : 'S'} · BY DAY`) + `<div class="mib-posts">${shownPosts.map(row).join('')}${posts.length > shownPosts.length ? `<div class="mib-more">+ ${posts.length - shownPosts.length} more</div>` : ''}</div>`
+      + (waiting ? foot(btn('Send Back', `data-mib="plan-back" data-id="${esc(pl.id)}"`) + `<span class="${(pl.posts || []).some((x) => x.check && x.check.state === 'changes') ? 'mib-faded' : ''}">${btn('Approve', `data-mib="plan-ok" data-id="${esc(pl.id)}"`, true)}</span>`) : '');
   }
+  // I8 — files added to Client Assets: the folder, and the files the update names; Open Folder
   function assetHTML(g, n) {
     const c = clientById(n.clientId), f = c && (c.folders || []).find((x) => x.id === n.folderId);
-    const names = String(n.snippet || '').split(', ').filter(Boolean);
-    return head(`<span class="mib-hic">${icon('assets')}</span>`, f ? f.name : assetTitle(n), c ? esc(c.name + (f ? ' › ' + folderPath(c, f) : '')) : '', unreadBtn(g) + openBtn(g, 'Open Folder'))
-      + `<div class="mib-ups">${g.items.slice().sort((a, b) => a.at.localeCompare(b.at)).map((x) => upd(x, bodyOf(x, null))).join('')}</div>`
-      + (names.length ? `<div class="mib-files">${names.map((x) => `<span class="mib-file static">${esc(x)}</span>`).join('')}</div>` : '');
+    const names = String(n.snippet || '').split(', ').map((x) => x.replace(/ \+\d+ more$/, '')).filter(Boolean);
+    const inFolder = f ? (f.files || []) : [];
+    let files = names.map((nm) => inFolder.find((a) => a.name === nm)).filter(Boolean);
+    const m = String(n.text || '').match(/^(added|replaced|removed) (?:a file|(\d+) files)/);
+    const fin = String(n.snippet || '').match(/^(\d+) files?$/);   // (the task's final files filed in the client's Files)
+    const count = m ? Number(m[2] || 1) : fin ? Number(fin[1]) : files.length;
+    if (!files.length && fin) files = inFolder.slice().sort((a, b) => String(b.addedAt || '').localeCompare(String(a.addedAt || ''))).slice(0, count);
+    const verb = m ? m[1] : 'added';
+    const pc = c ? ((db.projects.find((x) => x.clientId === c.id) || {}).color || '#6e717a') : '';
+    const line = `${c ? `<i class="mib-cdot" style="background:${esc(pc)}"></i>${esc(c.name + (f ? ' › ' + folderPath(c, f) : ''))}` : ''} · ${esc(verb)} by ${esc(nameOf(n.from))} · ${esc(clock(n.at))}`;
+    return head(hic('folder'), f ? f.name : assetTitle(n), line, openBtn(g, 'Open Folder'))
+      + cap(`${count} FILE${count === 1 ? '' : 'S'} ${esc(verb.toUpperCase())}`) + (files.length ? tiles(files) : `<div class="mib-files">${names.map((x) => `<span class="mib-file static">${esc(x)}</span>`).join('')}</div>`);
   }
+  // I9 — a claim: its items and total; Open Claims
+  const CLAIM_DID = { 'claim-ok': 'MARKED HR APPROVED', 'claim-paid': 'MARKED PAID', 'claim-hand': 'ADDED', claim: 'SUBMITTED' };
   function claimHTML(g, n) {
     const c = n.claimId && typeof Claims !== 'undefined' ? Claims.byId(n.claimId) : null;
     const items = c ? (c.groups || []).flatMap((gr) => (gr.items || []).map((i) => ({ d: gr.date, x: i.desc || gr.title || '', a: i.amount }))) : [];
-    const amt = (v) => '⃃' + (Number(v) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    return head(`<span class="mib-hic">${icon('coin')}</span>`, 'Expense claims', c ? Claims.pill(c) : '', unreadBtn(g) + openBtn(g, 'Open Claims'))
-      + `<div class="mib-ups">${g.items.slice().sort((a, b) => a.at.localeCompare(b.at)).map((x) => upd(x, bodyOf(x, null))).join('')}</div>`
-      + (items.length ? `<div class="mib-claim">${items.map((i) => `<div><span>${esc(i.d ? fmtDay(i.d) : '')}</span><span>${esc(i.x)}</span><b>${amt(i.a)}</b></div>`).join('')}<div class="tot"><span></span><span>Total</span><b>${amt(Claims.totalOf(c))}</b></div></div>` : '');
+    const amt = (v) => '⃃ ' + (Number(v) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const month = c && c.month ? new Date(c.month + '-01T00:00:00').toLocaleDateString('en-US', { month: 'long' }) : '';
+    const whose = c && c.userId === currentUserId ? 'Your' : c ? `${firstName(c.userId)}’s` : '';
+    const title = c ? `${whose} ${month} expense claim` : 'Expense claims';
+    const line = c ? `${items.length} item${items.length === 1 ? '' : 's'} · ${amt(Claims.totalOf(c))} · ${Claims.pill(c)}` : '';
+    return head(hic('coin', 'green'), title, line, openBtn(g, 'Open Claims'))
+      + cap(`${CLAIM_DID[n.kind] || 'UPDATED'} BY ${esc(nameOf(n.from).toUpperCase())} · ${esc(clock(n.at).toUpperCase())}`)
+      + (items.length ? `<div class="mib-claim">${items.map((i) => `<div><span>${esc(i.d ? parseYmd(i.d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '')}</span><span>${esc(i.x)}</span><b>${amt(i.a)}</b></div>`).join('')}<div class="tot"><span>Total</span><b>${amt(Claims.totalOf(c))}</b></div></div>` : '');
   }
+  // I12 — a scheduled comment that wasn't sent: its text and files; Open Task
   function schedHTML(g, n) {
-    return head(`<span class="mib-hic">${icon('clock')}</span>`, titleOf(n, null), esc(clock(n.at)), unreadBtn(g) + openBtn(g, 'Open Task'))
-      + `<div class="mib-ups">${upd(n, String(n.text || '').replace(/<(?!\/?b>)/g, '&lt;'))}</div>${n.snippet ? `<div class="mib-quote">${esc(n.snippet)}</div>` : ''}`;
+    const t = task(n.taskId), s = (db.scheduled || []).find((x) => x.id === n.schedId) || {};
+    const when = s.sendAt ? new Date(s.sendAt).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).replace(/, (\d+:\d+)/, ' · $1') : '';
+    const what = s.replyTo || /scheduled reply/.test(n.text || '') ? 'REPLY' : 'COMMENT';
+    const files = (s.attachments || []).map((a) => `<span class="mib-qf"><b>${esc(a.name)}</b><span>${esc(fmtSize(a.size) || '')}</span></span>`).join('');
+    const title = t ? (t.title || 'Untitled task') : (String(n.text || '').match(/<b>(.*?)<\/b>/) || [])[1] || titleOf(n, null);
+    const line = t ? [cdot(proj(t.projectId)), t.done ? 'completed' : esc(statusInfo(t).name)].filter(Boolean).join(' · ') : esc(n.reason || '');
+    return head(t ? statusIcon(t, 16) : hic('clock'), title, line, n.taskId ? openBtn(g, 'Open Task') : '')
+      + cap(`YOUR SCHEDULED ${what}${when ? ` · WAS FOR ${esc(when.toUpperCase())}` : ''}`)
+      + `<div class="mib-quote">${esc(s.text || n.snippet || '')}${files ? `<span class="mib-qfs">${files}</span>` : ''}</div>`;
   }
+  // I11 — the morning round-up, worked out again: its sections, the first with tasks open
+  const DY_TONE = { red: '#ff453a', amber: '#ff9f0a', accent: '#0a84ff' };
+  let dyOpen = null;
   function dailyHTML(g) {
     const n = g.items[0];
-    if (typeof Daily === 'undefined' || !Daily.wants()) return `${head(`<span class="mib-hic">${icon('sun')}</span>`, n.title || 'Good morning', '', unreadBtn(g))}<div class="mib-ups">${upd(n, String(n.text || '').replace(/<(?!\/?b>)/g, '&lt;'))}</div>`;
+    if (typeof Daily === 'undefined' || !Daily.wants()) return `${head(hic('sun', 'sun'), n.title || 'Good morning', '', '')}<div class="mib-ups">${upd(n, String(n.text || '').replace(/<(?!\/?b>)/g, '&lt;'))}</div>`;
     const S = Daily.sections();
     const cnt = (s) => (s.sched ? s.sched.length : s.tasks.length);
-    const first = S.find((s) => cnt(s));
+    if (dyOpen === null) { const f = S.find((s) => cnt(s)); dyOpen = f ? f.k : ''; }
     const when = new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
-    return head(`<span class="mib-hic sun">${icon('sun')}</span>`, `Good morning, ${firstName(currentUserId)}`, esc(when), unreadBtn(g))
-      + `<div class="mib-daily">${S.map((s) => `<div class="mib-dsec ${cnt(s) ? '' : 'none'}"><div class="mib-dh">${icon(s.ic)}<span>${esc(s.l)}</span><b>${cnt(s)}</b></div>
-        ${s === first && !s.sched ? s.tasks.slice(0, 6).map((t) => `<button type="button" class="mib-drow" data-mib="task" data-id="${esc(t.id)}"><span>${esc(t.title || 'Untitled task')}</span><span>${esc((proj(t.projectId) || {}).name || '')}${t.due ? ` · ${esc(fmtDay(t.due))}` : ''}</span></button>`).join('') : ''}</div>`).join('')}</div>
+    const scope = isSuper() ? 'the whole team’s tasks' : Work.hasClients(currentUserId) ? 'your clients’ tasks' : 'your tasks';
+    const today = todayStr();
+    return head(hic('sun', 'sun'), `Good morning, ${firstName(currentUserId)}`, `${esc(when)} · ${scope}`, '')
+      + `<div class="mib-daily">${S.map((s) => { const c = cnt(s), on = dyOpen === s.k && c;
+        const rows = !on ? '' : s.sched ? s.sched.map((x) => `<button type="button" class="mib-drow" data-mib="task" data-id="${esc(x.taskId)}"><span>${esc(trunc(x.text || 'Files', 70))}</span><span>${esc(new Date(x.sendAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }))}</span></button>`).join('')
+          : s.tasks.slice(0, 6).map((t) => `<button type="button" class="mib-drow" data-mib="task" data-id="${esc(t.id)}"><span>${esc(t.title || 'Untitled task')}</span><span>${esc((proj(t.projectId) || {}).name || '')}${t.due ? ` · <i class="${t.due < today ? 'late' : ''}">${esc(parseYmd(t.due).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }))}</i>` : ''}</span></button>`).join('')
+            + (s.filter ? `<button type="button" class="mib-dall" data-mib="dy-all" data-k="${s.k}">See them in My Tasks</button>` : '');
+        return `<div class="mib-dsec ${c ? '' : 'none'}"><button type="button" class="mib-dh" data-mib="dy-sec" data-k="${s.k}" ${c ? '' : 'disabled'} style="--c:${DY_TONE[s.tone] || DY_TONE.accent}">${icon(s.ic)}<span>${esc(s.l)}</span><b>${c}</b><i>${on ? '⌄' : c ? '›' : ''}</i></button>${rows}</div>`; }).join('')}</div>
         <div class="mib-dim mib-asof">Up to date as of ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</div>`;
   }
 
@@ -233,6 +323,7 @@ const MacInbox = (() => {
     if (changed) { stay.add(g.key); persist(); renderSidebar(); if (draw) renderContent(); }
   }
   function choose(k) {
+    if (k !== pick) { dyOpen = null; pending = []; }
     pick = k;
     const g = rows().list.find((x) => x.key === k);
     if (g && g.items.some((x) => !x.read)) markRead(g); else renderContent();
@@ -240,11 +331,13 @@ const MacInbox = (() => {
   function send(btnEl) {
     const box = btnEl.closest('.mib-box'), ta = box && box.querySelector('.mib-in');
     const text = ta ? ta.value.trim() : '';
-    if (!text) return;
+    if (!text && !pending.length) return;
     const t = task(ta.dataset.tid);
     if (!t) return;
     const html = esc(text).replace(/\n/g, '<br>');
-    postComment(t, ta.dataset.root, text, html, []);
+    const files = pending.splice(0);
+    files.forEach((a) => { if (!(t.attachments || []).some((x) => x.path === a.path)) (t.attachments = t.attachments || []).push(a); });
+    postComment(t, ta.dataset.root, text, html, files);
     t.updatedAt = nowISO();
     const g = rows().list.find((x) => x.key === pick);
     if (g) g.items.forEach((x) => { x.mine = { reply: text, at: nowISO() }; });
@@ -259,6 +352,21 @@ const MacInbox = (() => {
     const g = rows().list.find((x) => x.key === pick);
     if (g) g.items.forEach((x) => { if (c.reactions[e]) x.mine = { ...(x.mine && x.mine.reply ? x.mine : {}), react: e, at: nowISO() }; else if (x.mine && x.mine.react === e) { const { react: _r, ...rest } = x.mine; x.mine = rest.reply ? rest : undefined; if (!x.mine) delete x.mine; } });
     commit();
+  }
+  // + in the reply box: the Mac's own file picker, as a comment's (the files go up first, then with the reply)
+  let pending = [];
+  async function attach(el) {
+    const ta = document.querySelector('.mib-in'), t = ta && task(ta.dataset.tid);
+    if (!t) return;
+    try {
+      const res = await Host.call('pickAttachments', { taskId: t.id });
+      const got = (res.files || []).filter(Boolean).map((f) => ({ ...f, addedAt: nowISO(), addedBy: currentUserId }));
+      if (!got.length) return;
+      pending = pending.concat(got);
+      const up = document.querySelector('.mib-up');
+      if (up) { up.hidden = false; up.innerHTML = pending.map((a) => `<span class="mib-file static">${esc(a.name)}</span>`).join(''); }
+      const b = document.querySelector('.mib-send'); if (b) b.disabled = false;
+    } catch (e) { toast('Upload failed — try again'); }
   }
   // the six reactions popping up just above the ☺︎ (Y)
   function reactMenuAt(el) {
@@ -284,14 +392,22 @@ const MacInbox = (() => {
     else if (a === 'send') send(el);
     else if (a === 'react') react(el.dataset.tid, el.dataset.cid, el.dataset.e);
     else if (a === 'react-menu') reactMenuAt(el);
-    else if (a === 'task') { if (typeof Daily !== 'undefined') Daily.close && Daily.close(); openTask(el.dataset.id); }
+    else if (a === 'task') { if (task(el.dataset.id)) openTask(el.dataset.id); else toast('That task isn’t there anymore'); }
+    else if (a === 'pv') { const list = tileSets[Number(el.dataset.set)] || []; const f = list[Number(el.dataset.i)]; if (f) previewFile(f, list); }
+    else if (a === 'attach') attach(el);
+    else if (a === 'rv-ok') { const f = findReview(el.dataset.id); if (f) { decideReview(f.t, f.r, 'approve'); toast(`Approved — ${firstName(f.r.by)} told`); renderContent(); } }
+    else if (a === 'rv-amend') { decisionDialog(el.dataset.id); const b = document.querySelector('#overlay-root [data-d="amend"]'); if (b) b.click(); }
+    else if (a === 'plan-ok') { const pl = Plans.planById(el.dataset.id); if (pl) Promise.resolve(Plans.approve(pl)).then(() => renderContent()); }
+    else if (a === 'plan-back') { const pl = Plans.planById(el.dataset.id); if (pl) Plans.sendBack(pl); }
+    else if (a === 'dy-sec') { dyOpen = dyOpen === el.dataset.k ? '' : el.dataset.k; renderContent(); }
+    else if (a === 'dy-all') { if (window.__e11Daily) window.__e11Daily({ ev: 'all', k: el.dataset.k }); }
     else if (a === 'file') { const t = task(el.dataset.tid), c = t && (t.comments || []).find((x) => x.id === el.dataset.cid); const f = c && (c.attachments || []).find((x) => x.id === el.dataset.id); if (f) previewFile(f, c.attachments); }
   });
   document.addEventListener('input', (e) => {
     const ta = e.target.closest && e.target.closest('.mib-in');
     if (!ta) return;
     ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px';
-    const b = ta.parentElement.querySelector('.mib-send'); if (b) b.disabled = !ta.value.trim();
+    const b = ta.parentElement.querySelector('.mib-send'); if (b) b.disabled = !ta.value.trim() && !pending.length;
   });
   document.addEventListener('keydown', (e) => {
     if (!on() || ui.view !== 'inbox' || ui.taskId) return;
