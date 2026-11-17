@@ -378,6 +378,13 @@ the same function the website / server already has (no new server acts unless th
 **Remind Haris before any Mac app work starts (Haris 2026-11-10 18:34):** the Mac App Store app needs a build for
 content skeleton links (files…/p/<id> — the handler is in mac/swift/main.swift on main, commit 4815aab; the server
 1.9.30 already tells Apple /p/ is the apps'): until it's out, a skeleton link on a Mac with the app may not open there.
+**E11 Console for Mac — rules for every page (Haris 2026-11-17):** (1) **drawn again only where something changed** — a page
+never puts itself back whole: rows, updates and tiles stay unless what they show changed, the same picture never loads again,
+what's being typed stays, a list keeps its scroll (the Inbox: `MacInbox.patch`); a list starts at the top only when the page is
+opened from somewhere else. (2) **Every button a pill, no border** (as the bar's own). (3) **Files three to a row** in the Inbox
+at the default window size, one tile size, the name and size under, an icon when there's no picture. (4) **Nothing snaps** —
+the preview's shades fade with it (the flying picture under them). (5) **Tell Haris the test server's version** (x.y.z-test.N)
+every time a change goes up, so he can confirm it.
 **E11 Console for Mac — the sidebar SAVED and LOCKED exactly as it is (Haris 2026-11-15 09:31: "I dont want to mess it up,
 sidebar will remain exactly as now. In mac app"; 09:35 "Alright save the sidebar"):** mac/swift/Sidebar.swift and the page's
 NativeSide (web/app.js) as on main 0442ce5, branch `locked/mac-sidebar-0442ce5` (never moved or deleted) — the floating glass
