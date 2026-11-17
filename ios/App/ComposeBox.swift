@@ -241,12 +241,19 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       showingSend = send
       // (the mic as a line icon — Haris 2026-11-02; the change a little quicker than iPhone's default)
       let img = UIImage(systemName: send ? "arrow.up" : "mic", withConfiguration: UIImage.SymbolConfiguration(pointSize: send ? 14 : 15, weight: send ? .bold : .medium))
-      // (the symbol crossfades as the circle fills, both in the same 0.15 s — iPhone's replace effect left the circle empty
-      //  between the mic going and the arrow coming: Haris 2026-11-17 10:29)
-      if !first { UIView.transition(with: rightSym, duration: 0.15, options: [.transitionCrossDissolve, .allowUserInteraction]) { self.rightSym.image = img } }
-      else { rightSym.image = img }
+      // (iPhone's replace effect, as before — Haris 2026-11-17 10:42: "better before, just the black was coming before and
+      //  icon after": the circle now fills as the old symbol has gone and the new one comes up, not at the start)
+      if #available(iOS 17.0, *), !first, let img = img {
+        rightSym.setSymbolImage(img, contentTransition: .replace.downUp, options: .speed(1.6))
+      } else { rightSym.image = img }
       let paint = { self.right.backgroundColor = send ? .label : .tertiarySystemFill; self.right.tintColor = send ? .systemBackground : .label }
-      if first { paint() } else { UIView.animate(withDuration: 0.15, delay: 0, options: [.curveEaseInOut, .allowUserInteraction], animations: paint) }
+      // (delayed by hand, not with the animation's delay — the tint isn't animated and would switch at the start)
+      if first { paint() } else {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.09) { [weak self] in
+          guard let self = self, self.showingSend == send else { return }
+          UIView.animate(withDuration: 0.14, delay: 0, options: [.curveEaseInOut, .allowUserInteraction, .beginFromCurrentState], animations: paint)
+        }
+      }
     }
     holdG?.isEnabled = !send
     placeholder.isHidden = !(text.text ?? "").isEmpty
