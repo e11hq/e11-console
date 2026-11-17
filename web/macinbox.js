@@ -144,7 +144,7 @@ const MacInbox = (() => {
       const ext = fileExt(a.name), page = k === 'pdf' || k === 'text' || ['doc', 'docx', 'pages', 'rtf'].includes(ext);
       const pic = u ? `<img src="${u}" alt="" loading="lazy">` : page ? '<span class="mib-page"><i></i><i></i><i></i><i></i><i></i><i></i></span>'
         : `<span class="mib-ficon">${icon(k === 'image' ? 'image' : k === 'video' ? 'play' : 'clip')}<b>${esc(ext.slice(0, 4).toUpperCase() || 'FILE')}</b></span>`;
-      return `<button type="button" class="mib-tile" data-mib="pv" data-set="${set}" data-i="${i}"><span class="mib-tpic">${pic}${k === 'video' ? '<span class="mib-play">▶</span>' : ''}</span><span class="mib-tn">${esc(a.name)}</span><span class="mib-ts">${esc(fmtSize(a.size) || '')}</span></button>`;
+      return `<button type="button" class="mib-tile" data-mib="pv" data-set="${set}" data-i="${i}" data-att="${esc(a.id || '')}"><span class="mib-tpic">${pic}${k === 'video' ? '<span class="mib-play">▶</span>' : ''}</span><span class="mib-tn">${esc(a.name)}</span><span class="mib-ts">${esc(fmtSize(a.size) || '')}</span></button>`;
     }).join('')}</div>`;
   }
   // a comment's files: the same tiles as everywhere — one size, the name under, an icon when there's no picture
