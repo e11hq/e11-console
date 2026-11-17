@@ -505,7 +505,7 @@ const MacInbox = (() => {
     if (a.nodeType !== 1) { if (a.nodeValue !== b.nodeValue) a.nodeValue = b.nodeValue; return; }
     if (a.isEqualNode(b)) return;
     if (a.nodeName === 'IMG') { a.replaceWith(b); return; }
-    [...a.attributes].forEach((x) => { if (!b.hasAttribute(x.name)) a.removeAttribute(x.name); });
+    [...a.attributes].forEach((x) => { if (!b.hasAttribute(x.name) && !x.name.startsWith('data-live')) a.removeAttribute(x.name); });   // (data-live-…: set by the page itself, kept)
     [...b.attributes].forEach((x) => { if (a.getAttribute(x.name) !== x.value) a.setAttribute(x.name, x.value); });
     if (a.nodeName === 'TEXTAREA') return;   // (what's being typed stays)
     const byKey = new Map();
@@ -530,6 +530,9 @@ const MacInbox = (() => {
       if (held.size > 300) held.delete(held.keys().next().value);
     });
   }
+  // (the list's foot fades only while there's more under it)
+  function more(l) { if (!l) return; const m = l.scrollTop + l.clientHeight < l.scrollHeight - 2; if (m !== l.hasAttribute('data-live-more')) l.toggleAttribute('data-live-more', m); }
+  document.addEventListener('scroll', (e) => { if (e.target && e.target.classList && e.target.classList.contains('mib-list')) more(e.target); }, true);
   function patch(c) {
     const cur = c.firstElementChild;
     hold(c);
@@ -545,5 +548,5 @@ const MacInbox = (() => {
     if (pane) { pane.classList.remove('fresh'); void pane.offsetWidth; pane.classList.add('fresh'); }
     return true;
   }
-  return { on, view, patch, reset: () => { pick = undefined; shown = null; } };
+  return { on, view, patch, drawn: (c) => more(c.querySelector('.mib-list')), reset: () => { pick = undefined; shown = null; } };
 })();

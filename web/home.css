@@ -807,7 +807,9 @@ html.mac-chrome[data-theme="light"] .mib { --mib-fill: rgba(120, 120, 128, .12);
 .mib-chev { display: inline-grid; color: var(--mc-dim); margin-right: -3px; }
 .mib-chev svg { width: 12px; height: 12px; stroke-width: 1.8; }
 .mib-body { flex: 1; min-height: 0; display: flex; gap: 16px; }
-.mib-list { width: 400px; flex: none; overflow: auto; margin-top: -8px; padding-bottom: 0; }   /* (scrolled to the end, its last card ends where the pane does) */
+.mib-list { width: 400px; flex: none; overflow: auto; margin-top: -8px; padding-bottom: 0; border-radius: 0 0 12px 12px; }
+/* (a long list fades at its foot while there's more under it, as the pane under its reply box — Haris 2026-11-17) */
+.mib-list[data-live-more] { -webkit-mask-image: linear-gradient(#000 calc(100% - 36px), transparent); mask-image: linear-gradient(#000 calc(100% - 36px), transparent); }   /* (scrolled to the end, its last card ends where the pane does) */
 .mib-group { padding: 14px 4px 6px; font-size: 13px; font-weight: 600; color: var(--mc-dim); }
 .mib-card { background: var(--mc-card); border-radius: 12px; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
 .mib-row { position: relative; display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px 10px 8px; border-radius: 9px; cursor: default; }
@@ -943,7 +945,12 @@ html.mac-chrome .mib .mention { color: var(--mc-blue); background: none; padding
 html[data-theme="light"] .mib-pop { background: rgba(255, 255, 255, .98); box-shadow: 0 0 0 .5px rgba(0, 0, 0, .1), 0 8px 24px rgba(0, 0, 0, .18); }
 .mib-pop button { border: 0; background: none; width: 30px; height: 30px; border-radius: 15px; font-size: 18px; cursor: default; }
 .mib-pop button:hover { background: rgba(127, 127, 127, .2); }
-.mib-reply { margin-top: auto; padding-top: 12px; }
+/* the reply box (and a decision's buttons) stay at the pane's foot while a long pane scrolls, the updates fading out under them */
+.mib-pane { padding-bottom: 0; }
+.mib-pane:not(:has(> .mib-reply, > .mib-foot))::after { content: ""; flex: none; height: 18px; }
+.mib-reply, .mib-pane > .mib-foot { position: sticky; bottom: 0; z-index: 2; padding-bottom: 18px; background: linear-gradient(to bottom, transparent, var(--mc-card) 26px); }
+.mib-reply { margin-top: auto; padding-top: 26px; }
+.mib-pane > .mib-foot { background: var(--mc-card); }   /* (a decision's buttons on their line, as a bar) */
 .mib-where { font-size: 11.5px; color: var(--mc-dim); margin: 0 0 6px 4px; }
 .mib-box { display: flex; align-items: flex-end; gap: 8px; padding: 6px 6px 6px 14px; border-radius: 18px; background: var(--mc-field); }
 .mib-in { flex: 1; border: 0; outline: 0; resize: none; background: none; color: var(--mc-fg); font: inherit; font-size: 13px; line-height: 19px; padding: 3px 0; max-height: 140px; }
