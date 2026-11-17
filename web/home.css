@@ -900,16 +900,17 @@ html.mac-chrome[data-theme="light"] .mib-row.sel { background: color-mix(in srgb
 .mib-u-h span { font-size: 12px; color: var(--mc-dim); }
 .mib-u-t { font-size: 13px; line-height: 19px; margin-top: 3px; overflow-wrap: anywhere; }
 html.mac-chrome .mib .mention { color: var(--mc-blue); background: none; padding: 0; border-radius: 0; font-weight: 500; }
-/* a thread (as the task page's): the comment answered, then its replies, a line from its picture curving into each reply's */
+/* a thread (as the task page's): the comment answered, then its replies — one line from its picture down past them, curving
+   only into the last reply (yours, when you've replied — Haris 2026-11-17) */
 .mib-th { --rail: color-mix(in srgb, var(--mc-fg) 16%, transparent); }
-.mib-th-head { position: relative; }
+.mib-th-head { position: relative; display: flow-root; }
 .mib-th-head::after { content: ""; position: absolute; left: 14px; top: 48px; bottom: 0; border-left: 2px solid var(--rail); }
-.mib-th-r { position: relative; margin-left: 40px; }
-.mib-th-r::before { content: ""; position: absolute; left: -26px; top: 0; width: 20px; height: 27px; border-left: 2px solid var(--rail); border-bottom: 2px solid var(--rail); border-bottom-left-radius: 12px; }
+.mib-th-r { position: relative; margin-left: 40px; display: flow-root; }   /* (its margins inside, so the line has no gap) */
+.mib-th-r:last-child::before { content: ""; position: absolute; left: -26px; top: 0; width: 20px; height: 27px; border-left: 2px solid var(--rail); border-bottom: 2px solid var(--rail); border-bottom-left-radius: 12px; }
 .mib-th-r:not(:last-child)::after { content: ""; position: absolute; left: -26px; top: 0; bottom: 0; border-left: 2px solid var(--rail); }
 .mib-th-r .mib-u { border-top: 0; }
 .mib-th-r .mib-yours .mib-u { margin: 0; }
-.mib-th-r:has(> .mib-yours)::before { height: 25px; }
+.mib-th-r:last-child:has(> .mib-yours)::before { height: 25px; }
 .mib-lead .mib-u-t { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 /* your reply: Edit (the minutes left) · Delete, pills as every button */
 .mib-acts { margin-left: auto; display: inline-flex; gap: 6px; }
