@@ -2523,7 +2523,10 @@ extension HomeView: UICollectionViewDelegate {
     if t.isFolder { var x: UIView? = t; while let y = x, (y.backgroundColor?.cgColor.alpha ?? 0) < 0.99 { x = y.superview }; bg = (x?.backgroundColor ?? HomeLook(nil).bg).resolvedColor(with: v.traitCollection) }
     let img = UIGraphicsImageRenderer(bounds: b).image { ctx in
       path.addClip()
-      v.drawHierarchy(in: b, afterScreenUpdates: false)
+      // (drawn from the picture's own layer, not read off the screen: as it's pressed iPhone takes the tile up for its lift and
+      //  the screen read gave nothing — the lifted folder came up blank, only the page colour in its outline, and nothing flew
+      //  back as it was let go, the folder then popping in. Haris 2026-11-17 07:43)
+      v.layer.render(in: ctx.cgContext)
       if let bg = bg {
         let inset = UIBezierPath(cgPath: path.cgPath)
         let k: CGFloat = 1.5
