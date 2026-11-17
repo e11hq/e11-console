@@ -24,6 +24,9 @@ made from an old copy of Talk (main's `talk/` folder) instead of the real app, a
 - Before sending any build: the build number read exactly from its own line (`… build N signed`), checked by eye, never
   pulled loosely out of text.
 - When unsure, stop and check — never jump in.
+- Before starting any build, ask Haris which checks to run with it — the walk-through for every role, the simulator
+  self-test, anything else — and run only what he says (Haris, 2026-11-17 23:24). (The iPhone workflow's `walk` input
+  turns the walk-through on or off; its self-test runs every time today unless the workflow is changed.)
 
 ## Rule for every native screen of the iPhone app (Haris, 2026-11-03)
 When a screen is drawn again, **only what changed changes**: keep each row / card / tile / section by its id or key
