@@ -286,6 +286,15 @@ const MacInbox = (() => {
       const rows = [...(hide ? [`<button type="button" class="mib-moreb" data-mib="more-ups">+ ${hide} more</button>`] : []), ...others.slice(hide), ...mine];
       return `<div class="mib-th" data-key="th:${esc(b.pid)}"><div class="mib-th-head">${b.head}</div>${rows.map((r) => `<div class="mib-th-r${r.startsWith('<button') ? ' more' : ''}">${r}</div>`).join('')}</div>`;
     };
+    // your replies waiting to go out (scheduled here or on the website): last in the thread, Send Now · Cancel
+    const waiting = (db.scheduled || []).filter((x) => x.taskId === t.id && x.authorId === currentUserId && x.state === 'waiting').sort((a, b) => String(a.sendAt).localeCompare(String(b.sendAt)));
+    waiting.forEach((x) => {
+      const html = `<div class="mib-yours mib-sched">${upd({ id: 'sch-' + x.id, from: currentUserId, at: x.createdAt || nowISO() }, linkWords(mentionMark(esc(x.text || ''))), commentFiles(x.attachments || []))
+        .replace(`<b>${esc(nameOf(currentUserId))}</b>`, '<b>You</b>')
+        .replace(/<span>[^<]*<\/span><\/div><div class="mib-u-t">/, `<span class="mib-sch-at">${icon('clock')}Scheduled · ${esc(Sched.when(Date.parse(x.sendAt)))}</span><span class="mib-acts"><button type="button" class="mib-btn sm ico" data-mib="sch-now" data-id="${esc(x.id)}" title="Send now" aria-label="Send now">${icon('send')}</button><button type="button" class="mib-btn sm ico" data-mib="sch-x" data-id="${esc(x.id)}" title="Cancel" aria-label="Cancel">${icon('trash')}</button></span></div><div class="mib-u-t">`)}</div>`;
+      const last = blocks[blocks.length - 1];
+      if (last && last.replies) last.replies.push(html); else if (last && last.cid) blocks[blocks.length - 1] = { pid: last.cid, head: last.html, replies: [html] }; else blocks.push({ html });
+    });
     const ups = blocks.map((b) => (b.replies ? thread(b) : b.html)).join('');
     let reply = '';
     if (lastComment) {
@@ -294,7 +303,7 @@ const MacInbox = (() => {
       const to = firstName(lastComment.authorId);
       const where = lastComment.parentId || mineAll.length ? `Replies in ${esc(nameOf(rootC ? rootC.authorId : lastComment.authorId))}’s thread` : `Starts a thread under ${esc(to)}’s comment`;
       reply = `<!--foot--><div class="mib-reply"><div class="mib-where">↳ ${where}</div>${upHTML()}<div class="mib-box"><button type="button" class="mib-add" data-mib="attach" title="Attach files" aria-label="Attach files">${icon('plus')}</button><span class="mib-field"><span class="mib-hl" aria-hidden="true"></span><textarea rows="1" class="mib-in" placeholder="Reply to ${esc(to)}…" data-tid="${esc(t.id)}" data-root="${esc(root)}"></textarea></span>
-        <button type="button" class="mib-send" data-mib="send" title="Send" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button></div></div>`;
+        <button type="button" class="mib-clock" data-mib="sched" title="Schedule this reply" aria-label="Schedule this reply">${icon('clock')}</button><button type="button" class="mib-send" data-mib="send" title="Send" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button></div></div>`;
     }
     return head(t ? statusIcon(t, 16) : '', t ? (t.title || 'Untitled task') : 'Deleted task', taskLine(t), unreadBtn(g) + openBtn(g, 'Open Task'))
       + cap(`${items.length} update${items.length === 1 ? '' : 's'} · newest last`) + `<!--body--><div class="mib-ups">${ups}</div>${reply}`;
@@ -423,6 +432,7 @@ const MacInbox = (() => {
   }
   function choose(k) {
     openAll = false;   // (every pick in the list starts a long run closed again)
+    spClose();
     mClose(); picked = new Set();
     if (k !== pick) { dyOpen = null; pending.forEach((x) => { if (x.linked) return; if (x.att) api('POST', '/api/host/trashMany', { paths: [x.att.path] }).catch(() => {}); else x.sig.cancelled = true; }); pending = []; }
     pick = k;
@@ -550,6 +560,111 @@ const MacInbox = (() => {
     ta.style.height = h + 6 + 'px';
     ta.style.overflowY = measure.offsetHeight > 133 ? 'auto' : 'hidden';
     paintBox(ta);
+  }
+  // ---------- schedule this reply (A — Haris 2026-11-17): the clock opens one panel on the right — type a time, a quick
+  // time, or a day and a time; the website's own times (Dubai, office hours flagged) and its scheduled replies ----------
+  let sp = null;   // { el, view: {y, m}, day: {y, m, d} | null, pick: ms | null, typed: ms | null }
+  const DUB = 4 * 3600000;
+  const dubNow = () => { const d = new Date(Date.now() + DUB); return { y: d.getUTCFullYear(), m: d.getUTCMonth(), d: d.getUTCDate() }; };
+  const atDub = (y, m, d, h, mi = 0) => Date.UTC(y, m, d, h, mi) - DUB;
+  function spClose() { if (sp && sp.el) sp.el.remove(); sp = null; }
+  function spHTML() {
+    const QI = { soon: 'clock', hours: 'clock', tomorrow: 'sun', days: 'cal', week: 'cal' };
+    const tm = (ms) => new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Dubai' });
+    const wd = (ms) => new Date(ms).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'Asia/Dubai' });
+    const late = (ms) => (Sched.outside(ms) ? '<i class="mib-sp-out" title="Outside office hours (Mon–Fri, 9–6)"></i>' : '');
+    const typed = sp.typed ? `<div class="mib-am-r on" data-sp-at="${sp.typed}">${icon('clock')}<span class="mib-am-n">Schedule for ${esc(Sched.when(sp.typed))}</span>${late(sp.typed)}</div><div class="mib-sp-sep"></div>` : '';
+    const quick = Sched.quick().map((x) => `<div class="mib-am-r" data-sp-at="${x.ms}">${icon(QI[x.k] || 'clock')}<span class="mib-am-n">${esc(x.l)}</span>${late(x.ms)}<small>${x.short ? tm(x.ms) : `${wd(x.ms)}, ${tm(x.ms)}`}</small></div>`).join('');
+    const v = sp.view, today = dubNow(), first = new Date(Date.UTC(v.y, v.m, 1)).getUTCDay(), lead = (first + 6) % 7, days = new Date(Date.UTC(v.y, v.m + 1, 0)).getUTCDate();
+    const isToday = (d) => v.y === today.y && v.m === today.m && d === today.d, past = (d) => Date.UTC(v.y, v.m, d) < Date.UTC(today.y, today.m, today.d);
+    let cal = ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d) => `<b>${d}</b>`).join('') + '<i></i>'.repeat(lead);
+    for (let d = 1; d <= days; d++) cal += `<button type="button" class="${past(d) ? 'off' : ''} ${isToday(d) ? 'now' : ''} ${sp.day && sp.day.y === v.y && sp.day.m === v.m && sp.day.d === d ? 'on' : ''}" ${past(d) ? 'disabled' : `data-sp-day="${d}"`}>${d}</button>`;
+    const atThis = v.y === today.y && v.m === today.m;
+    const times = sp.day ? [9, 11, 14, 16].map((h) => atDub(sp.day.y, sp.day.m, sp.day.d, h)).filter((ms) => ms > Date.now() + 60000) : [];
+    const pills = sp.day ? `<div class="mib-sp-tm">${times.map((ms) => `<button type="button" class="${sp.pick === ms ? 'on' : ''}" data-sp-pick="${ms}">${tm(ms)}</button>`).join('')}<input class="mib-sp-other" placeholder="Other time" value="${esc(sp.other || '')}"></div>` : '';
+    const go = sp.pick ? `<button type="button" class="mib-btn primary mib-sp-go" data-sp-at="${sp.pick}">Schedule for ${esc(wd(sp.pick))}, ${esc(tm(sp.pick))}</button>` : '';
+    return `<div class="mib-sp-fld">${icon('search')}<input class="mib-sp-q" placeholder="Try “Tomorrow at 2 PM”…" value="${esc(sp.q || '')}" autocomplete="off" spellcheck="false"></div>${typed}
+      <div class="mib-am-h">Send this reply</div>${quick}<div class="mib-sp-sep"></div>
+      <div class="mib-am-h">Pick a day and time</div>
+      <div class="mib-sp-cal"><div class="mib-sp-mh"><b>${new Date(Date.UTC(v.y, v.m, 1)).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })}</b><span><button type="button" data-sp-nav="-1" ${atThis ? 'disabled' : ''}>${icon('chev-left')}</button><button type="button" data-sp-nav="1">${icon('chev-right')}</button></span></div><div class="mib-sp-g">${cal}</div></div>${pills}${go}`;
+  }
+  function spPaint(keepFocus) {
+    if (!sp) return;
+    const q = sp.el.querySelector('.mib-sp-q'), had = q && document.activeElement === q, pos = q ? q.selectionStart : 0;
+    sp.el.innerHTML = spHTML();
+    const box = document.querySelector('.mib-box');
+    if (box) { const r = box.getBoundingClientRect(); sp.el.style.left = Math.max(8, r.right - sp.el.offsetWidth) + 'px'; sp.el.style.top = Math.max(8, r.top - sp.el.offsetHeight - 8) + 'px'; }
+    const nq = sp.el.querySelector('.mib-sp-q'); if (nq && (had || keepFocus)) { nq.focus(); nq.setSelectionRange(pos, pos); }
+  }
+  function spOpen() {
+    if (sp) return spClose();
+    const t = dubNow();
+    sp = { view: { y: t.y, m: t.m }, day: null, pick: null, typed: null, q: '' };
+    sp.el = document.createElement('div'); sp.el.className = 'mib-amenu mib-spop'; document.body.appendChild(sp.el);
+    spPaint(true);
+  }
+  function scheduleAt(ms) {
+    const ta = document.querySelector('.mib-in'), t = ta && task(ta.dataset.tid);
+    if (!t) return spClose();
+    if (!(ms > Date.now() + 30000)) { toast('Pick a time in the future'); return; }
+    if (pending.some((x) => !x.att)) { toast('Wait for the upload'); return; }
+    const text = ta.value.trim();
+    if (!text && !pending.length) { spClose(); toast('Write your reply first'); ta.focus(); return; }
+    let html = esc(text);
+    picked.forEach((id) => { const u = userById(id); if (!u) return; const n = esc('@' + fullName(u)); html = html.split(n).join(`<span class="mention" data-user="${esc(u.id)}" contenteditable="false">${n}</span>`); });
+    html = html.replace(/\n/g, '<br>');
+    const files = pending.splice(0).map((x) => { if (x.blob) URL.revokeObjectURL(x.url); return x.att; });
+    db.scheduled = db.scheduled || [];
+    db.scheduled.push({ id: 's-' + uid(), taskId: t.id, taskTitle: t.title || '', authorId: currentUserId, replyTo: ta.dataset.root || null, text, html, attachments: files, sendAt: new Date(ms).toISOString(), createdAt: nowISO(), state: 'waiting' });
+    ta.value = ''; picked = new Set(); fitBox(ta); spClose();
+    commit();
+    if (ui.view === 'inbox') renderContent();
+    toast(`Reply scheduled for ${Sched.when(ms)}`);
+  }
+  document.addEventListener('mousedown', (e) => { if (sp && !sp.el.contains(e.target) && !e.target.closest('[data-mib="sched"]')) spClose(); }, true);
+  document.addEventListener('click', (e) => {
+    if (!sp || !sp.el.contains(e.target)) return;
+    const b = e.target.closest('[data-sp-at], [data-sp-day], [data-sp-nav], [data-sp-pick]');
+    if (!b) return;
+    if (b.dataset.spAt) return scheduleAt(+b.dataset.spAt);
+    if (b.dataset.spNav) { const n = +b.dataset.spNav, d = new Date(Date.UTC(sp.view.y, sp.view.m + n, 1)); sp.view = { y: d.getUTCFullYear(), m: d.getUTCMonth() }; return spPaint(); }
+    if (b.dataset.spDay) { sp.day = { y: sp.view.y, m: sp.view.m, d: +b.dataset.spDay }; sp.pick = null; sp.other = ''; return spPaint(); }
+    if (b.dataset.spPick) { sp.pick = +b.dataset.spPick; sp.other = ''; return spPaint(); }
+  });
+  document.addEventListener('input', (e) => {
+    if (!sp || !sp.el.contains(e.target)) return;
+    if (e.target.classList.contains('mib-sp-q')) { sp.q = e.target.value; const ms = Sched.parse(sp.q); sp.typed = ms && ms > Date.now() ? ms : null; return spPaint(true); }
+    if (e.target.classList.contains('mib-sp-other') && sp.day) {
+      sp.other = e.target.value;
+      const d = sp.day, ms = Sched.parse(`${['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'][d.m]} ${d.d} ${sp.other}`);
+      sp.pick = ms && ms > Date.now() ? ms : null;
+      const go = sp.el.querySelector('.mib-sp-go'); const pos = e.target.selectionStart;
+      spPaint(); const o = sp.el.querySelector('.mib-sp-other'); if (o) { o.focus(); o.setSelectionRange(pos, pos); }
+      void go;
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (!sp) return;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (sp.day) { sp.day = null; sp.pick = null; spPaint(); } else spClose(); return; }
+    if (e.key === 'Enter' && sp.el.contains(e.target)) { e.preventDefault(); e.stopPropagation(); const ms = sp.typed || sp.pick; if (ms) scheduleAt(ms); }
+  }, true);
+  // your scheduled reply: sent now, or cancelled (Undo for a moment)
+  function schedNow(id) {
+    const x = (db.scheduled || []).find((y) => y.id === id), t = x && task(x.taskId);
+    if (!x || !t) return;
+    db.scheduled = db.scheduled.filter((y) => y !== x);
+    const replyTo = x.replyTo && (t.comments || []).some((c) => c.id === x.replyTo) ? x.replyTo : null;
+    (x.attachments || []).forEach((a) => { if (!(t.attachments || []).some((y) => y.path === a.path)) (t.attachments = t.attachments || []).push(a); });
+    const cid = postComment(t, replyTo, x.text || '', x.html || '', x.attachments || []);
+    const g = rows().list.find((r) => r.key === pick);
+    if (g) { const was = g.items.find((y) => y.mine && (y.mine.cids || y.mine.cid)), cids = was ? (was.mine.cids || (was.mine.cid ? [was.mine.cid] : [])) : []; g.items.forEach((y) => { y.mine = { reply: x.text || '', at: nowISO(), cid, cids: [...cids, cid] }; }); }
+    t.updatedAt = nowISO(); commit(); if (ui.view === 'inbox') renderContent();
+  }
+  function schedCancel(id) {
+    const x = (db.scheduled || []).find((y) => y.id === id);
+    if (!x) return;
+    db.scheduled = db.scheduled.filter((y) => y !== x); commit(); if (ui.view === 'inbox') renderContent();
+    toast('Scheduled reply cancelled', { label: 'Undo', run: () => { if (!(db.scheduled || []).some((y) => y.id === x.id)) { db.scheduled.push(x); commit(); if (ui.view === 'inbox') renderContent(); } } });
   }
   function sendState() { const ta = document.querySelector('.mib-in'), b = document.querySelector('.mib-send'); if (ta && b) b.disabled = pending.some((x) => !x.att) || (!ta.value.trim() && !pending.length); }
   function upDraw() { if (ui.view === 'inbox') renderContent(); }
@@ -708,6 +823,9 @@ const MacInbox = (() => {
     else if (a === 'dy-sec') { dyOpen = dyOpen === el.dataset.k ? '' : el.dataset.k; renderContent(); }
     else if (a === 'more-ups') { openAll = true; renderContent(); }
     else if (a === 'up-x') unAdd(el.dataset.k);
+    else if (a === 'sched') spOpen();
+    else if (a === 'sch-now') schedNow(el.dataset.id);
+    else if (a === 'sch-x') schedCancel(el.dataset.id);
     else if (a === 'lk-x') { e.stopPropagation(); noCard.add(el.dataset.url); renderContent(); }
     else if (a === 'lk-open') { const x = LK.get(el.dataset.url); if (x && x.att) previewFile(x.att, [x.att]); else Host.call('openURL', { url: el.dataset.url }).catch(() => { try { window.open(el.dataset.url); } catch (_) { /* ignore */ } }); }
     else if (a === 'up-pv') { const done = pending.filter((y) => y.att).map((y) => y.att), x = pending.find((y) => String(y.k) === el.dataset.k); if (x && x.att) previewFile(x.att, done); }

@@ -1073,3 +1073,40 @@ html.mac-chrome .mention-pop .mi { display: flex; align-items: center; gap: 8px;
 html.mac-chrome .mention-pop .mi .av { width: 18px !important; height: 18px !important; font-size: 8px; }
 html.mac-chrome .mention-pop .asg-n { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 html.mac-chrome .mention-pop .asg-n small { margin-left: auto; font-size: 12px; color: var(--mc-dim); overflow: hidden; text-overflow: ellipsis; }
+
+/* schedule this reply (A): the clock beside the send arrow, a bigger symbol; its panel the Mac's own menu */
+.mib-clock { width: 30px; height: 30px; flex: none; border: 0; padding: 0; border-radius: 15px; background: none; color: var(--mc-dim); display: grid; place-items: center; cursor: default; }
+.mib-clock:hover { background: var(--mib-fill); color: var(--mc-fg); }
+.mib-clock .ic, .mib-clock svg { width: 20px; height: 20px; stroke-width: 1.6; }
+.mib-spop { width: 310px; padding: 6px; }
+.mib-sp-fld { margin: 2px 2px 6px; height: 28px; border-radius: 7px; background: rgba(127, 127, 127, .12); box-shadow: inset 0 0 0 .5px rgba(127, 127, 127, .25); display: flex; align-items: center; gap: 6px; padding: 0 8px; color: var(--mc-dim); }
+.mib-sp-fld .ic, .mib-sp-fld svg { width: 13px; height: 13px; }
+.mib-sp-q, .mib-sp-other { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--mc-fg); font: inherit; font-size: 13px; }
+.mib-spop .mib-am-r { height: 26px; }
+.mib-spop .mib-am-r > .ic, .mib-spop .mib-am-r > svg { width: 14px; height: 14px; color: var(--mc-dim); flex: none; }
+.mib-spop .mib-am-r:hover:not(.on) { background: #0a64d6; color: #fff; }
+.mib-spop .mib-am-r:hover small, .mib-spop .mib-am-r:hover > .ic, .mib-spop .mib-am-r.on > .ic { color: #fff; }
+.mib-sp-out { width: 6px; height: 6px; border-radius: 3px; background: #ff9f0a; flex: none; }
+.mib-sp-sep { height: 1px; margin: 5px 9px; background: rgba(127, 127, 127, .22); }
+.mib-sp-cal { padding: 2px 6px 4px; }
+.mib-sp-mh { display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 6px; }
+.mib-sp-mh button { border: 0; background: none; color: var(--mc-dim); width: 22px; height: 22px; border-radius: 6px; display: inline-grid; place-items: center; cursor: default; }
+.mib-sp-mh button:hover:not(:disabled) { background: var(--mib-fill); color: var(--mc-fg); }
+.mib-sp-mh button:disabled { opacity: .3; }
+.mib-sp-mh svg { width: 13px; height: 13px; }
+.mib-sp-g { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; font-size: 12px; }
+.mib-sp-g b { font-size: 10.5px; color: var(--mc-dim); font-weight: 600; padding-bottom: 2px; }
+.mib-sp-g button { height: 26px; border: 0; border-radius: 13px; background: none; color: var(--mc-fg); font: inherit; font-size: 12px; cursor: default; }
+.mib-sp-g button:hover:not(:disabled):not(.on) { background: var(--mib-fill); }
+.mib-sp-g button.off { color: var(--mc-dim); opacity: .45; }
+.mib-sp-g button.now { color: #0a84ff; font-weight: 700; }
+.mib-sp-g button.on { background: #0a64d6; color: #fff; font-weight: 600; }
+.mib-sp-tm { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 8px 6px; }
+.mib-sp-tm button { height: 24px; padding: 0 10px; border: 0; border-radius: 12px; background: var(--mib-fill); color: var(--mc-fg); font: inherit; font-size: 12px; cursor: default; }
+.mib-sp-tm button.on { background: #0a64d6; color: #fff; }
+.mib-sp-tm .mib-sp-other { flex: 1 1 90px; height: 24px; padding: 0 10px; border-radius: 12px; background: var(--mib-fill); font-size: 12px; }
+.mib-sp-go { display: flex; width: calc(100% - 12px); margin: 2px 6px 4px; justify-content: center; }
+/* a scheduled reply of yours, waiting */
+.mib-sched .mib-u { background: color-mix(in srgb, #ff9f0a 10%, transparent); }
+.mib-sch-at { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #ff9f0a; }
+.mib-sch-at .ic, .mib-sch-at svg { width: 12px; height: 12px; }
