@@ -977,6 +977,12 @@ html[data-theme="light"] .mib-pop { background: rgba(255, 255, 255, .98); box-sh
 .mib-box { display: flex; align-items: flex-end; gap: 8px; padding: 6px 6px 6px 14px; border-radius: 18px; background: var(--mc-field); }
 .mib-in { flex: 1; border: 0; outline: 0; resize: none; background: none; color: var(--mc-fg); font: inherit; font-size: 13px; line-height: 19px; padding: 3px 0; max-height: 140px; }
 .mib-in::placeholder { color: var(--mc-dim); }
+/* (the words drawn just behind the box's own clear ones, so an @name picked from the list shows in the list's blue) */
+.mib-field { flex: 1; min-width: 0; position: relative; display: flex; }
+.mib-hl { position: absolute; inset: 0; padding: 3px 0; font-size: 13px; line-height: 19px; white-space: pre-wrap; overflow-wrap: break-word; color: var(--mc-fg); pointer-events: none; overflow: hidden; }
+.mib-hl .mention { color: var(--mc-blue); }
+.mib-field > .mib-in { position: relative; color: transparent; caret-color: var(--mc-fg); }
+.mib-field > .mib-in::selection { color: transparent; }
 .mib-measure { position: absolute; left: -9999px; top: 0; visibility: hidden; font-size: 13px; line-height: 19px; white-space: pre-wrap; overflow-wrap: break-word; }
 /* files held over a comment's pane: a dashed blue border, the pane tinted, and the words in the middle */
 .mib-pane { position: relative; }

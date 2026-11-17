@@ -170,7 +170,7 @@ const MacInbox = (() => {
       const ext = fileExt(a.name), page = k === 'pdf' || k === 'text' || ['doc', 'docx', 'pages', 'rtf'].includes(ext);
       const pic = u ? `<img src="${u}" alt="" decoding="sync">` : page ? '<span class="mib-page"><i></i><i></i><i></i><i></i><i></i><i></i></span>'
         : `<span class="mib-ficon">${icon(k === 'image' ? 'image' : k === 'video' ? 'play' : 'clip')}<b>${esc(ext.slice(0, 4).toUpperCase() || 'FILE')}</b></span>`;
-      return `<button type="button" class="mib-tile" data-mib="pv" data-set="${set}" data-i="${i}" data-att="${esc(a.id || '')}"><span class="mib-tpic">${pic}${k === 'video' ? '<span class="mib-play">▶</span>' : ''}</span><span class="mib-tn">${esc(a.name)}</span><span class="mib-ts">${esc(fmtSize(a.size) || '')}</span></button>`;
+      return `<button type="button" class="mib-tile" data-mib="pv" data-set="${set}" data-i="${i}" data-att="${esc((withFileId(a) || {}).id || '')}"><span class="mib-tpic">${pic}${k === 'video' ? '<span class="mib-play">▶</span>' : ''}</span><span class="mib-tn">${esc(a.name)}</span><span class="mib-ts">${esc(fmtSize(a.size) || '')}</span></button>`;
     }).join('')}</div>`;
   }
   // a comment's files: the same tiles as everywhere — one size, the name under, an icon when there's no picture
@@ -293,7 +293,7 @@ const MacInbox = (() => {
       const rootC = (t.comments || []).find((x) => x.id === root);
       const to = firstName(lastComment.authorId);
       const where = lastComment.parentId || mineAll.length ? `Replies in ${esc(nameOf(rootC ? rootC.authorId : lastComment.authorId))}’s thread` : `Starts a thread under ${esc(to)}’s comment`;
-      reply = `<!--foot--><div class="mib-reply"><div class="mib-where">↳ ${where}</div>${upHTML()}<div class="mib-box"><button type="button" class="mib-add" data-mib="attach" title="Attach files" aria-label="Attach files">${icon('plus')}</button><textarea rows="1" class="mib-in" placeholder="Reply to ${esc(to)}…" data-tid="${esc(t.id)}" data-root="${esc(root)}"></textarea>
+      reply = `<!--foot--><div class="mib-reply"><div class="mib-where">↳ ${where}</div>${upHTML()}<div class="mib-box"><button type="button" class="mib-add" data-mib="attach" title="Attach files" aria-label="Attach files">${icon('plus')}</button><span class="mib-field"><span class="mib-hl" aria-hidden="true"></span><textarea rows="1" class="mib-in" placeholder="Reply to ${esc(to)}…" data-tid="${esc(t.id)}" data-root="${esc(root)}"></textarea></span>
         <button type="button" class="mib-send" data-mib="send" title="Send" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button></div></div>`;
     }
     return head(t ? statusIcon(t, 16) : '', t ? (t.title || 'Untitled task') : 'Deleted task', taskLine(t), unreadBtn(g) + openBtn(g, 'Open Task'))
@@ -474,12 +474,21 @@ const MacInbox = (() => {
     if (!pending.length) return '<div class="mib-up" hidden></div>';
     return `<div class="mib-up">${pending.map((x) => {
       const pic = x.url || (x.att ? picOf(x.att) : '');
-      return `<span class="mib-upt ${x.att ? 'done' : ''}" data-key="up:${x.k}">${pic ? `<img src="${esc(pic)}" alt="">` : `<span class="mib-ficon">${icon(fileKind(x) === 'video' ? 'play' : 'clip')}<b>${esc((fileExt(x.name) || 'file').slice(0, 4).toUpperCase())}</b></span>`}${pic && fileKind(x) === 'video' && x.att ? '<span class="mib-play">▶</span>' : ''}${ring(x)}<button type="button" class="mib-upx" data-mib="up-x" data-k="${x.k}" title="Remove" aria-label="Remove ${esc(x.name)}">${icon('x')}</button></span>`;
+      return `<span class="mib-upt ${x.att ? 'done' : ''}" data-key="up:${x.k}"${x.att ? ` data-mib="up-pv" data-k="${x.k}" data-att="${esc((withFileId(x.att) || {}).id || '')}"` : ''}>${pic ? `<img src="${esc(pic)}" alt="">` : `<span class="mib-ficon">${icon(fileKind(x) === 'video' ? 'play' : 'clip')}<b>${esc((fileExt(x.name) || 'file').slice(0, 4).toUpperCase())}</b></span>`}${pic && fileKind(x) === 'video' && x.att ? '<span class="mib-play">▶</span>' : ''}${ring(x)}<button type="button" class="mib-upx" data-mib="up-x" data-k="${x.k}" title="Remove" aria-label="Remove ${esc(x.name)}">${icon('x')}</button></span>`;
     }).join('')}</div>`;
   }
   // (the reply box exactly as tall as its words: measured on a copy laid out the same way — the textarea's own
   //  scrollHeight came out a line too tall on the Mac — up to 7 lines, then it scrolls)
   let measure = null;
+  function paintBox(ta) {
+    const hl = ta.parentElement && ta.parentElement.querySelector('.mib-hl');
+    if (!hl) return;
+    let h = esc(ta.value);
+    [...picked].map((id) => userById(id)).filter(Boolean).sort((a, b) => fullName(b).length - fullName(a).length).forEach((u) => { const n = esc('@' + fullName(u)); h = h.split(n).join(`<span class="mention">${n}</span>`); });
+    hl.innerHTML = h + '\u200b';
+    hl.scrollTop = ta.scrollTop;
+    if (!ta.__hlScroll) { ta.__hlScroll = true; ta.addEventListener('scroll', () => { hl.scrollTop = ta.scrollTop; }); }
+  }
   function fitBox(ta) {
     if (!measure) { measure = document.createElement('div'); measure.className = 'mib-measure'; document.body.appendChild(measure); }
     measure.style.width = ta.clientWidth + 'px';
@@ -487,6 +496,7 @@ const MacInbox = (() => {
     const h = Math.min(measure.offsetHeight, 133);
     ta.style.height = h + 6 + 'px';
     ta.style.overflowY = measure.offsetHeight > 133 ? 'auto' : 'hidden';
+    paintBox(ta);
   }
   function sendState() { const ta = document.querySelector('.mib-in'), b = document.querySelector('.mib-send'); if (ta && b) b.disabled = pending.some((x) => !x.att) || (!ta.value.trim() && !pending.length); }
   function upDraw() { if (ui.view === 'inbox') renderContent(); }
@@ -513,7 +523,7 @@ const MacInbox = (() => {
         if (el && p - last > 0.01) { last = p; el.style.strokeDashoffset = (94.25 * (1 - p)).toFixed(1); }
       }, x.sig).then((att) => {
         if (x.sig.cancelled || !pending.includes(x)) return;
-        x.att = { ...att, addedAt: nowISO(), addedBy: currentUserId }; x.p = 1;
+        x.att = { ...att, id: att.id || uid(), addedAt: nowISO(), addedBy: currentUserId }; x.p = 1;
         upDraw(); sendState();
       }).catch((e) => {
         if (e && e.cancelled) return;
@@ -640,6 +650,7 @@ const MacInbox = (() => {
     else if (a === 'dy-sec') { dyOpen = dyOpen === el.dataset.k ? '' : el.dataset.k; renderContent(); }
     else if (a === 'more-ups') { openAll = true; renderContent(); }
     else if (a === 'up-x') unAdd(el.dataset.k);
+    else if (a === 'up-pv') { const done = pending.filter((y) => y.att).map((y) => y.att), x = pending.find((y) => String(y.k) === el.dataset.k); if (x && x.att) previewFile(x.att, done); }
     else if (a === 'my-tasks') { ui.myTasksTab = 'todo'; go('mytasks'); }
     else if (a === 'my-edit') { editingId = el.dataset.cid; renderContent(); setTimeout(() => { const x = document.querySelector('.mib-ein'); if (x) { x.focus(); x.setSelectionRange(x.value.length, x.value.length); } }, 0); }
     else if (a === 'my-cancel') { editingId = null; renderContent(); }
@@ -663,7 +674,7 @@ const MacInbox = (() => {
       if ((e.key === 'Enter' || e.key === 'Tab') && !e.metaKey) { e.preventDefault(); mPick(mIdx); return; }
       if (e.key === 'Escape') { e.preventDefault(); mClose(); return; }
     }
-    if (ta) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); mClose(); send(ta.parentElement.querySelector('.mib-send')); } return; }
+    if (ta) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); mClose(); send(ta.closest('.mib-box').querySelector('.mib-send')); } return; }
     const ein = e.target.closest && e.target.closest('.mib-ein');
     if (ein) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveMine(ein.dataset.tid, ein.dataset.cid); } else if (e.key === 'Escape') { e.preventDefault(); editingId = null; renderContent(); } return; }
     if (e.target.closest && e.target.closest('input, textarea, [contenteditable="true"], .dialog, .menu')) return;
@@ -737,5 +748,6 @@ const MacInbox = (() => {
     // (a notification opened: a long run opens at its end, the newest update in view — Haris 2026-11-17)
     if (wasFresh && sc && sc.scrollHeight > sc.clientHeight) sc.scrollTop = sc.scrollHeight;
     more(c.querySelector('.mib-list')); under(sc); sendState();
+    const ta = c.querySelector('.mib-in'); if (ta) paintBox(ta);
   }, reset: () => { pick = undefined; shown = null; } };
 })();
