@@ -22,7 +22,13 @@ const MacInbox = (() => {
   const clock = (iso) => { const d = new Date(iso); const today = new Date().toDateString() === d.toDateString();
     return (today ? 'Today ' : fmtDay(d.toISOString().slice(0, 10)) + ' ') + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); };
   const nameOf = (id) => fullName(userById(id));
-  const mentionMark = (s) => s.replace(/@([A-Z][\w.'-]*(?: [A-Z][\w.'-]*){0,2})/g, '<span class="mention">@$1</span>');
+  // (an @ followed by a real person's name only — "@Areej Masri Print" marks Areej Masri, not the word after)
+  const mentionMark = (s) => {
+    const names = [...new Set((db.users || []).flatMap((u) => u.name ? [u.name, u.name.split(' ')[0]] : []).filter((x) => x && /^[A-Z]/i.test(x)))].sort((a, b) => b.length - a.length).map((n) => esc(n).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    return names.length ? s.replace(new RegExp(`@(${names.join('|')})(?![\\w])`, 'gi'), '<span class="mention">@$1</span>') : s;
+  };
+  // (the shared line marks any capitalised words after @ — marked again here with the real names)
+  const msgOf = (n, t) => mentionMark(String(notifMsg(n, t)).replace(/<span class="mention">(.*?)<\/span>/g, '$1'));
 
   // the rows, exactly as the website's Inbox makes them (one per task: its newest update, and how many)
   function rows() {
@@ -83,7 +89,7 @@ const MacInbox = (() => {
     return `<div class="mib-row ${unread ? 'unread' : ''} ${g.key === pick ? 'sel' : ''}" data-mib="pick" data-k="${esc(g.key)}">
       <span class="mib-dot"></span><span class="mib-lead">${lead}</span>
       <span class="mib-t"><span class="mib-tt">${titleIcon(n, t)}<span>${esc(titleOf(n, t))}</span></span>
-        <span class="mib-msg">${notifMsg(shownN, t)}</span>${mine ? `<span class="mib-mine">↳ ${mine}</span>` : ''}</span>
+        <span class="mib-msg">${msgOf(shownN, t)}</span>${mine ? `<span class="mib-mine">↳ ${mine}</span>` : ''}</span>
       <span class="mib-r"><span class="mib-time">${time(n.at)}</span>${items.length > 1 ? `<i class="mib-n">${items.length}</i>` : ''}</span></div>`;
   }
   function titleOf(n, t) {
@@ -161,7 +167,9 @@ const MacInbox = (() => {
     if (k === 'asset') return assetHTML(g, n);
     if (/^claim/.test(k)) return claimHTML(g, n);
     if (k === 'sched-cancel') return schedHTML(g, n);
-    const rq = t && isCD() ? g.items.find((x) => x.kind === 'review') : null;   // (the CD's review request shows as I6, whatever else came on that task)
+    // (the CD's review request shows as I6 — unless a comment came after it: then the comments, so none is hidden behind it)
+    let rq = t && isCD() ? g.items.filter((x) => x.kind === 'review').sort((a, b) => a.at.localeCompare(b.at)).pop() : null;
+    if (rq && g.items.some((x) => COMMENTS.has(x.kind) && x.at > rq.at)) rq = null;
     if (rq) { const r = reviewOf(t, rq); if (r) return reviewHTML(g, t, r); }
     return taskHTML(g, t);
   }
@@ -171,7 +179,7 @@ const MacInbox = (() => {
   }
   function bodyOf(n, t) {
     const who = `<b>${esc(fullName(userById(n.from)))}</b> `;
-    const m = notifMsg(n, t);
+    const m = msgOf(n, t);
     return m.startsWith(who) ? m.slice(who.length) : m;
   }
   // a task's line: its client, when it's due, its status and its priority (the board's coloured pills)
@@ -199,6 +207,8 @@ const MacInbox = (() => {
   function taskHTML(g, t) {
     const items = g.items.slice().sort((a, b) => a.at.localeCompare(b.at));
     let lastComment = null;
+    const cOf = (n) => (t && n.commentId && COMMENTS.has(n.kind) ? (t.comments || []).find((x) => x.id === n.commentId) : null);
+    const newestC = items.map(cOf).filter(Boolean).pop() || null;   // (only the newest comment takes a reaction — the earlier ones show theirs, still)
     const ups = items.map((n, i) => {
       const c = t && n.commentId && COMMENTS.has(n.kind) ? (t.comments || []).find((x) => x.id === n.commentId) : null;
       if (c) lastComment = c;
@@ -207,7 +217,9 @@ const MacInbox = (() => {
       const parent = c.parentId ? (t.comments || []).find((x) => x.id === c.parentId) : null;
       const text = mentionMark(esc(fullComment(n, t) || n.snippet || ''));
       const reacts = Object.entries(c.reactions || {}).filter(([, v]) => v);
-      const rx = `<div class="mib-rx">${reacts.map(([e, v]) => `<button type="button" class="mib-pill ${mineReact(g) === e ? 'mine' : ''}" data-mib="react" data-tid="${esc(t.id)}" data-cid="${esc(c.id)}" data-e="${esc(e)}">${e} <b>${typeof v === 'number' ? v : 1}</b></button>`).join('')}<button type="button" class="mib-smile" data-mib="react-menu" data-tid="${esc(t.id)}" data-cid="${esc(c.id)}" title="React">☺︎</button></div>`;
+      const live = c === newestC;
+      const rx = !live ? (reacts.length ? `<div class="mib-rx">${reacts.map(([e, v]) => `<span class="mib-pill still">${e} <b>${typeof v === 'number' ? v : 1}</b></span>`).join('')}</div>` : '')
+        : `<div class="mib-rx">${reacts.map(([e, v]) => `<button type="button" class="mib-pill ${mineReact(g) === e ? 'mine' : ''}" data-mib="react" data-tid="${esc(t.id)}" data-cid="${esc(c.id)}" data-e="${esc(e)}">${e} <b>${typeof v === 'number' ? v : 1}</b></button>`).join('')}<button type="button" class="mib-smile" data-mib="react-menu" data-tid="${esc(t.id)}" data-cid="${esc(c.id)}" title="React">☺︎</button></div>`;
       const box = upd({ ...n, from: c.authorId, at: c.at }, text, commentFiles(c.attachments || []), faded, rx);
       return parent ? `<div class="mib-thread"><div class="mib-thread-l">In ${esc(nameOf(parent.authorId))}’s thread</div>${box}</div>` : box;
     }).join('');
