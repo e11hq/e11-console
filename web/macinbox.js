@@ -74,10 +74,16 @@ const MacInbox = (() => {
       <div class="mib-body">
         <div class="mib-list">${groups.map((x) => `<div class="mib-group" data-key="g:${x.name}">${x.name}</div><div class="mib-card" data-key="c:${x.name}">${x.rows.map(rowHTML).join('')}</div>`).join('')
           || `<div class="mib-none"><b>${tab === 'primary' ? 'Inbox zero 🎉' : 'Nothing here yet'}</b><span>${tab === 'primary' ? 'You’re all caught up. New updates on your tasks and @mentions land here.' : 'Updates on tasks you’re assigned to or created will appear here.'}</span></div>`}</div>
-        <div class="mib-pane ${fresh ? 'fresh' : ''}">${g ? paneHTML(g) : emptyHTML()}</div>
+        <div class="mib-pane ${fresh ? 'fresh' : ''}">${paneParts(g ? paneHTML(g) : emptyHTML())}</div>
       </div></div>`;
   }
 
+  // (the pane: what it says scrolls in its own box; the reply box or a decision's buttons sit under that box, outside it —
+  //  so the scroll's spring at either end never moves them: Haris 2026-11-17 "dont have the comment stuck box spring")
+  function paneParts(html) {
+    const at = html.indexOf('<!--foot-->');
+    return at < 0 ? `<div class="mib-scroll">${html}</div>` : `<div class="mib-scroll">${html.slice(0, at)}</div>${html.slice(at + 11)}`;
+  }
   // a row: the website's own (its title, who did what, the time, how many), two lines, the unread dot; your answer under it
   function rowHTML(g) {
     const n = g.latest, t = task(n.taskId), items = g.items;
@@ -125,7 +131,7 @@ const MacInbox = (() => {
   const cap = (s) => `<div class="mib-cap">${s}</div>`;
   const soft = (label, color) => `<span class="mib-sp" style="--c:${color}">${esc(label)}</span>`;
   const solid = (label, bg) => `<span class="mib-solid" style="background:${bg};color:${textOn(bg)}">${esc(label)}</span>`;
-  const foot = (buttons) => `<div class="mib-foot"><span></span>${buttons}</div>`;
+  const foot = (buttons) => `<!--foot--><div class="mib-foot"><span></span>${buttons}</div>`;
   const cdot = (p) => (p ? `<i class="mib-cdot" style="background:${esc(p.color || '#87909e')}"></i>${esc(p.name)}` : '');
   const unreadBtn = (g) => btn('Mark Unread', `data-action="notif-clear" data-id="${esc(g.key)}" data-read="1"`);
   const openBtn = (g, label, primary = true) => btn(label, `data-action="open-notif" data-id="${esc(ibTarget(g.items).id)}"`, primary);
@@ -269,7 +275,7 @@ const MacInbox = (() => {
       const rootC = (t.comments || []).find((x) => x.id === root);
       const to = firstName(lastComment.authorId);
       const where = lastComment.parentId || mineAll.length ? `Replies in ${esc(nameOf(rootC ? rootC.authorId : lastComment.authorId))}’s thread` : `Starts a thread under ${esc(to)}’s comment`;
-      reply = `<div class="mib-reply"><div class="mib-where">↳ ${where}</div><div class="mib-up" hidden></div><div class="mib-box"><button type="button" class="mib-add" data-mib="attach" title="Attach files" aria-label="Attach files">${icon('plus')}</button><textarea rows="1" class="mib-in" placeholder="Reply to ${esc(to)}…" data-tid="${esc(t.id)}" data-root="${esc(root)}"></textarea>
+      reply = `<!--foot--><div class="mib-reply"><div class="mib-where">↳ ${where}</div><div class="mib-up" hidden></div><div class="mib-box"><button type="button" class="mib-add" data-mib="attach" title="Attach files" aria-label="Attach files">${icon('plus')}</button><textarea rows="1" class="mib-in" placeholder="Reply to ${esc(to)}…" data-tid="${esc(t.id)}" data-root="${esc(root)}"></textarea>
         <button type="button" class="mib-send" data-mib="send" title="Send" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button></div></div>`;
     }
     return head(t ? statusIcon(t, 16) : '', t ? (t.title || 'Untitled task') : 'Deleted task', taskLine(t), unreadBtn(g) + openBtn(g, 'Open Task'))

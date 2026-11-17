@@ -836,7 +836,7 @@ html.mac-chrome[data-theme="light"] .mib-row.sel { background: color-mix(in srgb
 .mib-n { font-style: normal; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: var(--mc-field); font-size: 11px; font-weight: 600; color: var(--mc-dim); display: inline-grid; place-items: center; }
 .mib-none { padding: 40px 12px; text-align: center; display: flex; flex-direction: column; gap: 6px; color: var(--mc-dim); font-size: 13px; }
 .mib-none b { color: var(--mc-fg); font-size: 15px; }
-.mib-pane { flex: 1; min-width: 0; background: var(--mc-card); border-radius: 12px; padding: 18px 20px; box-sizing: border-box; display: flex; flex-direction: column; overflow: auto; }
+.mib-pane { flex: 1; min-width: 0; background: var(--mc-card); border-radius: 12px; padding: 0; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; }
 .mib-pane.fresh > * { animation: mibIn .2s ease; }
 @keyframes mibIn { from { opacity: 0; } to { opacity: 1; } }
 .mib-empty { margin: auto; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--mc-dim); font-size: 13px; }
@@ -952,11 +952,11 @@ html[data-theme="light"] .mib-pop { background: rgba(255, 255, 255, .98); box-sh
 .mib-pop button { border: 0; background: none; width: 30px; height: 30px; border-radius: 15px; font-size: 18px; cursor: default; }
 .mib-pop button:hover { background: rgba(127, 127, 127, .2); }
 /* the reply box (and a decision's buttons) stay at the pane's foot while a long pane scrolls, the updates fading out under them */
-.mib-pane { padding-bottom: 0; }
-.mib-pane:not(:has(> .mib-reply, > .mib-foot))::after { content: ""; flex: none; height: 18px; }
-.mib-reply, .mib-pane > .mib-foot { position: sticky; bottom: 0; z-index: 2; padding-bottom: 18px; background: linear-gradient(to bottom, transparent, var(--mc-card) 26px); }
-.mib-reply { margin-top: auto; padding-top: 26px; }
-.mib-pane > .mib-foot { background: var(--mc-card); }   /* (a decision's buttons on their line, as a bar) */
+.mib-scroll { flex: 1; min-height: 0; overflow: auto; padding: 18px 20px; display: flex; flex-direction: column; }
+.mib-reply, .mib-pane > .mib-foot { flex: none; position: relative; z-index: 2; margin: 0 20px; padding-bottom: 18px; }
+.mib-reply { margin-top: -26px; padding-top: 26px; background: linear-gradient(to bottom, transparent, var(--mc-card) 26px); pointer-events: none; }
+.mib-reply > * { pointer-events: auto; }   /* (its fade over the end of the updates lets clicks through) */
+.mib-pane > .mib-foot { margin-top: 0; }
 .mib-where { font-size: 11.5px; color: var(--mc-dim); margin: 0 0 6px 4px; }
 .mib-box { display: flex; align-items: flex-end; gap: 8px; padding: 6px 6px 6px 14px; border-radius: 18px; background: var(--mc-field); }
 .mib-in { flex: 1; border: 0; outline: 0; resize: none; background: none; color: var(--mc-fg); font: inherit; font-size: 13px; line-height: 19px; padding: 3px 0; max-height: 140px; }
@@ -967,7 +967,7 @@ html[data-theme="light"] .mib-pop { background: rgba(255, 255, 255, .98); box-sh
 .mib-review { padding: 12px 0; border-top: .5px solid var(--mc-line); }
 .mib-review p { margin: 0 0 8px; font-size: 13px; line-height: 19px; }
 .mib-review-b { margin-top: 10px; display: flex; justify-content: flex-end; }
-.mib-pane:has(> .mib-greet) { background: linear-gradient(160deg, rgba(179, 166, 251, .22), rgba(91, 68, 212, .22)), var(--mc-card); }
+.mib-pane:has(.mib-greet) { background: linear-gradient(160deg, rgba(179, 166, 251, .22), rgba(91, 68, 212, .22)), var(--mc-card); }
 .mib-greet { margin: auto; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 13px; color: var(--mc-dim); }
 .mib-greet b { font-size: 26px; color: var(--mc-fg); }
 .mib-greet > :first-child { margin-bottom: 14px; }
