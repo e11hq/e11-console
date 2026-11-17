@@ -454,21 +454,50 @@ const MacAssets = (() => {
     moving = { cid: c.id, fid: f.id, aid: a.id };
     e.dataTransfer.effectAllowed = 'move';
     try { e.dataTransfer.setData('application/x-e11-file', a.id); } catch (x) { /* */ }
-    t.setAttribute('data-live-moving', '');
-    // (what's dragged: the file small, as Finder's — its picture and its name under it — Haris 19:24)
-    try {
-      const pic = t.querySelector('.mca-tp'), r = pic.getBoundingClientRect(), w = 96, h = Math.round(w * r.height / Math.max(1, r.width));
-      const g = document.createElement('div'); g.className = 'mca-ghost';
-      const pc = pic.cloneNode(true); pc.querySelectorAll('.mca-cl, .mca-pin').forEach((x) => x.remove()); pc.removeAttribute('data-live-pvhide');
-      pc.style.width = w + 'px'; pc.style.height = h + 'px';
-      g.appendChild(pc);
-      const nm = document.createElement('div'); nm.className = 'mca-ghost-n'; nm.textContent = a.name; g.appendChild(nm);
-      document.body.appendChild(g);
-      e.dataTransfer.setDragImage(g, w / 2 + 14, h / 2 + 6);
-      setTimeout(() => g.remove(), 0);
-    } catch (x) { /* the page's own picture of it */ }
+    // (what's dragged: the file small, as Finder's — its picture and its name under it — Haris 19:24); the tile itself
+    //  is gone from its place until it's let go (19:28)
+    try { const gh = ghostOf(t, a); e.dataTransfer.setDragImage(gh.g, gh.w / 2 + 14, gh.h / 2 + 6); setTimeout(() => gh.g.remove(), 0); } catch (x) { /* the page's own picture of it */ }
+    drag = { t, a, pt: null, moved: false };
+    requestAnimationFrame(() => { if (drag && drag.t === t) t.setAttribute('data-live-moving', ''); });
   }, true);
-  document.addEventListener('dragend', () => { moving = null; setHot(null); document.querySelectorAll('[data-live-moving]').forEach((x) => x.removeAttribute('data-live-moving')); }, true);
+  let drag = null;
+  function ghostOf(t, a) {
+    const pic = t.querySelector('.mca-tp'), r = pic.getBoundingClientRect(), w = 96, h = Math.round(w * r.height / Math.max(1, r.width));
+    const g = document.createElement('div'); g.className = 'mca-ghost';
+    const pc = pic.cloneNode(true); pc.querySelectorAll('.mca-cl, .mca-pin').forEach((x) => x.remove()); pc.removeAttribute('data-live-pvhide');
+    pc.style.width = w + 'px'; pc.style.height = h + 'px';
+    g.appendChild(pc);
+    const nm = document.createElement('div'); nm.className = 'mca-ghost-n'; nm.textContent = a.name; g.appendChild(nm);
+    document.body.appendChild(g);
+    return { g, w, h, pc };
+  }
+  // (where the pointer is while dragging: the page's own events, the last real one kept)
+  const track = (e) => { if (drag && (e.clientX || e.clientY)) drag.pt = { x: e.clientX, y: e.clientY }; };
+  document.addEventListener('drag', track, true);
+  document.addEventListener('dragover', track, true);
+  // (let go anywhere it can't go: it springs back into its place from where it was let go, as Finder's)
+  function springBack(d) {
+    const t = d.t, done = () => t.removeAttribute('data-live-moving');
+    if (!t.isConnected) return;
+    const pic = t.querySelector('.mca-tp'), r = pic && pic.getBoundingClientRect();
+    if (!d.pt || !r || !r.width || !Element.prototype.animate) { done(); t.animate([{ transform: 'scale(.92)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }], { duration: 260, easing: 'cubic-bezier(.3,1.35,.5,1)' }); return; }
+    const gh = ghostOf(t, d.a), g = gh.g;
+    g.classList.add('back');
+    const gw = g.offsetWidth, gh2 = g.offsetHeight;
+    const x0 = d.pt.x - gw / 2, y0 = d.pt.y - gh2 / 2;
+    const sc = r.width / gh.w, x1 = r.left - 14 * sc, y1 = r.top - 6 * sc;
+    g.style.left = '0px'; g.style.top = '0px'; g.style.transformOrigin = '0 0';
+    const a1 = g.animate([{ transform: `translate(${x0}px, ${y0}px) scale(1)` }, { transform: `translate(${x1}px, ${y1}px) scale(${sc})` }], { duration: 380, easing: 'cubic-bezier(.3,1.25,.5,1)', fill: 'forwards' });
+    gh.g.querySelector('.mca-ghost-n').animate([{ opacity: 1 }, { opacity: 0 }], { duration: 220, fill: 'forwards' });
+    a1.onfinish = () => { done(); g.remove(); };
+    setTimeout(() => { if (g.isConnected) { done(); g.remove(); } }, 700);
+  }
+  document.addEventListener('dragend', () => {
+    const d = drag; drag = null;
+    moving = null; setHot(null);
+    if (d && !d.moved) springBack(d);
+    document.querySelectorAll('[data-live-moving]').forEach((x) => { if (!d || x !== d.t || d.moved) x.removeAttribute('data-live-moving'); });
+  }, true);
   const moveTarget = (e) => {
     const c = moving && clientById(moving.cid);
     const card = c && e.target.closest && e.target.closest('.mca [data-mca-folder]');
@@ -492,6 +521,7 @@ const MacAssets = (() => {
     e.preventDefault(); e.stopPropagation();
     moving = null; setHot(null);
     if (!m) return;
+    if (drag) drag.moved = true;
     const src = m.c.folders.find((x) => x.id === mv.fid), a = src && src.files.find((x) => x.id === mv.aid);
     if (!a || !canDelAsset(a) || m.fo.files.some((x) => x.id === a.id)) return;
     const put = (from, to) => { from.files = from.files.filter((x) => x.id !== a.id); to.files.push(a); persist(0); render(); };

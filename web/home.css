@@ -1240,7 +1240,8 @@ html.mac-chrome[data-theme="light"] .mca-x { background: rgba(0, 0, 0, .25); col
 .mca-ghost .mca-aa { font-size: 22px; }
 .mca-ghost .mib-play { width: 20px; height: 20px; font-size: 8px; }
 .mca-ghost-n { max-width: 124px; padding: 1px 6px; border-radius: 4px; background: var(--mc-blue, #0a84ff); color: #fff; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mca-t[data-live-moving] { opacity: .45; transition: opacity .15s ease; }
+.mca-t[data-live-moving] { opacity: 0; }   /* (gone from its place while it's dragged — Haris 19:28) */
+.mca-ghost.back { z-index: 1000; pointer-events: none; }
 .mca-t[data-live-sel] .mca-tp { box-shadow: 0 0 0 2px var(--mc-blue); }
 .mca-t:hover .mca-tp img { filter: brightness(1.06); }
 .mca-tn { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
