@@ -674,6 +674,17 @@ opened by a link flying out of its picture and back, its spot empty from the mom
 only what's acted on this phone; read notifications taken off the iPhone (server 1.9.63's quiet note, remote-notification mode);
 a link turned off / on elsewhere shown at once. Version 1.2.2 — 1.2.1 build 1758 approved by Apple 2026-11-16, waiting for its
 manual release. Nothing changes in its look, behaviour or code without telling Haris first and his yes.
+**THE iPHONE APP — STABLE, LOCKED, the App Store release candidate: 1.2.2 build 1835 (Haris, 2026-11-17 10:07: "Release all to live,
+send the latest app build … to test flight … mark this as RC"):** commit 3576bf5, branches `stable/ios-1835`, `locked/ios-app-1835` and
+`candidate/appstore-ios-1.2.2-build-1835` (never moved or deleted; 1802's and earlier stay as history). 1835 = 1802 + the full test's
+fixes (report: project doc `claude/ios-full-test-report.md` — a comment arriving glides, a comment opened from the Inbox stays in view,
+a client found by search always opens, a link's file flies out of its picture, midnight works every screen out again, the widget told
+as the app leaves, LPO Pending readable in light, fewer server asks, dead code out) + comment reactions as the regular emoji + Client
+Assets' hold as E11 Talk's bubble (its own picture, flying back in sight) + the Inbox on Unread moving to All by itself + up to date on
+opening (quiet notes in the background) + the strips' icons centred + Recently added / search / Overview's files flying out of and back
+into their picture, sharp and in their own shape + the send arrow's swap whole + no snapping icons (Select, Appearance, Request
+Amendments, + / ✕) + sheets sized to their list measured as they come up (no jump after settling). With server **1.9.64** (live,
+2026-11-17: fast under load, quiet notes on opening). Nothing changes in its look, behaviour or code without telling Haris first and his yes.
 **The full iPhone test (Haris 2026-11-16 22:47):** plan in project doc `claude/ios-full-test-plan.md`, his additions added as he
 tells them; run only on his word — then that night nothing asked of him, bugs found are fixed and checked again.
 **E11 TALK — STABLE, LOCKED: build 170 — not a release candidate yet (Haris, 2026-11-16 22:45: "talk is stable now but still not yet rc"):**
