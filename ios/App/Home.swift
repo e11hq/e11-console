@@ -2523,10 +2523,9 @@ extension HomeView: UICollectionViewDelegate {
     if t.isFolder { var x: UIView? = t; while let y = x, (y.backgroundColor?.cgColor.alpha ?? 0) < 0.99 { x = y.superview }; bg = (x?.backgroundColor ?? HomeLook(nil).bg).resolvedColor(with: v.traitCollection) }
     let img = UIGraphicsImageRenderer(bounds: b).image { ctx in
       path.addClip()
-      // (drawn from the picture's own layer, not read off the screen: as it's pressed iPhone takes the tile up for its lift and
-      //  the screen read gave nothing — the lifted folder came up blank, only the page colour in its outline, and nothing flew
-      //  back as it was let go, the folder then popping in. Haris 2026-11-17 07:43)
-      v.layer.render(in: ctx.cgContext)
+      // (drawn from what the tile shows, not read off the screen or its layer — both came up blank: the folder lifted with only
+      //  the page colour in its outline and nothing flew back as it was let go. Haris 2026-11-17 07:43, 08:06)
+      t.drawPicture(ctx.cgContext, v.traitCollection)
       if let bg = bg {
         let inset = UIBezierPath(cgPath: path.cgPath)
         let k: CGFloat = 1.5
@@ -2536,6 +2535,21 @@ extension HomeView: UICollectionViewDelegate {
     }
     tileShot = (key, img, path)
     return tilePreview(img, path, on: v)
+  }
+  // (the self-test: the first folder's lifted picture as a hold makes it — its middle should be the folder's own blue)
+  var selfLiftProbe: [String: Any] {
+    guard let (key, t) = listViews.first(where: { ($0.value as? FileTile)?.isFolder == true }).map({ ($0.key, $0.value as! FileTile) }),
+          let ip = listDS?.indexPath(for: key) else { return ["none": "no folder"] }
+    _ = tileLift(ip)
+    guard let img = tileShot?.img.cgImage else { return ["none": "no picture"] }
+    tileShot = nil
+    var px = [UInt8](repeating: 0, count: 4)
+    let ctx = CGContext(data: &px, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+    ctx?.draw(img, in: CGRect(x: -CGFloat(img.width) / 2, y: -CGFloat(img.height) * 0.6, width: CGFloat(img.width), height: CGFloat(img.height)))
+    var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0
+    FileTile.folderBlue.resolvedColor(with: t.traitCollection).getRed(&r, green: &g, blue: &b, alpha: nil)
+    let want = [Int(r * 255), Int(g * 255), Int(b * 255)], got = [Int(px[0]), Int(px[1]), Int(px[2])]
+    return ["want": want, "got": got, "alpha": Int(px[3]), "blue": zip(want, got).allSatisfy { abs($0 - $1) < 24 } && px[3] > 240]
   }
   private var tileShot: (key: String, img: UIImage, path: UIBezierPath)? {
     get { objc_getAssociatedObject(self, &HomeView.tileShotKey) as? (String, UIImage, UIBezierPath) }

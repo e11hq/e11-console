@@ -184,6 +184,10 @@ if APPLE:
         if mem is not None:
             print('measure apple memory', lab, mem)
             check(0 < mem < 450, f"{lab}: memory once every page has been through — {mem} MB (under 450)")
+        cl = ap.get('caLift') or {}
+        if cl and not cl.get('none'):
+            check(cl.get('blue') is True, f"{lab}: a folder held in Client Assets lifts in its own blue (not blank) {cl}")
+        elif cl: print(f'note {lab}: folder lift not tried {cl}')
         dy = ap.get('day') or {}
         if dy:
             b0 = dy.get('before') or {}

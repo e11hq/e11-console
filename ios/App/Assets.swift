@@ -281,6 +281,7 @@ final class AssetsCtl {
     push(screen("client", id, nil), animated: true); ask(["ev": "want", "client": id]) { _ in }
     return "opened"
   }
+  var selfLift: [String: Any] { stack.last.map { $0.h.selfLiftProbe } ?? ["none": "nothing open"] }
   // (the self-test's live check: the screen on top — its client, how many folders and files it shows, its rows set again)
   var selfTop: [String: Any] {
     guard let t = stack.last else { return ["open": false] }

@@ -21,6 +21,30 @@ final class FileTile: UIView {
   // (held: Apple's lift on the picture itself — the folder or the file — as the Files app and Photos, not the tile's box;
   //  Haris 2026-11-10 15:32)
   var liftView: UIView { pic }
+  // (held: its picture drawn from what it shows — the folder in its blue, the file's own picture as it's placed, else its
+  //  type's badge on its colour. Read off the screen or the layer it came up blank: iPhone has the tile taken up as it's
+  //  pressed, and the pictures sit where a layer copy can't read them — Haris 2026-11-17 08:06)
+  func drawPicture(_ c: CGContext, _ tc: UITraitCollection) {
+    let b = pic.bounds
+    if let bg = pic.backgroundColor?.resolvedColor(with: tc) { bg.setFill(); c.fill(b) }
+    if let img = pic.image, img.size.width > 0, img.size.height > 0 {
+      let k = img.size.width / img.size.height, bk = b.width / max(1, b.height)
+      var r = b
+      switch pic.contentMode {
+      case .scaleAspectFill: r = k > bk ? CGRect(x: b.midX - b.height * k / 2, y: 0, width: b.height * k, height: b.height) : CGRect(x: 0, y: b.midY - b.width / k / 2, width: b.width, height: b.width / k)
+      case .scaleAspectFit: r = k > bk ? CGRect(x: 0, y: b.midY - b.width / k / 2, width: b.width, height: b.width / k) : CGRect(x: b.midX - b.height * k / 2, y: 0, width: b.height * k, height: b.height)
+      default: break
+      }
+      c.saveGState(); c.clip(to: b)
+      (img.renderingMode == .alwaysTemplate ? img.withTintColor((pic.tintColor ?? .label).resolvedColor(with: tc), renderingMode: .alwaysOriginal) : img).draw(in: r)
+      c.restoreGState()
+    }
+    if !badge.isHidden, let t = badge.text, let f = badge.font {
+      let a: [NSAttributedString.Key: Any] = [.font: f, .foregroundColor: (badge.textColor ?? .label).resolvedColor(with: tc)]
+      let sz = (t as NSString).size(withAttributes: a)
+      (t as NSString).draw(at: CGPoint(x: badge.frame.midX - sz.width / 2, y: badge.frame.midY - sz.height / 2), withAttributes: a)
+    }
+  }
   var liftRadius: CGFloat { isFolder ? 4 : max(6, pic.layer.cornerRadius) }
   // (held: the lift's outline — a folder in its own shape, its tab and its body, so Apple's lift shadow follows the folder,
   //  not a box around it: a grey box showed behind a lifted folder, Haris 2026-11-10 17:08; a file: its picture's rounded shape)

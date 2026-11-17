@@ -334,6 +334,7 @@ extension Main {
       ("aCaAllWait", {}),
       ("aCaOpen", { if self.meApple { self.apple("caOpen", ["r": self.assetsCtl.selfOpenClient()]) } }),
       ("aCaOpenWait", {}),
+      ("aCaLift", { if self.meApple { self.apple("caLift", self.assetsCtl.selfLift) } }),
       // (live, the full test 2026-11-16: a folder added elsewhere while the client's Client Assets are open — it arrives in
       //  place, the page not drawn again)
       ("aLiveA", {
