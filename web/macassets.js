@@ -62,14 +62,14 @@ const MacAssets = (() => {
   }
   const lg = (c, s) => `<span class="mca-lg s${s}">${clientLogoHTML(c, s)}</span>`;
   function clientCard(c) {
-    return `<div class="mca-cc" data-key="c-${c.id}" data-action="open-client" data-id="${c.id}" data-mca-client="${c.id}" title="${esc(c.name)}">${lg(c, 112)}<div class="mca-cn">${esc(c.name)}</div><div class="mca-cm">${plural(topFolders(c).length, 'folder')} · ${plural(clientFileCount(c), 'file')}</div></div>`;
+    return `<div class="mca-cc" data-key="c-${c.id}" data-action="open-client" data-id="${c.id}" data-mca-client="${c.id}">${lg(c, 112)}<div class="mca-cn" title="${esc(c.name)}">${esc(c.name)}</div><div class="mca-cm">${plural(topFolders(c).length, 'folder')} · ${plural(clientFileCount(c), 'file')}</div></div>`;
   }
   function folderCard(c, f, sm) {
     const imgs = sm ? [] : f.files.filter((a) => isImage(a)).slice(0, 3);
     const subs = subFolders(c, f).length;
     const meta = [subs ? plural(subs, 'folder') : '', f.files.length ? plural(f.files.length, 'file') : ''].filter(Boolean).join(' · ') || 'Empty';
-    return `<div class="mca-fc ${sm ? 'sm' : ''} ${f.finalOf ? 'final' : ''}" data-key="f-${f.id}" data-action="open-cfolder" data-id="${f.id}" data-mca-folder="${f.id}" data-mca-cl="${c.id}" title="${esc(f.name)}">`
-      + `<div class="mca-ftop">${folderSVG(!!f.finalOf)}<div class="mca-ftx"><div class="mca-fn">${esc(f.name)}</div><div class="mca-fm">${f.finalOf ? '<span class="mca-fin">Final</span>' : ''}<span>${meta}</span></div></div></div>`
+    return `<div class="mca-fc ${sm ? 'sm' : ''} ${f.finalOf ? 'final' : ''}" data-key="f-${f.id}" data-action="open-cfolder" data-id="${f.id}" data-mca-folder="${f.id}" data-mca-cl="${c.id}">`
+      + `<div class="mca-ftop">${folderSVG(!!f.finalOf)}<div class="mca-ftx"><div class="mca-fn" title="${esc(f.name)}">${esc(f.name)}</div><div class="mca-fm">${f.finalOf ? '<span class="mca-fin">Final</span>' : ''}<span>${meta}</span></div></div></div>`
       + (imgs.length ? `<div class="mca-peek">${imgs.map((a) => `<span><img src="${imgUrl(a, 240)}" alt="" draggable="false"></span>`).join('')}</div>` : '')
       + (pinned(f) ? `<span class="mca-pin" title="Pinned">${SV.pin}</span>` : '') + '</div>';
   }
@@ -80,9 +80,9 @@ const MacAssets = (() => {
     return `<div class="mca-fc new ${sm ? 'sm' : ''} ${nf.err ? 'bad' : ''}" data-key="nf"><div class="mca-ftop">${folderSVG(false)}<div class="mca-ftx"><input class="mca-nfin" data-key="nfin" value="New folder" maxlength="80" spellcheck="false" autocomplete="off"><div class="mca-fm">${nf.err ? `<span class="mca-warn" title="${esc(nf.err)}">${esc(nf.err)}</span>` : '<span>Empty</span>'}</div></div></div></div>`;
   }
   function tile(c, f, a, q) {
-    return `<div class="mca-t" data-key="a-${a.id}" ${!q && canDelAsset(a) ? 'draggable="true"' : ''} data-action="tile-open" data-id="${a.id}" data-att="${a.id}" data-mca-file="${a.id}" data-mca-cl="${c.id}" title="${esc(a.name)}">`
+    return `<div class="mca-t" data-key="a-${a.id}" ${!q && canDelAsset(a) ? 'draggable="true"' : ''} data-action="tile-open" data-id="${a.id}" data-att="${a.id}" data-mca-file="${a.id}" data-mca-cl="${c.id}">`
       + `<div class="mib-tpic mca-tp ${isFont(a) ? 'font' : ''}">${picHTML(a)}<button type="button" class="mca-cl" data-action="copy-att" data-id="${a.id}" title="Copy link — paste it in a comment, or send it to anyone">${SV.link}Copy Link</button>${!q && pinned(a) ? `<span class="mca-pin t" title="Pinned">${SV.pin}</span>` : ''}</div>`
-      + `<div class="mca-tn">${q ? caMark(a.name, q) : esc(a.name)}</div>`
+      + `<div class="mca-tn" title="${esc(a.name)}">${q ? caMark(a.name, q) : esc(a.name)}</div>`
       + (q ? `<a class="mca-loc" data-action="open-cfolder-of" data-client="${c.id}" data-id="${f.id}" title="Open this folder">${lg(c, 12)}<span>${esc(c.name)} › ${esc(folderPath(c, f))}</span></a>`
         : `<div class="mca-ts">${esc(fmtSize(a.size) || '')}${a.addedBy ? ` · ${esc(firstName(a.addedBy))}` : ''}</div>`)
       + '</div>';
