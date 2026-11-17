@@ -196,7 +196,9 @@ final class ClientSheetVC: UITableViewController, UITextFieldDelegate {
       f.frame = CGRect(x: 0, y: 0, width: 300, height: 50); tableView.tableFooterView = f
     }
   }
-  override func viewDidLayoutSubviews() { super.viewDidLayoutSubviews(); if navigationController?.topViewController === self, navigationController?.transitionCoordinator == nil { (navigationController as? FitNav)?.fitTo(tableView) } }
+  // (measured as it lays out — also while the sheet is coming up: the guard is for a list pushed or popped inside it. Skipped
+  //  while coming up, the sheet slid up to its guess and jumped to its size once there — Haris 2026-11-17 09:58)
+  override func viewDidLayoutSubviews() { super.viewDidLayoutSubviews(); if let n = navigationController, n.topViewController === self, n.transitionCoordinator == nil || n.isBeingPresented { (n as? FitNav)?.fitTo(tableView) } }
   override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); (navigationController as? FitNav)?.fitTo(tableView) }   // (back from a list: someone added — its size now)
   private func rgb() -> UIColor { UIColor(hex: color) ?? NativeSheetVC.color(row["rgb"]) ?? .systemGray }
   private func logoView(_ size: CGFloat) -> UIView {
@@ -373,7 +375,8 @@ final class ClientSheetVC: UITableViewController, UITextFieldDelegate {
 // pushed onto it (Add Account Manager…) grows or shrinks it to fit too, with the sheet's own animation (Haris 2026-11-02)
 final class FitNav: UINavigationController {
   private var fit: CGFloat = 360, measured = false, appeared = false
-  override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); appeared = true }
+  // (up before the lists inside hear it: a size found as they arrive is Apple's animated change, never a single-frame jump)
+  override func viewDidAppear(_ a: Bool) { appeared = true; super.viewDidAppear(a) }
   override func viewDidLoad() {
     super.viewDidLoad()
     sheetPresentationController?.detents = [.custom(identifier: .init("fitList")) { [weak self] ctx in min(ctx.maximumDetentValue, self?.fit ?? 360) }]
