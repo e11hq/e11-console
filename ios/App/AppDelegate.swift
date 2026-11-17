@@ -295,7 +295,9 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     // (going to another app, iPhone takes the app's picture in light and in dark for its app switcher, telling the app each
     //  look for a moment — not the phone changing: the app switched its whole look there and back, every screen drawn
     //  again, Haris 2026-11-08. Only a change while the app is in front counts; coming back it's read again.)
-    guard UIApplication.shared.applicationState != .background else { return }
+    // (only while the app is in front: Control Center over it leaves it inactive, and a look told then redrew the open page —
+    //  the keyboard went down and came back: Haris 2026-11-17 10:29. Becoming active reads it again.)
+    guard UIApplication.shared.applicationState == .active else { return }
     let light = tc.userInterfaceStyle == .light
     if (appStyle == .light) != light { lookTurned(light) }
   }

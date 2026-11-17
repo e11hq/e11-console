@@ -241,9 +241,10 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       showingSend = send
       // (the mic as a line icon — Haris 2026-11-02; the change a little quicker than iPhone's default)
       let img = UIImage(systemName: send ? "arrow.up" : "mic", withConfiguration: UIImage.SymbolConfiguration(pointSize: send ? 14 : 15, weight: send ? .bold : .medium))
-      if #available(iOS 17.0, *), !first, let img = img {
-        rightSym.setSymbolImage(img, contentTransition: .replace.downUp, options: .speed(1.6))
-      } else { rightSym.image = img }
+      // (the symbol crossfades as the circle fills, both in the same 0.15 s — iPhone's replace effect left the circle empty
+      //  between the mic going and the arrow coming: Haris 2026-11-17 10:29)
+      if !first { UIView.transition(with: rightSym, duration: 0.15, options: [.transitionCrossDissolve, .allowUserInteraction]) { self.rightSym.image = img } }
+      else { rightSym.image = img }
       let paint = { self.right.backgroundColor = send ? .label : .tertiarySystemFill; self.right.tintColor = send ? .systemBackground : .label }
       if first { paint() } else { UIView.animate(withDuration: 0.15, delay: 0, options: [.curveEaseInOut, .allowUserInteraction], animations: paint) }
     }
