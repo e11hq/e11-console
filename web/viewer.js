@@ -56,7 +56,10 @@ const Viewer = (() => {
       const who = a.addedBy ? userName(a.addedBy) : '';
       const base = { id: a.id, name: a.name, ext: ext.slice(0, 5), meta: [fmtSize(a.size), who, a.addedAt ? timeAgo(a.addedAt) : ''].filter(Boolean).join(' · ') };
       // (a video with no poster of its own: the picture its tile shows — it flies in and out as that, not as the whole tile)
-      const cover = a.thumb ? abs(posterUrl(a)) : kind === 'video' && a.path ? abs('/api/fthumb?path=' + encodeURIComponent(a.path) + '&id=' + encodeURIComponent(a.id || '')) : '';
+      // (a PDF or a Word / PowerPoint / Excel file too: the server's picture of its first page — it flies in and out as that,
+      //  the page itself, not its tile — Haris 2026-11-17)
+      const served = a.path && (kind === 'video' || kind === 'pdf' || /^(docx?|pptx?|xlsx?)$/.test(ext));
+      const cover = a.thumb ? abs(posterUrl(a)) : served ? abs('/api/fthumb?path=' + encodeURIComponent(a.path) + '&id=' + encodeURIComponent(a.id || '')) : '';
       if (kind === 'image') return { ...base, kind: 'image', src: abs(imgUrl(a, 1600)), thumb: abs(imgUrl(a, 160)) };
       if (kind === 'video') return { ...base, kind: 'video', src: abs(viewUrl(a)), cover, thumb: cover };
       if (kind === 'audio') return { ...base, kind: 'audio', src: abs(fileUrl(a)) };
