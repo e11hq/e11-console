@@ -630,7 +630,13 @@ const MacInbox = (() => {
       if (el) sc.scrollTo({ top: sc.scrollTop + el.getBoundingClientRect().bottom - sc.getBoundingClientRect().bottom + 18, behavior: 'smooth' });
     });
   }
-  document.addEventListener('mousedown', (e) => { if (sp && !sp.el.contains(e.target) && !e.target.closest('[data-mib="sched"]')) spClose(); }, true);
+  // (the clock opens its panel the moment it's pressed, as a Mac pop-up button does — on click it took two presses in the
+  //  app: the press's click was lost as the box under it was set again — Haris 2026-11-17)
+  document.addEventListener('mousedown', (e) => {
+    const ck = e.button === 0 && e.target.closest && e.target.closest('[data-mib="sched"]');
+    if (ck && on() && ui.view === 'inbox') { e.preventDefault(); spOpen(); return; }
+    if (sp && !sp.el.contains(e.target)) spClose();
+  }, true);
   document.addEventListener('click', (e) => {
     if (!sp || !sp.el.contains(e.target)) return;
     const b = e.target.closest('[data-sp-at], [data-sp-day], [data-sp-nav], [data-sp-pick]');
@@ -856,7 +862,7 @@ const MacInbox = (() => {
     else if (a === 'dy-sec') { dyOpen = dyOpen === el.dataset.k ? '' : el.dataset.k; renderContent(); }
     else if (a === 'more-ups') { openAll = true; renderContent(); }
     else if (a === 'up-x') unAdd(el.dataset.k);
-    else if (a === 'sched') spOpen();
+    else if (a === 'sched') { if (e.detail === 0) spOpen(); }   // (a press opens it on mousedown; Space / Return on the button still does)
     else if (a === 'sch-now') schedNow(el.dataset.id);
     else if (a === 'sch-x') schedCancel(el.dataset.id);
     else if (a === 'lk-x') { e.stopPropagation(); noCard.add(el.dataset.url); renderContent(); }
