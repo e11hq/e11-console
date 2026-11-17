@@ -447,7 +447,7 @@ const MacAssets = (() => {
   let moving = null;   // { cid, fid, aid }
   document.addEventListener('dragstart', (e) => {
     const t = on() && e.target.closest && e.target.closest('.mca-t[draggable="true"]');
-    if (!t) return;
+    if (!t) { if (on() && e.target.closest && e.target.closest('.mca, .mca-iw')) e.preventDefault(); return; }   // (nothing else here is dragged out)
     const { c, f, a } = fileOf(t.dataset.mcaFile);
     if (!a || !canDelAsset(a)) { e.preventDefault(); return; }
     moving = { cid: c.id, fid: f.id, aid: a.id };

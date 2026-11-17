@@ -1137,6 +1137,8 @@ html.mac-chrome #content:has(> .mca) { background: var(--mc-content); }
 html.mac-chrome[data-theme="light"] .mca { --mca-fill: rgba(120, 120, 128, .12); --mca-fill-h: rgba(120, 120, 128, .2); --mca-field: rgba(120, 120, 128, .1); --mca-hot: var(--mc-blue); }
 .mca[data-page="folder"] { gap: 16px; }
 .mca * { letter-spacing: normal; }
+/* (no picture is dragged out of Client Assets — logos, folders' peeks, the Info window's; a file is dragged as a whole, to move it — Haris 19:49) */
+.mca img, .mca-iw img, .mca svg { -webkit-user-drag: none; user-drag: none; }
 .mca a { color: inherit; text-decoration: none; cursor: pointer; }
 .mca a:hover { color: var(--mc-fg); }
 /* the head: the page's name big, the counts under, its pills at the right */
