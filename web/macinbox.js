@@ -63,6 +63,7 @@ const MacInbox = (() => {
     const seg = [['primary', 'Primary', unreadN], ['all', 'All', 0], ['cleared', 'Cleared', 0]]
       .map(([k, l, n]) => `<button type="button" class="mib-tab ${tab === k ? 'on' : ''}" data-action="inbox-tab" data-tab="${k}">${l}${n ? ` <i>${n}</i>` : ''}</button>`).join('');
     const g = list.find((x) => x.key === pick) || null;
+    const zero = !list.length && tab === 'primary';   // (Inbox Zero — mock-up C, Haris 2026-11-17)
     const fresh = shown !== (g ? g.key : null);
     wasFresh = fresh;
     shown = g ? g.key : null;
@@ -72,9 +73,9 @@ const MacInbox = (() => {
           <button type="button" class="mib-btn" data-action="ib-filter">${esc(f === 'all' ? 'All updates' : IB_FILTERS[f])}<span class="mib-chev">${icon('chev')}</span></button>
           ${unreadN ? `<button type="button" class="mib-btn" data-action="mark-all-read">✓ Clear All</button>` : ''}</div></header>
       <div class="mib-body">
-        <div class="mib-list">${groups.map((x) => `<div class="mib-group" data-key="g:${x.name}">${x.name}</div><div class="mib-card" data-key="c:${x.name}">${x.rows.map(rowHTML).join('')}</div>`).join('')
+        <div class="mib-list">${zero ? zeroHTML() : groups.map((x) => `<div class="mib-group" data-key="g:${x.name}">${x.name}</div><div class="mib-card" data-key="c:${x.name}">${x.rows.map(rowHTML).join('')}</div>`).join('')
           || `<div class="mib-none"><b>${tab === 'primary' ? 'Inbox zero 🎉' : 'Nothing here yet'}</b><span>${tab === 'primary' ? 'You’re all caught up. New updates on your tasks and @mentions land here.' : 'Updates on tasks you’re assigned to or created will appear here.'}</span></div>`}</div>
-        <div class="mib-pane ${fresh ? 'fresh' : ''}">${paneParts(g ? paneHTML(g) : emptyHTML())}</div>
+        <div class="mib-pane ${fresh ? 'fresh' : ''}">${paneParts(g ? paneHTML(g) : zero ? nextUpHTML() : emptyHTML())}</div>
       </div></div>`;
   }
 
@@ -122,6 +123,18 @@ const MacInbox = (() => {
     return t ? statusIcon(t) : `<span class="st-ic">${statusIconSVG('#87909e', 'todo', 0)}</span>`;
   }
 
+  // Inbox Zero (mock-up C): the list says you're caught up; the pane shows what's next for you, nearest due first
+  function zeroHTML() {
+    return `<div class="mib-zero"><span class="mib-zero-ic">${icon('check')}</span><b>Inbox Zero</b><span>You’re all caught up. New updates on your tasks and @mentions land here.</span><button type="button" class="mib-btn" data-action="inbox-tab" data-tab="cleared">See Cleared</button></div>`;
+  }
+  function nextUpHTML() {
+    const today = todayStr();
+    const ts = db.tasks.filter((t) => isMine(t) && !t.done && !t.parentId && task(t.id)).sort((a, b) => String(a.due || '9999').localeCompare(String(b.due || '9999'))).slice(0, 8);
+    const rows = ts.map((t) => `<button type="button" class="mib-drow" data-mib="task" data-id="${esc(t.id)}"><span>${esc(t.title || 'Untitled task')}</span><span>${esc((proj(t.projectId) || {}).name || '')}${t.due ? ` · <i class="${t.due < today ? 'late' : ''}">${esc(fmtDue(t.due))}</i>` : ''}</span></button>`).join('');
+    return head('', 'Next up for you', `${esc(new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }))} · from your tasks`, '')
+      + (rows ? `<div class="mib-nextup">${rows}</div>` : '<p class="mib-dim">Nothing open on your list.</p>')
+      + foot(btn('Open My Tasks', 'data-mib="my-tasks"', true));
+  }
   function emptyHTML() {
     return `<div class="mib-empty">${icon('inbox')}<b>Nothing Selected</b><span>Pick an update on the left to read it here.</span></div>`;
   }
@@ -427,14 +440,14 @@ const MacInbox = (() => {
     let html = esc(text);
     picked.forEach((id) => { const u = userById(id); if (!u) return; const n = esc('@' + fullName(u)); html = html.split(n).join(`<span class="mention" data-user="${esc(u.id)}" contenteditable="false">${n}</span>`); });
     html = html.replace(/\n/g, '<br>'); picked = new Set();
-    const files = pending.splice(0).map((x) => { if (x.url) URL.revokeObjectURL(x.url); return x.att; });
+    const files = pending.splice(0).map((x) => { if (x.blob) URL.revokeObjectURL(x.url); return x.att; });
     files.forEach((a) => { if (!(t.attachments || []).some((x) => x.path === a.path)) (t.attachments = t.attachments || []).push(a); });
     const cid = postComment(t, ta.dataset.root, text, html, files);
     t.updatedAt = nowISO();
     const g = rows().list.find((x) => x.key === pick);
     if (g) { const was = g.items.find((x) => x.mine && x.mine.reply), cids = was ? (was.mine.cids || (was.mine.cid ? [was.mine.cid] : [])) : []; g.items.forEach((x) => { x.mine = { reply: text, at: nowISO(), cid, cids: [...cids, cid] }; }); }
     // (sent: the box empty again, and the reply just added scrolled into view, smoothly — Haris 2026-11-17)
-    ta.value = ''; ta.style.height = 'auto';
+    ta.value = ''; fitBox(ta);
     commit();
     if (ui.view === 'inbox') renderContent();
     requestAnimationFrame(() => {
@@ -460,16 +473,39 @@ const MacInbox = (() => {
   function upHTML() {
     if (!pending.length) return '<div class="mib-up" hidden></div>';
     return `<div class="mib-up">${pending.map((x) => {
-      const pic = x.url || (x.att && fileKind(x.att) === 'image' ? imgUrl(x.att, 160) : x.att && x.att.thumb ? posterUrl(x.att) : '');
-      return `<span class="mib-upt ${x.att ? 'done' : ''}" data-key="up:${x.k}">${pic ? `<img src="${esc(pic)}" alt="">` : `<span class="mib-ficon">${icon(fileKind(x) === 'video' ? 'play' : 'clip')}<b>${esc((fileExt(x.name) || 'file').slice(0, 4).toUpperCase())}</b></span>`}${ring(x)}<button type="button" class="mib-upx" data-mib="up-x" data-k="${x.k}" title="Remove" aria-label="Remove ${esc(x.name)}">${icon('x')}</button></span>`;
+      const pic = x.url || (x.att ? picOf(x.att) : '');
+      return `<span class="mib-upt ${x.att ? 'done' : ''}" data-key="up:${x.k}">${pic ? `<img src="${esc(pic)}" alt="">` : `<span class="mib-ficon">${icon(fileKind(x) === 'video' ? 'play' : 'clip')}<b>${esc((fileExt(x.name) || 'file').slice(0, 4).toUpperCase())}</b></span>`}${pic && fileKind(x) === 'video' && x.att ? '<span class="mib-play">▶</span>' : ''}${ring(x)}<button type="button" class="mib-upx" data-mib="up-x" data-k="${x.k}" title="Remove" aria-label="Remove ${esc(x.name)}">${icon('x')}</button></span>`;
     }).join('')}</div>`;
+  }
+  // (the reply box exactly as tall as its words: measured on a copy laid out the same way — the textarea's own
+  //  scrollHeight came out a line too tall on the Mac — up to 7 lines, then it scrolls)
+  let measure = null;
+  function fitBox(ta) {
+    if (!measure) { measure = document.createElement('div'); measure.className = 'mib-measure'; document.body.appendChild(measure); }
+    measure.style.width = ta.clientWidth + 'px';
+    measure.textContent = (ta.value || ' ') + '\u200b';
+    const h = Math.min(measure.offsetHeight, 133);
+    ta.style.height = h + 6 + 'px';
+    ta.style.overflowY = measure.offsetHeight > 133 ? 'auto' : 'hidden';
   }
   function sendState() { const ta = document.querySelector('.mib-in'), b = document.querySelector('.mib-send'); if (ta && b) b.disabled = pending.some((x) => !x.att) || (!ta.value.trim() && !pending.length); }
   function upDraw() { if (ui.view === 'inbox') renderContent(); }
   function addFiles(files, t) {
     files.forEach((f) => {
       const x = { k: ++upN, name: f.name, size: f.size, p: 0, sig: { cancelled: false }, url: f instanceof Blob && /^image\//.test(f.type) ? URL.createObjectURL(f) : '' };
+      x.blob = !!x.url;
       pending.push(x);
+      // (a video's first moment as its picture, straight from the file while it goes up)
+      if (f instanceof Blob && /^video\//.test(f.type)) {
+        const v = document.createElement('video'), src = URL.createObjectURL(f);
+        v.muted = true; v.preload = 'auto'; v.src = src;
+        v.onloadeddata = () => { try { v.currentTime = Math.min(0.1, v.duration || 0); } catch (e) { /* first frame */ } };
+        v.onseeked = () => {
+          try { const c = document.createElement('canvas'), k = 160 / Math.max(v.videoWidth, v.videoHeight, 1); c.width = Math.round(v.videoWidth * k); c.height = Math.round(v.videoHeight * k); c.getContext('2d').drawImage(v, 0, 0, c.width, c.height); x.url = c.toDataURL('image/jpeg', 0.8); upDraw(); } catch (e) { /* none */ }
+          URL.revokeObjectURL(src);
+        };
+        v.onerror = () => URL.revokeObjectURL(src);
+      }
       let last = 0;
       ServerHost.uploadFile(f, { taskId: t.id }, (p) => {
         x.p = p;
@@ -499,7 +535,7 @@ const MacInbox = (() => {
     const x = pending.find((y) => String(y.k) === String(k));
     if (!x) return;
     pending = pending.filter((y) => y !== x);
-    if (x.url) URL.revokeObjectURL(x.url);
+    if (x.blob) URL.revokeObjectURL(x.url);
     if (x.att && !x.linked) api('POST', '/api/host/trashMany', { paths: [x.att.path] }).catch(() => {});   // (up already, never sent: to the Trash — a # file of the task stays)
     else x.sig.cancelled = true;                                                              // (still going up: stopped)
     upDraw(); sendState();
@@ -604,6 +640,7 @@ const MacInbox = (() => {
     else if (a === 'dy-sec') { dyOpen = dyOpen === el.dataset.k ? '' : el.dataset.k; renderContent(); }
     else if (a === 'more-ups') { openAll = true; renderContent(); }
     else if (a === 'up-x') unAdd(el.dataset.k);
+    else if (a === 'my-tasks') { ui.myTasksTab = 'todo'; go('mytasks'); }
     else if (a === 'my-edit') { editingId = el.dataset.cid; renderContent(); setTimeout(() => { const x = document.querySelector('.mib-ein'); if (x) { x.focus(); x.setSelectionRange(x.value.length, x.value.length); } }, 0); }
     else if (a === 'my-cancel') { editingId = null; renderContent(); }
     else if (a === 'my-save') saveMine(el.dataset.tid, el.dataset.cid);
@@ -614,7 +651,7 @@ const MacInbox = (() => {
   document.addEventListener('input', (e) => {
     const ta = e.target.closest && e.target.closest('.mib-in');
     if (!ta) return;
-    ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px';
+    fitBox(ta);
     mUpdate(ta);
     sendState();
   });
