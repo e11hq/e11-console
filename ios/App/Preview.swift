@@ -802,6 +802,16 @@ final class FileTouch: UIGestureRecognizer {
     return ""
   }
   static func mark(_ iv: UIImageView, _ f: [String: Any]) { objc_setAssociatedObject(iv, &markKey, key(f), .OBJC_ASSOCIATION_COPY_NONATOMIC) }
+  // (an Apple list cell's picture marked with the file it shows, the others in it cleared — a reused cell carries no old mark:
+  //  Recently added, search's files and Overview's latest fly out of and back into their row's picture, as a task's files —
+  //  Haris 2026-11-17 08:34)
+  static func markCell(_ cell: UIView, _ f: [String: Any]?) {
+    var ivs: [UIImageView] = []
+    func walk(_ v: UIView) { if let iv = v as? UIImageView { ivs.append(iv) }; v.subviews.forEach(walk) }
+    walk(cell)
+    for iv in ivs { objc_setAssociatedObject(iv, &markKey, nil, .OBJC_ASSOCIATION_COPY_NONATOMIC) }
+    if let f = f, let iv = ivs.first(where: { $0.image != nil && $0.bounds.width >= 20 }) ?? ivs.first(where: { $0.image != nil }) { mark(iv, f) }
+  }
   static func marked(_ key: String, in w: UIWindow?) -> UIImageView? {
     guard !key.isEmpty, let w = w else { return nil }
     func walk(_ v: UIView) -> UIImageView? {

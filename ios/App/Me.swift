@@ -133,6 +133,7 @@ struct SetItem {
   var trail: [MeSwipe] = []
   var line3: (String, UIColor)? = nil   // (a third line in its own colour — a subscription's invoices, days left in the Trash)
   var pic: String? = nil                // (a file's own picture as the row's picture — the Trash's G1)
+  var file: [String: Any]? = nil        // (the file it opens — its picture is where the preview flies out of and back into)
   var sig: String { "\(sigBase)|\(lead.map { $0.title }.joined(separator: ","))|\(trail.map { $0.title }.joined(separator: ","))|\(line3?.0 ?? "")|\(line3?.1.description ?? "")|\(pic ?? "")" }
   private var sigBase: String { "\(title)|\(sub)|\(value)|\(sym ?? "")|\(col?.description ?? "")|\(chevron)|\(toggle != nil)|\(danger)|\(pill ?? "")|\(badge ?? "")|\(count)|\(pills.map { $0.0 }.joined(separator: ","))|\(person?.photo ?? "")|\(person?.ini ?? "")|\(warn)|\(dim)|\(bold)|\(tap != nil)|\(hold != nil)|\(menu != nil)|\(popup != nil)" }
 }
@@ -2201,6 +2202,7 @@ final class MeCtl {
       let items = found.map { f -> SetItem in
         var it = SetItem(key: "s." + (f["id"] as? String ?? ""), title: f["name"] as? String ?? "", sub: f["where"] as? String ?? "", chevron: false, tap: { [weak self] in self?.openOne(f["path"] as? String ?? "", f["name"] as? String ?? "File") })
         it.person = (photo: f["pic"] as? String, ini: f["ext"] as? String ?? "", rgb: .systemGray)
+        if let p = f["path"] as? String, !p.isEmpty { it.file = ["id": p, "path": p] }
         return it
       }
       out.append(head(h, "ovs", (r["loose"] as? Bool) == true ? "Close matches" : "Files · \(items.count)"))
@@ -2213,6 +2215,7 @@ final class MeCtl {
     let files = ((o["assets"] as? [[String: Any]]) ?? []).map { f -> SetItem in
       var it = SetItem(key: "f." + (f["id"] as? String ?? ""), title: f["name"] as? String ?? "", sub: f["where"] as? String ?? "", value: f["when"] as? String ?? "", chevron: false, tap: { [weak self] in self?.openOne(f["path"] as? String ?? "", f["name"] as? String ?? "File") })
       it.person = (photo: f["pic"] as? String, ini: f["ext"] as? String ?? "", rgb: NativeSheetVC.color(f["rgb"]) ?? .systemGray)
+      if let p = f["path"] as? String, !p.isEmpty { it.file = ["id": p, "path": p] }
       return it
     }
     if (o["fin"] as? Bool) == true {

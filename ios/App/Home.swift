@@ -455,6 +455,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   // the card's colour, Apple's highlight when it's tapped
   private func paintRow(_ cell: UICollectionViewListCell, _ r: AppleRow) {
     cell.contentConfiguration = r.rowContent
+    FileTouch.markCell(cell.contentView, (r as? FileListRow).flatMap { $0.isFolder ? nil : $0.info })
     var acc: [UICellAccessory] = []
     if r.rowHasAccessory { acc.append(.customView(configuration: .init(customView: r, placement: .trailing(), reservedLayoutWidth: .actual, maintainsFixedSize: true))) }
     if r.rowChevron { acc.append(.disclosureIndicator()) }
@@ -2556,7 +2557,9 @@ extension HomeView: UICollectionViewDelegate {
       if let d = small.data?.assumingMemoryBound(to: UInt8.self) { for y in 0..<4 { grid.append((0..<6).map { x in let o = (3 - y) * 24 + x * 4; return String(format: "%02x%02x%02x", d[o], d[o + 1], d[o + 2]) }.joined(separator: " ")) } }
     }
     return ["want": want, "got": got, "alpha": Int(px[3]), "blue": zip(want, got).allSatisfy { abs($0 - $1) < 24 } && px[3] > 240, "grid": grid,
-            "pic": t.selfPicInfo, "size": [img.width, img.height]]
+            "pic": t.selfPicInfo, "size": [img.width, img.height],
+            // (a Recently added row's picture marked for the preview's flight)
+            "recentMarked": listViews.values.compactMap { $0 as? FileListRow }.first { !$0.isFolder }.map { FileTouch.marked(FileTouch.key($0.info), in: window) != nil } as Any]
   }
   private var tileShot: (key: String, img: UIImage, path: UIBezierPath)? {
     get { objc_getAssociatedObject(self, &HomeView.tileShotKey) as? (String, UIImage, UIBezierPath) }
@@ -2863,6 +2866,7 @@ extension HomeView {
       cf.imageToTextPadding = 12
     }
     cell.contentConfiguration = cf
+    FileTouch.markCell(cell.contentView, it.file)
     var acc: [UICellAccessory] = []
     if let b = it.badge { acc.append(.customView(configuration: .init(customView: HomeView.meBadge(b, .systemBlue), placement: .trailing()))) }
     if it.count > 0 { acc.append(.customView(configuration: .init(customView: HomeView.meBadge(it.count > 99 ? "99+" : "\(it.count)", .systemRed), placement: .trailing()))) }

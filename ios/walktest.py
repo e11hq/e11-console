@@ -187,6 +187,8 @@ if APPLE:
         cl = ap.get('caLift') or {}
         if cl and not cl.get('none'):
             check(cl.get('blue') is True, f"{lab}: a folder held in Client Assets lifts in its own blue (not blank) {cl}")
+            if cl.get('recentMarked') is not None:
+                check(cl.get('recentMarked') is True, f"{lab}: a Recently added file's picture is where its preview flies out of and back into {cl.get('recentMarked')}")
         elif cl: print(f'note {lab}: folder lift not tried {cl}')
         dy = ap.get('day') or {}
         if dy:
