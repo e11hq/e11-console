@@ -2530,7 +2530,7 @@ extension HomeView: UICollectionViewDelegate {
         let inset = UIBezierPath(cgPath: path.cgPath)
         let k: CGFloat = 1.5
         inset.apply(CGAffineTransform(translationX: -b.midX, y: -b.midY).concatenating(CGAffineTransform(scaleX: (b.width - 2 * k) / max(1, b.width), y: (b.height - 2 * k) / max(1, b.height))).concatenating(CGAffineTransform(translationX: b.midX, y: b.midY)))
-        ctx.cgContext.saveGState(); inset.addClip(); ctx.cgContext.setBlendMode(.destinationOver); bg.setFill(); ctx.fill(b); ctx.cgContext.restoreGState()
+        ctx.cgContext.saveGState(); inset.addClip(); bg.setFill(); ctx.fill(b, blendMode: .destinationOver); ctx.cgContext.restoreGState()   // (behind the folder only — the renderer's plain fill(b) paints over it whatever blend is set: the folder came up as the page colour, Haris 2026-11-17)
       }
     }
     tileShot = (key, img, path)
@@ -2542,7 +2542,6 @@ extension HomeView: UICollectionViewDelegate {
           let ip = listDS?.indexPath(for: key) else { return ["none": "no folder"] }
     _ = tileLift(ip)
     guard let img = tileShot?.img.cgImage else { return ["none": "no picture"] }
-    let plain = UIGraphicsImageRenderer(size: CGSize(width: 112, height: 90), format: { let f = UIGraphicsImageRendererFormat(); f.scale = 1; return f }()).pngData { c in t.drawPicture(c.cgContext, t.traitCollection) }.base64EncodedString()
     tileShot = nil
     var px = [UInt8](repeating: 0, count: 4)
     let ctx = CGContext(data: &px, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
@@ -2557,8 +2556,7 @@ extension HomeView: UICollectionViewDelegate {
       if let d = small.data?.assumingMemoryBound(to: UInt8.self) { for y in 0..<4 { grid.append((0..<6).map { x in let o = (3 - y) * 24 + x * 4; return String(format: "%02x%02x%02x", d[o], d[o + 1], d[o + 2]) }.joined(separator: " ")) } }
     }
     return ["want": want, "got": got, "alpha": Int(px[3]), "blue": zip(want, got).allSatisfy { abs($0 - $1) < 24 } && px[3] > 240, "grid": grid,
-            "pic": t.selfPicInfo, "size": [img.width, img.height], "plain": plain,
-            "png": UIGraphicsImageRenderer(size: CGSize(width: 112, height: 90), format: { let f = UIGraphicsImageRendererFormat(); f.scale = 1; return f }()).pngData { _ in UIImage(cgImage: img).draw(in: CGRect(x: 0, y: 0, width: 112, height: 90)) }.base64EncodedString()]
+            "pic": t.selfPicInfo, "size": [img.width, img.height]]
   }
   private var tileShot: (key: String, img: UIImage, path: UIBezierPath)? {
     get { objc_getAssociatedObject(self, &HomeView.tileShotKey) as? (String, UIImage, UIBezierPath) }
