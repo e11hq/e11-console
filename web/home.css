@@ -860,11 +860,9 @@ html.mac-chrome[data-theme="light"] .mib-row.sel { background: color-mix(in srgb
 .mib-foot > span:first-child { margin-left: auto; }
 .mib-faded { opacity: .45; }
 /* files as pictures: a photo its own, a video its cover with ▶, a document a page */
-.mib-tiles { display: flex; gap: 12px; flex-wrap: wrap; }
-.mib-tile { width: 170px; display: flex; flex-direction: column; gap: 5px; border: 0; padding: 0; background: none; font: inherit; color: var(--mc-fg); text-align: left; cursor: default; }
-.mib-tiles.big .mib-tile { width: 200px; }
-.mib-tpic { position: relative; height: 120px; border-radius: 9px; overflow: hidden; background: var(--mc-field); display: grid; place-items: center; }
-.mib-tiles.big .mib-tpic { height: 132px; }
+.mib-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; max-width: 624px; }   /* (three to a row, whatever the pane's width — Haris 2026-11-17) */
+.mib-tile { min-width: 0; display: flex; flex-direction: column; gap: 5px; border: 0; padding: 0; background: none; font: inherit; color: var(--mc-fg); text-align: left; cursor: default; }
+.mib-tpic { position: relative; aspect-ratio: 3 / 2; border-radius: 9px; overflow: hidden; background: var(--mc-field); display: grid; place-items: center; }
 .mib-tpic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .mib-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 34px; height: 34px; border-radius: 17px; background: rgba(0, 0, 0, .78); display: grid; place-items: center; color: #fff; font-size: 13px; padding-left: 2px; box-sizing: border-box; }
 .mib-page { position: absolute; left: 18px; right: 18px; top: 12px; bottom: 26px; background: #fff; border-radius: 2px; box-shadow: 0 1px 4px rgba(0, 0, 0, .3); padding: 8px 7px; box-sizing: border-box; }
