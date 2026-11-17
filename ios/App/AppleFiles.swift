@@ -24,6 +24,7 @@ final class FileTile: UIView {
   // (held: its picture drawn from what it shows — the folder in its blue, the file's own picture as it's placed, else its
   //  type's badge on its colour. Read off the screen or the layer it came up blank: iPhone has the tile taken up as it's
   //  pressed, and the pictures sit where a layer copy can't read them — Haris 2026-11-17 08:06)
+  var selfPicInfo: String { "img \(pic.image.map { "\($0.size) mode \($0.renderingMode.rawValue)" } ?? "nil") cm \(pic.contentMode.rawValue) b \(pic.bounds.size) bg \(pic.backgroundColor == nil ? "nil" : "set") badge \(badge.isHidden ? "hidden" : badge.text ?? "")" }
   func drawPicture(_ c: CGContext, _ tc: UITraitCollection) {
     let b = pic.bounds
     if let bg = pic.backgroundColor?.resolvedColor(with: tc) { bg.setFill(); c.fill(b) }

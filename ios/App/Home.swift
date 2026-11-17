@@ -2549,7 +2549,14 @@ extension HomeView: UICollectionViewDelegate {
     var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0
     FileTile.folderBlue.resolvedColor(with: t.traitCollection).getRed(&r, green: &g, blue: &b, alpha: nil)
     let want = [Int(r * 255), Int(g * 255), Int(b * 255)], got = [Int(px[0]), Int(px[1]), Int(px[2])]
-    return ["want": want, "got": got, "alpha": Int(px[3]), "blue": zip(want, got).allSatisfy { abs($0 - $1) < 24 } && px[3] > 240]
+    // (a coarse 6 × 4 grid of the picture too — which parts are drawn)
+    var grid: [String] = []
+    if let small = CGContext(data: nil, width: 6, height: 4, bitsPerComponent: 8, bytesPerRow: 24, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) {
+      small.draw(img, in: CGRect(x: 0, y: 0, width: 6, height: 4))
+      if let d = small.data?.assumingMemoryBound(to: UInt8.self) { for y in 0..<4 { grid.append((0..<6).map { x in let o = (3 - y) * 24 + x * 4; return String(format: "%02x%02x%02x", d[o], d[o + 1], d[o + 2]) }.joined(separator: " ")) } }
+    }
+    return ["want": want, "got": got, "alpha": Int(px[3]), "blue": zip(want, got).allSatisfy { abs($0 - $1) < 24 } && px[3] > 240, "grid": grid,
+            "pic": t.selfPicInfo, "size": [img.width, img.height]]
   }
   private var tileShot: (key: String, img: UIImage, path: UIBezierPath)? {
     get { objc_getAssociatedObject(self, &HomeView.tileShotKey) as? (String, UIImage, UIBezierPath) }
