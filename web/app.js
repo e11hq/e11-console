@@ -9963,9 +9963,12 @@ function tipShow(t) {
   let x, y;
   if (left) { x = r.left - w - 10; y = r.top + r.height / 2 - h / 2; el.classList.add('left'); }
   else { x = r.left + r.width / 2 - w / 2; y = r.bottom + 8; el.classList.add('below'); if (y + h > innerHeight - 6) { y = r.top - h - 8; el.classList.replace('below', 'above'); } }
-  el.style.left = Math.max(6, Math.min(x, innerWidth - w - 6)) + 'px';
+  // (the Mac app: no tooltip ever slides under the sidebar — each stays right of the page's left edge — Haris 19:47, 19:48 "all")
+  const ct = Host.isMacApp && !t.closest('#sidebar') && document.getElementById('content');
+  const minX = ct ? Math.max(6, ct.getBoundingClientRect().left + 6) : 6;
+  el.style.left = Math.max(minX, Math.min(x, innerWidth - w - 6)) + 'px';
   el.style.top = Math.max(6, y) + 'px';
-  el.style.setProperty('--ax', (r.left + r.width / 2 - Math.max(6, Math.min(x, innerWidth - w - 6))) + 'px');
+  el.style.setProperty('--ax', (r.left + r.width / 2 - Math.max(minX, Math.min(x, innerWidth - w - 6))) + 'px');
   requestAnimationFrame(() => el.classList.add('on'));
 }
 document.addEventListener('mouseover', (e) => {
