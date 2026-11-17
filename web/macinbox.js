@@ -630,11 +630,12 @@ const MacInbox = (() => {
       if (el) sc.scrollTo({ top: sc.scrollTop + el.getBoundingClientRect().bottom - sc.getBoundingClientRect().bottom + 18, behavior: 'smooth' });
     });
   }
+  let spPress = 0;
   // (the clock opens its panel the moment it's pressed, as a Mac pop-up button does — on click it took two presses in the
   //  app: the press's click was lost as the box under it was set again — Haris 2026-11-17)
   document.addEventListener('mousedown', (e) => {
     const ck = e.button === 0 && e.target.closest && e.target.closest('[data-mib="sched"]');
-    if (ck && on() && ui.view === 'inbox') { e.preventDefault(); spOpen(); return; }
+    if (ck && on() && ui.view === 'inbox') { e.preventDefault(); spPress = Date.now(); spOpen(); return; }
     if (sp && !sp.el.contains(e.target)) spClose();
   }, true);
   document.addEventListener('click', (e) => {
@@ -862,7 +863,9 @@ const MacInbox = (() => {
     else if (a === 'dy-sec') { dyOpen = dyOpen === el.dataset.k ? '' : el.dataset.k; renderContent(); }
     else if (a === 'more-ups') { openAll = true; renderContent(); }
     else if (a === 'up-x') unAdd(el.dataset.k);
-    else if (a === 'sched') { if (e.detail === 0) spOpen(); }   // (a press opens it on mousedown; Space / Return on the button still does)
+    // (a press opens it on mousedown; a click whose press never reached the page — the Mac's text system can keep the
+    //  first press while words are in the box — opens it here; Space / Return on the button too)
+    else if (a === 'sched') { if (Date.now() - spPress > 600) { if (!sp) spOpen(); } }
     else if (a === 'sch-now') schedNow(el.dataset.id);
     else if (a === 'sch-x') schedCancel(el.dataset.id);
     else if (a === 'lk-x') { e.stopPropagation(); noCard.add(el.dataset.url); renderContent(); }
