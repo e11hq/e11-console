@@ -11,6 +11,20 @@ If you are any other Claude session:
 (Why: on 2026-10-30 two chats worked on the app at once — separate branches, mixed TestFlight builds and a revert
 that never reached main.)
 
+**Refresh before you start anything — be very, very careful (Haris, 2026-11-17 23:03).** On 2026-11-17 a Talk build was
+made from an old copy of Talk (main's `talk/` folder) instead of the real app, and a build number was misread ("11" from
+"E11") — both caught before reaching TestFlight. So, every time, before changing or building anything:
+- Check where each app's real, current code is — never assume:
+  - E11 Talk: branch `talk-chat-1` (main's `talk/` folder is an old copy — never build Talk from main)
+  - E11 Console iPhone: `ios-nav`
+  - Mac app (Swift): `macapp-13`
+  - website and server: `main`
+  Confirm with the newest `locked/` / `stable/` / `candidate/` branches and the latest commits.
+- Read what's already built before planning it (git log, the project docs) — don't describe as "to do" what's done.
+- Before sending any build: the build number read exactly from its own line (`… build N signed`), checked by eye, never
+  pulled loosely out of text.
+- When unsure, stop and check — never jump in.
+
 **The server — LOCKED at 1.9.27 (Haris, 2026-11-10 11:51: "lock the server states to latest"):** commit 12191cb, branch
 `locked/server-1.9.27` (never moved or deleted). Its rules and screens (web/rules.js, web/appview.js, server/src) as they are
 in 1.9.27 — which notifications go to whom and which reach the phone (`onPhone`), the occasion reminders' recipients, the
