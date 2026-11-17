@@ -288,6 +288,9 @@ const MacAssets = (() => {
       macMenu(pt, [{ label: 'Open', run: () => cliEl.click() }], canAssets() ? (an) => clientMenu(an, c) : null);
       return;
     }
+    // (a client's picture on its page: the same options as ••• — Haris 19:18)
+    const lgEl = e.target.closest('.mca-lgb');
+    if (lgEl) { const c = clientById(ui.clientId); if (c && canAssets()) macMenu(pt, [], (an) => clientMenu(an, c)); return; }
     // empty space: what this page can make
     const c = clientById(ui.clientId), f = c && ui.view === 'client' ? c.folders.find((x) => x.id === ui.folderId) : null;
     let items = [];
