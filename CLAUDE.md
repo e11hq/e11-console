@@ -24,6 +24,9 @@ made from an old copy of Talk (main's `talk/` folder) instead of the real app, a
 - Before sending any build: the build number read exactly from its own line (`… build N signed`), checked by eye, never
   pulled loosely out of text.
 - When unsure, stop and check — never jump in.
+- Before starting any build, ask Haris which checks to run with it — the walk-through for every role, the simulator
+  self-test, anything else — and run only what he says (Haris, 2026-11-17 23:24). (The iPhone workflow's `walk` input
+  turns the walk-through on or off; its self-test runs every time today unless the workflow is changed.)
 
 **The server — LOCKED at 1.9.27 (Haris, 2026-11-10 11:51: "lock the server states to latest"):** commit 12191cb, branch
 `locked/server-1.9.27` (never moved or deleted). Its rules and screens (web/rules.js, web/appview.js, server/src) as they are
