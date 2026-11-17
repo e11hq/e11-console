@@ -374,7 +374,7 @@ const MacInbox = (() => {
 
   // I5 — a content skeleton: its occasions, its posts by day; Send Back · Approve when it's waiting for you
   const POST_ST = { ok: ['Ready', '#30d158'], changes: ['Changes asked', '#ff9f0a'] };
-  const PFMT = { post: 'image', carousel: 'copy', reel: 'play', story: 'story', video: 'play' };
+  const PFMT = { post: 'image', carousel: 'copy', reel: 'reel', story: 'story', video: 'play' };
   function planHTML(g, n) {
     const pl = Plans.planById(n.planId), p = pl ? proj(pl.projectId) : null;
     if (!pl) return head(hic('cal', 'purple'), planTitle(n), '', openBtn(g, 'Open Plan', false)) + '<p class="mib-dim">Content skeleton not found</p>';
