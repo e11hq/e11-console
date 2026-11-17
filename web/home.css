@@ -916,6 +916,7 @@ html.mac-chrome .mib .mention { color: var(--mc-blue); background: none; padding
 .mib-th-r .mib-u { border-top: 0; }
 .mib-th-r .mib-yours .mib-u { margin: 0; }
 .mib-th-r:last-child:has(> .mib-yours)::before { height: 25px; }
+.mib-th-r:has(> .mib-yours):not(:last-child) { padding-bottom: 6px; }   /* (your replies apart, as every other) */
 .mib-lead .mib-u-t { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 /* your reply: Edit (the minutes left) · Delete, pills as every button */
 .mib-acts { margin-left: auto; display: inline-flex; gap: 6px; }
