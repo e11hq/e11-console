@@ -175,6 +175,24 @@ extension Main {
 
   // Sign out (Me › Sign out — the page's signOut): this person's screens and copy put away, then this iPhone's own sign-in
   // forgotten (the App Review copy: its own sign-out); the sign-in page follows, and the app asks again once it's back on our site
+  // Me › Server (the owner only — Haris 2026-11-17 21:13): this iPhone on the live server or the test one. The screens on
+  // show belong to the other server — put away as when signing out, with the sign-ins kept (each server's its own); the app
+  // starts again on the chosen one (signing in there the first time). E11 Talk on this iPhone follows it (WidgetShare).
+  func switchServer(_ k: String) {
+    let cur = defaults.string(forKey: "e11_server") ?? "live"
+    guard k != cur, k == "live" || k == "test" else { return }
+    bootState.state = .signedOut; bootState.me = nil; bootState.owned = false
+    putAwayForSwitch()
+    AppData.shared.forgetCopies(except: nil)   // (the other server's copy: never shown on this one)
+    quickBooted = false
+    tabBar.isHidden = true; tabsHidden = true; view.setNeedsLayout()
+    AppleTabs.shared?.mirrorShown()
+    var q = (defaults.data(forKey: "e11_quick").flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }) ?? [:]
+    q["me"] = nil
+    if let d = try? JSONSerialization.data(withJSONObject: q) { defaults.set(d, forKey: "e11_quick") }
+    if k == "live" { defaults.removeObject(forKey: "e11_server") } else { defaults.set(k, forKey: "e11_server") }
+    loadHome()
+  }
   func signOutNative() {
     DeviceKey.drop(self)   // (this phone's key for our sign-in: let go — signing back in needs the password)
     bootState.state = .signedOut; bootState.me = nil; bootState.owned = false

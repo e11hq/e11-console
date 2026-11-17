@@ -1989,6 +1989,13 @@ final class MeCtl {
         out.append(head(h, "about", "About"))
         out.append(group(h, "about", [SetItem(key: "about", title: "About", sub: (model["canUpdate"] as? Bool) == true ? "What’s new · App updates" : "What’s new", sym: "info", col: .systemGray, tap: { [weak self] in self?.open("about") })]))
       }
+      // (the owner — or anyone already on it: this iPhone on the live server or the test one — Haris 2026-11-17 21:13)
+      let onTest = UserDefaults.standard.string(forKey: "e11_server") == "test"
+      if (model["owner"] as? Bool) == true || onTest {
+        out.append(head(h, "server", "Server"))
+        out.append(group(h, "server", [SetItem(key: "server", title: "Server", value: onTest ? "Test" : "Live", sym: "server.rack", col: .systemBlue, tap: { [weak self] in self?.serverPick() })]))
+        out.append(foot(h, "server", "Only you see this. Test is the test server: its own data and the newest changes, before they’re published. E11 Talk on this iPhone follows it."))
+      }
       if let t = model["test"] as? [String: Any] {
         var test: [SetItem] = []
         if (t["viewAs"] as? Bool) == true {
@@ -3460,6 +3467,16 @@ final class MeCtl {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.main.authing = false }
       }
     }
+  }
+  private func serverPick() {
+    let cur = UserDefaults.standard.string(forKey: "e11_server") == "test" ? "test" : "live"
+    let ac = UIAlertController(title: "Server", message: "This iPhone only. E11 Talk on it follows.", preferredStyle: .actionSheet)
+    for (k, t) in [("live", "Live"), ("test", "Test")] {
+      ac.addAction(UIAlertAction(title: t + (k == cur ? " ✓" : ""), style: .default) { [weak self] _ in self?.main.switchServer(k) })
+    }
+    ac.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+    ac.popoverPresentationController?.sourceView = main.view
+    main.topMost().present(ac, animated: true)
   }
   private func signOutAsk() {
     let review = UserDefaults.standard.string(forKey: "e11_server") == "review"
