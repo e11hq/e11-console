@@ -567,7 +567,7 @@ const MacInbox = (() => {
   const DUB = 4 * 3600000;
   const dubNow = () => { const d = new Date(Date.now() + DUB); return { y: d.getUTCFullYear(), m: d.getUTCMonth(), d: d.getUTCDate() }; };
   const atDub = (y, m, d, h, mi = 0) => Date.UTC(y, m, d, h, mi) - DUB;
-  function spClose() { if (sp && sp.el) sp.el.remove(); sp = null; }
+  function spClose() { if (sp && sp.el) sp.el.remove(); sp = null; document.querySelectorAll('.mib-clock[data-live-on]').forEach((b) => b.removeAttribute('data-live-on')); }
   function spHTML() {
     const QI = { soon: 'clock', hours: 'clock', tomorrow: 'sun', days: 'cal', week: 'cal' };
     const tm = (ms) => new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Dubai' });
@@ -601,6 +601,7 @@ const MacInbox = (() => {
     const t = dubNow();
     sp = { view: { y: t.y, m: t.m }, day: null, pick: null, typed: null, q: '' };
     sp.el = document.createElement('div'); sp.el.className = 'mib-amenu mib-spop'; document.body.appendChild(sp.el);
+    const ck = document.querySelector('.mib-clock'); if (ck) ck.setAttribute('data-live-on', '');   // (the clock tinted blue while its panel is up, as the mock-up)
     spPaint(true);
   }
   function scheduleAt(ms) {
