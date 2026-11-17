@@ -25,8 +25,8 @@
 }
 :root { --mono: "E11 Dirham", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace; --radius: 7px; }
 :root:not(.phone) body { background: var(--app); font-size: 13.5px; }
-:root[data-theme="dark"]:not(.phone) ::-webkit-scrollbar-thumb { background: #2a2c33; background-clip: padding-box; }
-:root[data-theme="light"]:not(.phone) ::-webkit-scrollbar-thumb { background: #d4d4da; background-clip: padding-box; }
+:root[data-theme="dark"]:not(.phone):not(.mac-chrome) ::-webkit-scrollbar-thumb { background: #2a2c33; background-clip: padding-box; }
+:root[data-theme="light"]:not(.phone):not(.mac-chrome) ::-webkit-scrollbar-thumb { background: #d4d4da; background-clip: padding-box; }
 
 /* ---------- Frame ---------- */
 :root:not(.phone) #app { grid-template-columns: 232px minmax(0, 1fr); background: var(--app); }
