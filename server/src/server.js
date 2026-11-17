@@ -644,6 +644,29 @@ export function createServer(cfg) {
     json(res, 403, { ok: false, error: 'No E11 Talk account for ' + id.email });
     return null;
   }
+  // E11 Talk over the office network (office.js passes 'talkup' / 'talkfile'): a piece of a file being sent, or a message's
+  // file fetched — as /api/talk/upload and /api/talk/file/…, for the person the pass is for (Haris 2026-11-17 20:13)
+  async function talkLocal(pass, url, req, res) {
+    const t = talkNow();
+    if (!t) return json(res, 404, { ok: false, error: 'Not found' });
+    const who = { id: String(pass.u), ...(pass.person ? { person: pass.person } : {}) };
+    if (url.pathname === '/local/talk/upload' && req.method === 'POST' && pass.k === 'talkup') {
+      const bytes = await readRaw(req, 8 * 1024 * 1024 + 1024);
+      const q = url.searchParams;
+      const r = t.upload(who, q.get('id') || '', q.get('name') || '', q.get('offset') || '0', bytes, q.get('last') === '1', q.get('at'));
+      return json(res, r.status || (r.ok === false ? 400 : 200), r);
+    }
+    if (url.pathname === '/local/talk/file' && (req.method === 'GET' || req.method === 'HEAD') && pass.k === 'talkfile') {
+      const f = t.fileFor(who, pass.fid);
+      if (!f) return json(res, 404, { ok: false, error: 'That file has gone' });
+      const full = t.filePath(f), size = fs.statSync(full).size;
+      res.writeHead(200, { 'Content-Type': mimeOf(f.name), 'Content-Length': size, 'Cache-Control': 'private, max-age=86400' });
+      if (req.method === 'HEAD') return res.end();
+      res.on('finish', () => t.fetched(who, f.id));   // (the whole file reached the phone)
+      return fs.createReadStream(full).pipe(res);
+    }
+    return json(res, 404, { ok: false, error: 'Not found' });
+  }
   async function talkRoute(req, res, p, url, u) {
     const t = talkNow();
     // (how long the server itself took — who's asking, then the answer — for the app's speed report: Server-Timing,
@@ -697,6 +720,16 @@ export function createServer(cfg) {
         const bytes = await readRaw(req, 8 * 1024 * 1024 + 1024);
         const q = url.searchParams;
         return out(t.upload(u, q.get('id') || '', q.get('name') || '', q.get('offset') || '0', bytes, q.get('last') === '1', q.get('at')));
+      }
+      // in the office: a pass for one file sent or fetched straight over the office network (office.js; the phone only —
+      // Haris 2026-11-17 20:13). Not in the office: 409, and the phone goes the usual way.
+      if (p === '/api/talk/local/ticket' && req.method === 'POST') {
+        const b = await readBody(req, 16 * 1024).catch(() => ({}));
+        if (macId || req.talkMac) return json(res, 403, { ok: false, error: 'Only on the phone' });
+        if (!office.info(req).local) return json(res, 409, { ok: false, error: 'Not in the office' });
+        const who = { u: dev.id, person: dev.person || null };
+        if (b.kind === 'file') { const f = t.fileFor(dev, String(b.id || '')); if (!f) return json(res, 404, { ok: false, error: 'That file has gone' }); return out({ ok: true, ...office.ticket(dev, { k: 'talkfile', ...who, fid: f.id }) }); }
+        return out({ ok: true, ...office.ticket(dev, { k: 'talkup', ...who }) });
       }
       if (p.startsWith('/api/talk/file/') && (req.method === 'GET' || req.method === 'HEAD')) {
         const f = t.fileFor(dev, p.slice('/api/talk/file/'.length));
@@ -1852,7 +1885,7 @@ export function createServer(cfg) {
     server, store, files, cfSync, webPush, get talk() { return talkNow(); },
     listen: (port, host) => new Promise((ok) => {
       // the office-network port (HTTPS, own certificate), when the NAS has it set up
-      if (cfg.localPort) office.listen(cfg.localPort, office.localHandler({ readRaw, json, users: (id) => store.get('users', String(id)), uploads, canStill: (u, target, fp) => (fp ? access.canReadFile(u, fp) : !uploadDenied(u, target)) }));
+      if (cfg.localPort) office.listen(cfg.localPort, office.localHandler({ readRaw, json, users: (id) => store.get('users', String(id)), uploads, canStill: (u, target, fp) => (fp ? access.canReadFile(u, fp) : !uploadDenied(u, target)), talk: talkLocal }));
       server.listen(port, host, () => ok(server.address().port));
     }),
     office, apns,

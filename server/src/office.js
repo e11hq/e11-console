@@ -1,4 +1,5 @@
-/* Fast office use (planned with Haris 2026-10-27; claude/nas-copy-and-light-copies-plan.md). Mac app only.
+/* Fast office use (planned with Haris 2026-10-27; claude/nas-copy-and-light-copies-plan.md). Mac app; the office network
+   also E11 Console's and E11 Talk's iPhone apps (Haris 2026-11-17 20:13 — claude/office-network-iphone-plan.md).
 
    1. Copy inside the NAS: a file picked in the Mac app that's on the NAS shared folder "E11 Share" isn't uploaded.
       The app sends its place in the share and a fingerprint (SHA-256 of its first and last MB); the server finds it
@@ -111,17 +112,19 @@ export function createOffice({ store, files, cfg = {}, ipOf, now = () => Date.no
 
   /* ---------- 2. the office network ---------- */
   function ticket(u, what) {
-    const p = { u: u.id, exp: now() + (what.k === 'up' ? 60 : 15) * 60_000, n: crypto.randomBytes(6).toString('hex'), ...what };
+    const p = { u: u.id, exp: now() + (what.k === 'up' || what.k === 'talkup' ? 60 : 15) * 60_000, n: crypto.randomBytes(6).toString('hex'), ...what };
     return { url: localUrl, token: sign(p), cert: tls().sha256 };
   }
   // the office port's own little server: a ping, uploads with a pass, downloads with a pass
-  function localHandler({ readRaw, json, users, uploads, canStill }) {
+  function localHandler({ readRaw, json, users, uploads, canStill, talk = null }) {
     const upPath = new Map();   // pass nonce → the file it's writing
     return async (req, res) => {
       const url = new URL(req.url, 'https://office');
       try {
         if (url.pathname === '/local/ping') return json(res, 200, { ok: true, app: 'e11-console' });
         const p = verify(url.searchParams.get('t'));
+        // (E11 Talk's passes — its own people, not only E11 Console's: answered by Talk itself, server.js — Haris 2026-11-17 20:13)
+        if (p && String(p.k || '').startsWith('talk')) return talk ? await talk(p, url, req, res) : json(res, 404, { ok: false, error: 'Not found' });
         const u = p && users(p.u);
         if (!p || !u || u.active === false) return json(res, 403, { ok: false, error: 'This pass isn’t valid — try again' });
         if (url.pathname === '/local/upload' && req.method === 'POST' && p.k === 'up') {

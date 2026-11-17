@@ -69,24 +69,36 @@ final class Net {
   func post(_ path: String, _ json: [String: Any], _ done: @escaping ([String: Any]?) -> Void = { _ in }) { call(path, method: "POST", json: json, done: done) }
   func act(_ b: [String: Any], _ done: @escaping ([String: Any]?) -> Void = { _ in }) { post("/api/talk/act", b, done) }
 
-  // a file to send: in pieces of 4 MB, with its progress
+  // a file to send: in pieces of 4 MB, with its progress — in the office over the office network first (Office, Haris
+  // 2026-11-17 20:13); if that doesn't work, again the usual way from the start
   func upload(_ data: Data, name: String, progress: @escaping (Double) -> Void, done: @escaping (String?) -> Void) {
     let piece = 4 * 1024 * 1024
-    func next(_ id: String?, _ offset: Int) {
-      let end = min(data.count, offset + piece), last = end >= data.count
-      var q = "/api/talk/upload?offset=\(offset)&name=\(name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "file")"
-      if let id = id { q += "&id=\(id)" }
-      if last { q += "&last=1" }
-      session.dataTask(with: request(q, method: "POST", body: data.subdata(in: offset..<end))) { d, _, _ in
-        let j = d.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
-        DispatchQueue.main.async {
-          guard (j?["ok"] as? Bool) == true, let fid = j?["id"] as? String else { done(nil); return }
-          progress(data.isEmpty ? 1 : Double(end) / Double(data.count))
-          if last { done(fid) } else { next(fid, end) }
-        }
-      }.resume()
+    func attempt(_ pass: Office.Pass?) {
+      func next(_ id: String?, _ offset: Int) {
+        let end = min(data.count, offset + piece), last = end >= data.count
+        var q = "offset=\(offset)&name=\(name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "file")"
+        if let id = id { q += "&id=\(id)" }
+        if last { q += "&last=1" }
+        let r: URLRequest
+        if let p = pass, let u = URL(string: p.url + "/local/talk/upload?t=" + (p.token.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "") + "&" + q) {
+          var lr = URLRequest(url: u); lr.httpMethod = "POST"; lr.httpBody = data.subdata(in: offset..<end)
+          lr.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type"); r = lr
+        } else { r = request("/api/talk/upload?" + q, method: "POST", body: data.subdata(in: offset..<end)) }
+        (pass == nil ? session : Office.shared.session).dataTask(with: r) { d, _, _ in
+          let j = d.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
+          DispatchQueue.main.async {
+            guard (j?["ok"] as? Bool) == true, let fid = j?["id"] as? String else {
+              if pass != nil { Office.shared.failed(); progress(0); attempt(nil) } else { done(nil) }
+              return
+            }
+            progress(data.isEmpty ? 1 : Double(end) / Double(data.count))
+            if last { done(fid) } else { next(fid, end) }
+          }
+        }.resume()
+      }
+      next(nil, 0)
     }
-    next(nil, 0)
+    Office.shared.pass(["kind": "up"]) { p in attempt(p) }
   }
 
   // a file the phone still has but the server has let go: sent again under its own id (for a Mac being linked)
@@ -125,12 +137,21 @@ final class Net {
   func file(_ id: String, _ done: @escaping (URL?) -> Void) {
     let to = Net.local(id)
     if FileManager.default.fileExists(atPath: to.path) { done(to); return }
-    session.downloadTask(with: request("/api/talk/file/" + id)) { tmp, resp, _ in
-      guard let tmp = tmp, (resp as? HTTPURLResponse)?.statusCode == 200 else { DispatchQueue.main.async { done(nil) }; return }
-      try? FileManager.default.removeItem(at: to)
-      try? FileManager.default.moveItem(at: tmp, to: to)
-      DispatchQueue.main.async { done(FileManager.default.fileExists(atPath: to.path) ? to : nil) }
-    }.resume()
+    // (in the office: over the office network first — Office; if that doesn't work, the usual way)
+    func fetch(_ pass: Office.Pass?) {
+      var r = request("/api/talk/file/" + id)
+      if let p = pass, let u = URL(string: p.url + "/local/talk/file?t=" + (p.token.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")) { r = URLRequest(url: u) }
+      (pass == nil ? session : Office.shared.session).downloadTask(with: r) { tmp, resp, _ in
+        guard let tmp = tmp, (resp as? HTTPURLResponse)?.statusCode == 200 else {
+          if pass != nil { Office.shared.failed(); DispatchQueue.main.async { fetch(nil) } } else { DispatchQueue.main.async { done(nil) } }
+          return
+        }
+        try? FileManager.default.removeItem(at: to)
+        try? FileManager.default.moveItem(at: tmp, to: to)
+        DispatchQueue.main.async { done(FileManager.default.fileExists(atPath: to.path) ? to : nil) }
+      }.resume()
+    }
+    Office.shared.pass(["kind": "file", "id": id]) { p in fetch(p) }
   }
   // E11 Console's pictures (people's photos, client logos) — the same server
   private let pics = NSCache<NSString, UIImage>()

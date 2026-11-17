@@ -95,3 +95,23 @@ test('office network: passes only in the office; uploads in pieces; downloads; t
   const other = await post(PROD, '/api/local/ticket', { kind: 'file', path: 'attachments/t2/x.bin' }, OFFICE);
   assert.equal(other.status, 403, 'only files they may see');
 });
+test('E11 Talk over the office network: passes only in the office, on the phone; a file sent in pieces and fetched back', async () => {
+  assert.equal((await post(PROD, '/api/talk/local/ticket', { kind: 'up' }, '94.1.2.3')).status, 409, 'not outside');
+  const tk = await post(PROD, '/api/talk/local/ticket', { kind: 'up' }, OFFICE);
+  assert.equal(tk.ok, true); assert.equal(tk.url, `https://127.0.0.1:${lport}`);
+  const data = crypto.randomBytes(5 * 1024 * 1024 + 7);
+  const up = (q, body) => call(`${tk.url}/local/talk/upload?t=${encodeURIComponent(tk.token)}&${q}`, { method: 'POST' }, body).then((r) => JSON.parse(r.body));
+  const a = await up('offset=0&name=cut.mov', data.subarray(0, 4 * 1024 * 1024));
+  assert.equal(a.ok, true);
+  const b = await up(`offset=${4 * 1024 * 1024}&name=cut.mov&id=${a.id}&last=1`, data.subarray(4 * 1024 * 1024));
+  assert.equal(b.ok, true); assert.equal(b.done, true); assert.equal(b.size, data.length);
+  assert.equal((await call(`${tk.url}/local/upload?t=${encodeURIComponent(tk.token)}&offset=0`, { method: 'POST' }, data.subarray(0, 9))).status, 404, 'a Talk pass isn’t an E11 Console upload pass');
+  const ft = await post(PROD, '/api/talk/local/ticket', { kind: 'file', id: a.id }, OFFICE);
+  assert.equal(ft.ok, true);
+  const got = await call(`${ft.url}/local/talk/file?t=${encodeURIComponent(ft.token)}`);
+  assert.equal(got.status, 200); assert.ok(got.body.equals(data), 'fetched back over the office network');
+  assert.equal((await post(OWNER, '/api/talk/local/ticket', { kind: 'file', id: a.id }, OFFICE)).status, 404, 'only someone the file is for');
+  assert.equal((await call(`${ft.url}/local/talk/file?t=bad`)).status, 403, 'no pass, no file');
+  const mac = await fetch(base + '/api/talk/local/ticket', { method: 'POST', headers: { 'X-Dev-Email': PROD, 'X-Talk-Mac': 'm1', 'Content-Type': 'application/json', 'CF-Connecting-IP': OFFICE, 'CF-Ray': 'x-DXB' }, body: '{}' });
+  assert.ok(mac.status === 403 || mac.status === 410, 'not from a linked Mac');
+});
