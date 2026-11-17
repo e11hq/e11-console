@@ -160,6 +160,60 @@ extension Main {
     return vcs[i].tabBarItem.badgeValue ?? ""
   }
   private func apple(_ k: String, _ v: [String: Any]) { var a = (selfResult["apple"] as? [String: Any]) ?? [:]; a[k] = v; selfResult["apple"] = a }
+
+  // The icon-swap lab: one row per way of swapping, each row the app's swapping icons at their real sizes and colours —
+  // the comment box's mic ↔ ↑ in its circle, + ↔ ✕, ▶ ↔ ⏸ and ○ ↔ ✓ — swapped together at 1.0 s, 2.4 s and 3.8 s
+  private var labWin: UIWindow?
+  func swapLab() {
+    guard let scene = screenWindow?.windowScene else { return }
+    let w = UIWindow(windowScene: scene); w.windowLevel = .alert + 1; w.backgroundColor = HomeLook.bg
+    let vc = UIViewController(); vc.view.backgroundColor = HomeLook.bg; w.rootViewController = vc; w.isHidden = false; labWin = w
+    let ways = ["A now 1.6", "B downUp 1", "C offUp 1", "D replace", "E magic", "F fade"]
+    var rows: [(Int, UIView, UIImageView, UIView, UIImageView, UIView, UIImageView, UIImageView)] = []
+    let cfg = { (n: String, pt: CGFloat, wt: UIImage.SymbolWeight) in UIImage(systemName: n, withConfiguration: UIImage.SymbolConfiguration(pointSize: pt, weight: wt)) }
+    for (i, name) in ways.enumerated() {
+      let y = 70 + CGFloat(i) * 96
+      let l = UILabel(frame: CGRect(x: 12, y: y, width: 90, height: 40)); l.text = name; l.font = .systemFont(ofSize: 12); l.textColor = .secondaryLabel; l.numberOfLines = 2; vc.view.addSubview(l)
+      func circle(_ x: CGFloat, _ d: CGFloat, _ bg: UIColor, _ tint: UIColor, _ img: UIImage?) -> (UIView, UIImageView) {
+        let c = UIView(frame: CGRect(x: x, y: y + 20 - d / 2, width: d, height: d)); c.layer.cornerRadius = d / 2; c.backgroundColor = bg; c.tintColor = tint
+        let v = UIImageView(image: img); v.contentMode = .center; v.frame = c.bounds; c.addSubview(v); vc.view.addSubview(c); return (c, v)
+      }
+      let (s, sv) = circle(110, 36, .tertiarySystemFill, .label, cfg("mic", 15, .medium))
+      let (pl, pv) = circle(165, 34, UIColor.label.withAlphaComponent(0.07), .label, cfg("plus", 15, .semibold))
+      let (pp, ppv) = circle(220, 60, UIColor.black.withAlphaComponent(0.45), .white, cfg("play.fill", 24, .bold))
+      let tick = UIImageView(image: UIImage(systemName: "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22))); tick.tintColor = .tertiaryLabel
+      tick.frame = CGRect(x: 300, y: y + 5, width: 30, height: 30); tick.contentMode = .center; vc.view.addSubview(tick)
+      rows.append((i, s, sv, pl, pv, pp, ppv, tick))
+    }
+    func swap(_ on: Bool) {
+      for (i, s, sv, _, pv, _, ppv, tick) in rows {
+        let send = cfg(on ? "arrow.up" : "mic", on ? 14 : 15, on ? .bold : .medium), plus = cfg(on ? "xmark" : "plus", 15, .semibold)
+        let play = cfg(on ? "pause.fill" : "play.fill", 24, .bold), t = UIImage(systemName: on ? "checkmark.circle.fill" : "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22))
+        let fill = { s.backgroundColor = on ? .label : .tertiarySystemFill; s.tintColor = on ? .systemBackground : .label; tick.tintColor = on ? .systemBlue : .tertiaryLabel }
+        let pairs: [(UIImageView, UIImage?)] = [(sv, send), (pv, plus), (ppv, play), (tick, t)]
+        if i == 0 {
+          for (v, im) in pairs { if #available(iOS 17.0, *), let im = im { v.setSymbolImage(im, contentTransition: .replace.downUp, options: .speed(1.6)) } }
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.09) { UIView.animate(withDuration: 0.14, animations: fill) }
+        } else if i == 5 {
+          for (v, im) in pairs { UIView.transition(with: v, duration: 0.25, options: .transitionCrossDissolve) { v.image = im } }
+          UIView.animate(withDuration: 0.25, animations: fill)
+        } else {
+          for (v, im) in pairs {
+            guard #available(iOS 17.0, *), let im = im else { continue }
+            switch i {
+            case 1: v.setSymbolImage(im, contentTransition: .replace.downUp)
+            case 2: v.setSymbolImage(im, contentTransition: .replace.offUp)
+            case 3: v.setSymbolImage(im, contentTransition: .replace)
+            default: if #available(iOS 18.0, *) { v.setSymbolImage(im, contentTransition: .replace.magic(fallback: .replace.downUp)) } else { v.setSymbolImage(im, contentTransition: .replace) }
+            }
+          }
+          UIView.animate(withDuration: 0.25, delay: 0, options: .curveEaseInOut, animations: fill)
+        }
+      }
+    }
+    for (t, on) in [(1.0, true), (2.4, false), (3.8, true)] { DispatchQueue.main.asyncAfter(deadline: .now() + t) { swap(on) } }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 5.6) { [weak self] in self?.labWin?.isHidden = true; self?.labWin = nil }
+  }
   private func appleSteps() -> [(String, () -> Void)] {
     let home = AppData.shared.screen("home").model ?? [:]
     let cards = ((home["groups"] as? [[String: Any]]) ?? []).flatMap { ($0["cards"] as? [[String: Any]]) ?? [] }.compactMap { $0["id"] as? String }
@@ -553,6 +607,11 @@ extension Main {
       // on the same day nothing on E11 Day is set again (only what changed changes)
       // Memory (the full test, Haris 2026-11-16): what the app holds once every page above has been through — iPhone's own
       // count (phys_footprint, as Xcode's gauge shows it)
+      // Icon swaps filmed (Haris 2026-11-17 10:55: "check on simulator before, stop guessing"): ios/walktest.py films the
+      // screen from aSwapRec to aSwapEnd (ios-swap.mp4) while aSwapLab shows each icon swap in each way, side by side
+      ("aSwapRec", {}),
+      ("aSwapLab", { self.swapLab() }),
+      ("aSwapEnd", {}),
       ("aMem", {
         var info = task_vm_info_data_t(), n = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
         let kr = withUnsafeMutablePointer(to: &info) { $0.withMemoryRebound(to: integer_t.self, capacity: Int(n)) { task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &n) } }

@@ -103,6 +103,13 @@ try:
                 seen_away.add(st); sh('xcrun', 'simctl', 'ui', udid, 'appearance', 'light')
             if st and st.endswith('_aContrastDark') and st not in seen_away:
                 seen_away.add(st); sh('xcrun', 'simctl', 'ui', udid, 'appearance', 'dark')
+            # (the icon swaps filmed — Haris 2026-11-17: from aSwapRec to aSwapEnd, ios-swap.mp4)
+            if st and st.endswith('_aSwapRec') and st not in seen_away:
+                seen_away.add(st); swaprec = subprocess.Popen(['xcrun', 'simctl', 'io', udid, 'recordVideo', '--codec=h264', '--force', os.path.join(TMP, 'ios-swap.mp4')], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+            if st and st.endswith('_aSwapEnd') and st not in seen_away:
+                seen_away.add(st); time.sleep(1.5)
+                try: swaprec.send_signal(2); swaprec.wait(timeout=20)
+                except Exception: pass
             if st == 'done': break
             # (the app gone — crashed — or stuck: no new step for 60 s)
             if time.time() - last > 100:
