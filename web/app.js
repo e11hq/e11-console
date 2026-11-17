@@ -2680,6 +2680,8 @@ const Sync = (() => {
     window.E11_TALK = !!me.talk;   // (the Mac app's E11 Talk button — test site for now)   // the App Review copy (its own sign-in instead of Cloudflare's)
     if (typeof ViewAs !== 'undefined') ViewAs.init(me.viewAs);   // test site only: the owner using the app as someone else
     AppIcon.setOwner(me.owner); if (me.appIcon) AppIcon.sync(me.appIcon);
+    // (the Mac app: its Server menu only for the owner — Haris 2026-11-17 21:47; older Mac apps answer an unknown command)
+    if (Host.isMacApp && typeof NativeMac !== 'undefined') NativeMac.call('owner', { on: !!me.owner }).catch(() => {});
     ownerId = me.ownerId || null;
     signinOn = !!me.signin;
     if (typeof OwnerView !== 'undefined') OwnerView.init(me);
