@@ -638,6 +638,14 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       if ins.event == nil { ins.event = { [weak self] e in self?.pageJS("window.__e11Info && window.__e11Info(\(jsonString(e)))") } }
       MacLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) { done(["ok": ins.show(a)]) }
     case "infoClose": InfoWindows.shared.close(a["key"] as? String ?? ""); done(["ok": true])
+    // (who's signed in is the owner — or not: the Server menu shown or taken away; someone else left on Test goes back to Live)
+    case "owner":
+      let on = (a["on"] as? Bool) == true
+      if defaults.bool(forKey: "e11_is_owner") != on { defaults.set(on, forKey: "e11_is_owner"); buildMenu() }
+      #if APPSTORE
+      if !on && defaults.string(forKey: "e11_server") == "test" { setServer("live") }
+      #endif
+      done(["ok": true])
     case "appInfo":
       done(["ok": true, "server": SERVER, "shell": SHELL_VERSION, "native": "swift",
             "version": info["CFBundleShortVersionString"] as? String ?? "3.0.0", "touchID": defaults.bool(forKey: LOCK_KEY),
@@ -966,14 +974,17 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     loginItem.state = atLogin() ? .on : .off
     var serverItems: [NSMenuItem] = []
     #if APPSTORE
-    let serverMenu = NSMenu(title: "Server")
     let cur = defaults.string(forKey: "e11_server") ?? "live"
+    // (only the owner has the Server menu — Haris 2026-11-17 21:47; the page says who's signed in: command "owner")
+    if defaults.bool(forKey: "e11_is_owner") || cur == "test" {
+    let serverMenu = NSMenu(title: "Server")
     for (k, t) in [("live", "Live"), ("test", "Test"), ("review", "App Review")] {
       let it = item(t, #selector(pickServer(_:)), "", .command, self); it.representedObject = k; it.state = cur == k ? .on : .off
       serverMenu.addItem(it)
     }
     let serverItem = NSMenuItem(title: "Server", action: nil, keyEquivalent: ""); serverItem.submenu = serverMenu
     serverItems = [serverItem, .separator()]
+    }
     #endif
     _ = sub(APP_NAME, [
       item("About " + APP_NAME, #selector(NSApplication.orderFrontStandardAboutPanel(_:))), .separator(),
