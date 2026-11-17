@@ -323,6 +323,8 @@ final class FileListRow: UIView, AppleRow {
         FeedLoader.shared.small(p, px: 132) { [weak self] img, atOnce in
           guard let self = self, self.picPath == p, let img = img else { return }
           self.pic = FileListRow.thumb(img)
+          // (Recently added: its larger picture made ready too, in the background — what the preview flies out with)
+          if !self.found { FeedLoader.shared.small(p, px: 600) { _, _ in } }
           if !atOnce { UIView.transition(with: self, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction]) { self.paint(L) }; self.onLook?() }
         }
       }

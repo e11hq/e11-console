@@ -108,6 +108,8 @@ final class FeedLoader {
       }
     }
   }
+  // (a picture already kept at that size, now — nothing read or fetched)
+  func kept(_ path: String, px: CGFloat) -> UIImage? { smalls.object(forKey: "\(path)|\(Int(px))" as NSString) }
   func image(_ path: String, _ done: @escaping (UIImage?) -> Void) {
     if let i = cache.object(forKey: path as NSString) ?? locals[path] { return done(i) }
     if path.hasPrefix("local:") { return done(nil) }
