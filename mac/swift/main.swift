@@ -600,8 +600,16 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
         let z = Double(web.pageZoom)
         from = NSRect(x: x * z, y: y * z, width: w * z, height: h * z)
       }
-      MacLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) {
+      // (a picture of the file's own tile on the page, as it shows it: a file with no picture of its own — a PDF, a .zip, an .ai —
+      //  flies out of its tile and back into it with that, as a photo does: Haris 2026-11-17)
+      let shoot: (@escaping (NSImage?) -> Void) -> Void = { [weak self] then in
+        guard let self = self, let f = from, f.width > 4, f.height > 4 else { return then(nil) }
+        let cfg = WKSnapshotConfiguration(); cfg.rect = f; cfg.afterScreenUpdates = false
+        self.web.takeSnapshot(with: cfg) { img, _ in then(img) }
+      }
+      shoot { shot in MacLoad.refreshCookies(self.web.configuration.websiteDataStore.httpCookieStore) {
         let pv = MacPreview(files: files, at: (a["at"] as? NSNumber)?.intValue ?? 0, from: from)
+        pv.tileShot = shot
         pv.event = { [weak self] e in self?.pageJS("window.__e11Preview && window.__e11Preview(\(jsonString(e)))") }
         pv.onGone = { [weak self, weak pv] in
           guard let self = self else { return }
@@ -611,7 +619,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
         self.preview = pv
         pv.open(in: cv)
         done(["ok": true])
-      }
+      } }
     case "previewSet":
       // (where the file now on show has its thumbnail on the page — the preview flies back into it: Haris 2026-11-15)
       if let id = a["fromId"] as? String {

@@ -134,6 +134,7 @@ final class MacPreview: NSView {
   private var from: NSRect?, openedAt: Int   // (openedAt: the file `from` is the thumbnail of — moved on as the page says where the one on show sits)
   var event: (([String: Any]) -> Void)?
   var onGone: (() -> Void)?
+  var tileShot: NSImage?   // (the file's tile as the page shows it — what a file with no picture of its own flies out of and back into)
   private let back = NSView(), stage = NSView()
   private var content: NSView?
   private var player: AVPlayer?
@@ -439,15 +440,17 @@ final class MacPreview: NSView {
       }
       self.wake()
     }
-    guard let r = from, r.width > 4, let t = cur["thumb"] as? String ?? cur["cover"] as? String, !t.isEmpty else {
+    guard let r = from, r.width > 4 else {
       NSAnimationContext.runAnimationGroup { c in c.duration = 0.25; self.stage.animator().alphaValue = 1 }
       return finish()
     }
+    let t = (cur["thumb"] as? String) ?? (cur["cover"] as? String) ?? ""
     var flown = false
     let fly0: (NSImage?) -> Void = { [weak self] im in
       guard let self = self, !flown else { return }
       flown = true
-      guard let im = im else { NSAnimationContext.runAnimationGroup { c in c.duration = 0.25; self.stage.animator().alphaValue = 1 }; return finish() }
+      guard let im = im ?? self.tileShot else { NSAnimationContext.runAnimationGroup { c in c.duration = 0.25; self.stage.animator().alphaValue = 1 }; return finish() }
+      let shotFly = im === self.tileShot   // (its tile's picture: lands at the size it'll show at, then the file fades in under it)
       // (as Photos / E11 Talk: the picture cut to the thumbnail's own shape and corners at first, opening out to the whole
       //  picture as it grows — one layer filling its frame, its frame and corners moved by Core Animation; Haris 16:36:
       //  "the coming in from the thumbnail is not looking native")
@@ -456,17 +459,28 @@ final class MacPreview: NSView {
       //  one frame as it landed — Haris 2026-11-17 "the shadow … dont have it snap")
       self.addSubview(fly, positioned: .above, relativeTo: self.stage)
       finish()
-      fly.move(to: self.fit(im.size, in: target), radius: 0, duration: 0.38, timing: CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1)) {
-        self.stage.alphaValue = 1
-        fly.removeFromSuperview()
+      fly.move(to: self.fit(im.size, in: shotFly ? self.shotTarget(target) : target), radius: shotFly ? 12 : 0, duration: 0.38, timing: CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1)) {
+        if shotFly {
+          NSAnimationContext.runAnimationGroup({ c in c.duration = 0.2; self.stage.animator().alphaValue = 1; fly.animator().alphaValue = 0 }, completionHandler: { fly.removeFromSuperview() })
+        } else {
+          self.stage.alphaValue = 1
+          fly.removeFromSuperview()
+        }
       }
     }
     // (the full picture when it arrives within a moment — the thumbnail, small and cut square, came out blurred and cropped,
     //  16:23 — else the thumbnail)
-    if (cur["kind"] as? String) == "image" {
+    if t.isEmpty { fly0(nil) }   // (no picture of its own: its tile's)
+    else if (cur["kind"] as? String) == "image" {
       MacLoad.image(cur["src"] as? String) { im in if let im = im { fly0(im) } }
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { MacLoad.image(t) { im in fly0(im) } }
     } else { MacLoad.image(t) { im in fly0(im) } }
+  }
+  // (where a tile's picture lands: a card in the middle, at most twice its own size)
+  private func shotTarget(_ r: NSRect) -> NSRect {
+    guard let s = tileShot?.size, s.width > 0 else { return r }
+    let w = min(r.width * 0.5, s.width * 2), h = w * s.height / s.width
+    return NSRect(x: r.midX - w / 2, y: r.midY - h / 2, width: w, height: h)
   }
   private func fit(_ s: NSSize, in r: NSRect) -> NSRect {
     guard s.width > 0, s.height > 0 else { return r }
@@ -489,6 +503,18 @@ final class MacPreview: NSView {
       let start = convert(fit(im.size, in: z.bounds), from: z)
       let fly = PvFly(im, frame: start, radius: 0)
       addSubview(fly, positioned: .above, relativeTo: stage); stage.alphaValue = 0   // (under the shades, which fade with the rest)
+      NSAnimationContext.runAnimationGroup { c in
+        c.duration = 0.3; self.back.animator().alphaValue = 0; self.chrome.forEach { $0.animator().alphaValue = 0 }
+      }
+      fly.move(to: r, radius: 9, duration: 0.32, timing: CAMediaTimingFunction(controlPoints: 0.3, 0.7, 0.2, 1)) { gone() }
+    } else if at == openedAt, let r = from, r.width > 4, let shot = tileShot {
+      // (a file with no picture of its own: its tile's picture comes up over it and flies back into the tile, as a photo)
+      let fly = PvFly(shot, frame: fit(shot.size, in: shotTarget(stage.frame)), radius: 12)
+      fly.alphaValue = 0
+      addSubview(fly, positioned: .above, relativeTo: stage)
+      NSAnimationContext.runAnimationGroup { c in
+        c.duration = 0.18; fly.animator().alphaValue = 1; self.stage.animator().alphaValue = 0
+      }
       NSAnimationContext.runAnimationGroup { c in
         c.duration = 0.3; self.back.animator().alphaValue = 0; self.chrome.forEach { $0.animator().alphaValue = 0 }
       }
