@@ -452,7 +452,9 @@ final class MacPreview: NSView {
       //  picture as it grows — one layer filling its frame, its frame and corners moved by Core Animation; Haris 16:36:
       //  "the coming in from the thumbnail is not looking native")
       let fly = PvFly(im, frame: r, radius: 9)
-      self.addSubview(fly)
+      // (under the shades, as the picture itself sits: on top of them the shades were hidden while it flew and came on in
+      //  one frame as it landed — Haris 2026-11-17 "the shadow … dont have it snap")
+      self.addSubview(fly, positioned: .above, relativeTo: self.stage)
       finish()
       fly.move(to: self.fit(im.size, in: target), radius: 0, duration: 0.38, timing: CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1)) {
         self.stage.alphaValue = 1
@@ -486,7 +488,7 @@ final class MacPreview: NSView {
     if at == openedAt, let r = from, r.width > 4, let z = content as? PvZoom, z.magnification <= 1.01, let im = img {
       let start = convert(fit(im.size, in: z.bounds), from: z)
       let fly = PvFly(im, frame: start, radius: 0)
-      addSubview(fly); stage.alphaValue = 0
+      addSubview(fly, positioned: .above, relativeTo: stage); stage.alphaValue = 0   // (under the shades, which fade with the rest)
       NSAnimationContext.runAnimationGroup { c in
         c.duration = 0.3; self.back.animator().alphaValue = 0; self.chrome.forEach { $0.animator().alphaValue = 0 }
       }
