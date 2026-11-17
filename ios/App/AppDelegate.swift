@@ -62,6 +62,12 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
   //  iOS stops the app at launch)
   func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
     UNUserNotificationCenter.current().delegate = self
+    // (the Server choice left iPhone's Settings — only the owner has it now, in Me › Server: Haris 2026-11-17. A phone
+    //  set to Test there goes back to Live once; App Review keeps its own link on the sign-in page)
+    if !defaults.bool(forKey: "e11_server_owner_only") {
+      if defaults.string(forKey: "e11_server") == "test" { defaults.removeObject(forKey: "e11_server") }
+      defaults.set(true, forKey: "e11_server_owner_only")
+    }
     NotifActions.register()
     Dirham.setup()
     return true
