@@ -1159,6 +1159,7 @@ html.mac-chrome[data-theme="light"] .mca { --mca-fill: rgba(120, 120, 128, .12);
 .mca-pill.blue { background: var(--mc-blue); color: #fff; font-weight: 500; }
 .mca-pill.blue:hover { background: color-mix(in srgb, var(--mc-blue) 88%, #000); }
 .mca-pill.ico { width: 28px; padding: 0; justify-content: center; }
+.mca-back { margin-right: -4px; }   /* (a folder's page: ‹ back to the folder it's in, or the client — Haris 19:26) */
 /* the search field, its scope at the right */
 .mca-field { height: 34px; border-radius: 9px; background: var(--mca-field); display: flex; align-items: center; gap: 8px; padding: 0 12px; color: var(--mc-dim); transition: box-shadow .15s ease; flex: none; }
 .mca-field:focus-within { box-shadow: 0 0 0 2px color-mix(in srgb, var(--mc-blue) 55%, transparent); }
