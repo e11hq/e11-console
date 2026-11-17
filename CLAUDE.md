@@ -696,6 +696,14 @@ the self-test films it every run, aSwapLab → ios-swap.mp4). With server **1.9.
 Nothing changes in its look, behaviour or code without telling Haris first and his yes.
 **The full iPhone test (Haris 2026-11-16 22:47):** plan in project doc `claude/ios-full-test-plan.md`, his additions added as he
 tells them; run only on his word — then that night nothing asked of him, bugs found are fixed and checked again.
+**E11 TALK — STABLE, LOCKED, the App Store release candidate: 1.0.2 build 175 (Haris, 2026-11-17 12:20: "build, send to tf and mark
+all apps as released App Store version"):** commit 26de702 on talk-chat-1, branches `stable/talk-175`, `locked/talk-175` and
+`candidate/appstore-talk-1.0.2-build-175` (never moved or deleted; 170's and earlier stay as history — 175 replaces 148 as the
+candidate). 175 = 170 + the message bar while typing: the camera fading, the mic's and send's whole buttons changing places as the
+Claude app's (0.2 s), ✓ ↔ ↑ while editing; the sign-in: the server's answer never seen (a still of the page fading over it),
+Cloudflare's own page on the way to ours never shown (its cream); the fallback server live's (talk.e11hq.com) with no E11 Console
+signed in. With E11 Console 1.2.2 build 1850 the two apps' App Store release candidates. Nothing changes in its look, behaviour or
+code without telling Haris first and his yes.
 **E11 TALK — STABLE, LOCKED: build 170 — not a release candidate yet (Haris, 2026-11-16 22:45: "talk is stable now but still not yet rc"):**
 commit 4740a08 on talk-chat-1, branches `stable/talk-170` and `locked/talk-170` (never moved or deleted; 162's and earlier stay as
 history). 170 = 162 + client contacts' two tabs (E11 Agency · Settings) and each tab's own count; Client Assets links opening in
