@@ -189,10 +189,11 @@ extension Main {
       for (i, s, sv, _, pv, _, ppv, tick) in rows {
         let send = cfg(on ? "arrow.up" : "mic", on ? 14 : 15, on ? .bold : .medium), plus = cfg(on ? "xmark" : "plus", 15, .semibold)
         let play = cfg(on ? "pause.fill" : "play.fill", 24, .bold), t = UIImage(systemName: on ? "checkmark.circle.fill" : "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22))
-        let fill = { s.backgroundColor = on ? .label : .tertiarySystemFill; s.tintColor = on ? .systemBackground : .label; tick.tintColor = on ? .systemBlue : .tertiaryLabel }
+        let fill = { s.backgroundColor = on ? .label : .tertiarySystemFill }
         let pairs: [(UIImageView, UIImage?)] = [(sv, send), (pv, plus), (ppv, play), (tick, t)]
         // (the app's own swap, then the colours, as the app's buttons do)
         for (v, im) in pairs { SymSwap.set(v, im, animated: true) }
+        UIView.performWithoutAnimation { s.tintColor = on ? .systemBackground : .label; tick.tintColor = on ? .systemBlue : .tertiaryLabel }
         UIView.animate(withDuration: SymSwap.time, delay: 0, options: .curveEaseInOut, animations: fill)
       }
     }

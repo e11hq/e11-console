@@ -567,7 +567,7 @@ final class ContactPreview: UITableViewController {
     if let cell = t.cellForRow(at: ip), let mark = cell.accessoryView as? UIImageView {
       let ticked = on.contains(k)
       SymSwap.set(mark, UIImage(systemName: ticked ? "checkmark.circle.fill" : "circle"), animated: true)
-      UIView.animate(withDuration: SymSwap.time) { mark.tintColor = ticked ? self.view.tintColor : .tertiaryLabel }
+      UIView.performWithoutAnimation { mark.tintColor = ticked ? self.view.tintColor : .tertiaryLabel }
     }
     navigationItem.rightBarButtonItem?.isEnabled = !on.isEmpty
   }

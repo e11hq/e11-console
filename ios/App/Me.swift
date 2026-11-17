@@ -390,7 +390,7 @@ final class ThemeBlock: UIView, HomeBlock {
       x.2.textColor = L.title
       let mark = x.3
       SymSwap.set(mark, UIImage(systemName: on ? "checkmark.circle.fill" : "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22, weight: .regular)), animated: true)
-      if mark.window != nil { UIView.animate(withDuration: SymSwap.time) { mark.tintColor = on ? .systemBlue : .tertiaryLabel } } else { mark.tintColor = on ? .systemBlue : .tertiaryLabel }
+      UIView.performWithoutAnimation { mark.tintColor = on ? .systemBlue : .tertiaryLabel }
       x.0.accessibilityTraits = on ? [.button, .selected] : .button
     }
     if sw.isOn != (m == "auto") { sw.setOn(m == "auto", animated: window != nil) }
@@ -4342,7 +4342,7 @@ final class AmendSheetVC: UIViewController, UITextViewDelegate {
     if on { ticked.insert(id) } else { ticked.remove(id) }
     if let b = ticks[id] {
       SymSwap.set(b, UIImage(systemName: on ? "checkmark.circle.fill" : "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22)), animated: true)
-      UIView.animate(withDuration: SymSwap.time) { b.tintColor = on ? .systemOrange : .tertiaryLabel }
+      UIView.performWithoutAnimation { b.tintColor = on ? .systemOrange : .tertiaryLabel }
     }
     UIView.animate(withDuration: 0.25) {
       self.wills[id]?.isHidden = on

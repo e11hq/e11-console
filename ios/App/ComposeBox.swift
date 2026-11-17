@@ -243,7 +243,10 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       let img = UIImage(systemName: send ? "arrow.up" : "mic", withConfiguration: UIImage.SymbolConfiguration(pointSize: send ? 14 : 15, weight: send ? .bold : .medium))
       // (the swap and the circle's fill together, in the same time — filmed: Haris 2026-11-17 10:55)
       SymSwap.set(rightSym, img, animated: !first)
-      let paint = { self.right.backgroundColor = send ? .label : .tertiarySystemFill; self.right.tintColor = send ? .systemBackground : .label }
+      // (the new symbol in its own colour from the start — a colour fading with the circle passed through the circle's own
+      //  grey and the icon vanished halfway, filmed; only the circle's fill fades)
+      UIView.performWithoutAnimation { right.tintColor = send ? .systemBackground : .label }
+      let paint = { self.right.backgroundColor = send ? .label : .tertiarySystemFill }
       if first { paint() } else { UIView.animate(withDuration: SymSwap.time, delay: 0, options: [.curveEaseInOut, .allowUserInteraction, .beginFromCurrentState], animations: paint) }
     }
     holdG?.isEnabled = !send
@@ -1184,9 +1187,10 @@ final class PickList: UITableView, UITableViewDataSource, UITableViewDelegate {
 // One way for every icon that turns into another icon (mic ↔ ↑, + ↔ ✕, ▶ ↔ ⏸, ○ ↔ ✓) — Haris 2026-11-17: filmed in the
 // simulator side by side (the self-test's aSwapLab, ios-swap.mp4), iPhone's replace effect left an empty moment between
 // the two (the old one gone before the new one came) and the mic vanished into the circle as it filled. Here the old
-// one shrinks and fades in its own colour as the new one grows and fades in, both at once, on Apple's spring — no
-// moment without an icon. (Ours, said plainly: Apple has no swap that runs the two together.) A button's symbol is
-// drawn by its own image view on top (the button's own image left empty). Set a colour change after calling it.
+// one shrinks and fades in its own colour as the new one grows and fades in (in its own colour from the start), both at
+// once, on Apple's spring — no moment without an icon. (Ours, said plainly: Apple has no swap that runs the two together.) A button's symbol is
+// drawn by its own image view on top (the button's own image left empty). Set the new colour straight after calling it,
+// not animated.
 enum SymSwap {
   static let time = 0.25
   static func set(_ v: UIImageView, _ img: UIImage?, animated: Bool) {

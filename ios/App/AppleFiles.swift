@@ -211,7 +211,7 @@ final class FileTile: UIView {
     let set = { self.tick.tintColor = self.picked ? .systemBlue : .white; SymSwap.set(self.tick, img, animated: false) }
     guard window != nil else { tick.isHidden = !selecting; tick.alpha = 1; set(); return }
     if selecting && tick.isHidden { tick.alpha = 0; tick.isHidden = false; set() }
-    else { SymSwap.set(tick, img, animated: !tick.isHidden && tick.alpha > 0); UIView.animate(withDuration: SymSwap.time) { self.tick.tintColor = self.picked ? .systemBlue : .white } }
+    else { SymSwap.set(tick, img, animated: !tick.isHidden && tick.alpha > 0); UIView.performWithoutAnimation { tick.tintColor = picked ? .systemBlue : .white } }
     UIView.animate(withDuration: 0.2, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState]) { self.tick.alpha = self.selecting ? 1 : 0 } completion: { _ in
       if !self.selecting { self.tick.isHidden = true; self.tick.alpha = 1 }
     }
