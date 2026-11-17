@@ -163,11 +163,11 @@ extension Main {
 
   // The icon-swap lab: one row per way of swapping, each row the app's swapping icons at their real sizes and colours —
   // the comment box's mic ↔ ↑ in its circle, + ↔ ✕, ▶ ↔ ⏸ and ○ ↔ ✓ — swapped together at 1.0 s, 2.4 s and 3.8 s
-  private var labWin: UIWindow?
+  private static var labWin: UIWindow?
   func swapLab() {
     guard let scene = screenWindow?.windowScene else { return }
-    let w = UIWindow(windowScene: scene); w.windowLevel = .alert + 1; w.backgroundColor = HomeLook.bg
-    let vc = UIViewController(); vc.view.backgroundColor = HomeLook.bg; w.rootViewController = vc; w.isHidden = false; labWin = w
+    let w = UIWindow(windowScene: scene); w.windowLevel = .alert + 1; w.backgroundColor = .systemBackground
+    let vc = UIViewController(); vc.view.backgroundColor = .systemBackground; w.rootViewController = vc; w.isHidden = false; Self.labWin = w
     let ways = ["A now 1.6", "B downUp 1", "C offUp 1", "D replace", "E magic", "F fade"]
     var rows: [(Int, UIView, UIImageView, UIView, UIImageView, UIView, UIImageView, UIImageView)] = []
     let cfg = { (n: String, pt: CGFloat, wt: UIImage.SymbolWeight) in UIImage(systemName: n, withConfiguration: UIImage.SymbolConfiguration(pointSize: pt, weight: wt)) }
@@ -212,7 +212,7 @@ extension Main {
       }
     }
     for (t, on) in [(1.0, true), (2.4, false), (3.8, true)] { DispatchQueue.main.asyncAfter(deadline: .now() + t) { swap(on) } }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 5.6) { [weak self] in self?.labWin?.isHidden = true; self?.labWin = nil }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 5.6) { Self.labWin?.isHidden = true; Self.labWin = nil }
   }
   private func appleSteps() -> [(String, () -> Void)] {
     let home = AppData.shared.screen("home").model ?? [:]
