@@ -1128,3 +1128,173 @@ html.mac-chrome[data-theme="light"] .mib-sp-oh, html.mac-chrome[data-theme="ligh
 .mib-hs-t.on .mib-hs-p { box-shadow: 0 0 0 2px #0a84ff; }
 .mib-hs-n { width: 68px; font-size: 10.5px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
 .mib-hs-s { font-size: 9.5px; color: var(--mc-dim); }
+
+/* ===== The Mac app's Client Assets — Finder's way (macassets.js; canvas "Client Assets — Mac" C1–C7, Haris 2026-11-17) ===== */
+html.mac-chrome #content:has(> .mca) { background: var(--mc-content); }
+.mca { --mca-fill: rgba(120, 120, 128, .24); --mca-fill-h: rgba(120, 120, 128, .32); --mca-field: rgba(120, 120, 128, .18); --mca-hot: #64b0ff;
+  color: var(--mc-fg); font-family: "E11 Dirham", -apple-system, BlinkMacSystemFont, system-ui, sans-serif; -webkit-font-smoothing: auto; letter-spacing: normal; line-height: 1.3; font-size: 13px;
+  min-height: 100%; box-sizing: border-box; padding: 22px 32px 40px; display: flex; flex-direction: column; gap: 18px; cursor: default; }
+html.mac-chrome[data-theme="light"] .mca { --mca-fill: rgba(120, 120, 128, .12); --mca-fill-h: rgba(120, 120, 128, .2); --mca-field: rgba(120, 120, 128, .1); --mca-hot: var(--mc-blue); }
+.mca[data-page="folder"] { gap: 16px; }
+.mca * { letter-spacing: normal; }
+.mca a { color: inherit; text-decoration: none; cursor: pointer; }
+.mca a:hover { color: var(--mc-fg); }
+/* the head: the page's name big, the counts under, its pills at the right */
+.mca-head { display: flex; align-items: flex-end; gap: 16px; }
+.mca-head.c, .mca-head.f { align-items: center; }
+.mca-head.f { gap: 14px; }
+.mca-ht { flex: 1; min-width: 0; }
+.mca h1 { margin: 0; font-size: 26px; font-weight: 700; color: var(--mc-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mca-head.c h1 { font-size: 24px; }
+.mca-head.f h1 { font-size: 22px; }
+.mca-sub { font-size: 13px; color: var(--mc-dim); margin-top: 3px; }
+.mca-meta { font-size: 13px; color: var(--mc-dim); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
+.mca-head.f .mca-meta { font-size: 12.5px; margin-top: 3px; gap: 0 4px; }
+.mca-chip { height: 20px; padding: 0 8px; border-radius: 10px; background: var(--mca-fill); color: var(--mc-fg) !important; font-size: 11.5px; display: inline-flex; align-items: center; gap: 5px; }
+.mca-chip i { width: 7px; height: 7px; border-radius: 2px; display: block; }
+/* pills, no border (as everywhere on the Mac) */
+.mca-pill { height: 28px; padding: 0 12px; border-radius: 14px; border: 0; background: var(--mca-fill); color: var(--mc-fg); font: inherit; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; flex: none; cursor: default; transition: background .15s ease; }
+.mca-pill:hover { background: var(--mca-fill-h); }
+.mca-pill svg { width: 14px; height: 14px; }
+.mca-pill.blue { background: var(--mc-blue); color: #fff; font-weight: 500; }
+.mca-pill.blue:hover { background: color-mix(in srgb, var(--mc-blue) 88%, #000); }
+.mca-pill.ico { width: 28px; padding: 0; justify-content: center; }
+/* the search field, its scope at the right */
+.mca-field { height: 34px; border-radius: 9px; background: var(--mca-field); display: flex; align-items: center; gap: 8px; padding: 0 12px; color: var(--mc-dim); transition: box-shadow .15s ease; flex: none; }
+.mca-field:focus-within { box-shadow: 0 0 0 2px color-mix(in srgb, var(--mc-blue) 55%, transparent); }
+.mca-field > svg { width: 14px; height: 14px; flex: none; }
+.mca-field input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font: inherit; font-size: 13px; color: var(--mc-fg); padding: 0; }
+.mca-field input::placeholder { color: var(--mc-dim); }
+.mca-x { width: 18px; height: 18px; border-radius: 9px; border: 0; padding: 0; background: rgba(255, 255, 255, .25); color: #1c1c1e; display: grid; place-items: center; font-size: 10px; font-weight: 700; flex: none; cursor: default; }
+html.mac-chrome[data-theme="light"] .mca-x { background: rgba(0, 0, 0, .25); color: #fff; }
+.mca-x[hidden] { display: none; }
+.mca-scope { height: 22px; padding: 0 9px; border-radius: 11px; background: color-mix(in srgb, var(--mc-blue) 20%, transparent); color: var(--mca-hot); font-size: 11.5px; font-weight: 600; display: inline-flex; align-items: center; white-space: nowrap; flex: none; }
+#ca-body:empty { display: none; }
+/* logos: the client's own square */
+.mca-lg { display: grid; flex: none; }
+.mca-lg .cl-logo { box-shadow: 0 1px 2px rgba(0, 0, 0, .4); }
+.mca-lg .cl-logo:not(.mono) img { box-sizing: border-box; padding: 11%; }
+.mca-lg.s112 .cl-logo { border-radius: 22px; }
+.mca-lg.s64 .cl-logo { border-radius: 15px; }
+.mca-lg.s44 .cl-logo { border-radius: 11px; }
+.mca-lg.s24 .cl-logo { border-radius: 6px; box-shadow: none; }
+.mca-lg.s12 .cl-logo { border-radius: 3px; box-shadow: none; }
+.mca-lg.s12 .cl-logo:not(.mono) img, .mca-lg.s24 .cl-logo:not(.mono) img { padding: 6%; }
+/* C1: every client, as Finder's icon view */
+.mca-cgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 18px 16px; }
+.mca-cc { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 10px 6px 8px; border-radius: 12px; min-width: 0; transition: background .15s ease; }
+.mca-cc[data-live-sel] { background: var(--mc-sel); }
+.mca-cn { font-size: 13px; font-weight: 600; text-align: center; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mca-cm { font-size: 11.5px; color: var(--mc-dim); }
+/* C2: a client's folders as cards; C3: the folders inside, smaller */
+.mca-fgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.mca-subs { display: flex; flex-wrap: wrap; gap: 12px; }
+.mca-fc { position: relative; border-radius: 12px; background: var(--mc-card); padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; transition: box-shadow .2s ease, background .2s ease; }
+.mca-fc[data-live-sel] { box-shadow: 0 0 0 2px var(--mc-blue); }
+.mca-fc:has(.mca-fm[data-live-hot]) { background: color-mix(in srgb, var(--mc-blue) 22%, var(--mc-card)); box-shadow: 0 0 0 2px var(--mc-blue); }
+.mca-ftop { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.mca-fi { width: 40px; height: 32px; flex: none; }
+.mca-ftx { flex: 1; min-width: 0; }
+.mca-fn { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 14px; }
+.mca-fm { font-size: 12px; color: var(--mc-dim); display: flex; gap: 6px; align-items: center; margin-top: 2px; white-space: nowrap; }
+.mca-fm[data-live-hot] > * { display: none; }
+.mca-fm[data-live-hot]::after { content: attr(data-live-hot); color: var(--mca-hot); }
+.mca-fin { height: 17px; padding: 0 6px; border-radius: 5px; background: color-mix(in srgb, var(--mc-green) 18%, transparent); color: var(--mc-green); font-size: 10.5px; font-weight: 600; display: inline-flex; align-items: center; }
+.mca-fin.big { margin-top: 4px; }
+.mca-peek { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+.mca-peek span { aspect-ratio: 3 / 2; border-radius: 6px; overflow: hidden; background: var(--mc-field); }
+.mca-peek img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mca-pin { position: absolute; top: 10px; right: 10px; width: 13px; height: 13px; color: var(--mc-dim); }
+.mca-pin svg { display: block; width: 100%; height: 100%; }
+.mca-fc.sm { width: 236px; border-radius: 11px; padding: 11px 13px; gap: 0; box-sizing: border-box; }
+.mca-fc.sm .mca-ftop { gap: 10px; }
+.mca-fc.sm .mca-fi { width: 32px; height: 26px; }
+.mca-fc.sm .mca-fn { font-size: 13px; }
+.mca-fc.sm .mca-fm { font-size: 11.5px; margin-top: 1px; }
+.mca-fc.sm .mca-pin { top: 8px; right: 8px; }
+/* (a pinned file: the pin at its picture's top right, giving way to Copy Link while the pointer is on it) */
+.mca-pin.t { top: 8px; right: 8px; z-index: 1; width: 22px; height: 22px; padding: 5px; box-sizing: border-box; border-radius: 11px; background: rgba(30, 30, 32, .7); color: #fff; transition: opacity .15s ease; }
+.mca-t:hover .mca-pin.t { opacity: 0; }
+/* C7: a new folder, its name ready to type; orange when the name is taken */
+@keyframes mca-in { from { opacity: 0; transform: scale(.96); } }
+.mca-fc.new { box-shadow: 0 0 0 2px var(--mc-blue); animation: mca-in .18s ease-out; }
+.mca-fc.new.bad { box-shadow: 0 0 0 2px var(--mc-orange); }
+.mca-nfin { display: block; width: 100%; height: 22px; box-sizing: border-box; border: 0; outline: 0; border-radius: 5px; background: #0a64d6; color: #fff; padding: 0 6px; font: inherit; font-size: 14px; font-weight: 500; }
+.mca-fc.sm .mca-nfin { font-size: 12.5px; }
+.mca-fc.bad .mca-nfin { background: #c46a00; }
+.mca-nfin::selection { background: rgba(255, 255, 255, .35); }
+.mca-warn { color: var(--mc-orange); font-size: 11.5px; white-space: normal; }
+/* C3: captions, then the files as the Inbox's tiles */
+.mca-cap { font-size: 11px; font-weight: 600; letter-spacing: .04em !important; color: var(--mc-dim); }
+.mca-tgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+.mca-t { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.mca .mca-tp { border-radius: 10px; transition: box-shadow .15s ease; }
+.mca-t[data-live-sel] .mca-tp { box-shadow: 0 0 0 2px var(--mc-blue); }
+.mca-t:hover .mca-tp img { filter: brightness(1.06); }
+.mca-tn { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mca-ts { font-size: 11.5px; color: var(--mc-dim); margin-top: -3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mca-aa { font-size: 34px; font-weight: 700; color: var(--mc-fg); }
+.mca .mib-play { width: 30px; height: 30px; border-radius: 15px; background: rgba(0, 0, 0, .7); font-size: 11px; z-index: 1; }
+.mca-cl { position: absolute; right: 8px; top: 8px; z-index: 2; height: 24px; padding: 0 9px; border-radius: 12px; border: 0; background: rgba(30, 30, 32, .8); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); color: #fff; font: inherit; font-size: 11.5px; display: flex; align-items: center; gap: 5px; opacity: 0; transition: opacity .15s ease; cursor: default; }
+.mca-cl svg { width: 12px; height: 12px; }
+.mca-t:hover .mca-cl { opacity: 1; }
+.mca-cl:hover { background: rgba(30, 30, 32, .92); }
+/* C4: search — clients and folders as rows, files as tiles with where they live */
+.mca-res { display: flex; flex-direction: column; gap: 14px; }
+.mca-rows { border-radius: 11px; background: var(--mc-card); overflow: hidden; }
+.mca-row { height: 44px; display: flex; align-items: center; gap: 11px; padding: 0 14px; border-bottom: .5px solid var(--mc-line); transition: background .12s ease; }
+.mca-row:last-child { border-bottom: 0; }
+.mca-row:hover, .mca-row[data-live-sel] { background: var(--mc-sel); }
+.mca-row > svg { width: 26px; height: 21px; flex: none; }
+.mca-rn { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mca-rl { margin-left: auto; font-size: 12px; color: var(--mc-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; max-width: 50%; }
+.mca mark { background: rgba(255, 214, 10, .28); color: inherit; border-radius: 3px; padding: 0 1px; }
+html.mac-chrome[data-theme="light"] .mca mark { background: rgba(255, 204, 0, .35); }
+.mca-loc { font-size: 11.5px; color: var(--mc-dim) !important; display: flex; align-items: center; gap: 5px; margin-top: -3px; min-width: 0; }
+.mca-loc span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mca-loc:hover span { text-decoration: underline; }
+.mca-loose { font-size: 12px; color: var(--mc-dim); }
+.mca-none { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 60px 20px; color: var(--mc-dim); text-align: center; }
+.mca-none svg { width: 26px; height: 26px; margin-bottom: 6px; }
+.mca-none b { font-size: 15px; font-weight: 600; color: var(--mc-fg); }
+/* uploads under way: a row each, its bar filling */
+.mca-ups:empty { display: none; }
+.mca-ups { display: flex; flex-direction: column; gap: 6px; }
+.mca-ups .sr-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px; background: var(--mc-card); border: 0; }
+.mca-ups .ficon { width: 30px; height: 30px; border-radius: 7px; background: var(--mca-fill); color: var(--mc-dim); display: grid; place-items: center; font-size: 9px; font-weight: 700; text-transform: uppercase; flex: none; }
+.mca-ups .sr-meta { flex: 1; min-width: 0; }
+.mca-ups .sr-name { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mca-ups .sr-bar { height: 4px; border-radius: 2px; background: var(--mca-fill); margin: 5px 0 3px; overflow: hidden; }
+.mca-ups .sr-bar i { display: block; height: 100%; background: var(--mc-blue); transition: width .2s ease; }
+.mca-ups small { font-size: 11px; color: var(--mc-dim); }
+.mca-ups .ok .sr-bar i { background: var(--mc-green); }
+.mca-ups .err small { color: var(--mc-red); }
+/* C6: files dragged over a folder's page — the page beside the sidebar takes them */
+.mca-ov { position: fixed; z-index: 800; background: rgba(28, 28, 30, .6); pointer-events: none; opacity: 0; transition: opacity .15s ease; font-family: "E11 Dirham", -apple-system, BlinkMacSystemFont, system-ui, sans-serif; -webkit-font-smoothing: auto; }
+html[data-theme="light"] .mca-ov { background: rgba(255, 255, 255, .6); }
+.mca-ov.on { opacity: 1; }
+.mca-ov-in { position: absolute; inset: 12px; border-radius: 12px; border: 2px dashed color-mix(in srgb, var(--mc-blue) 85%, transparent); background: color-mix(in srgb, var(--mc-blue) 12%, transparent); display: grid; place-items: center; text-align: center; }
+.mca-ov-big { font-size: 20px; font-weight: 700; color: #64b0ff; }
+html[data-theme="light"] .mca-ov-big { color: var(--mc-blue); }
+.mca-ov-sub { font-size: 13px; color: var(--mc-dim); margin-top: 4px; }
+.mca-ov-sub b { color: var(--mc-fg); font-weight: 600; }
+/* C5: Info — a Get Info window of its own */
+@keyframes mca-pop { from { opacity: 0; transform: scale(.97); } }
+.mca-iw { position: fixed; width: 330px; box-sizing: border-box; padding: 16px; border-radius: 12px; background: #2a2a2d; box-shadow: 0 0 0 .5px rgba(255, 255, 255, .14), 0 20px 50px rgba(0, 0, 0, .6);
+  color: var(--mc-fg); font-family: "E11 Dirham", -apple-system, BlinkMacSystemFont, system-ui, sans-serif; -webkit-font-smoothing: auto; font-size: 13px; line-height: 1.3; animation: mca-pop .16s ease-out; cursor: default; }
+html[data-theme="light"] .mca-iw { background: #fff; box-shadow: 0 0 0 .5px rgba(0, 0, 0, .14), 0 20px 50px rgba(0, 0, 0, .22); }
+.mca-iw-tb { display: flex; align-items: center; gap: 7px; margin: -6px -6px 10px; user-select: none; -webkit-user-select: none; }
+.mca-iw-tb i { width: 11px; height: 11px; border-radius: 6px; display: block; flex: none; }
+.mca-iw-tb i.r { background: #ff5f57; } .mca-iw-tb i.y { background: #febc2e; } .mca-iw-tb i.g { background: #28c840; }
+.mca-iw-tb b { flex: 1; min-width: 0; text-align: center; font-size: 12.5px; font-weight: 600; color: var(--mc-dim); margin-right: 40px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mca-iw-pic { height: 150px; aspect-ratio: auto !important; border-radius: 9px; margin-bottom: 12px; position: relative; overflow: hidden; background: var(--mc-field); display: grid; place-items: center; }
+.mca-iw-pic .mca-iw-fi { width: 96px; height: 77px; }
+.mca-nm { font-size: 14px; font-weight: 600; word-break: break-all; }
+.mca-sm { font-size: 12px; color: var(--mc-dim); }
+.mca-icap { font-size: 10.5px; font-weight: 600; letter-spacing: .05em; color: var(--mc-dim); margin: 10px 0 2px; }
+.mca-k { display: flex; justify-content: space-between; gap: 14px; padding: 6px 0; border-bottom: .5px solid var(--mc-line); font-size: 12.5px; }
+.mca-k:last-child { border-bottom: 0; }
+.mca-k span { color: var(--mc-dim); flex: none; }
+.mca-k b { font-weight: 500; text-align: right; min-width: 0; overflow-wrap: anywhere; }
+.mca-iw-act { display: flex; justify-content: flex-end; margin-top: 12px; }
+.mca-iw .mca-pill { --mca-fill: rgba(120, 120, 128, .24); --mca-fill-h: rgba(120, 120, 128, .32); }

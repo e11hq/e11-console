@@ -3138,6 +3138,7 @@ function renderContentNow() {
   else if (ui.view === 'profile') c.innerHTML = viewProfile();
   else if (ui.view === 'updates') c.innerHTML = AppIcon.isOwner() ? viewUpdates() : '<div class="empty"><div class="big">App updates are managed by the owner</div></div>';
   else if (ui.view === 'trash') c.innerHTML = viewTrash();
+  else if ((ui.view === 'clients' || ui.view === 'client') && typeof MacAssets !== 'undefined' && MacAssets.on()) { MacAssets.draw(c); if (ui.view === 'clients') { migrateClientLogos(); autoLogosAll(); } }   // (the Mac: Finder's way — macassets.js)
   else if (ui.view === 'clients') { c.innerHTML = viewClients(); migrateClientLogos(); autoLogosAll(); }
   else if (ui.view === 'client') {
     const cl = clientById(ui.clientId);
@@ -7531,6 +7532,7 @@ function caSearchBar(c) {
   </div>`;
 }
 function caResultsHTML(q, scope) {
+  if (typeof MacAssets !== 'undefined' && MacAssets.on()) return MacAssets.results(q, scope);   // (the Mac: macassets.js)
   const r = caSearch(q, scope);
   const n = r.clients.length + r.folders.length + r.files.length;
   if (!n) return `<div class="ca-noresults">${icon('search')}<b>Nothing matches “${esc(q.trim())}”</b><span>Try a client name, a folder like “fonts”, or a file type like “pdf” or “otf”.</span></div>`;
@@ -7789,6 +7791,7 @@ function assetNotify(c, f, verb, names) {
 // Info pop-up for a Client Assets file or folder. Final files keep their details from when they were filed, so they
 // still show once the task has gone; "Open task" only while it's there.
 function caInfo(kind, id) {
+  if (typeof MacAssets !== 'undefined' && MacAssets.on()) return MacAssets.info(kind, id);   // (the Mac: a Get Info window — macassets.js)
   let c = null, f = null, a = null;
   for (const cl of db.clients || []) for (const fo of cl.folders) {
     if (kind === 'folder' && fo.id === id) { c = cl; f = fo; }
