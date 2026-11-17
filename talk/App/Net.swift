@@ -34,7 +34,9 @@ enum Server {
       if h == "test.e11hq.com" { return "https://talk-test.e11hq.com" }
       if h.hasPrefix("review.") { return "https://" + h }
     }
-    return Bundle.main.object(forInfoDictionaryKey: "TalkServerURL") as? String ?? "https://talk-test.e11hq.com"
+    // (no E11 Console signed in on this phone — a client contact, or Talk signed in first: the live server, as the App Store
+    //  app should — it was the test server, left from when Talk was built there; Haris 2026-11-17 12:18)
+    return Bundle.main.object(forInfoDictionaryKey: "TalkServerURL") as? String ?? "https://talk.e11hq.com"
   }
 }
 
