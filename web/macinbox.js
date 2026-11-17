@@ -888,8 +888,10 @@ const MacInbox = (() => {
     sendState();
   });
   document.addEventListener('keydown', (e) => {
-    if (!on() || ui.view !== 'inbox' || ui.taskId) return;
+    // (the reply box's own keys work whatever else is open — with a task left open behind the Inbox, Return fell through
+    //  and put empty lines in the box, growing it: Haris 2026-11-17)
     const ta = e.target.closest && e.target.closest('.mib-in');
+    if (!on() || ui.view !== 'inbox' || (ui.taskId && !ta)) return;
     if (ta && mpop) {
       const fwd = e.key === 'ArrowDown' || (mQ && mQ.kind === '#' && e.key === 'ArrowRight'), back = e.key === 'ArrowUp' || (mQ && mQ.kind === '#' && e.key === 'ArrowLeft');
       if (fwd || back) { e.preventDefault(); mIdx = (mIdx + (fwd ? 1 : -1) + mItems.length) % mItems.length; mUpdate(ta); return; }
