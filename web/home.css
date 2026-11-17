@@ -804,13 +804,13 @@ html.mac-chrome .mib { --text: var(--mc-fg); --text-2: var(--mc-dim); --text-3: 
 .mib-body { flex: 1; min-height: 0; display: flex; gap: 16px; }
 .mib-list { width: 400px; flex: none; overflow: auto; margin-top: -8px; padding-bottom: 8px; }
 .mib-group { padding: 14px 4px 6px; font-size: 13px; font-weight: 600; color: var(--mc-dim); }
-.mib-card { background: var(--mc-card); border-radius: 12px; padding: 4px 6px; }
+.mib-card { background: var(--mc-card); border-radius: 12px; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
 .mib-row { position: relative; display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px 10px 8px; border-radius: 9px; cursor: default; }
-.mib-row + .mib-row::before { content: ""; position: absolute; left: 52px; right: 12px; top: 0; height: .5px; background: var(--mc-line); }
+.mib-row + .mib-row::before { content: ""; position: absolute; left: 52px; right: 12px; top: -1.25px; height: .5px; background: var(--mc-line); }
 .mib-row:hover { background: var(--mc-sel); }
 .mib-row.sel { background: color-mix(in srgb, var(--mc-blue) 28%, transparent); }
 html.mac-chrome[data-theme="light"] .mib-row.sel { background: color-mix(in srgb, var(--mc-blue) 16%, transparent); }
-.mib-row.sel::before, .mib-row.sel + .mib-row::before { display: none; }
+.mib-row.sel::before, .mib-row.sel + .mib-row::before, .mib-row:hover::before, .mib-row:hover + .mib-row::before { display: none; }
 .mib-dot { width: 8px; height: 8px; border-radius: 4px; flex: none; margin-top: 9px; background: transparent; transition: background .2s; }
 .mib-row.unread .mib-dot { background: var(--mc-blue); }
 .mib-lead { flex: none; }
