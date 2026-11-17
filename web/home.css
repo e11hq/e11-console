@@ -1134,3 +1134,6 @@ html.mac-chrome[data-theme="light"] .mib-sp-oh, html.mac-chrome[data-theme="ligh
 .mib-hs-t.on .mib-hs-p { box-shadow: 0 0 0 2px #0a84ff; }
 .mib-hs-n { width: 68px; font-size: 10.5px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
 .mib-hs-s { font-size: 9.5px; color: var(--mc-dim); }
+/* the Mac Inbox's typing box never shows a scroll bar — it scrolls with the wheel or trackpad once its words pass 7 lines (Haris 2026-11-17) */
+.mib-in { scrollbar-width: none; }
+.mib-in::-webkit-scrollbar { display: none; width: 0; height: 0; }
