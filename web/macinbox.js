@@ -374,6 +374,7 @@ const MacInbox = (() => {
 
   // I5 — a content skeleton: its occasions, its posts by day; Send Back · Approve when it's waiting for you
   const POST_ST = { ok: ['Ready', '#30d158'], changes: ['Changes asked', '#ff9f0a'] };
+  const PFMT = { post: 'image', carousel: 'copy', reel: 'play', story: 'image', video: 'play' };
   function planHTML(g, n) {
     const pl = Plans.planById(n.planId), p = pl ? proj(pl.projectId) : null;
     if (!pl) return head(hic('cal', 'purple'), planTitle(n), '', openBtn(g, 'Open Plan', false)) + '<p class="mib-dim">Content skeleton not found</p>';
@@ -384,8 +385,11 @@ const MacInbox = (() => {
     const occ = m && typeof Occasions !== 'undefined' ? Occasions.between(m + '-01', m + '-31').filter((o) => String(o.date || '').slice(0, 7) === m) : [];
     const fmt = Object.fromEntries((Plans.FORMATS || []).map(([k, name]) => [k, name]));
     const chName = Object.fromEntries((typeof Cal !== 'undefined' && Cal.CHANNELS ? Cal.CHANNELS : []).map(([k, name]) => [k, name]));
-    const pic = (x) => { const gr = Plans.progress(x); const img = (gr.files || []).find((r) => fileKind(r) === 'image') || (x.refs || []).find((r) => r.path && fileKind(r) === 'image'); return img ? `<img src="${imgUrl(img, 160)}" alt="" decoding="sync">` : ''; };
-    const shownPosts = posts.slice(0, 3);
+    const pic = (x) => { const gr = Plans.progress(x); const img = (gr.files || []).find((r) => fileKind(r) === 'image') || (x.refs || []).find((r) => r.path && fileKind(r) === 'image'); if (img) return `<img src="${imgUrl(img, 160)}" alt="" decoding="sync">`;
+      // (no picture yet: the post's format, its symbol in its colour — Haris 2026-11-17)
+      const f = (Plans.FORMATS || []).find((q) => q[0] === x.format) || ['post', 'Post', '#8b8b96'];
+      return `<span class="mib-pfmt" style="--k:${f[2]}">${icon(PFMT[f[0]] || 'image')}</span>`; };
+    const shownPosts = posts;   // (every post, in full — Haris 2026-11-17)
     // (the posts' files — their references and the finished work — as tiles, Haris 2026-11-17)
     const seen = new Set(), pfiles = posts.flatMap((x) => (Plans.progress(x).files || []).concat((x.refs || []).filter((r) => r.path))).filter((a) => { const k = a.path || a.id; if (!k || seen.has(k)) return false; seen.add(k); return true; });
     const row = (x) => { const d = x.day ? parseYmd(x.day) : null; const s = x.check && POST_ST[x.check.state];
