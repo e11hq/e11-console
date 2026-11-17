@@ -1168,6 +1168,7 @@ html.mac-chrome[data-theme="light"] .mca { --mca-fill: rgba(120, 120, 128, .12);
 .mca-x { width: 18px; height: 18px; border-radius: 9px; border: 0; padding: 0; background: rgba(255, 255, 255, .25); color: #1c1c1e; display: grid; place-items: center; font-size: 10px; font-weight: 700; flex: none; cursor: default; }
 html.mac-chrome[data-theme="light"] .mca-x { background: rgba(0, 0, 0, .25); color: #fff; }
 .mca-x[hidden] { display: none; }
+.mca-x svg { width: 10px; height: 10px; display: block; }   /* (Haris 19:19: the ✕ bigger — drawn, as Apple's clear button) */
 .mca-scope { height: 22px; padding: 0 9px; border-radius: 11px; background: color-mix(in srgb, var(--mc-blue) 20%, transparent); color: var(--mca-hot); font-size: 11.5px; font-weight: 600; display: inline-flex; align-items: center; white-space: nowrap; flex: none; }
 #ca-body:empty { display: none; }
 /* logos: the client's own square */

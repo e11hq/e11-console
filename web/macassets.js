@@ -58,7 +58,7 @@ const MacAssets = (() => {
   function bar(c) {
     const q = (c ? ui.caScope === c.id : !ui.caScope) ? ui.caQ || '' : '';
     return `<div class="mca-field" data-key="bar">${SV.search}<input id="ca-q" value="${esc(q)}" placeholder="${c ? `Search ${esc(c.name)}’s folders and files` : 'Search clients, folders and files — e.g. “ford logo png”'}" autocomplete="off" spellcheck="false">`
-      + `<button type="button" class="mca-x ca-q-x" data-action="ca-q-clear" title="Clear (Esc)" ${q ? '' : 'hidden'}>✕</button><span class="mca-scope">${c ? `In ${esc(c.name)}` : 'All clients'}</span></div>`;
+      + `<button type="button" class="mca-x ca-q-x" data-action="ca-q-clear" title="Clear (Esc)" ${q ? '' : 'hidden'}><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2.6 2.6l4.8 4.8M7.4 2.6 2.6 7.4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button><span class="mca-scope">${c ? `In ${esc(c.name)}` : 'All clients'}</span></div>`;
   }
   const lg = (c, s) => `<span class="mca-lg s${s}">${clientLogoHTML(c, s)}</span>`;
   function clientCard(c) {
