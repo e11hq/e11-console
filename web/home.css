@@ -1078,7 +1078,7 @@ html.mac-chrome .mention-pop .asg-n small { margin-left: auto; font-size: 12px; 
 .mib-clock { width: 30px; height: 30px; flex: none; border: 0; padding: 0; margin-right: -5px; border-radius: 15px; background: none; color: var(--mc-dim); display: grid; place-items: center; cursor: default; transition: background-color .15s, color .15s; }
 .mib-clock:hover { background: var(--mib-fill); color: var(--mc-fg); }
 .mib-clock[data-live-on], .mib-clock[data-live-on]:hover { background: rgba(10, 132, 255, .22); color: var(--mc-blue); }
-.mib-clock .ic, .mib-clock svg { width: 20px; height: 20px; stroke-width: 1.6; }
+.mib-clock .ic, .mib-clock svg { width: 17px; height: 17px; stroke-width: 1.7; }
 .mib-spop { width: 310px; padding: 6px; }
 .mib-sp-fld { margin: 2px 2px 6px; height: 28px; border-radius: 7px; background: rgba(127, 127, 127, .12); box-shadow: inset 0 0 0 .5px rgba(127, 127, 127, .25); display: flex; align-items: center; gap: 6px; padding: 0 8px; color: var(--mc-dim); }
 .mib-sp-fld .ic, .mib-sp-fld svg { width: 13px; height: 13px; }
