@@ -34,57 +34,94 @@ enum Uploader {
   static func send(_ url: URL, name: String, task: String, dest: String? = nil, bar: Bool = true, cookies: @escaping (@escaping (String) -> Void) -> Void, progress: @escaping (Double) -> Void, done: @escaping (String?) -> Void) {
     let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
     let job = UploadCenter.shared.begin(name, size, bar: bar)
-    var path: String?, next: Int64 = 0, going = 0, over = false
-    var gone: Int64 = 0, partly: [Int64: Int64] = [:]   // (pieces in, and how far each one on its way has gone)
+    var over = false
     let finish: (String?) -> Void = { p in
       guard !over else { return }
       over = true
       if p == nil { UploadCenter.shared.running[job]?.forEach { $0.cancel() } }
       UploadCenter.shared.running[job] = nil; UploadCenter.shared.end(job); done(p)
     }
-    let report = {
-      let at = min(size, gone + partly.values.reduce(0, +))
-      UploadCenter.shared.step(job, at)
-      progress(size > 0 ? Double(at) / Double(size) : 1)
-    }
-    func go(_ offset: Int64, then: @escaping () -> Void) {
-      guard let fh = try? FileHandle(forReadingFrom: url) else { return finish(nil) }
-      try? fh.seek(toOffset: UInt64(offset))
-      let data = (try? fh.read(upToCount: Int(piece))) ?? Data()
-      try? fh.close()
-      var q = URLComponents(string: serverURL() + "/api/host/writeChunkBin")!
-      // (into a Client Assets folder: its place on the server, dest — Client Assets on the phone, shell 32)
-      var qi = [URLQueryItem(name: dest == nil ? "taskId" : "dest", value: dest ?? task), URLQueryItem(name: "name", value: name), URLQueryItem(name: "offset", value: String(offset))]
-      if let p = path { qi.append(URLQueryItem(name: "path", value: p)) }
-      q.queryItems = qi
-      going += 1
-      cookies { c in DispatchQueue.main.async {   // (Transfers is kept on the main thread)
-        guard !over else { return }
-        var r = URLRequest(url: q.url!); r.httpMethod = "POST"   // (its body: the piece, from a file — Transfers)
-        r.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type"); if !c.isEmpty { r.setValue(c, forHTTPHeaderField: "Cookie") }
-        // (as it goes: the bar and the file's ring move with the pieces, not only once each is in)
-        let t = Transfers.shared.upload(r, body: data, sent: { n in partly[offset] = min(n, Int64(data.count)); report() }) { resp, d in
-          going -= 1
-          guard !over else { return }
-          let j = d.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-          guard resp?.statusCode == 200, let p = j?["path"] as? String else { return finish(nil) }
-          if path == nil { path = p }
-          partly[offset] = nil; gone += Int64(data.count); report()
-          then()
+    // one go at it: over the office network with a pass (Office — Haris 2026-11-17 20:13), or the usual way. An office go
+    // that doesn't work is let go — what reached the NAS taken away — and the file goes again the usual way, from the start.
+    func attempt(_ pass: Office.Pass?, _ cookie: String) {
+      var path: String?, next: Int64 = 0, going = 0, quit = false
+      var gone: Int64 = 0, partly: [Int64: Int64] = [:]   // (pieces in, and how far each one on its way has gone)
+      let mine = { () -> [URLSessionTask] in UploadCenter.shared.running[job] ?? [] }
+      let report = {
+        let at = min(size, gone + partly.values.reduce(0, +))
+        UploadCenter.shared.step(job, at)
+        progress(size > 0 ? Double(at) / Double(size) : 1)
+      }
+      let fail: () -> Void = {
+        guard !quit else { return }
+        quit = true
+        guard pass != nil, !over, !UploadCenter.shared.cancelled(job) else { return finish(nil) }
+        mine().forEach { $0.cancel() }; UploadCenter.shared.running[job] = nil
+        Office.failed()
+        if let p = path, let tu = URL(string: serverURL() + "/api/host/trashMany") {
+          var r = URLRequest(url: tu); r.httpMethod = "POST"; r.setValue("application/json", forHTTPHeaderField: "Content-Type")
+          if !cookie.isEmpty { r.setValue(cookie, forHTTPHeaderField: "Cookie") }
+          r.httpBody = try? JSONSerialization.data(withJSONObject: ["paths": [p]])
+          URLSession.shared.dataTask(with: r).resume()
         }
-        if let t = t { UploadCenter.shared.running[job, default: []].append(t) }
-      } }
+        UploadCenter.shared.step(job, 0); progress(0)
+        attempt(nil, cookie)
+      }
+      func go(_ offset: Int64, then: @escaping () -> Void) {
+        guard let fh = try? FileHandle(forReadingFrom: url) else { return finish(nil) }
+        try? fh.seek(toOffset: UInt64(offset))
+        let data = (try? fh.read(upToCount: Int(piece))) ?? Data()
+        try? fh.close()
+        var q: URLComponents
+        if let p = pass {
+          q = URLComponents(string: p.url + "/local/upload")!
+          q.queryItems = [URLQueryItem(name: "t", value: p.token), URLQueryItem(name: "offset", value: String(offset))]
+        } else {
+          q = URLComponents(string: serverURL() + "/api/host/writeChunkBin")!
+          // (into a Client Assets folder: its place on the server, dest — Client Assets on the phone, shell 32)
+          var qi = [URLQueryItem(name: dest == nil ? "taskId" : "dest", value: dest ?? task), URLQueryItem(name: "name", value: name), URLQueryItem(name: "offset", value: String(offset))]
+          if let p = path { qi.append(URLQueryItem(name: "path", value: p)) }
+          q.queryItems = qi
+        }
+        going += 1
+        // (the usual way: the sign-in asked for each piece, as always; the office way needs only its pass)
+        let signIn: (@escaping (String) -> Void) -> Void = pass == nil ? cookies : { $0("") }
+        signIn { c in DispatchQueue.main.async {   // (Transfers is kept on the main thread)
+          guard !over, !quit else { return }
+          var r = URLRequest(url: q.url!); r.httpMethod = "POST"   // (its body: the piece, from a file — Transfers)
+          r.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+          if !c.isEmpty { r.setValue(c, forHTTPHeaderField: "Cookie") }
+          // (as it goes: the bar and the file's ring move with the pieces, not only once each is in)
+          let t = Transfers.shared.upload(r, body: data, sent: { n in guard !quit else { return }; partly[offset] = min(n, Int64(data.count)); report() }) { resp, d in
+            going -= 1
+            guard !over, !quit else { return }
+            let j = d.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            guard resp?.statusCode == 200, let p = j?["path"] as? String else { return fail() }
+            if path == nil { path = p }
+            partly[offset] = nil; gone += Int64(data.count); report()
+            then()
+          }
+          if let t = t { UploadCenter.shared.running[job, default: []].append(t) }
+        } }
+      }
+      // (as many on their way as there's room for; all in — its path)
+      func pump() {
+        guard !over, !quit else { return }
+        if UploadCenter.shared.cancelled(job) { return finish(nil) }
+        while going < together && next < size { let off = next; next += piece; go(off, then: pump) }
+        if going == 0 && next >= size { finish(path) }
+      }
+      // (the first piece alone: it makes the file the others are written into)
+      next = piece
+      go(0, then: pump)
     }
-    // (as many on their way as there's room for; all in — its path)
-    func pump() {
+    cookies { c in DispatchQueue.main.async {
       guard !over else { return }
-      if UploadCenter.shared.cancelled(job) { return finish(nil) }
-      while going < together && next < size { let off = next; next += piece; go(off, then: pump) }
-      if going == 0 && next >= size { finish(path) }
-    }
-    // (the first piece alone: it makes the file the others are written into)
-    next = piece
-    go(0, then: pump)
+      // (in the office: a pass for this file, from the server — none: the usual way)
+      var body: [String: Any] = ["kind": "up", "name": name, "size": size]
+      if let d = dest { body["dest"] = d } else { body["taskId"] = task }
+      Office.pass(body, cookie: c) { p in attempt(p, c) }
+    } }
   }
 }
 

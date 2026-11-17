@@ -29,6 +29,9 @@ final class Transfers: NSObject, URLSessionDataDelegate, URLSessionDownloadDeleg
   private final class Down { let name: String; let progress: (Int64, Int64) -> Void; let done: (URL?) -> Void; var file: URL?
     init(_ n: String, _ p: @escaping (Int64, Int64) -> Void, _ d: @escaping (URL?) -> Void) { name = n; progress = p; done = d } }
   private var ups: [Int: Up] = [:], downs: [Int: Down] = [:]
+  // (in the office: a file fetched from the NAS over the office network — Office — while the usual one waits, paused,
+  //  in case it doesn't work: the office one → the usual one, and back)
+  private var usual: [Int: URLSessionDownloadTask] = [:], office: [Int: URLSessionDownloadTask] = [:]
   private var dir: URL {
     let d = FileManager.default.temporaryDirectory.appendingPathComponent("transfers", isDirectory: true)
     try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
@@ -49,8 +52,23 @@ final class Transfers: NSObject, URLSessionDataDelegate, URLSessionDownloadDeleg
   @discardableResult
   func download(_ r: URLRequest, name: String, progress: @escaping (Int64, Int64) -> Void, done: @escaping (URL?) -> Void) -> URLSessionDownloadTask {
     let t = session.downloadTask(with: r)
-    downs[t.taskIdentifier] = Down(name, progress, done)
-    t.resume()
+    let d = Down(name, progress, done)
+    downs[t.taskIdentifier] = d
+    // a file of the server's, in the office: from the NAS over the office network (Haris 2026-11-17 20:13); the usual way
+    // if there's no pass or it doesn't work. The task handed back stays the one to cancel.
+    if let u = r.url, u.path.hasPrefix("/__file/"), u.host == URL(string: serverURL())?.host {
+      let fp = String(u.path.dropFirst("/__file/".count))
+      Office.pass(["kind": "file", "path": fp], cookie: r.value(forHTTPHeaderField: "Cookie") ?? "") { [weak self] p in
+        guard let self = self, self.downs[t.taskIdentifier] === d, t.state == .suspended else { return }
+        guard let p = p, var q = URLComponents(string: p.url + "/local/file") else { return t.resume() }
+        q.queryItems = [URLQueryItem(name: "t", value: p.token)]
+        guard let lu = q.url else { return t.resume() }
+        var lr = URLRequest(url: lu); lr.timeoutInterval = 20
+        let lt = self.session.downloadTask(with: lr)
+        self.downs[lt.taskIdentifier] = d; self.usual[lt.taskIdentifier] = t; self.office[t.taskIdentifier] = lt
+        lt.resume()
+      }
+    } else { t.resume() }
     return t
   }
 
@@ -65,14 +83,28 @@ final class Transfers: NSObject, URLSessionDataDelegate, URLSessionDownloadDeleg
   // (the file must be moved before this returns — iPhone takes it away after)
   func urlSession(_ s: URLSession, downloadTask t: URLSessionDownloadTask, didFinishDownloadingTo loc: URL) {
     guard let d = downs[t.taskIdentifier], ((t.response as? HTTPURLResponse)?.statusCode ?? 0) / 100 == 2 else { try? FileManager.default.removeItem(at: loc); return }
-    let name = ((t.response?.suggestedFilename).flatMap { $0.isEmpty || $0 == "Unknown" ? nil : $0 } ?? d.name).replacingOccurrences(of: "/", with: "-")
+    let viaOffice = usual[t.taskIdentifier] != nil   // (the office address names no file: its own name)
+    let name = ((viaOffice ? nil : t.response?.suggestedFilename).flatMap { $0.isEmpty || $0 == "Unknown" ? nil : $0 } ?? d.name).replacingOccurrences(of: "/", with: "-")
     let sub = dir.appendingPathComponent("dl-\(UUID().uuidString)", isDirectory: true)
     try? FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
     let dest = sub.appendingPathComponent(name.isEmpty ? "file" : name)
     if (try? FileManager.default.moveItem(at: loc, to: dest)) != nil { d.file = dest }
   }
+  // (the office server's own certificate — Office; everything else as iPhone checks it)
+  func urlSession(_ s: URLSession, didReceive ch: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+    if let r = Office.trust(ch) { completionHandler(r.0, r.1) } else { completionHandler(.performDefaultHandling, nil) }
+  }
   func urlSession(_ s: URLSession, task: URLSessionTask, didCompleteWithError e: Error?) {
     let id = task.taskIdentifier
+    // (an office-network download ended: its file, or — it didn't work — the usual one goes ahead)
+    if let t = usual.removeValue(forKey: id) {
+      office[t.taskIdentifier] = nil
+      guard let d = downs.removeValue(forKey: id) else { return }   // (cancelled with the usual one)
+      if e == nil, let f = d.file { downs[t.taskIdentifier] = nil; t.cancel(); d.done(f) }
+      else { Office.failed(); d.progress(0, -1); t.resume() }
+      return
+    }
+    if let lt = office.removeValue(forKey: id) { usual[lt.taskIdentifier] = nil; downs[lt.taskIdentifier] = nil; lt.cancel() }
     if let u = ups.removeValue(forKey: id) {
       try? FileManager.default.removeItem(at: u.file)
       u.done(e == nil ? task.response as? HTTPURLResponse : nil, u.data)

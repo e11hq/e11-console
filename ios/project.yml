@@ -76,6 +76,8 @@ targets:
         NSPhotoLibraryUsageDescription: Show your recent photos in the + sheet, to attach to a task, a comment or Client Assets.
         NSLocationWhenInUseUsageDescription: Send your current location, or a place near you, in a comment.
         NSContactsUsageDescription: Save a contact someone sent in a comment to your contacts.
+        # (in the office, files go straight to and from the office server — Office.swift, Haris 2026-11-17: the Mac app's words)
+        NSLocalNetworkUsageDescription: E11 Console connects to the office server directly when you are in the office, so big files move faster.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         E11ServerURL: https://console.e11hq.com
