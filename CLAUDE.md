@@ -385,6 +385,8 @@ opened from somewhere else. (2) **Every button a pill, no border** (as the bar's
 at the default window size, one tile size, the name and size under, an icon when there's no picture. (4) **Nothing snaps** —
 the preview's shades fade with it (the flying picture under them). (5) **Tell Haris the test server's version** (x.y.z-test.N)
 every time a change goes up, so he can confirm it.
+(6) **@ and # lists are the Mac's own menu** (Haris 2026-11-17, option A): frosted panel, compact 24 pt rows, a small heading,
+the chosen row in Apple's blue; @ photo · name · role, # the kind's symbol in its colour · name · size — every such list in the Mac app.
 **E11 Console for Mac — the sidebar SAVED and LOCKED exactly as it is (Haris 2026-11-15 09:31: "I dont want to mess it up,
 sidebar will remain exactly as now. In mac app"; 09:35 "Alright save the sidebar"):** mac/swift/Sidebar.swift and the page's
 NativeSide (web/app.js) as on main 0442ce5, branch `locked/mac-sidebar-0442ce5` (never moved or deleted) — the floating glass
