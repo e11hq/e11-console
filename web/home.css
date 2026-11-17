@@ -903,7 +903,19 @@ html.mac-chrome[data-theme="light"] .mib-row.sel { background: color-mix(in srgb
 .mib-qf span { color: var(--mc-dim); }
 .mib-add { flex: none; width: 26px; height: 26px; border: 0; background: none; color: var(--mc-dim); display: grid; place-items: center; cursor: default; margin-left: -6px; }
 .mib-add svg { width: 15px; height: 15px; }
-.mib-up { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 6px 4px; }
+.mib-up { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+/* a file waiting to go with the reply: a square, its picture (or its kind's icon), its own ring while it goes up, ✕ */
+.mib-upt { position: relative; width: 64px; height: 64px; border-radius: 10px; background: var(--mc-field); display: grid; place-items: center; overflow: hidden; }
+.mib-upt > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: opacity .2s; }
+.mib-upt:not(.done) > img { opacity: .55; }
+.mib-upt .mib-ficon .ic, .mib-upt .mib-ficon svg { width: 20px; height: 20px; }
+.mib-upt .mib-ficon b { font-size: 10px; }
+.mib-ring { position: absolute; width: 34px; height: 34px; left: 15px; top: 15px; transform: rotate(-90deg); }
+.mib-ring circle { fill: none; stroke-width: 3; stroke: rgba(0, 0, 0, .35); }
+.mib-ring circle.on { stroke: #fff; stroke-linecap: round; stroke-dasharray: 94.25; transition: stroke-dashoffset .2s linear; }
+.mib-upx { position: absolute; top: 4px; right: 4px; width: 18px; height: 18px; border-radius: 9px; border: 0; padding: 0; background: rgba(0, 0, 0, .55); color: #fff; display: grid; place-items: center; cursor: default; }
+.mib-upx svg { width: 10px; height: 10px; stroke-width: 2.2; }
+.mib-pane[data-live-drop] { box-shadow: inset 0 0 0 2px var(--mc-blue); }   /* (files held over it: they'll go with the reply) */
 .mib-dall { display: block; width: 100%; text-align: left; border: 0; border-top: .5px solid var(--mc-line); background: none; font: inherit; font-size: 12.5px; color: var(--mc-blue); padding: 7px 12px 9px 37px; cursor: default; }
 .mib-ups { display: flex; flex-direction: column; }
 .mib-u { display: flex; gap: 10px; padding: 12px 0; border-top: .5px solid var(--mc-line); }

@@ -280,7 +280,7 @@ const MacInbox = (() => {
       const rootC = (t.comments || []).find((x) => x.id === root);
       const to = firstName(lastComment.authorId);
       const where = lastComment.parentId || mineAll.length ? `Replies in ${esc(nameOf(rootC ? rootC.authorId : lastComment.authorId))}’s thread` : `Starts a thread under ${esc(to)}’s comment`;
-      reply = `<!--foot--><div class="mib-reply"><div class="mib-where">↳ ${where}</div><div class="mib-up" hidden></div><div class="mib-box"><button type="button" class="mib-add" data-mib="attach" title="Attach files" aria-label="Attach files">${icon('plus')}</button><textarea rows="1" class="mib-in" placeholder="Reply to ${esc(to)}…" data-tid="${esc(t.id)}" data-root="${esc(root)}"></textarea>
+      reply = `<!--foot--><div class="mib-reply"><div class="mib-where">↳ ${where}</div>${upHTML()}<div class="mib-box"><button type="button" class="mib-add" data-mib="attach" title="Attach files" aria-label="Attach files">${icon('plus')}</button><textarea rows="1" class="mib-in" placeholder="Reply to ${esc(to)}…" data-tid="${esc(t.id)}" data-root="${esc(root)}"></textarea>
         <button type="button" class="mib-send" data-mib="send" title="Send" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button></div></div>`;
     }
     return head(t ? statusIcon(t, 16) : '', t ? (t.title || 'Untitled task') : 'Deleted task', taskLine(t), unreadBtn(g) + openBtn(g, 'Open Task'))
@@ -410,7 +410,7 @@ const MacInbox = (() => {
   }
   function choose(k) {
     openAll = false;   // (every pick in the list starts a long run closed again)
-    if (k !== pick) { dyOpen = null; pending = []; }
+    if (k !== pick) { dyOpen = null; pending.forEach((x) => { if (x.att) api('POST', '/api/host/trashMany', { paths: [x.att.path] }).catch(() => {}); else x.sig.cancelled = true; }); pending = []; }
     pick = k;
     const g = rows().list.find((x) => x.key === k);
     if (g && g.items.some((x) => !x.read)) markRead(g); else renderContent();
@@ -418,17 +418,25 @@ const MacInbox = (() => {
   function send(btnEl) {
     const box = btnEl.closest('.mib-box'), ta = box && box.querySelector('.mib-in');
     const text = ta ? ta.value.trim() : '';
+    if (pending.some((x) => !x.att)) return;   // (still going up: Send waits — its button is dimmed)
     if (!text && !pending.length) return;
     const t = task(ta.dataset.tid);
     if (!t) return;
     const html = esc(text).replace(/\n/g, '<br>');
-    const files = pending.splice(0);
+    const files = pending.splice(0).map((x) => { if (x.url) URL.revokeObjectURL(x.url); return x.att; });
     files.forEach((a) => { if (!(t.attachments || []).some((x) => x.path === a.path)) (t.attachments = t.attachments || []).push(a); });
     const cid = postComment(t, ta.dataset.root, text, html, files);
     t.updatedAt = nowISO();
     const g = rows().list.find((x) => x.key === pick);
     if (g) { const was = g.items.find((x) => x.mine && x.mine.reply), cids = was ? (was.mine.cids || (was.mine.cid ? [was.mine.cid] : [])) : []; g.items.forEach((x) => { x.mine = { reply: text, at: nowISO(), cid, cids: [...cids, cid] }; }); }
+    // (sent: the box empty again, and the reply just added scrolled into view, smoothly — Haris 2026-11-17)
+    ta.value = ''; ta.style.height = 'auto';
     commit();
+    if (ui.view === 'inbox') renderContent();
+    requestAnimationFrame(() => {
+      const sc = document.querySelector('.mib-scroll'), el = sc && sc.querySelector(`[data-key="u:mine-${cid}"]`);
+      if (el) sc.scrollTo({ top: sc.scrollTop + el.getBoundingClientRect().bottom - sc.getBoundingClientRect().bottom + 18, behavior: 'smooth' });
+    });
   }
   function react(tid, cid, e) {
     const t = task(tid), c = t && (t.comments || []).find((x) => x.id === cid);
@@ -440,21 +448,76 @@ const MacInbox = (() => {
     if (g) g.items.forEach((x) => { if (c.reactions[e]) x.mine = { ...(x.mine && x.mine.reply ? x.mine : {}), react: e, at: nowISO() }; else if (x.mine && x.mine.react === e) { const { react: _r, ...rest } = x.mine; x.mine = rest.reply ? rest : undefined; if (!x.mine) delete x.mine; } });
     commit();
   }
-  // + in the reply box: the Mac's own file picker, as a comment's (the files go up first, then with the reply)
-  let pending = [];
-  async function attach(el) {
+  // + in the reply box (the Mac's own file picker) or files dropped on the pane: each goes up at once as a square tile under
+  // the reply box, its own ring showing how far it is, ✕ to take it off (stopping it, or putting an uploaded one in the Trash);
+  // only here — every other upload shows as it always has (Haris 2026-11-17)
+  let pending = [], upN = 0;
+  const ring = (x) => x.att ? '' : `<svg class="mib-ring" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15"/><circle class="on" cx="18" cy="18" r="15" style="stroke-dashoffset:${(94.25 * (1 - (x.p || 0))).toFixed(1)}"/></svg>`;
+  function upHTML() {
+    if (!pending.length) return '<div class="mib-up" hidden></div>';
+    return `<div class="mib-up">${pending.map((x) => {
+      const pic = x.url || (x.att && fileKind(x.att) === 'image' ? imgUrl(x.att, 160) : x.att && x.att.thumb ? posterUrl(x.att) : '');
+      return `<span class="mib-upt ${x.att ? 'done' : ''}" data-key="up:${x.k}">${pic ? `<img src="${esc(pic)}" alt="">` : `<span class="mib-ficon">${icon(fileKind(x) === 'video' ? 'play' : 'clip')}<b>${esc((fileExt(x.name) || 'file').slice(0, 4).toUpperCase())}</b></span>`}${ring(x)}<button type="button" class="mib-upx" data-mib="up-x" data-k="${x.k}" title="Remove" aria-label="Remove ${esc(x.name)}">${icon('x')}</button></span>`;
+    }).join('')}</div>`;
+  }
+  function sendState() { const ta = document.querySelector('.mib-in'), b = document.querySelector('.mib-send'); if (ta && b) b.disabled = pending.some((x) => !x.att) || (!ta.value.trim() && !pending.length); }
+  function upDraw() { if (ui.view === 'inbox') renderContent(); }
+  function addFiles(files, t) {
+    files.forEach((f) => {
+      const x = { k: ++upN, name: f.name, size: f.size, p: 0, sig: { cancelled: false }, url: f instanceof Blob && /^image\//.test(f.type) ? URL.createObjectURL(f) : '' };
+      pending.push(x);
+      let last = 0;
+      ServerHost.uploadFile(f, { taskId: t.id }, (p) => {
+        x.p = p;
+        const el = document.querySelector(`.mib-upt[data-key="up:${x.k}"] .on`);   // (only the ring moves — nothing drawn again)
+        if (el && p - last > 0.01) { last = p; el.style.strokeDashoffset = (94.25 * (1 - p)).toFixed(1); }
+      }, x.sig).then((att) => {
+        if (x.sig.cancelled || !pending.includes(x)) return;
+        x.att = { ...att, addedAt: nowISO(), addedBy: currentUserId }; x.p = 1;
+        upDraw(); sendState();
+      }).catch((e) => {
+        if (e && e.cancelled) return;
+        pending = pending.filter((y) => y !== x); upDraw(); sendState();
+        toast(`Upload failed: ${x.name}`);
+      });
+    });
+    upDraw(); sendState();
+  }
+  async function attach() {
     const ta = document.querySelector('.mib-in'), t = ta && task(ta.dataset.tid);
     if (!t) return;
     try {
-      const res = await Host.call('pickAttachments', { taskId: t.id });
-      const got = (res.files || []).filter(Boolean).map((f) => ({ ...f, addedAt: nowISO(), addedBy: currentUserId }));
-      if (!got.length) return;
-      pending = pending.concat(got);
-      const up = document.querySelector('.mib-up');
-      if (up) { up.hidden = false; up.innerHTML = pending.map((a) => `<span class="mib-file static">${esc(a.name)}</span>`).join(''); }
-      const b = document.querySelector('.mib-send'); if (b) b.disabled = false;
-    } catch (e) { toast('Upload failed — try again'); }
+      const files = Host.isMacApp ? await ServerHost.pickMacFiles({ multiple: true, prompt: 'Attach' }) : await ServerHost.pickFiles({ multiple: true });
+      if (files && files.length) addFiles([...files], t);
+    } catch (e) { toast('Couldn’t add the files — try again'); }
   }
+  function unAdd(k) {
+    const x = pending.find((y) => String(y.k) === String(k));
+    if (!x) return;
+    pending = pending.filter((y) => y !== x);
+    if (x.url) URL.revokeObjectURL(x.url);
+    if (x.att) api('POST', '/api/host/trashMany', { paths: [x.att.path] }).catch(() => {});   // (up already, never sent: to the Trash)
+    else x.sig.cancelled = true;                                                              // (still going up: stopped)
+    upDraw(); sendState();
+  }
+  // files dragged onto a comment's pane go up as if picked with +
+  const dropPane = (e) => { const p = e.target.closest && e.target.closest('.mib-pane'); return p && p.querySelector('.mib-in') && [...((e.dataTransfer && e.dataTransfer.types) || [])].includes('Files') ? p : null; };
+  ['dragenter', 'dragover'].forEach((ev) => document.addEventListener(ev, (e) => {
+    if (!on() || ui.view !== 'inbox') return;
+    const p = dropPane(e);
+    document.querySelectorAll('.mib-pane[data-live-drop]').forEach((x) => { if (x !== p) x.removeAttribute('data-live-drop'); });
+    if (!p) return;
+    e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; p.setAttribute('data-live-drop', '');
+  }, true));
+  document.addEventListener('dragleave', (e) => { const p = e.target.closest && e.target.closest('.mib-pane'); if (p && !p.contains(e.relatedTarget)) p.removeAttribute('data-live-drop'); }, true);
+  document.addEventListener('drop', (e) => {
+    if (!on() || ui.view !== 'inbox') return;
+    const p = dropPane(e);
+    if (!p) return;
+    e.preventDefault(); e.stopPropagation(); p.removeAttribute('data-live-drop');
+    const t = task(p.querySelector('.mib-in').dataset.tid), files = [...(e.dataTransfer.files || [])].filter((f) => f.size || f.type);
+    if (t && files.length) addFiles(files, t);
+  }, true);
   // the six reactions popping up just above the ☺︎ (Y)
   function reactMenuAt(el) {
     document.querySelectorAll('.mib-pop').forEach((x) => x.remove());
@@ -488,6 +551,7 @@ const MacInbox = (() => {
     else if (a === 'plan-back') { const pl = Plans.planById(el.dataset.id); if (pl) Plans.sendBack(pl); }
     else if (a === 'dy-sec') { dyOpen = dyOpen === el.dataset.k ? '' : el.dataset.k; renderContent(); }
     else if (a === 'more-ups') { openAll = true; renderContent(); }
+    else if (a === 'up-x') unAdd(el.dataset.k);
     else if (a === 'my-edit') { editingId = el.dataset.cid; renderContent(); setTimeout(() => { const x = document.querySelector('.mib-ein'); if (x) { x.focus(); x.setSelectionRange(x.value.length, x.value.length); } }, 0); }
     else if (a === 'my-cancel') { editingId = null; renderContent(); }
     else if (a === 'my-save') saveMine(el.dataset.tid, el.dataset.cid);
@@ -499,7 +563,7 @@ const MacInbox = (() => {
     const ta = e.target.closest && e.target.closest('.mib-in');
     if (!ta) return;
     ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px';
-    const b = ta.parentElement.querySelector('.mib-send'); if (b) b.disabled = !ta.value.trim() && !pending.length;
+    sendState();
   });
   document.addEventListener('keydown', (e) => {
     if (!on() || ui.view !== 'inbox' || ui.taskId) return;
@@ -577,6 +641,6 @@ const MacInbox = (() => {
     const sc = c.querySelector('.mib-scroll');
     // (a notification opened: a long run opens at its end, the newest update in view — Haris 2026-11-17)
     if (wasFresh && sc && sc.scrollHeight > sc.clientHeight) sc.scrollTop = sc.scrollHeight;
-    more(c.querySelector('.mib-list')); under(sc);
+    more(c.querySelector('.mib-list')); under(sc); sendState();
   }, reset: () => { pick = undefined; shown = null; } };
 })();

@@ -1716,7 +1716,7 @@ const ServerHost = (() => {
   // a file link to save (not to open): the Mac app saves it to Downloads itself — its window would otherwise show the
   // file in place of the app, with no way back; a browser / the iPhone app download it as usual
   const save = (url, name) => (Host.isMacApp ? saveOnMac(url, name || String(url).split('?')[0].split('/').pop(), false) : Promise.resolve(download(url, name)));
-  return { call, uploadMany, pickFiles, download, save, setOffice: (o) => { office = o || null; }, office: () => office };
+  return { call, uploadMany, uploadFile, pickFiles, pickMacFiles, download, save, setOffice: (o) => { office = o || null; }, office: () => office };
 })();
 
 /* ================= Data ================= */
