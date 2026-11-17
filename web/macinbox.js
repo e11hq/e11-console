@@ -410,7 +410,8 @@ const MacInbox = (() => {
   }
   function choose(k) {
     openAll = false;   // (every pick in the list starts a long run closed again)
-    if (k !== pick) { dyOpen = null; pending.forEach((x) => { if (x.att) api('POST', '/api/host/trashMany', { paths: [x.att.path] }).catch(() => {}); else x.sig.cancelled = true; }); pending = []; }
+    mClose(); picked = new Set();
+    if (k !== pick) { dyOpen = null; pending.forEach((x) => { if (x.linked) return; if (x.att) api('POST', '/api/host/trashMany', { paths: [x.att.path] }).catch(() => {}); else x.sig.cancelled = true; }); pending = []; }
     pick = k;
     const g = rows().list.find((x) => x.key === k);
     if (g && g.items.some((x) => !x.read)) markRead(g); else renderContent();
@@ -422,7 +423,10 @@ const MacInbox = (() => {
     if (!text && !pending.length) return;
     const t = task(ta.dataset.tid);
     if (!t) return;
-    const html = esc(text).replace(/\n/g, '<br>');
+    // (@ names picked from the list become the website's mentions, so they're told)
+    let html = esc(text);
+    picked.forEach((id) => { const u = userById(id); if (!u) return; const n = esc('@' + fullName(u)); html = html.split(n).join(`<span class="mention" data-user="${esc(u.id)}" contenteditable="false">${n}</span>`); });
+    html = html.replace(/\n/g, '<br>'); picked = new Set();
     const files = pending.splice(0).map((x) => { if (x.url) URL.revokeObjectURL(x.url); return x.att; });
     files.forEach((a) => { if (!(t.attachments || []).some((x) => x.path === a.path)) (t.attachments = t.attachments || []).push(a); });
     const cid = postComment(t, ta.dataset.root, text, html, files);
@@ -496,10 +500,58 @@ const MacInbox = (() => {
     if (!x) return;
     pending = pending.filter((y) => y !== x);
     if (x.url) URL.revokeObjectURL(x.url);
-    if (x.att) api('POST', '/api/host/trashMany', { paths: [x.att.path] }).catch(() => {});   // (up already, never sent: to the Trash)
+    if (x.att && !x.linked) api('POST', '/api/host/trashMany', { paths: [x.att.path] }).catch(() => {});   // (up already, never sent: to the Trash — a # file of the task stays)
     else x.sig.cancelled = true;                                                              // (still going up: stopped)
     upDraw(); sendState();
   }
+  // @ and # in the reply box, as the website's: @ the team (picked: "@Name", told when it's sent), # this task's files
+  // (picked: added to the reply as the same file — no upload). Apple's menu look; ↑ ↓, Enter or Tab, Esc.
+  let mpop = null, mItems = [], mIdx = 0, mQ = null, picked = new Set();
+  function mClose() { if (mpop) mpop.remove(); mpop = null; mQ = null; }
+  function mQuery(ta) {
+    const before = ta.value.slice(0, ta.selectionStart);
+    const m = before.match(/(?:^|[\s(])([@#])([^\s@#]{0,30})$/);
+    return m ? { kind: m[1], q: m[2].toLowerCase(), start: ta.selectionStart - m[2].length - 1, end: ta.selectionStart } : null;
+  }
+  function mUpdate(ta) {
+    const q = mQuery(ta), t = task(ta.dataset.tid);
+    if (!q || !t) return mClose();
+    mItems = q.kind === '@'
+      ? activeUsers().filter((u) => u.id !== currentUserId && (fullName(u).toLowerCase().includes(q.q) || u.email.toLowerCase().includes(q.q))).slice(0, 8).map((u) => ({ u }))
+      : taskFilesList(t).filter((a) => (a.name || '').toLowerCase().includes(q.q)).slice(0, 8).map((a) => ({ a }));
+    if (!mItems.length) return mClose();
+    if (!mQ || mQ.kind !== q.kind) mIdx = 0;
+    mQ = q; if (mIdx >= mItems.length) mIdx = 0;
+    if (!mpop) { mpop = document.createElement('div'); mpop.className = 'menu mention-pop mib-mpop'; document.body.appendChild(mpop); }
+    mpop.innerHTML = `<div class="menu-label">${q.kind === '@' ? 'Mention someone' : 'Add a file of this task'}</div>` + mItems.map((it, i) => it.u
+      ? `<div class="mi asg-mi ${i === mIdx ? 'hl' : ''}" data-mib-m="${i}">${avatarHTML(it.u.id, 22)}<span class="asg-n">${esc(fullName(it.u))}<small>${esc(it.u.email)}</small></span></div>`
+      : `<div class="mi asg-mi ${i === mIdx ? 'hl' : ''}" data-mib-m="${i}"><i class="fr-ic fk-${chipKind(it.a.name)}"></i><span class="asg-n">${esc(it.a.name)}<small>${esc(fmtSize(it.a.size) || '')}</small></span></div>`).join('');
+    const box = ta.closest('.mib-box').getBoundingClientRect(), h = mpop.offsetHeight;
+    mpop.style.left = box.left + 'px'; mpop.style.top = Math.max(8, box.top - h - 6) + 'px';
+  }
+  function mPick(i) {
+    const ta = document.querySelector('.mib-in'), it = mItems[i], q = mQ;
+    mClose();
+    if (!ta || !it || !q) return;
+    const t = task(ta.dataset.tid);
+    if (it.u) {
+      const ins = '@' + fullName(it.u) + ' ';
+      ta.value = ta.value.slice(0, q.start) + ins + ta.value.slice(q.end);
+      ta.selectionStart = ta.selectionEnd = q.start + ins.length;
+      picked.add(it.u.id);
+    } else if (t) {
+      ta.value = ta.value.slice(0, q.start) + ta.value.slice(q.end);
+      ta.selectionStart = ta.selectionEnd = q.start;
+      if (pending.some((x) => x.att && x.att.path === it.a.path)) toast('That file is already added');
+      else { pending.push({ k: ++upN, name: it.a.name, size: it.a.size, p: 1, linked: true, sig: { cancelled: false }, att: { ...it.a, id: uid(), linked: true, addedAt: nowISO() } }); upDraw(); }
+    }
+    ta.focus(); ta.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  document.addEventListener('mousedown', (e) => {
+    const it = e.target.closest && e.target.closest('[data-mib-m]');
+    if (it) { e.preventDefault(); mPick(+it.dataset.mibM); return; }
+    if (mpop && !e.target.closest('.mib-mpop')) mClose();
+  }, true);
   // files dragged onto a comment's pane go up as if picked with +
   const dropPane = (e) => { const p = e.target.closest && e.target.closest('.mib-pane'); return p && p.querySelector('.mib-in') && [...((e.dataTransfer && e.dataTransfer.types) || [])].includes('Files') ? p : null; };
   ['dragenter', 'dragover'].forEach((ev) => document.addEventListener(ev, (e) => {
@@ -563,12 +615,18 @@ const MacInbox = (() => {
     const ta = e.target.closest && e.target.closest('.mib-in');
     if (!ta) return;
     ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px';
+    mUpdate(ta);
     sendState();
   });
   document.addEventListener('keydown', (e) => {
     if (!on() || ui.view !== 'inbox' || ui.taskId) return;
     const ta = e.target.closest && e.target.closest('.mib-in');
-    if (ta) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(ta.parentElement.querySelector('.mib-send')); } return; }
+    if (ta && mpop) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); mIdx = (mIdx + (e.key === 'ArrowDown' ? 1 : -1) + mItems.length) % mItems.length; mUpdate(ta); return; }
+      if ((e.key === 'Enter' || e.key === 'Tab') && !e.metaKey) { e.preventDefault(); mPick(mIdx); return; }
+      if (e.key === 'Escape') { e.preventDefault(); mClose(); return; }
+    }
+    if (ta) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); mClose(); send(ta.parentElement.querySelector('.mib-send')); } return; }
     const ein = e.target.closest && e.target.closest('.mib-ein');
     if (ein) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveMine(ein.dataset.tid, ein.dataset.cid); } else if (e.key === 'Escape') { e.preventDefault(); editingId = null; renderContent(); } return; }
     if (e.target.closest && e.target.closest('input, textarea, [contenteditable="true"], .dialog, .menu')) return;
