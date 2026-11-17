@@ -685,6 +685,15 @@ opening (quiet notes in the background) + the strips' icons centred + Recently a
 into their picture, sharp and in their own shape + the send arrow's swap whole + no snapping icons (Select, Appearance, Request
 Amendments, + / ✕) + sheets sized to their list measured as they come up (no jump after settling). With server **1.9.64** (live,
 2026-11-17: fast under load, quiet notes on opening). Nothing changes in its look, behaviour or code without telling Haris first and his yes.
+**THE iPHONE APP — STABLE, LOCKED, the App Store release candidate: 1.2.2 build 1850 (Haris, 2026-11-17 11:29: "lock console and set
+as rc"):** commit 91aa88f, branches `stable/ios-1850`, `locked/ios-app-1850` and `candidate/appstore-ios-1.2.2-build-1850` (never moved
+or deleted; 1835's and earlier stay as history — 1850 replaces 1835 as the candidate). 1850 = 1835 + Recently added / search files flying
+out of their sharp picture (the file's own best picture) + the phone's look followed only while the app is in front (Control Center no
+longer redraws the page and drops the keyboard — to be confirmed on the phone) + every swapping icon (mic ↔ ↑, + ↔ ✕, ▶ ↔ ⏸ in the
+preview and voice notes, ○ ↔ ✓) with no empty moment: the old shrinking in its own colour as the new grows in, together, 0.25 s on
+Apple's spring (SymSwap — ours, said plainly: Apple's replace effect left the circle empty between the two, filmed in the simulator;
+the self-test films it every run, aSwapLab → ios-swap.mp4). With server **1.9.65** (live: e11hq.com's E11. logo and blue heading).
+Nothing changes in its look, behaviour or code without telling Haris first and his yes.
 **The full iPhone test (Haris 2026-11-16 22:47):** plan in project doc `claude/ios-full-test-plan.md`, his additions added as he
 tells them; run only on his word — then that night nothing asked of him, bugs found are fixed and checked again.
 **E11 TALK — STABLE, LOCKED: build 170 — not a release candidate yet (Haris, 2026-11-16 22:45: "talk is stable now but still not yet rc"):**
