@@ -1,5 +1,4 @@
 import UIKit
-import WebKit
 
 /* The walk-through (Haris 2026-11-05: "go through the whole app, click on every button… see all is working"): on the build
    machine, a second run of the app with the website off (E11_SELFTEST=walk) taps its way through every screen — Home and
@@ -596,9 +595,6 @@ extension Main {
       // count (phys_footprint, as Xcode's gauge shows it)
       // Icon swaps filmed (Haris 2026-11-17 10:55: "check on simulator before, stop guessing"): ios/walktest.py films the
       // screen from aSwapRec to aSwapEnd (ios-swap.mp4) while aSwapLab shows each icon swap in each way, side by side
-      // E11 Talk's sign-in answer (Haris 2026-11-17 12:02: "no guess"): a web page whose JSON answer is cancelled in
-      // Apple's response policy is never drawn — the page keeps what it showed (checked here on the simulator's WebKit)
-      ("aWebCancel", { WebCancelLab.run { r in self.apple("webCancel", r) } }),
       ("aSwapRec", {}),
       ("aSwapLab", { self.swapLab() }),
       ("aSwapEnd", {}),
@@ -888,34 +884,4 @@ enum ClientTrail {
   }
   static func note(_ s: String, stack: Bool = false) { guard !SELFTEST.isEmpty else { return }; notes.append("\(at()) \(s)" + (stack ? " ← " + callers() : "")) }
   static func linkNote(_ s: String) { guard !SELFTEST.isEmpty else { return }; link.append("\(at()) \(s)") }
-}
-
-// (the self-test's check of Talk's sign-in fix: the page shows "SIGNIN", then goes to the server's JSON answer, which the
-//  response policy cancels; read back: the words on the page, whether anything new was committed, the answer's type)
-final class WebCancelLab: NSObject, WKNavigationDelegate {
-  private static var live: WebCancelLab?
-  private let web = WKWebView(frame: CGRect(x: 0, y: 0, width: 300, height: 300))
-  private var seen: [String: Any] = ["cancelled": false, "committedAfter": false]
-  private var done: (([String: Any]) -> Void)?, armed = false
-  static func run(_ done: @escaping ([String: Any]) -> Void) {
-    let l = WebCancelLab(); live = l; l.done = done; l.web.navigationDelegate = l
-    l.web.loadHTMLString("<p>SIGNIN</p>", baseURL: URL(string: serverURL()))
-  }
-  func webView(_ w: WKWebView, didFinish n: WKNavigation!) {
-    guard !armed else { return }
-    armed = true
-    w.load(URLRequest(url: URL(string: serverURL() + "/api/talk/state")!))
-    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-      w.evaluateJavaScript("document.body.innerText") { t, _ in
-        self.seen["text"] = (t as? String) ?? "?"; self.done?(self.seen); WebCancelLab.live = nil
-      }
-    }
-  }
-  func webView(_ w: WKWebView, didCommit n: WKNavigation!) { if armed { seen["committedAfter"] = true } }
-  func webView(_ w: WKWebView, decidePolicyFor r: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
-    if armed, r.isForMainFrame, r.response.url?.path.hasPrefix("/api/") == true {
-      seen["cancelled"] = true; seen["mime"] = r.response.mimeType ?? "?"; decisionHandler(.cancel); return
-    }
-    decisionHandler(.allow)
-  }
 }
