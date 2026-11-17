@@ -109,6 +109,10 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
   let text = PasteTextView()
   private let placeholder = UILabel()
   private let plus = UIButton(type: .system), right = UIButton(type: .system)
+  // (the mic / ↑ drawn by an image view of its own in the circle, its colour the button's: the button's own picture was swapped
+  //  by iPhone's replace effect and then set again straight after, which cut the effect — the circle filled, the arrow came in
+  //  late with a jump; Haris 2026-11-17 09:49)
+  private let rightSym = UIImageView()
   private let replyLine = UIStackView(), replyLabel = UILabel()
   private let tiles = UIStackView()
   private let mentions = PickList()
@@ -147,6 +151,9 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     //  Console", W4, Haris 2026-11-16)
     plus.addAction(UIAction { [weak self] _ in self?.plusSheet() }, for: .touchUpInside)
     right.addAction(UIAction { [weak self] _ in self?.sendTapped() }, for: .touchUpInside)
+    rightSym.contentMode = .center; rightSym.isUserInteractionEnabled = false; rightSym.translatesAutoresizingMaskIntoConstraints = false
+    right.addSubview(rightSym)
+    NSLayoutConstraint.activate([rightSym.centerXAnchor.constraint(equalTo: right.centerXAnchor), rightSym.centerYAnchor.constraint(equalTo: right.centerYAnchor)])
     let hold = UILongPressGestureRecognizer(target: self, action: #selector(holdMic(_:))); hold.minimumPressDuration = 0.18
     right.addGestureRecognizer(hold); holdG = hold
     tiles.spacing = 8; tiles.alignment = .center
@@ -234,10 +241,9 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       showingSend = send
       // (the mic as a line icon — Haris 2026-11-02; the change a little quicker than iPhone's default)
       let img = UIImage(systemName: send ? "arrow.up" : "mic", withConfiguration: UIImage.SymbolConfiguration(pointSize: send ? 14 : 15, weight: send ? .bold : .medium))
-      if #available(iOS 17.0, *), !first, let iv = right.imageView, let img = img {
-        iv.setSymbolImage(img, contentTransition: .replace.downUp, options: .speed(1.6))
-        right.setImage(img, for: .normal)
-      } else { right.setImage(img, for: .normal) }
+      if #available(iOS 17.0, *), !first, let img = img {
+        rightSym.setSymbolImage(img, contentTransition: .replace.downUp, options: .speed(1.6))
+      } else { rightSym.image = img }
       let paint = { self.right.backgroundColor = send ? .label : .tertiarySystemFill; self.right.tintColor = send ? .systemBackground : .label }
       if first { paint() } else { UIView.animate(withDuration: 0.15, delay: 0, options: [.curveEaseInOut, .allowUserInteraction], animations: paint) }
     }
