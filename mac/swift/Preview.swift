@@ -470,6 +470,17 @@ final class MacPreview: NSView {
           // (a video: its picture lands at the video's own size and stays until the player shows its first frame, then the
           //  two crossfade — it flew in as the whole tile and the player came on black: Haris 2026-11-17)
           self.whenShowing(pv, cross)
+        } else if let pdf = self.content as? PDFView {
+          // (a PDF or an Office file's PDF: its first page's picture lands, waits until Apple's PDF view has the page drawn,
+          //  settles onto where that page really is, then the two crossfade — Haris 2026-11-17)
+          self.whenPDF(pdf) { [weak self] in
+            guard let self = self else { return }
+            if let pr = self.pageRect(pdf) {
+              fly.move(to: pr, radius: 0, duration: 0.18, timing: CAMediaTimingFunction(name: .easeOut)) { cross() }
+            } else { cross() }
+          }
+        } else if !(self.content is PvZoom) {
+          cross()
         } else {
           self.stage.alphaValue = 1
           fly.removeFromSuperview()
@@ -483,6 +494,24 @@ final class MacPreview: NSView {
       MacLoad.image(cur["src"] as? String) { im in if let im = im { fly0(im) } }
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { MacLoad.image(t) { im in fly0(im) } }
     } else { MacLoad.image(t) { im in fly0(im) } }
+  }
+  // (calls `then` once Apple's PDF view has its document — or after 3 s)
+  private func whenPDF(_ pdf: PDFView, _ then: @escaping () -> Void) {
+    let t0 = CACurrentMediaTime()
+    Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self, weak pdf] tm in
+      guard let pdf = pdf, self != nil else { tm.invalidate(); return }
+      if pdf.document != nil || CACurrentMediaTime() - t0 > 3 {
+        tm.invalidate()
+        DispatchQueue.main.async { then() }   // (a moment for the page to be laid out)
+      }
+    }
+  }
+  // (where the PDF view shows its page on show, in this view's own terms)
+  private func pageRect(_ pdf: PDFView) -> NSRect? {
+    pdf.layoutSubtreeIfNeeded()
+    guard let page = pdf.currentPage ?? pdf.document?.page(at: 0) else { return nil }
+    let r = convert(pdf.convert(page.bounds(for: pdf.displayBox), from: page), from: pdf)
+    return r.width > 4 && r.height > 4 ? r.intersection(pdf.convert(pdf.bounds, to: self)) : nil
   }
   // (calls `then` once the player has its first frame on screen — or after 3 s, whatever happens)
   private func whenShowing(_ pv: AVPlayerView, _ then: @escaping () -> Void) {
@@ -525,9 +554,11 @@ final class MacPreview: NSView {
         c.duration = 0.3; self.back.animator().alphaValue = 0; self.chrome.forEach { $0.animator().alphaValue = 0 }
       }
       fly.move(to: r, radius: 9, duration: 0.32, timing: CAMediaTimingFunction(controlPoints: 0.3, 0.7, 0.2, 1)) { gone() }
-    } else if at == openedAt, let r = from, r.width > 4, let pv = content as? AVPlayerView, let pic = flyPic {
-      // (a video: its picture comes up over the player where the video is and flies back into its tile — Haris 2026-11-17)
-      let fly = PvFly(pic, frame: convert(fit(pic.size, in: pv.bounds), from: pv), radius: 0)
+    } else if at == openedAt, let r = from, r.width > 4, let v = content, !(v is PvZoom), let pic = flyPic {
+      // (a video, a PDF or an Office file: its picture comes up over it where it is on show and flies back into its tile —
+      //  Haris 2026-11-17)
+      let start = (v as? PDFView).flatMap { pageRect($0) } ?? convert(fit(pic.size, in: v.bounds), from: v)
+      let fly = PvFly(pic, frame: start, radius: 0)
       fly.alphaValue = 0
       addSubview(fly, positioned: .above, relativeTo: stage)
       NSAnimationContext.runAnimationGroup { c in
