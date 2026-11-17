@@ -3025,8 +3025,9 @@ final class MessageBar: UIView, UITextViewDelegate {
     smiley.accessibilityLabel = box.emoji ? "Keyboard" : "Emoji"
   }
   private let plus = UIButton(type: .system), cam = UIButton(type: .system), mic = UIButton(type: .system), sendB = UIButton(type: .system)
-  // (the mic's and send's symbols as their own image views on the circles — ✓ ↔ ↑ swapping on send while editing;
-  //  typing: the two whole buttons change places, showTyping — Haris 2026-11-17)
+  // (the mic's and send's symbols as their own image views on the circles — so the mic ↔ ↑ swap runs as E11 Console's
+  //  comment box: the old one shrinking and fading in its own colour as the new one grows in, the circle's colour fading
+  //  black ↔ blue, the camera fading out and in — Haris 2026-11-17)
   private let micSym = UIImageView(), sendSym = UIImageView()
   private var shownTyping: Bool?
   private let place = UILabel()
@@ -3246,33 +3247,32 @@ final class MessageBar: UIView, UITextViewDelegate {
     pauseB.layer.borderColor = UIColor.systemRed.resolvedColor(with: traitCollection).cgColor
     box.layer.borderColor = MessageBar.boxEdge.resolvedColor(with: traitCollection).cgColor
   }
-  // typing starts or stops: the camera fades, and the mic's and send's whole buttons change places as the Claude app's
-  // send button does (filmed from Haris's recording, 2026-11-17 11:36): the old button shrinking a little and fading as the
-  // new one grows back from a little smaller, both together, about 0.2 s — a trial in Talk first (Haris 11:39)
+  // typing starts or stops: the camera fades, the mic and send swap in the one place (E11 Console's swap, filmed in the
+  // simulator: no moment without an icon) — 0.25 s on Apple's spring
   private func showTyping(_ t: Bool) {
     guard t != shownTyping else { return }
     let first = shownTyping == nil; shownTyping = t
-    let small = CGAffineTransform(scaleX: 0.75, y: 0.75)
-    let (going, coming) = t ? (mic, sendB) : (sendB, mic)
-    guard !first, window != nil, !UIAccessibility.isReduceMotionEnabled, mic.transform == .identity || mic.transform == small else {
+    let shrunk = CGAffineTransform(scaleX: 0.5, y: 0.5)
+    let (going, coming) = t ? (micSym, sendSym) : (sendSym, micSym)
+    guard !first, window != nil, !UIAccessibility.isReduceMotionEnabled else {
       UIView.performWithoutAnimation {
-        sendB.isHidden = !t; mic.isHidden = t; cam.isHidden = t; sendB.alpha = 1; cam.alpha = 1; mic.alpha = 1
-        sendB.transform = .identity; mic.transform = .identity
+        sendB.isHidden = !t; mic.isHidden = t; cam.isHidden = t; sendB.alpha = 1; cam.alpha = 1
+        for v in [micSym, sendSym] { v.alpha = 1; v.transform = .identity }
       }
       return
     }
     UIView.performWithoutAnimation {
       mic.isHidden = false; sendB.isHidden = false; cam.isHidden = false
-      cam.alpha = t ? 1 : 0
-      coming.alpha = 0; coming.transform = small; going.alpha = 1; going.transform = .identity
+      sendB.alpha = t ? 0 : 1; cam.alpha = t ? 1 : 0
+      coming.alpha = 0; coming.transform = shrunk; going.alpha = 1; going.transform = .identity
     }
-    UIView.animate(withDuration: 0.2, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
-      self.cam.alpha = t ? 0 : 1
-      coming.alpha = 1; coming.transform = .identity; going.alpha = 0; going.transform = small
+    UIView.animate(withDuration: 0.25, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+      self.sendB.alpha = t ? 1 : 0; self.cam.alpha = t ? 0 : 1
+      coming.alpha = 1; coming.transform = .identity; going.alpha = 0; going.transform = shrunk
     } completion: { _ in
       guard self.shownTyping == t else { return }
       self.sendB.isHidden = !t; self.mic.isHidden = t; self.cam.isHidden = t
-      self.cam.alpha = 1; going.alpha = 1; going.transform = .identity
+      self.sendB.alpha = 1; self.cam.alpha = 1; going.alpha = 1; going.transform = .identity
     }
   }
   @objc private func micHold(_ g: UILongPressGestureRecognizer) {
