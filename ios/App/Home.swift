@@ -2571,7 +2571,11 @@ extension HomeView: UICollectionViewDelegate {
     let iv = UIImageView(image: img); iv.frame = b; iv.backgroundColor = .clear
     let p = UIPreviewParameters(); p.backgroundColor = .clear
     p.visiblePath = path; p.shadowPath = path
-    return UITargetedPreview(view: iv, parameters: p, target: UIPreviewTarget(container: v, center: CGPoint(x: b.midX, y: b.midY)))
+    // (aimed at the tile the picture sits in, not the picture itself: the picture is out of its place while it's held, and
+    //  iPhone flies the preview back inside its target's container — into the hidden picture it went unseen, the spot empty
+    //  until the folder came back: Haris 2026-11-17 08:36)
+    let box = v.superview ?? v
+    return UITargetedPreview(view: iv, parameters: p, target: UIPreviewTarget(container: box, center: box === v ? CGPoint(x: b.midX, y: b.midY) : v.center))
   }
   // (the tile out of its place while it's held — its picture is what's up — and back the moment the picture has landed)
   func collectionView(_ cv: UICollectionView, willDisplayContextMenu c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
