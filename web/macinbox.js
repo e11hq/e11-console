@@ -572,9 +572,11 @@ const MacInbox = (() => {
     const QI = { soon: 'clock', hours: 'clock', tomorrow: 'sun', days: 'cal', week: 'cal' };
     const tm = (ms) => new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Dubai' });
     const wd = (ms) => new Date(ms).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'Asia/Dubai' });
-    const late = (ms) => (Sched.outside(ms) ? '<i class="mib-sp-out" title="Outside office hours (Mon–Fri, 9–6)"></i>' : '');
-    const typed = sp.typed ? `<div class="mib-am-r on" data-sp-at="${sp.typed}">${icon('clock')}<span class="mib-am-n">Schedule for ${esc(Sched.when(sp.typed))}</span>${late(sp.typed)}</div><div class="mib-sp-sep"></div>` : '';
-    const quick = Sched.quick().map((x) => `<div class="mib-am-r" data-sp-at="${x.ms}">${icon(QI[x.k] || 'clock')}<span class="mib-am-n">${esc(x.l)}</span>${late(x.ms)}<small>${x.short ? tm(x.ms) : `${wd(x.ms)}, ${tm(x.ms)}`}</small></div>`).join('');
+    // (said in words, as the website: "Outside office hours" under the time, and a note before Schedule — Haris 2026-11-17)
+    const late = (ms) => (Sched.outside(ms) ? '<em class="mib-sp-oh">Outside office hours</em>' : '');
+    const note = (ms) => (Sched.outside(ms) ? `<div class="mib-sp-note">${icon('info')}Outside office hours (Mon–Fri, 9–6)</div>` : '');
+    const typed = sp.typed ? `<div class="mib-am-r on" data-sp-at="${sp.typed}">${icon('clock')}<span class="mib-am-n">Schedule for ${esc(Sched.when(sp.typed))}</span></div>${note(sp.typed)}<div class="mib-sp-sep"></div>` : '';
+    const quick = Sched.quick().map((x) => `<div class="mib-am-r" data-sp-at="${x.ms}">${icon(QI[x.k] || 'clock')}<span class="mib-am-n">${esc(x.l)}</span><small>${x.short ? tm(x.ms) : `${wd(x.ms)}, ${tm(x.ms)}`}${late(x.ms)}</small></div>`).join('');
     const v = sp.view, today = dubNow(), first = new Date(Date.UTC(v.y, v.m, 1)).getUTCDay(), lead = (first + 6) % 7, days = new Date(Date.UTC(v.y, v.m + 1, 0)).getUTCDate();
     const isToday = (d) => v.y === today.y && v.m === today.m && d === today.d, past = (d) => Date.UTC(v.y, v.m, d) < Date.UTC(today.y, today.m, today.d);
     let cal = ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d) => `<b>${d}</b>`).join('') + '<i></i>'.repeat(lead);
@@ -582,7 +584,7 @@ const MacInbox = (() => {
     const atThis = v.y === today.y && v.m === today.m;
     const times = sp.day ? [9, 11, 14, 16].map((h) => atDub(sp.day.y, sp.day.m, sp.day.d, h)).filter((ms) => ms > Date.now() + 60000) : [];
     const pills = sp.day ? `<div class="mib-sp-tm">${times.map((ms) => `<button type="button" class="${sp.pick === ms ? 'on' : ''}" data-sp-pick="${ms}">${tm(ms)}</button>`).join('')}<input class="mib-sp-other" placeholder="Other time" value="${esc(sp.other || '')}"></div>` : '';
-    const go = sp.pick ? `<button type="button" class="mib-btn primary mib-sp-go" data-sp-at="${sp.pick}">Schedule for ${esc(wd(sp.pick))}, ${esc(tm(sp.pick))}</button>` : '';
+    const go = sp.pick ? `${note(sp.pick)}<button type="button" class="mib-btn primary mib-sp-go" data-sp-at="${sp.pick}">Schedule for ${esc(wd(sp.pick))}, ${esc(tm(sp.pick))}</button>` : '';
     return `<div class="mib-sp-fld">${icon('search')}<input class="mib-sp-q" placeholder="Try “Tomorrow at 2 PM”…" value="${esc(sp.q || '')}" autocomplete="off" spellcheck="false"></div>${typed}
       <div class="mib-am-h">Send this reply</div>${quick}<div class="mib-sp-sep"></div>
       <div class="mib-am-h">Pick a day and time</div>

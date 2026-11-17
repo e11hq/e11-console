@@ -1083,11 +1083,15 @@ html.mac-chrome .mention-pop .asg-n small { margin-left: auto; font-size: 12px; 
 .mib-sp-fld { margin: 2px 2px 6px; height: 28px; border-radius: 7px; background: rgba(127, 127, 127, .12); box-shadow: inset 0 0 0 .5px rgba(127, 127, 127, .25); display: flex; align-items: center; gap: 6px; padding: 0 8px; color: var(--mc-dim); }
 .mib-sp-fld .ic, .mib-sp-fld svg { width: 13px; height: 13px; }
 .mib-sp-q, .mib-sp-other { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--mc-fg); font: inherit; font-size: 13px; }
-.mib-spop .mib-am-r { height: 26px; }
+.mib-spop .mib-am-r { height: auto; min-height: 26px; }
 .mib-spop .mib-am-r > .ic, .mib-spop .mib-am-r > svg { width: 14px; height: 14px; color: var(--mc-dim); flex: none; }
 .mib-spop .mib-am-r:hover:not(.on) { background: #0a64d6; color: #fff; }
 .mib-spop .mib-am-r:hover small, .mib-spop .mib-am-r:hover > .ic, .mib-spop .mib-am-r.on > .ic { color: #fff; }
-.mib-sp-out { width: 6px; height: 6px; border-radius: 3px; background: #ff9f0a; flex: none; }
+.mib-spop .mib-am-r small { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; }
+.mib-sp-oh { font-style: normal; font-size: 10.5px; color: #ff9f0a; }
+.mib-spop .mib-am-r:hover .mib-sp-oh { color: #fff; }
+.mib-sp-note { display: flex; align-items: center; gap: 6px; margin: 2px 8px 6px; font-size: 11.5px; color: #ff9f0a; }
+.mib-sp-note .ic, .mib-sp-note svg { width: 13px; height: 13px; flex: none; }
 .mib-sp-sep { height: 1px; margin: 5px 9px; background: rgba(127, 127, 127, .22); }
 .mib-sp-cal { padding: 2px 6px 4px; }
 .mib-sp-mh { display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 6px; }
@@ -1113,3 +1117,4 @@ html.mac-chrome .mention-pop .asg-n small { margin-left: auto; font-size: 12px; 
 .mib-sch-at .ic, .mib-sch-at svg { width: 12px; height: 12px; }
 /* the Mac: the thumbnail of the file in the preview, out of sight while the preview is up (it flies out of and back into it) */
 [data-live-pvhide] { visibility: hidden; }
+html.mac-chrome[data-theme="light"] .mib-sp-oh, html.mac-chrome[data-theme="light"] .mib-sp-note { color: #b25e00; }
