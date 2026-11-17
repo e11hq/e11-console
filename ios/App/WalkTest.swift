@@ -168,7 +168,7 @@ extension Main {
     guard let scene = screenWindow?.windowScene else { return }
     let w = UIWindow(windowScene: scene); w.windowLevel = .alert + 1; w.backgroundColor = .systemBackground
     let vc = UIViewController(); vc.view.backgroundColor = .systemBackground; w.rootViewController = vc; w.isHidden = false; Self.labWin = w
-    let ways = ["A now 1.6", "B downUp 1", "C offUp 1", "D replace", "E magic", "F fade"]
+    let ways = ["F fade .25", "H fade+bounce", "I overlap .25", "J overlap .32", "K downUp+late fill", "L fade .35"]
     var rows: [(Int, UIView, UIImageView, UIView, UIImageView, UIView, UIImageView, UIImageView)] = []
     let cfg = { (n: String, pt: CGFloat, wt: UIImage.SymbolWeight) in UIImage(systemName: n, withConfiguration: UIImage.SymbolConfiguration(pointSize: pt, weight: wt)) }
     for (i, name) in ways.enumerated() {
@@ -191,23 +191,29 @@ extension Main {
         let play = cfg(on ? "pause.fill" : "play.fill", 24, .bold), t = UIImage(systemName: on ? "checkmark.circle.fill" : "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22))
         let fill = { s.backgroundColor = on ? .label : .tertiarySystemFill; s.tintColor = on ? .systemBackground : .label; tick.tintColor = on ? .systemBlue : .tertiaryLabel }
         let pairs: [(UIImageView, UIImage?)] = [(sv, send), (pv, plus), (ppv, play), (tick, t)]
-        if i == 0 {
-          for (v, im) in pairs { if #available(iOS 17.0, *), let im = im { v.setSymbolImage(im, contentTransition: .replace.downUp, options: .speed(1.6)) } }
-          DispatchQueue.main.asyncAfter(deadline: .now() + 0.09) { UIView.animate(withDuration: 0.14, animations: fill) }
-        } else if i == 5 {
-          for (v, im) in pairs { UIView.transition(with: v, duration: 0.25, options: .transitionCrossDissolve) { v.image = im } }
-          UIView.animate(withDuration: 0.25, animations: fill)
-        } else {
-          for (v, im) in pairs {
-            guard #available(iOS 17.0, *), let im = im else { continue }
-            switch i {
-            case 1: v.setSymbolImage(im, contentTransition: .replace.downUp)
-            case 2: v.setSymbolImage(im, contentTransition: .replace.offUp)
-            case 3: v.setSymbolImage(im, contentTransition: .replace)
-            default: if #available(iOS 18.0, *) { v.setSymbolImage(im, contentTransition: .replace.magic(fallback: .replace.downUp)) } else { v.setSymbolImage(im, contentTransition: .replace) }
-            }
-          }
-          UIView.animate(withDuration: 0.25, delay: 0, options: .curveEaseInOut, animations: fill)
+        // (the old symbol's own colour kept on a copy of it going, the new one coming in its own — side by side in time)
+        func overlap(_ v: UIImageView, _ im: UIImage?, _ d: Double) {
+          let old = UIImageView(image: v.image); old.contentMode = v.contentMode; old.frame = v.frame
+          old.tintColor = v.tintColor.resolvedColor(with: v.traitCollection); v.superview?.insertSubview(old, aboveSubview: v)
+          UIView.performWithoutAnimation { v.image = im; v.alpha = 0; v.transform = CGAffineTransform(scaleX: 0.5, y: 0.5) }
+          UIView.animate(withDuration: d, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+            v.alpha = 1; v.transform = .identity; old.alpha = 0; old.transform = CGAffineTransform(scaleX: 0.5, y: 0.5)
+          } completion: { _ in old.removeFromSuperview() }
+        }
+        switch i {
+        case 0, 5:
+          for (v, im) in pairs { UIView.transition(with: v, duration: i == 0 ? 0.25 : 0.35, options: .transitionCrossDissolve) { v.image = im } }
+          UIView.animate(withDuration: i == 0 ? 0.25 : 0.35, animations: fill)
+        case 1:
+          for (v, im) in pairs { UIView.transition(with: v, duration: 0.2, options: .transitionCrossDissolve) { v.image = im }; if #available(iOS 17.0, *) { v.addSymbolEffect(.bounce.up, options: .nonRepeating) } }
+          UIView.animate(withDuration: 0.2, animations: fill)
+        case 2, 3:
+          let d = i == 2 ? 0.25 : 0.32
+          for (v, im) in pairs { overlap(v, im, d) }
+          UIView.animate(withDuration: d, delay: 0, options: .curveEaseInOut, animations: fill)
+        default:
+          for (v, im) in pairs { if #available(iOS 17.0, *), let im = im { v.setSymbolImage(im, contentTransition: .replace.downUp) } }
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { UIView.animate(withDuration: 0.15, animations: fill) }
         }
       }
     }
