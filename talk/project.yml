@@ -9,7 +9,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.0.2"
+    MARKETING_VERSION: "1.0.3"   # (1.0.2 = build 175, in App Store review 2026-11-17 — 1.0.3: the office network)
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Automatic
 targets:
@@ -83,6 +83,10 @@ targets:
         LSApplicationQueriesSchemes: [comgooglemaps, waze]
         NSPhotoLibraryAddUsageDescription: Save photos and videos from your groups to Photos.
         NSMicrophoneUsageDescription: Record voice messages and the sound of videos you send.
+        # (in the office, files go straight to and from the office server — Office.swift, Haris 2026-11-17)
+        NSLocalNetworkUsageDescription: E11 Talk connects to the office server directly when you are in the office, so photos, videos and files move faster.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
         TalkServerURL: https://talk.e11hq.com
         SharedKeychainGroup: $(AppIdentifierPrefix)ae.e11.console.shared
         NSFaceIDUsageDescription: Face ID signs you back in to E11 Talk.

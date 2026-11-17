@@ -110,7 +110,20 @@ final class Net {
   // a file → the server, in 4 MB pieces: the first makes it; then three side by side, each written at its own place (at=),
   // and an empty last one at its whole length (Haris 2026-11-16, "uploads are super slow": one piece after another left the
   // line idle between them). The ring fills smoothly as the pieces go.
+  // (in the office: over the office network first — Office, Haris 2026-11-17 20:13; if that doesn't work, again the usual way
+  //  from the start)
   func upload(_ data: Data, name: String, progress: @escaping (Double) -> Void, done: @escaping (String?) -> Void) {
+    Office.shared.pass(["kind": "up"]) { [weak self] p in
+      guard let self = self else { return done(nil) }
+      guard let p = p else { return self.upload1(data, name: name, via: nil, progress: progress, done: done) }
+      self.upload1(data, name: name, via: p, progress: progress) { [weak self] fid in
+        if let fid = fid { return done(fid) }
+        Office.shared.failed(); progress(0)
+        self?.upload1(data, name: name, via: nil, progress: progress, done: done)
+      }
+    }
+  }
+  private func upload1(_ data: Data, name: String, via: Office.Pass?, progress: @escaping (Double) -> Void, done: @escaping (String?) -> Void) {
     let piece = 4 * 1024 * 1024, together = 3
     let enc = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "file"
     var id: String?, next = 0, going = 0, over = false, gone = 0
@@ -126,7 +139,12 @@ final class Net {
       if at { q += "&at=\(offset)" }
       if last { q += "&last=1" }
       going += 1
-      let t = session.dataTask(with: request(q, method: "POST", body: data.subdata(in: offset..<end))) { d, _, _ in
+      var r = request(q, method: "POST", body: data.subdata(in: offset..<end))
+      if let p = via, let u = URL(string: p.url + "/local/talk/upload?t=" + (p.token.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "") + "&" + q.dropFirst("/api/talk/upload?".count)) {
+        var lr = URLRequest(url: u); lr.httpMethod = "POST"; lr.httpBody = r.httpBody
+        lr.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type"); r = lr
+      }
+      let t = (via == nil ? session : Office.shared.session).dataTask(with: r) { d, _, _ in
         let j = d.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
         DispatchQueue.main.async {
           going -= 1
@@ -190,11 +208,23 @@ final class Net {
     return String(h, radix: 16)
   }
   static func local(_ id: String) -> URL { filesDir.appendingPathComponent(id.replacingOccurrences(of: "/", with: "_")) }
+  // a message's file from the server — in the office over the office network first (Office), else (or if that doesn't
+  // work) the usual way. The answer as a download task gives it: the file, and the server's answer.
+  private func download(_ id: String, _ then: @escaping (URL?, URLResponse?) -> Void) {
+    let usual = { self.session.downloadTask(with: self.request("/api/talk/file/" + id)) { tmp, resp, _ in then(tmp, resp) }.resume() }
+    Office.shared.pass(["kind": "file", "id": id]) { p in
+      guard let p = p, let u = URL(string: p.url + "/local/talk/file?t=" + (p.token.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")) else { return usual() }
+      Office.shared.session.downloadTask(with: URLRequest(url: u)) { tmp, resp, _ in
+        if let tmp = tmp, (resp as? HTTPURLResponse)?.statusCode == 200 { return then(tmp, resp) }
+        Office.shared.failed(); usual()
+      }.resume()
+    }
+  }
   func file(_ id: String, _ done: @escaping (URL?) -> Void) {
     let to = Net.local(id)
     if FileManager.default.fileExists(atPath: to.path) { done(to); return }
     let uid = Talk.shared.me?.id
-    session.downloadTask(with: request("/api/talk/file/" + id)) { tmp, resp, _ in
+    download(id) { tmp, resp in
       let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
       // (no longer on the server: from the iCloud backup when it's there — Haris 2026-11-14)
       if (400..<500).contains(code) { DispatchQueue.main.async { Backup.shared.recover(id, uid: uid, done) }; return }
@@ -202,7 +232,7 @@ final class Net {
       try? FileManager.default.removeItem(at: to)
       try? FileManager.default.moveItem(at: tmp, to: to)
       DispatchQueue.main.async { done(FileManager.default.fileExists(atPath: to.path) ? to : nil) }
-    }.resume()
+    }
   }
   // a new message's file onto the phone before saying it arrived: true once it's here — or the server has none to give
   // (gone, refused); false only when it couldn't be reached, to be tried again
@@ -210,12 +240,12 @@ final class Net {
     let to = Net.local(id)
     if FileManager.default.fileExists(atPath: to.path) { done(true); return }
     let uid = Talk.shared.me?.id
-    session.downloadTask(with: request("/api/talk/file/" + id)) { tmp, resp, _ in
+    download(id) { tmp, resp in
       let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
       if (400..<500).contains(code) { DispatchQueue.main.async { Backup.shared.recover(id, uid: uid) { _ in done(true) } }; return }
       if code == 200, let tmp = tmp { try? FileManager.default.removeItem(at: to); try? FileManager.default.moveItem(at: tmp, to: to) }
       DispatchQueue.main.async { done(code == 200 || (400..<500).contains(code)) }
-    }.resume()
+    }
   }
   // E11 Console's pictures (people's photos, client logos) — the same server
   private let pics = NSCache<NSString, UIImage>()
