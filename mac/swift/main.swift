@@ -1324,6 +1324,7 @@ enum PageMenu {
   static func show(_ a: [String: Any], in web: WKWebView, zoom: CGFloat, _ done: @escaping ([String: Any]) -> Void) {
     let picker = Picker()
     let menu = NSMenu()
+    menu.minimumWidth = 220   // (every right-click menu from the page at least this wide — Haris 2026-11-17 19:57)
     menu.autoenablesItems = false
     var lastSep = true
     for it in a["list"] as? [[String: Any]] ?? [] {
