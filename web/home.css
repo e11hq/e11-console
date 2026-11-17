@@ -883,8 +883,12 @@ html.mac-chrome[data-theme="light"] .mib-row.sel { background: color-mix(in srgb
 .mib-tile:hover .mib-tpic { filter: brightness(1.08); }
 .mib-occ { display: flex; gap: 8px; flex-wrap: wrap; }
 .mib-more { font-size: 12px; color: var(--mc-dim); padding: 4px 10px; }
-.mib-moreb { border: 0; background: none; padding: 10px 0 4px; font: inherit; font-size: 12px; font-weight: 500; color: var(--mc-blue); cursor: default; }   /* (+ N more in a thread: words, as "See them in My Tasks") */
+.mib-moreb { border: 0; background: none; padding: 0; line-height: 16px; font: inherit; font-size: 12px; font-weight: 500; color: var(--mc-blue); cursor: default; }   /* (+ N more in a thread: words, as "See them in My Tasks") */
 .mib-moreb:hover { text-decoration: underline; }
+.mib-th-r.more { margin-top: -6px; }   /* (+ N more close to what's round it: 6 above, 6 under) */
+.mib-th .mib-th-r.more:not(:last-child)::after { top: 6px; }   /* (the line not drawn twice where it meets the comment's) */
+.mib-th-r.more + .mib-th-r > .mib-u { padding-top: 6px; }
+.mib-th-r.more + .mib-th-r:last-child::before { height: 21px; }
 .mib-pday { width: 44px; text-align: center; flex: none; }
 .mib-pday b { display: block; font-size: 15px; }
 .mib-pday span { font-size: 10.5px; color: var(--mc-dim); }
