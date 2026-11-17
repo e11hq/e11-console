@@ -59,6 +59,7 @@ const ICONS = {
   logout: '<path d="M6.4 13.3H3.5a.8.8 0 0 1-.8-.8v-9c0-.4.4-.8.8-.8h2.9M10.4 11l3-3-3-3M13.3 8H6.2"/>',
   bell: '<path d="M4 11.2V7.4a4 4 0 0 1 8 0v3.8l1.2 1.2H2.8zM6.6 13.4a1.5 1.5 0 0 0 2.8 0"/>',
   lock: '<rect x="3.2" y="7.2" width="9.6" height="6.4" rx="1.4"/><path d="M5.4 7.2V5.3a2.6 2.6 0 0 1 5.2 0v1.9"/>',
+  story: '<rect x="4.2" y="1.3" width="7.6" height="13.4" rx="1.8"/><path d="M5.8 3.3h1.6M8.6 3.3h1.6"/>',   // (a tall Instagram story, its progress bars at the top — the content plans' Story, Haris 2026-11-17)
   image: '<rect x="2.3" y="2.8" width="11.4" height="10.4" rx="1.6"/><circle cx="5.9" cy="6.3" r="1.2"/><path d="m13.7 10.6-3.4-3.3-6.7 5.9"/>',
   camera: '<path d="M2.3 5.4c0-.5.4-.9.9-.9h1.9l1-1.5h3.8l1 1.5h1.9c.5 0 .9.4.9.9v6.7c0 .5-.4.9-.9.9H3.2a.9.9 0 0 1-.9-.9z"/><circle cx="8" cy="8.6" r="2.3"/>',
   details: '<path d="M2.4 4.2h7.2M2.4 8h5.2M2.4 11.8h7.2"/><path d="M12.6 7.2v5"/><circle cx="12.6" cy="4.4" r=".75" fill="currentColor" stroke="none"/>',
