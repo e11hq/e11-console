@@ -455,6 +455,18 @@ const MacAssets = (() => {
     e.dataTransfer.effectAllowed = 'move';
     try { e.dataTransfer.setData('application/x-e11-file', a.id); } catch (x) { /* */ }
     t.setAttribute('data-live-moving', '');
+    // (what's dragged: the file small, as Finder's — its picture and its name under it — Haris 19:24)
+    try {
+      const pic = t.querySelector('.mca-tp'), r = pic.getBoundingClientRect(), w = 96, h = Math.round(w * r.height / Math.max(1, r.width));
+      const g = document.createElement('div'); g.className = 'mca-ghost';
+      const pc = pic.cloneNode(true); pc.querySelectorAll('.mca-cl, .mca-pin').forEach((x) => x.remove()); pc.removeAttribute('data-live-pvhide');
+      pc.style.width = w + 'px'; pc.style.height = h + 'px';
+      g.appendChild(pc);
+      const nm = document.createElement('div'); nm.className = 'mca-ghost-n'; nm.textContent = a.name; g.appendChild(nm);
+      document.body.appendChild(g);
+      e.dataTransfer.setDragImage(g, w / 2 + 14, h / 2 + 6);
+      setTimeout(() => g.remove(), 0);
+    } catch (x) { /* the page's own picture of it */ }
   }, true);
   document.addEventListener('dragend', () => { moving = null; setHot(null); document.querySelectorAll('[data-live-moving]').forEach((x) => x.removeAttribute('data-live-moving')); }, true);
   const moveTarget = (e) => {
