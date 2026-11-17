@@ -211,7 +211,13 @@ const MacInbox = (() => {
     //  2026-11-17 "have a similar design for the threaded notifications and replies")
     const blocks = [];
     const lead = (pc) => upd({ id: 'lead-' + pc.id, from: pc.authorId, at: pc.at }, mentionMark(esc(pc.text || '')), '', true).replace('class="mib-u faded"', 'class="mib-u faded mib-lead"');
+    // (a long run of updates: only the one before the newest, faded, and the newest — "+ N more" above them opens the rest,
+    //  no closing it; picking a notification in the list again closes it. Your replies always all show — Haris 2026-11-17)
+    const hide = openAll ? 0 : Math.max(0, items.length - 2);
+    lastComment = items.map(cOf).filter(Boolean).pop() || null;
+    if (hide) blocks.push({ html: `<button type="button" class="mib-btn sm mib-moreb" data-mib="more-ups" data-key="more">+ ${hide} more</button>` });
     items.forEach((n, i) => {
+      if (i < hide) return;
       const c = cOf(n), html = one(n, i);
       const pid = c && c.parentId, last = blocks[blocks.length - 1];
       if (!pid) { blocks.push({ cid: c ? c.id : null, html }); return; }
@@ -265,7 +271,7 @@ const MacInbox = (() => {
     return head(t ? statusIcon(t, 16) : '', t ? (t.title || 'Untitled task') : 'Deleted task', taskLine(t), unreadBtn(g) + openBtn(g, 'Open Task'))
       + cap(`${items.length} update${items.length === 1 ? '' : 's'} · newest last`) + `<div class="mib-ups">${ups}</div>${reply}`;
   }
-  let editingId = null, tick = null;
+  let editingId = null, tick = null, openAll = false;
   // your replies from this pane, still there (each comment's id kept; an older one without, its words)
   function myReplies(g, t) {
     const x = g.items.find((n) => n.mine && n.mine.reply);
@@ -388,6 +394,7 @@ const MacInbox = (() => {
     if (changed) { stay.add(g.key); persist(); renderSidebar(); if (draw) renderContent(); }
   }
   function choose(k) {
+    openAll = false;   // (every pick in the list starts a long run closed again)
     if (k !== pick) { dyOpen = null; pending = []; }
     pick = k;
     const g = rows().list.find((x) => x.key === k);
@@ -465,6 +472,7 @@ const MacInbox = (() => {
     else if (a === 'plan-ok') { const pl = Plans.planById(el.dataset.id); if (pl) Promise.resolve(Plans.approve(pl)).then(() => renderContent()); }
     else if (a === 'plan-back') { const pl = Plans.planById(el.dataset.id); if (pl) Plans.sendBack(pl); }
     else if (a === 'dy-sec') { dyOpen = dyOpen === el.dataset.k ? '' : el.dataset.k; renderContent(); }
+    else if (a === 'more-ups') { openAll = true; renderContent(); }
     else if (a === 'my-edit') { editingId = el.dataset.cid; renderContent(); setTimeout(() => { const x = document.querySelector('.mib-ein'); if (x) { x.focus(); x.setSelectionRange(x.value.length, x.value.length); } }, 0); }
     else if (a === 'my-cancel') { editingId = null; renderContent(); }
     else if (a === 'my-save') saveMine(el.dataset.tid, el.dataset.cid);

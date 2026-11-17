@@ -883,6 +883,7 @@ html.mac-chrome[data-theme="light"] .mib-row.sel { background: color-mix(in srgb
 .mib-tile:hover .mib-tpic { filter: brightness(1.08); }
 .mib-occ { display: flex; gap: 8px; flex-wrap: wrap; }
 .mib-more { font-size: 12px; color: var(--mc-dim); padding: 4px 10px; }
+.mib-moreb { align-self: flex-start; margin: 10px 0 2px 40px; }   /* (+ N more: the earlier updates of a long run) */
 .mib-pday { width: 44px; text-align: center; flex: none; }
 .mib-pday b { display: block; font-size: 15px; }
 .mib-pday span { font-size: 10.5px; color: var(--mc-dim); }
