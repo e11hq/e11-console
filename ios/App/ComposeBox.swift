@@ -1187,3 +1187,23 @@ final class PickList: UITableView, UITableViewDataSource, UITableViewDelegate {
     }
   }
 }
+
+// One way for every icon that turns into another icon (mic ↔ ↑, + ↔ ✕, ▶ ↔ ⏸, ○ ↔ ✓): iPhone's own symbol swap, the
+// old one going down as the new one comes up — Haris 2026-11-17 10:51 ("all other buttons in this category").
+// A button's symbol is drawn by its own image view on top (the button's own image left empty), as the comment box's.
+enum SymSwap {
+  static func set(_ v: UIImageView, _ img: UIImage?, animated: Bool) {
+    if animated, v.window != nil, v.image != nil, let img = img { v.setSymbolImage(img, contentTransition: .replace.downUp, options: .speed(1.6)) }
+    else { v.image = img }
+  }
+  static func set(_ b: UIButton, _ img: UIImage?, animated: Bool) {
+    let v: UIImageView
+    if let x = b.viewWithTag(4721) as? UIImageView { v = x } else {
+      v = UIImageView(); v.tag = 4721; v.contentMode = .center; v.isUserInteractionEnabled = false; v.translatesAutoresizingMaskIntoConstraints = false
+      b.addSubview(v)
+      NSLayoutConstraint.activate([v.centerXAnchor.constraint(equalTo: b.centerXAnchor), v.centerYAnchor.constraint(equalTo: b.centerYAnchor)])
+    }
+    if b.image(for: .normal) != nil { b.setImage(nil, for: .normal) }
+    set(v, img, animated: animated)
+  }
+}

@@ -389,8 +389,8 @@ final class ThemeBlock: UIView, HomeBlock {
       x.1.layer.borderColor = on ? UIColor.systemBlue.cgColor : UIColor.clear.cgColor
       x.2.textColor = L.title
       let mark = x.3
-      let tickSet = { mark.image = UIImage(systemName: on ? "checkmark.circle.fill" : "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22, weight: .regular)); mark.tintColor = on ? .systemBlue : .tertiaryLabel }
-      if mark.window != nil { UIView.transition(with: mark, duration: 0.15, options: [.transitionCrossDissolve, .allowUserInteraction], animations: tickSet) } else { tickSet() }   // (crossfading, not snapping — Haris 2026-11-17)
+      mark.tintColor = on ? .systemBlue : .tertiaryLabel   // (iPhone's own symbol swap — Haris 2026-11-17 10:51)
+      SymSwap.set(mark, UIImage(systemName: on ? "checkmark.circle.fill" : "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22, weight: .regular)), animated: true)
       x.0.accessibilityTraits = on ? [.button, .selected] : .button
     }
     if sw.isOn != (m == "auto") { sw.setOn(m == "auto", animated: window != nil) }
@@ -4312,7 +4312,7 @@ final class AmendSheetVC: UIViewController, UITextViewDelegate {
       for f in files {
         let id = f["id"] as? String ?? ""
         let row = UIStackView(); row.axis = .horizontal; row.spacing = 12; row.alignment = .top
-        let tick = UIButton(type: .system); tick.setImage(UIImage(systemName: "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22)), for: .normal); tick.tintColor = .tertiaryLabel
+        let tick = UIButton(type: .system); SymSwap.set(tick, UIImage(systemName: "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22)), animated: false); tick.tintColor = .tertiaryLabel
         tick.addAction(UIAction { [weak self] _ in self?.toggle(id) }, for: .touchUpInside); tick.accessibilityLabel = "Needs changes: \(f["name"] as? String ?? "")"
         ticks[id] = tick
         let th = UIImageView(); th.contentMode = .scaleAspectFill; th.clipsToBounds = true; th.layer.cornerRadius = 10; th.backgroundColor = .tertiarySystemFill
@@ -4341,10 +4341,9 @@ final class AmendSheetVC: UIViewController, UITextViewDelegate {
     let on = !ticked.contains(id)
     if on { ticked.insert(id) } else { ticked.remove(id) }
     if let b = ticks[id] {
-      UIView.transition(with: b, duration: 0.15, options: [.transitionCrossDissolve, .allowUserInteraction]) {   // (crossfading, not snapping — Haris 2026-11-17)
-        b.setImage(UIImage(systemName: on ? "checkmark.circle.fill" : "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22)), for: .normal)
-        b.tintColor = on ? .systemOrange : .tertiaryLabel
-      }
+      // (iPhone's own symbol swap — Haris 2026-11-17 10:51)
+      b.tintColor = on ? .systemOrange : .tertiaryLabel
+      SymSwap.set(b, UIImage(systemName: on ? "checkmark.circle.fill" : "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22)), animated: true)
     }
     UIView.animate(withDuration: 0.25) {
       self.wills[id]?.isHidden = on

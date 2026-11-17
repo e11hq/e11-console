@@ -566,9 +566,8 @@ final class ContactPreview: UITableViewController {
     UISelectionFeedbackGenerator().selectionChanged()
     if let cell = t.cellForRow(at: ip), let mark = cell.accessoryView as? UIImageView {
       let ticked = on.contains(k)
-      UIView.transition(with: mark, duration: 0.15, options: .transitionCrossDissolve) {
-        mark.image = UIImage(systemName: ticked ? "checkmark.circle.fill" : "circle"); mark.tintColor = ticked ? self.view.tintColor : .tertiaryLabel
-      }
+      mark.tintColor = ticked ? self.view.tintColor : .tertiaryLabel   // (iPhone's own symbol swap — Haris 2026-11-17 10:51)
+      SymSwap.set(mark, UIImage(systemName: ticked ? "checkmark.circle.fill" : "circle"), animated: true)
     }
     navigationItem.rightBarButtonItem?.isEnabled = !on.isEmpty
   }

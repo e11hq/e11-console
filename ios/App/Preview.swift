@@ -100,7 +100,7 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
     cardNote.font = .systemFont(ofSize: 15); cardNote.textColor = UIColor(white: 1, alpha: 0.62); cardNote.numberOfLines = 0; cardNote.textAlignment = .center
     [cardPic, cardType, cardNote].forEach { cardStack.addArrangedSubview($0) }
     contentView.addSubview(cardStack)
-    play.setImage(UIImage(systemName: "play.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 30, weight: .bold)), for: .normal)
+    SymSwap.set(play, UIImage(systemName: "play.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 30, weight: .bold)), animated: false); play.accessibilityLabel = "Play"
     play.tintColor = .white
     play.backgroundColor = UIColor.black.withAlphaComponent(0.45)
     play.layer.cornerRadius = 38
@@ -169,8 +169,12 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
     let name = playing ? "pause.fill" : "play.fill"
     let alpha: CGFloat = playing ? (chrome ? 1 : 0) : (held || atEnd ? 1 : 0)
     guard play.alpha != alpha || play.accessibilityIdentifier != name else { return }
-    let set = { self.play.setImage(UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 30, weight: .bold)), for: .normal); self.play.accessibilityIdentifier = name; self.play.alpha = alpha }
-    if animated { UIView.transition(with: play, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction], animations: set) } else { set() }
+    // (▶ ↔ ⏸ with iPhone's own symbol swap, the button fading as it comes or goes — Haris 2026-11-17 10:51)
+    if play.accessibilityIdentifier != name {
+      SymSwap.set(play, UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 30, weight: .bold)), animated: animated && play.alpha > 0 && alpha > 0)
+      play.accessibilityIdentifier = name; play.accessibilityLabel = playing ? "Pause" : "Play"
+    }
+    if animated { UIView.animate(withDuration: 0.2, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState]) { self.play.alpha = alpha } } else { play.alpha = alpha }
   }
   deinit { if let e = ended { NotificationCenter.default.removeObserver(e) } }
 
