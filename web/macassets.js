@@ -80,7 +80,7 @@ const MacAssets = (() => {
     return `<div class="mca-fc new ${sm ? 'sm' : ''} ${nf.err ? 'bad' : ''}" data-key="nf"><div class="mca-ftop">${folderSVG(false)}<div class="mca-ftx"><input class="mca-nfin" data-key="nfin" value="New folder" maxlength="80" spellcheck="false" autocomplete="off"><div class="mca-fm">${nf.err ? `<span class="mca-warn">${esc(nf.err)}</span>` : '<span>Empty</span>'}</div></div></div></div>`;
   }
   function tile(c, f, a, q) {
-    return `<div class="mca-t" data-key="a-${a.id}" data-action="tile-open" data-id="${a.id}" data-att="${a.id}" data-mca-file="${a.id}" data-mca-cl="${c.id}" title="${esc(a.name)}">`
+    return `<div class="mca-t" data-key="a-${a.id}" ${!q && canDelAsset(a) ? 'draggable="true"' : ''} data-action="tile-open" data-id="${a.id}" data-att="${a.id}" data-mca-file="${a.id}" data-mca-cl="${c.id}" title="${esc(a.name)}">`
       + `<div class="mib-tpic mca-tp ${isFont(a) ? 'font' : ''}">${picHTML(a)}<button type="button" class="mca-cl" data-action="copy-att" data-id="${a.id}" title="Copy link — paste it in a comment, or send it to anyone">${SV.link}Copy Link</button>${!q && pinned(a) ? `<span class="mca-pin t" title="Pinned">${SV.pin}</span>` : ''}</div>`
       + `<div class="mca-tn">${q ? caMark(a.name, q) : esc(a.name)}</div>`
       + (q ? `<a class="mca-loc" data-action="open-cfolder-of" data-client="${c.id}" data-id="${f.id}" title="Open this folder">${lg(c, 12)}<span>${esc(c.name)} › ${esc(folderPath(c, f))}</span></a>`
@@ -394,14 +394,14 @@ const MacAssets = (() => {
   function setHot(card, n) {
     if (hot && hot !== card) { const m = hot.querySelector('.mca-fm'); if (m) m.removeAttribute('data-live-hot'); }
     hot = card;
-    if (card) { const m = card.querySelector('.mca-fm'); if (m) m.setAttribute('data-live-hot', `Drop ${n ? plural(n, 'file') : 'files'} here`); }
+    if (card) { const m = card.querySelector('.mca-fm'); if (m) m.setAttribute('data-live-hot', typeof n === 'string' ? n : `Drop ${n ? plural(n, 'file') : 'files'} here`); }
   }
   function clear() {
     clearTimeout(offT); setHot(null);
     if (ov) { const o = ov; ov = null; o.classList.remove('on'); setTimeout(() => o.remove(), 160); }
   }
   document.addEventListener('dragover', (e) => {
-    if (!on() || ui.view !== 'client' || (typeof dragId !== 'undefined' && dragId) || !fileDrag(e)) return;
+    if (!on() || ui.view !== 'client' || (typeof dragId !== 'undefined' && dragId) || moving || !fileDrag(e)) return;
     const ct = document.getElementById('content');
     const { c, f } = curFolder();
     clearTimeout(offT); offT = setTimeout(clear, 300);
@@ -420,7 +420,7 @@ const MacAssets = (() => {
   }, true);
   document.addEventListener('dragleave', (e) => { if ((ov || hot) && !e.relatedTarget) clear(); }, true);
   document.addEventListener('drop', (e) => {
-    if (!on() || ui.view !== 'client' || (typeof dragId !== 'undefined' && dragId) || !fileDrag(e)) return;
+    if (!on() || ui.view !== 'client' || (typeof dragId !== 'undefined' && dragId) || moving || !fileDrag(e)) return;
     const { c, f } = curFolder();
     const card = hot, files = [...(e.dataTransfer.files || [])];
     clear();
@@ -435,6 +435,46 @@ const MacAssets = (() => {
     if (!card || !files.length) return;
     PageHistory.mark(); ui.folderId = card.dataset.mcaFolder; const ct = document.getElementById('content'); if (ct) ct.scrollTop = 0; render(); PageHistory.mark();
     uploadIntoFolder(files);
+  }, true);
+
+  // ---------- a file held and dragged onto a folder card: moved there (as C6's client page — Haris 19:08) ----------
+  // (only the app's list changes: the file stays where it's kept on disk, its link and copies pasted in tasks keep working)
+  let moving = null;   // { cid, fid, aid }
+  document.addEventListener('dragstart', (e) => {
+    const t = on() && e.target.closest && e.target.closest('.mca-t[draggable="true"]');
+    if (!t) return;
+    const { c, f, a } = fileOf(t.dataset.mcaFile);
+    if (!a || !canDelAsset(a)) { e.preventDefault(); return; }
+    moving = { cid: c.id, fid: f.id, aid: a.id };
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('application/x-e11-file', a.id); } catch (x) { /* */ }
+    t.setAttribute('data-live-moving', '');
+  }, true);
+  document.addEventListener('dragend', () => { moving = null; setHot(null); document.querySelectorAll('[data-live-moving]').forEach((x) => x.removeAttribute('data-live-moving')); }, true);
+  const moveTarget = (e) => {
+    const c = moving && clientById(moving.cid);
+    const card = c && e.target.closest && e.target.closest('.mca [data-mca-folder]');
+    const fo = card && card.dataset.mcaCl === c.id && c.folders.find((x) => x.id === card.dataset.mcaFolder);
+    return fo && fo.id !== moving.fid && canUploadTo(c, fo) ? { c, card, fo } : null;
+  };
+  document.addEventListener('dragover', (e) => {
+    if (!moving) return;
+    const m = moveTarget(e);
+    e.preventDefault(); e.stopPropagation();
+    e.dataTransfer.dropEffect = m ? 'move' : 'none';
+    setHot(m ? m.card : null, 'Move 1 file here');
+  }, true);
+  document.addEventListener('drop', (e) => {
+    if (!moving) return;
+    const m = moveTarget(e), mv = moving;
+    e.preventDefault(); e.stopPropagation();
+    moving = null; setHot(null);
+    if (!m) return;
+    const src = m.c.folders.find((x) => x.id === mv.fid), a = src && src.files.find((x) => x.id === mv.aid);
+    if (!a || !canDelAsset(a) || m.fo.files.some((x) => x.id === a.id)) return;
+    const put = (from, to) => { from.files = from.files.filter((x) => x.id !== a.id); to.files.push(a); persist(0); render(); };
+    put(src, m.fo);
+    toast(`Moved “${a.name}” to ${m.fo.name}`, { label: 'Undo', run: () => { const c = clientById(mv.cid), s2 = c && c.folders.find((x) => x.id === mv.fid), d2 = c && c.folders.find((x) => x.id === m.fo.id); if (s2 && d2 && d2.files.some((x) => x.id === a.id)) put(d2, s2); } }, 8000);
   }, true);
 
   return { on, view, draw, results, info };
