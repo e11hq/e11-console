@@ -691,15 +691,6 @@ html.mac-chrome .hm-bar:hover, html.mac-chrome .hm-bar.future:hover { background
 html.mac-chrome .hm-streak .hm-hlist { overflow-y: auto; overflow-x: hidden; gap: 0; }
 /* (the soft fade at the bottom kept, as before — the rows scroll under it; Haris 16:28: "now it's a sharp cut") */
 html.mac-chrome .hm-streak .hm-hlist { -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 26px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 26px), transparent); padding-bottom: 18px; }
-/* ===== scroll bars, the whole Mac app (Haris 2026-11-15 16:33 / 17:19): as Apple's overlay ones — a thin rounded bar over
-   the list's right edge while it scrolls, fading away a moment after; WebKit's own (always on show, whatever the app
-   asks) hidden. app.js MacScroll draws it; it can be dragged too. ===== */
-html.mac-chrome, html.mac-chrome * { scrollbar-width: none; }
-html.mac-chrome ::-webkit-scrollbar { display: none; width: 0; height: 0; }
-.mac-sb { position: fixed; z-index: 9000; width: 7px; border-radius: 4px; background: rgba(128, 128, 128, .6); opacity: 0; transition: opacity .35s ease, width .15s ease; pointer-events: auto; cursor: default; }
-.mac-sb.on { opacity: 1; transition: opacity .1s ease, width .15s ease; }
-.mac-sb:hover, .mac-sb.drag { width: 10px; opacity: 1; }
-html[data-theme="light"] .mac-sb { background: rgba(0, 0, 0, .45); }
 /* the Talk button: E11 Talk's own bubble (the iPhone's TalkBubble) in the bar's ink — white in dark, black in light — and
    "Talk" beside it, as the iPhone's top bar (Haris 2026-11-15 17:30) */
 #tb-talk .tb-bubble { display: inline-block; width: 16px; height: 14.7px; flex: none; background-color: currentColor;
