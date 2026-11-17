@@ -3,30 +3,13 @@ import Security
 
 /* Talking to the server (server/src/talk.js — /api/talk/…). E11 Talk's own sign-in for now (Haris 2026-11-06: before
    the App Store it becomes shared with E11 Console): Cloudflare's email code in a web page once, then its sign-in cookie
-   is kept in the Keychain and sent with every request. Built on the test server first (talk-test.e11hq.com); on live, talk.e11hq.com, since 2026-11-17. */
+   is kept in the Keychain and sent with every request. Built on the test server first (talk-test.e11hq.com). */
 enum Server {
-  // E11 Talk follows E11 Console's server on the same phone (Haris 2026-11-17 20:32): Console on test → Talk on test; on
-  // live (or App Review's copy, which has no Talk of its own yet) → Talk on live. Console says where it is in the Keychain
-  // the two apps share (WidgetShare's "signin"). No E11 Console on the phone: the address built into the app.
-  private(set) static var url: String = pick()
-  static var host: String { URL(string: url)?.host ?? "" }
-  static func pick() -> String {
+  static var url: String {
     if let s = UserDefaults.standard.string(forKey: "talk_server"), !s.isEmpty { return s }
-    let own = Bundle.main.object(forInfoDictionaryKey: "TalkServerURL") as? String ?? "https://talk.e11hq.com"
-    guard let console = consoleServer(), let h = URL(string: console)?.host else { return own }
-    return h.hasPrefix("test.") ? "https://talk-test.e11hq.com" : "https://talk.e11hq.com"
+    return Bundle.main.object(forInfoDictionaryKey: "TalkServerURL") as? String ?? "https://talk-test.e11hq.com"
   }
-  // (back in front: E11 Console moved to another server meanwhile → true, and Talk goes with it)
-  static func follow() -> Bool { let n = pick(); guard n != url else { return false }; url = n; return true }
-  private static func consoleServer() -> String? {
-    var q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "ae.e11.console.widget", kSecAttrAccount as String: "signin",
-                            kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne]
-    if let g = Bundle.main.object(forInfoDictionaryKey: "E11KeychainGroup") as? String, !g.hasPrefix("$(") { q[kSecAttrAccessGroup as String] = g }
-    var out: AnyObject?
-    guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data,
-          let o = try? JSONSerialization.jsonObject(with: d) as? [String: String], let s = o["server"], !s.isEmpty else { return nil }
-    return s
-  }
+  static var host: String { URL(string: url)?.host ?? "" }
 }
 
 enum Keychain {
@@ -58,8 +41,6 @@ final class Net {
     return URLSession(configuration: c)
   }()
   init() { cookie = Keychain.get("cookie-" + Server.host) }
-  // (another server: its own sign-in)
-  func reloadSignIn() { stopListening(); cookie = Keychain.get("cookie-" + Server.host) }
   var signedIn: Bool { !(cookie ?? "").isEmpty }
 
   func request(_ path: String, method: String = "GET", json: [String: Any]? = nil, body: Data? = nil, type: String? = nil) -> URLRequest {
@@ -88,36 +69,24 @@ final class Net {
   func post(_ path: String, _ json: [String: Any], _ done: @escaping ([String: Any]?) -> Void = { _ in }) { call(path, method: "POST", json: json, done: done) }
   func act(_ b: [String: Any], _ done: @escaping ([String: Any]?) -> Void = { _ in }) { post("/api/talk/act", b, done) }
 
-  // a file to send: in pieces of 4 MB, with its progress — in the office over the office network first (Office, Haris
-  // 2026-11-17 20:13); if that doesn't work, again the usual way from the start
+  // a file to send: in pieces of 4 MB, with its progress
   func upload(_ data: Data, name: String, progress: @escaping (Double) -> Void, done: @escaping (String?) -> Void) {
     let piece = 4 * 1024 * 1024
-    func attempt(_ pass: Office.Pass?) {
-      func next(_ id: String?, _ offset: Int) {
-        let end = min(data.count, offset + piece), last = end >= data.count
-        var q = "offset=\(offset)&name=\(name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "file")"
-        if let id = id { q += "&id=\(id)" }
-        if last { q += "&last=1" }
-        let r: URLRequest
-        if let p = pass, let u = URL(string: p.url + "/local/talk/upload?t=" + (p.token.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "") + "&" + q) {
-          var lr = URLRequest(url: u); lr.httpMethod = "POST"; lr.httpBody = data.subdata(in: offset..<end)
-          lr.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type"); r = lr
-        } else { r = request("/api/talk/upload?" + q, method: "POST", body: data.subdata(in: offset..<end)) }
-        (pass == nil ? session : Office.shared.session).dataTask(with: r) { d, _, _ in
-          let j = d.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
-          DispatchQueue.main.async {
-            guard (j?["ok"] as? Bool) == true, let fid = j?["id"] as? String else {
-              if pass != nil { Office.shared.failed(); progress(0); attempt(nil) } else { done(nil) }
-              return
-            }
-            progress(data.isEmpty ? 1 : Double(end) / Double(data.count))
-            if last { done(fid) } else { next(fid, end) }
-          }
-        }.resume()
-      }
-      next(nil, 0)
+    func next(_ id: String?, _ offset: Int) {
+      let end = min(data.count, offset + piece), last = end >= data.count
+      var q = "/api/talk/upload?offset=\(offset)&name=\(name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "file")"
+      if let id = id { q += "&id=\(id)" }
+      if last { q += "&last=1" }
+      session.dataTask(with: request(q, method: "POST", body: data.subdata(in: offset..<end))) { d, _, _ in
+        let j = d.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
+        DispatchQueue.main.async {
+          guard (j?["ok"] as? Bool) == true, let fid = j?["id"] as? String else { done(nil); return }
+          progress(data.isEmpty ? 1 : Double(end) / Double(data.count))
+          if last { done(fid) } else { next(fid, end) }
+        }
+      }.resume()
     }
-    Office.shared.pass(["kind": "up"]) { p in attempt(p) }
+    next(nil, 0)
   }
 
   // a file the phone still has but the server has let go: sent again under its own id (for a Mac being linked)
@@ -156,21 +125,12 @@ final class Net {
   func file(_ id: String, _ done: @escaping (URL?) -> Void) {
     let to = Net.local(id)
     if FileManager.default.fileExists(atPath: to.path) { done(to); return }
-    // (in the office: over the office network first — Office; if that doesn't work, the usual way)
-    func fetch(_ pass: Office.Pass?) {
-      var r = request("/api/talk/file/" + id)
-      if let p = pass, let u = URL(string: p.url + "/local/talk/file?t=" + (p.token.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")) { r = URLRequest(url: u) }
-      (pass == nil ? session : Office.shared.session).downloadTask(with: r) { tmp, resp, _ in
-        guard let tmp = tmp, (resp as? HTTPURLResponse)?.statusCode == 200 else {
-          if pass != nil { Office.shared.failed(); DispatchQueue.main.async { fetch(nil) } } else { DispatchQueue.main.async { done(nil) } }
-          return
-        }
-        try? FileManager.default.removeItem(at: to)
-        try? FileManager.default.moveItem(at: tmp, to: to)
-        DispatchQueue.main.async { done(FileManager.default.fileExists(atPath: to.path) ? to : nil) }
-      }.resume()
-    }
-    Office.shared.pass(["kind": "file", "id": id]) { p in fetch(p) }
+    session.downloadTask(with: request("/api/talk/file/" + id)) { tmp, resp, _ in
+      guard let tmp = tmp, (resp as? HTTPURLResponse)?.statusCode == 200 else { DispatchQueue.main.async { done(nil) }; return }
+      try? FileManager.default.removeItem(at: to)
+      try? FileManager.default.moveItem(at: tmp, to: to)
+      DispatchQueue.main.async { done(FileManager.default.fileExists(atPath: to.path) ? to : nil) }
+    }.resume()
   }
   // E11 Console's pictures (people's photos, client logos) — the same server
   private let pics = NSCache<NSString, UIImage>()
