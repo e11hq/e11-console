@@ -211,13 +211,7 @@ const MacInbox = (() => {
     //  2026-11-17 "have a similar design for the threaded notifications and replies")
     const blocks = [];
     const lead = (pc) => upd({ id: 'lead-' + pc.id, from: pc.authorId, at: pc.at }, mentionMark(esc(pc.text || '')), '', true).replace('class="mib-u faded"', 'class="mib-u faded mib-lead"');
-    // (a long run of updates: only the one before the newest, faded, and the newest — "+ N more" above them opens the rest,
-    //  no closing it; picking a notification in the list again closes it. Your replies always all show — Haris 2026-11-17)
-    const hide = openAll ? 0 : Math.max(0, items.length - 2);
-    lastComment = items.map(cOf).filter(Boolean).pop() || null;
-    if (hide) blocks.push({ html: `<button type="button" class="mib-btn sm mib-moreb" data-mib="more-ups" data-key="more">+ ${hide} more</button>` });
     items.forEach((n, i) => {
-      if (i < hide) return;
       const c = cOf(n), html = one(n, i);
       const pid = c && c.parentId, last = blocks[blocks.length - 1];
       if (!pid) { blocks.push({ cid: c ? c.id : null, html }); return; }
@@ -258,7 +252,17 @@ const MacInbox = (() => {
     const soonest = mineAll.map((m) => m.c).filter((c) => c && canEditComment(c)).map(editLeft).sort((a, b) => a - b)[0];
     clearTimeout(tick);
     if (soonest) tick = setTimeout(() => { if (ui.view === 'inbox') renderContent(); }, (soonest % 60000 || 60000) + 200);
-    const ups = blocks.map((b) => (b.replies ? `<div class="mib-th" data-key="th:${esc(b.pid)}"><div class="mib-th-head">${b.head}</div>${b.replies.map((r) => `<div class="mib-th-r">${r}</div>`).join('')}</div>` : b.html)).join('');
+    // (a long thread: the comment it's under, then only the reply before the newest (faded) and the newest — "+ N more" over
+    //  them opens the rest, no closing it; picking a notification in the list again closes it. Your replies all show, last —
+    //  Haris 2026-11-17)
+    const thread = (b) => {
+      const mineAt = b.replies.findIndex((r) => r.startsWith('<div class="mib-yours">'));
+      const others = mineAt < 0 ? b.replies : b.replies.slice(0, mineAt), mine = mineAt < 0 ? [] : b.replies.slice(mineAt);
+      const hide = openAll ? 0 : Math.max(0, others.length - 2);
+      const rows = [...(hide ? [`<button type="button" class="mib-moreb" data-mib="more-ups">+ ${hide} more</button>`] : []), ...others.slice(hide), ...mine];
+      return `<div class="mib-th" data-key="th:${esc(b.pid)}"><div class="mib-th-head">${b.head}</div>${rows.map((r) => `<div class="mib-th-r${r.startsWith('<button') ? ' more' : ''}">${r}</div>`).join('')}</div>`;
+    };
+    const ups = blocks.map((b) => (b.replies ? thread(b) : b.html)).join('');
     let reply = '';
     if (lastComment) {
       const root = lastComment.parentId || lastComment.id;
