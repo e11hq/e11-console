@@ -2305,11 +2305,13 @@ final class ToastCapsule: UIView {
   func cross(_ on: Bool) {
     guard on != crossed else { return }
     crossed = on
-    UIView.performWithoutAnimation {
-      plusB.setImage(UIImage(systemName: on ? "xmark" : "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)), for: .normal)
-      plusB.accessibilityLabel = on ? "Cancel download" : nil
-      plusB.isHidden = !roundOn
-    }
+    // (+ ↔ ✕ crossfading in place, the button fading in or out when it comes or goes — it snapped: Haris 2026-11-17)
+    let img = UIImage(systemName: on ? "xmark" : "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
+    plusB.accessibilityLabel = on ? "Cancel download" : nil
+    if plusB.window == nil { UIView.performWithoutAnimation { plusB.setImage(img, for: .normal); plusB.isHidden = !roundOn } }
+    else if plusB.isHidden, roundOn { UIView.performWithoutAnimation { plusB.setImage(img, for: .normal); plusB.alpha = 0; plusB.isHidden = false }; UIView.animate(withDuration: 0.2) { self.plusB.alpha = 1 } }
+    else if !roundOn { UIView.animate(withDuration: 0.2, animations: { self.plusB.alpha = 0 }) { _ in if !self.roundOn { self.plusB.isHidden = true; self.plusB.alpha = 1 } } }
+    else { UIView.transition(with: plusB, duration: 0.15, options: [.transitionCrossDissolve, .allowUserInteraction]) { self.plusB.setImage(img, for: .normal) } }
     setNeedsLayout()
   }
   private var timer: Timer?, touching = false, closing = false

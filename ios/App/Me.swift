@@ -388,8 +388,9 @@ final class ThemeBlock: UIView, HomeBlock {
       let k = i == 0 ? "light" : "dark", on = k == shown
       x.1.layer.borderColor = on ? UIColor.systemBlue.cgColor : UIColor.clear.cgColor
       x.2.textColor = L.title
-      x.3.image = UIImage(systemName: on ? "checkmark.circle.fill" : "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22, weight: .regular))
-      x.3.tintColor = on ? .systemBlue : .tertiaryLabel
+      let mark = x.3
+      let tickSet = { mark.image = UIImage(systemName: on ? "checkmark.circle.fill" : "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22, weight: .regular)); mark.tintColor = on ? .systemBlue : .tertiaryLabel }
+      if mark.window != nil { UIView.transition(with: mark, duration: 0.15, options: [.transitionCrossDissolve, .allowUserInteraction], animations: tickSet) } else { tickSet() }   // (crossfading, not snapping — Haris 2026-11-17)
       x.0.accessibilityTraits = on ? [.button, .selected] : .button
     }
     if sw.isOn != (m == "auto") { sw.setOn(m == "auto", animated: window != nil) }
@@ -4339,8 +4340,12 @@ final class AmendSheetVC: UIViewController, UITextViewDelegate {
     UISelectionFeedbackGenerator().selectionChanged(); err.text = nil
     let on = !ticked.contains(id)
     if on { ticked.insert(id) } else { ticked.remove(id) }
-    ticks[id]?.setImage(UIImage(systemName: on ? "checkmark.circle.fill" : "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22)), for: .normal)
-    ticks[id]?.tintColor = on ? .systemOrange : .tertiaryLabel
+    if let b = ticks[id] {
+      UIView.transition(with: b, duration: 0.15, options: [.transitionCrossDissolve, .allowUserInteraction]) {   // (crossfading, not snapping — Haris 2026-11-17)
+        b.setImage(UIImage(systemName: on ? "checkmark.circle.fill" : "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22)), for: .normal)
+        b.tintColor = on ? .systemOrange : .tertiaryLabel
+      }
+    }
     UIView.animate(withDuration: 0.25) {
       self.wills[id]?.isHidden = on
       self.notes[id]?.superview?.isHidden = !on
