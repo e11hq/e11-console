@@ -631,10 +631,17 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
         preview?.setFrom(r, id: id)
       }
       preview?.set(a); done(["ok": true])
+    // (Client Assets' Info as the Mac's own Get Info window — Info.swift, Haris 2026-11-17 19:53)
+    case "infoWindow":
+      let ins = InfoWindows.shared
+      ins.main = window
+      if ins.event == nil { ins.event = { [weak self] e in self?.pageJS("window.__e11Info && window.__e11Info(\(jsonString(e)))") } }
+      MacLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) { done(["ok": ins.show(a)]) }
+    case "infoClose": InfoWindows.shared.close(a["key"] as? String ?? ""); done(["ok": true])
     case "appInfo":
       done(["ok": true, "server": SERVER, "shell": SHELL_VERSION, "native": "swift",
             "version": info["CFBundleShortVersionString"] as? String ?? "3.0.0", "touchID": defaults.bool(forKey: LOCK_KEY),
-            "glass": FileManager.default.fileExists(atPath: Bundle.main.bundlePath + "/Contents/Resources/Assets.car"), "store": IS_STORE, "apns": IS_STORE, "sidebar": true, "preview": true])
+            "glass": FileManager.default.fileExists(atPath: Bundle.main.bundlePath + "/Contents/Resources/Assets.car"), "store": IS_STORE, "apns": IS_STORE, "sidebar": true, "preview": true, "info": true])
     default: done(["ok": false, "error": "Unknown command " + cmd])
     }
   }

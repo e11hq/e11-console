@@ -22,6 +22,7 @@ targets:
       - path: ../swift/Sidebar.swift
       - path: ../swift/Splash.swift
       - path: ../swift/Preview.swift
+      - path: ../swift/Info.swift
       - path: ../splash
         type: folder
         buildPhase: resources
