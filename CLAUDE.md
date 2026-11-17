@@ -387,6 +387,14 @@ the preview's shades fade with it (the flying picture under them). (5) **Tell Ha
 every time a change goes up, so he can confirm it.
 (6) **@ and # lists are the Mac's own menu** (Haris 2026-11-17, option A): frosted panel, compact 24 pt rows, a small heading,
 the chosen row in Apple's blue; @ photo · name · role, # the kind's symbol in its colour · name · size — every such list in the Mac app.
+**E11 Console for Mac — the Inbox DONE and LOCKED (Haris 2026-11-17 18:27: "lets mark the inbox done"):** web/macinbox.js and its
+`.mib-*` styles (web/home.css) as on main 4edd3c5 (test 1.9.66-test.767), branch `locked/mac-inbox-4edd3c5` (never moved or
+deleted). Holds: the list and panes (morph patch, nothing redrawn that didn't change), threads, your replies (Edit · Delete),
+the reply box (files dropped or +, upload rings, @ / # — # as a strip of tiles —, link cards, schedule a reply: panel A, the
+clock tinted while it's open), Inbox Zero C, every update with files showing them as tiles (attached, reviews, plans, claims,
+scheduled replies), content plans with every post and the format symbols (Reel / Story tall), PDF / Office pictures from the
+server (poppler-data in the image), the preview flying from a tile's picture only. Nothing changes in its look, behaviour or
+code without telling Haris first and his yes.
 **E11 Console for Mac — the sidebar SAVED and LOCKED exactly as it is (Haris 2026-11-15 09:31: "I dont want to mess it up,
 sidebar will remain exactly as now. In mac app"; 09:35 "Alright save the sidebar"):** mac/swift/Sidebar.swift and the page's
 NativeSide (web/app.js) as on main 0442ce5, branch `locked/mac-sidebar-0442ce5` (never moved or deleted) — the floating glass
