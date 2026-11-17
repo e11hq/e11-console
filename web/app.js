@@ -3130,7 +3130,7 @@ function renderContentNow() {
   else if (ui.view === 'home') c.innerHTML = viewHome();
   else if (ui.view === 'mytasks') c.innerHTML = viewMyTasks();
   else if (ui.view === 'today') c.innerHTML = viewMyDay();
-  else if (ui.view === 'inbox') { c.innerHTML = viewInbox(); fitInbox(c); }
+  else if (ui.view === 'inbox') { if (!(typeof MacInbox !== 'undefined' && MacInbox.on() && MacInbox.patch(c))) c.innerHTML = viewInbox(); fitInbox(c); }   // (the Mac: only what changed — macinbox.js)
   else if (ui.view === 'team') { c.innerHTML = viewTeam(); if (Host.isServer && can('manageUsers')) api('GET', '/api/cloudflare').then(paintCfStatus).catch(() => {}); }
   else if (ui.view === 'reviews') { c.innerHTML = viewReviews(); hydrateThumbs(c); }
   else if (ui.view === 'profile') c.innerHTML = viewProfile();

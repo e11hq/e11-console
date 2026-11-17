@@ -964,3 +964,4 @@ html[data-theme="light"] .mib-pop { background: rgba(255, 255, 255, .98); box-sh
 .mib-drow:hover { background: var(--mc-sel); }
 .mib-dim { color: var(--mc-dim); font-size: 12px; }
 .mib-asof { margin-top: auto; padding-top: 12px; }
+.mib-u-b > .mib-tiles { margin-top: 5px; }   /* (as far under the words as the words are under the name — Haris 2026-11-17) */

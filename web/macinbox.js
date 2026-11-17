@@ -64,6 +64,7 @@ const MacInbox = (() => {
       .map(([k, l, n]) => `<button type="button" class="mib-tab ${tab === k ? 'on' : ''}" data-action="inbox-tab" data-tab="${k}">${l}${n ? ` <i>${n}</i>` : ''}</button>`).join('');
     const g = list.find((x) => x.key === pick) || null;
     const fresh = shown !== (g ? g.key : null);
+    wasFresh = fresh;
     shown = g ? g.key : null;
     return `<div class="mib">
       <header class="mib-head"><div><div class="mib-line">${unreadN ? `${unreadN} unread` : 'All caught up'}</div><h1>Inbox</h1></div>
@@ -71,7 +72,7 @@ const MacInbox = (() => {
           <button type="button" class="mib-btn" data-action="ib-filter">${esc(f === 'all' ? 'All updates' : IB_FILTERS[f])}<span class="mib-chev">⌄</span></button>
           ${unreadN ? `<button type="button" class="mib-btn" data-action="mark-all-read">✓ Clear All</button>` : ''}</div></header>
       <div class="mib-body">
-        <div class="mib-list">${groups.map((x) => `<div class="mib-group">${x.name}</div><div class="mib-card">${x.rows.map(rowHTML).join('')}</div>`).join('')
+        <div class="mib-list">${groups.map((x) => `<div class="mib-group" data-key="g:${x.name}">${x.name}</div><div class="mib-card" data-key="c:${x.name}">${x.rows.map(rowHTML).join('')}</div>`).join('')
           || `<div class="mib-none"><b>${tab === 'primary' ? 'Inbox zero 🎉' : 'Nothing here yet'}</b><span>${tab === 'primary' ? 'You’re all caught up. New updates on your tasks and @mentions land here.' : 'Updates on tasks you’re assigned to or created will appear here.'}</span></div>`}</div>
         <div class="mib-pane ${fresh ? 'fresh' : ''}">${g ? paneHTML(g) : emptyHTML()}</div>
       </div></div>`;
@@ -86,7 +87,7 @@ const MacInbox = (() => {
       ? avatarHTML(shownN.from, 26) : `<span class="mib-kic">${icon(NOTIF_ICON[shownN.kind] || 'bell')}</span>`;
     const mineN = items.find((x) => x.mine);
     const mine = mineN ? (mineN.mine.react ? `<b>You reacted</b> ${esc(mineN.mine.react)}` : `<b>You replied:</b> ${esc(trunc(mineN.mine.reply || '', 120))}`) : '';
-    return `<div class="mib-row ${unread ? 'unread' : ''} ${g.key === pick ? 'sel' : ''}" data-mib="pick" data-k="${esc(g.key)}">
+    return `<div class="mib-row ${unread ? 'unread' : ''} ${g.key === pick ? 'sel' : ''}" data-mib="pick" data-k="${esc(g.key)}" data-key="r:${esc(g.key)}">
       <span class="mib-dot"></span><span class="mib-lead">${lead}</span>
       <span class="mib-t"><span class="mib-tt">${titleIcon(n, t)}<span>${esc(titleOf(n, t))}</span></span>
         <span class="mib-msg">${msgOf(shownN, t)}</span>${mine ? `<span class="mib-mine">↳ ${mine}</span>` : ''}</span>
@@ -170,7 +171,7 @@ const MacInbox = (() => {
   }
   // one update: who, when, what — a comment in full, in its thread, its files and reactions
   function upd(n, body, extra = '', faded = false, after = '') {
-    return `<div class="mib-u ${faded ? 'faded' : ''}">${avatarHTML(n.from, 30)}<div class="mib-u-b"><div class="mib-u-h"><b>${esc(nameOf(n.from))}</b><span>${esc(clock(n.at))}</span></div><div class="mib-u-t">${body}</div>${extra}</div></div>${after}`;
+    return `<div class="mib-u ${faded ? 'faded' : ''}"${n.id ? ` data-key="u:${esc(n.id)}"` : ''}>${avatarHTML(n.from, 30)}<div class="mib-u-b"><div class="mib-u-h"><b>${esc(nameOf(n.from))}</b><span>${esc(clock(n.at))}</span></div><div class="mib-u-t">${body}</div>${extra}</div></div>${after}`;
   }
   function bodyOf(n, t) {
     const who = `<b>${esc(fullName(userById(n.from)))}</b> `;
@@ -430,5 +431,42 @@ const MacInbox = (() => {
     if (order[j] && order[j] !== pick) { choose(order[j]); const r = document.querySelector('.mib-row.sel'); if (r) r.scrollIntoView({ block: 'nearest' }); }
   });
 
-  return { on, view, reset: () => { pick = undefined; shown = null; } };
+  // ---------- drawn again: only what changed (Haris 2026-11-17: "dont redraw the page unless anything has changed") ----------
+  // The page asks for the Inbox again on every change anywhere; instead of putting it all back (every picture loaded again,
+  // blank for a moment), the new one is laid over the one on show: a row, an update or a tile stays as it is unless what it
+  // shows changed — the same picture never loads again, a reply being typed stays, the lists keep their scroll.
+  let wasFresh = false;
+  const keyOf = (n) => (n.nodeType === 1 ? n.getAttribute('data-key') : null);
+  function morph(a, b) {
+    if (a.nodeType !== b.nodeType || a.nodeName !== b.nodeName) { a.replaceWith(b); return; }
+    if (a.nodeType !== 1) { if (a.nodeValue !== b.nodeValue) a.nodeValue = b.nodeValue; return; }
+    if (a.isEqualNode(b)) return;
+    [...a.attributes].forEach((x) => { if (!b.hasAttribute(x.name)) a.removeAttribute(x.name); });
+    [...b.attributes].forEach((x) => { if (a.getAttribute(x.name) !== x.value) a.setAttribute(x.name, x.value); });
+    if (a.nodeName === 'TEXTAREA') return;   // (what's being typed stays)
+    const byKey = new Map();
+    [...a.childNodes].forEach((x) => { const k = keyOf(x); if (k) byKey.set(k, x); });
+    const neu = [...b.childNodes];
+    neu.forEach((nb, i) => {
+      const k = keyOf(nb), cur = a.childNodes[i] || null, had = k ? byKey.get(k) : null;
+      if (had) { if (had !== cur) a.insertBefore(had, cur); byKey.delete(k); morph(had, nb); }
+      else if (cur && !k && !keyOf(cur)) morph(cur, nb);
+      else a.insertBefore(nb, cur);
+    });
+    while (a.childNodes.length > neu.length) a.lastChild.remove();
+  }
+  function patch(c) {
+    const cur = c.firstElementChild;
+    if (!cur || c.children.length !== 1 || !cur.classList.contains('mib')) return false;
+    const t = document.createElement('template');
+    t.innerHTML = view().trim();
+    const nb = t.content.firstElementChild;
+    if (!nb) return false;
+    morph(cur, nb);
+    // (another notification picked: its pane fades in, as when it was drawn afresh)
+    const pane = wasFresh && cur.querySelector('.mib-pane');
+    if (pane) { pane.classList.remove('fresh'); void pane.offsetWidth; pane.classList.add('fresh'); }
+    return true;
+  }
+  return { on, view, patch, reset: () => { pick = undefined; shown = null; } };
 })();
