@@ -3,11 +3,11 @@ import Security
 
 /* Talking to the server (server/src/talk.js — /api/talk/…). E11 Talk's own sign-in for now (Haris 2026-11-06: before
    the App Store it becomes shared with E11 Console): Cloudflare's email code in a web page once, then its sign-in cookie
-   is kept in the Keychain and sent with every request. Built on the test server first (talk-test.e11hq.com). */
+   is kept in the Keychain and sent with every request. Built on the test server first (talk-test.e11hq.com); on live, talk.e11hq.com, since 2026-11-17. */
 enum Server {
   static var url: String {
     if let s = UserDefaults.standard.string(forKey: "talk_server"), !s.isEmpty { return s }
-    return Bundle.main.object(forInfoDictionaryKey: "TalkServerURL") as? String ?? "https://talk-test.e11hq.com"
+    return Bundle.main.object(forInfoDictionaryKey: "TalkServerURL") as? String ?? "https://talk.e11hq.com"
   }
   static var host: String { URL(string: url)?.host ?? "" }
 }

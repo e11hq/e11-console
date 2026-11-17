@@ -60,4 +60,4 @@ targets:
         NSLocalNetworkUsageDescription: E11 Talk connects to the office server directly when you are in the office, so photos, videos and files move faster.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
-        TalkServerURL: https://talk-test.e11hq.com
+        TalkServerURL: https://talk.e11hq.com   # (live — Haris 2026-11-17 20:29: "move talk to live"; was talk-test.e11hq.com)
