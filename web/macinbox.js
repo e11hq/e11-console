@@ -161,7 +161,7 @@ const MacInbox = (() => {
     if (k === 'image') return imgUrl(a, 480);
     // (the server's own picture of a PDF or Word / PowerPoint / Excel file, asked fresh — one kept from before could be
     //  missing words — Haris 2026-11-17)
-    if (a.path && (k === 'pdf' || /^(docx?|pptx?|xlsx?)$/.test(fileExt(a.name)))) return '/api/fthumb?path=' + encodeURIComponent(a.path) + '&id=' + encodeURIComponent(a.id || '');
+    if (a.path && (k === 'pdf' || /^(docx?|pptx?|xlsx?)$/.test(fileExt(a.name)))) return '/api/fthumb?path=' + encodeURIComponent(a.path) + '&id=' + encodeURIComponent(a.id || '') + '&v=2';   // (v=2: not the picture this Mac kept from before)
     if (a.thumb) return posterUrl(a);
     // (the server's own picture of a video, a PDF's first page, or a Word / PowerPoint / Excel file's first page — Haris 2026-11-17)
     if (a.path && (k === 'video' || k === 'pdf' || /^(docx?|pptx?|xlsx?)$/.test(fileExt(a.name)))) return '/api/fthumb?path=' + encodeURIComponent(a.path) + '&id=' + encodeURIComponent(a.id || '');
