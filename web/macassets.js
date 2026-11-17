@@ -77,7 +77,7 @@ const MacAssets = (() => {
   let nf = null;
   function nfCard(c, parent, sm) {
     if (!nf || nf.cid !== c.id || nf.pid !== (parent ? parent.id : null)) return '';
-    return `<div class="mca-fc new ${sm ? 'sm' : ''} ${nf.err ? 'bad' : ''}" data-key="nf"><div class="mca-ftop">${folderSVG(false)}<div class="mca-ftx"><input class="mca-nfin" data-key="nfin" value="New folder" maxlength="80" spellcheck="false" autocomplete="off"><div class="mca-fm">${nf.err ? `<span class="mca-warn">${esc(nf.err)}</span>` : '<span>Empty</span>'}</div></div></div></div>`;
+    return `<div class="mca-fc new ${sm ? 'sm' : ''} ${nf.err ? 'bad' : ''}" data-key="nf"><div class="mca-ftop">${folderSVG(false)}<div class="mca-ftx"><input class="mca-nfin" data-key="nfin" value="New folder" maxlength="80" spellcheck="false" autocomplete="off"><div class="mca-fm">${nf.err ? `<span class="mca-warn" title="${esc(nf.err)}">${esc(nf.err)}</span>` : '<span>Empty</span>'}</div></div></div></div>`;
   }
   function tile(c, f, a, q) {
     return `<div class="mca-t" data-key="a-${a.id}" ${!q && canDelAsset(a) ? 'draggable="true"' : ''} data-action="tile-open" data-id="${a.id}" data-att="${a.id}" data-mca-file="${a.id}" data-mca-cl="${c.id}" title="${esc(a.name)}">`

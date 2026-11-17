@@ -1202,6 +1202,7 @@ html.mac-chrome[data-theme="light"] .mca-x { background: rgba(0, 0, 0, .25); col
 .mca-ftx { flex: 1; min-width: 0; }
 .mca-fn { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 14px; }
 .mca-fm { font-size: 12px; color: var(--mc-dim); display: flex; gap: 6px; align-items: center; margin-top: 2px; white-space: nowrap; }
+.mca-fm { height: 17px; }   /* (one height with or without the Final mark: cards never change height — Haris 19:34) */
 .mca-fm[data-live-hot] > * { display: none; }
 .mca-fm[data-live-hot]::after { content: attr(data-live-hot); color: var(--mca-hot); }
 .mca-fin { height: 17px; padding: 0 6px; border-radius: 5px; background: color-mix(in srgb, var(--mc-green) 18%, transparent); color: var(--mc-green); font-size: 10.5px; font-weight: 600; display: inline-flex; align-items: center; }
@@ -1224,11 +1225,13 @@ html.mac-chrome[data-theme="light"] .mca-x { background: rgba(0, 0, 0, .25); col
 @keyframes mca-in { from { opacity: 0; transform: scale(.96); } }
 .mca-fc.new { box-shadow: 0 0 0 2px var(--mc-blue); animation: mca-in .18s ease-out; }
 .mca-fc.new.bad { box-shadow: 0 0 0 2px var(--mc-orange); }
-.mca-nfin { display: block; width: 100%; height: 22px; box-sizing: border-box; border: 0; outline: 0; border-radius: 5px; background: #0a64d6; color: #fff; padding: 0 6px; font: inherit; font-size: 14px; font-weight: 500; }
-.mca-fc.sm .mca-nfin { font-size: 12.5px; }
+.mca-nfin { display: block; width: 100%; height: 22px; margin: -2px 0; box-sizing: border-box; border: 0; outline: 0; border-radius: 5px; background: #0a64d6; color: #fff; padding: 0 6px; font: inherit; font-size: 14px; font-weight: 500; }
+.mca-fc.sm .mca-nfin { font-size: 12.5px; height: 21px; }
+/* (a new folder's card is as tall as the others: the name box takes no more room than a name, the warning one line — Haris 19:34) */
+.mca-subs { align-items: flex-start; }
 .mca-fc.bad .mca-nfin { background: #c46a00; }
 .mca-nfin::selection { background: rgba(255, 255, 255, .35); }
-.mca-warn { color: var(--mc-orange); font-size: 11.5px; white-space: normal; }
+.mca-warn { color: var(--mc-orange); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 /* C3: captions, then the files as the Inbox's tiles */
 .mca-cap { font-size: 11px; font-weight: 600; letter-spacing: .04em !important; color: var(--mc-dim); }
 .mca-tgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
