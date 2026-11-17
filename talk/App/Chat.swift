@@ -3025,6 +3025,11 @@ final class MessageBar: UIView, UITextViewDelegate {
     smiley.accessibilityLabel = box.emoji ? "Keyboard" : "Emoji"
   }
   private let plus = UIButton(type: .system), cam = UIButton(type: .system), mic = UIButton(type: .system), sendB = UIButton(type: .system)
+  // (the mic's and send's symbols as their own image views on the circles — so the mic ↔ ↑ swap runs as E11 Console's
+  //  comment box: the old one shrinking and fading in its own colour as the new one grows in, the circle's colour fading
+  //  black ↔ blue, the camera fading out and in — Haris 2026-11-17)
+  private let micSym = UIImageView(), sendSym = UIImageView()
+  private var shownTyping: Bool?
   private let place = UILabel()
   var placeholder = "Message" { didSet { place.text = placeholder } }
   private let replyV = UIView(), replyName = UILabel(), replyText = UILabel(), replyX = UIButton(type: .system), replyBar = UIView()
@@ -3082,13 +3087,18 @@ final class MessageBar: UIView, UITextViewDelegate {
     [plus, cam].forEach { $0.tintColor = .label; addSubview($0) }
     var mc = UIButton.Configuration.filled()
     // (WhatsApp's, measured from Haris's screenshot: a filled mic about 11 × 16 in a 31 circle, level with the box)
-    mc.image = UIImage(systemName: "mic.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .regular))
+    micSym.image = UIImage(systemName: "mic.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .regular))
     mc.baseBackgroundColor = .label; mc.baseForegroundColor = .systemBackground; mc.cornerStyle = .capsule; mc.contentInsets = .zero
     mic.configuration = mc
     var sc = UIButton.Configuration.filled()
-    sc.image = UIImage(systemName: "arrow.up", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .bold))
+    sendSym.image = UIImage(systemName: "arrow.up", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .bold))
     sc.baseBackgroundColor = Look.rgb(0x2F7BFF); sc.baseForegroundColor = .white; sc.cornerStyle = .capsule; sc.contentInsets = .zero
     sendB.configuration = sc
+    for (b, v, ink) in [(mic, micSym, UIColor.systemBackground), (sendB, sendSym, UIColor.white)] {
+      v.tintColor = ink; v.contentMode = .center; v.isUserInteractionEnabled = false; v.translatesAutoresizingMaskIntoConstraints = false
+      b.addSubview(v)
+      NSLayoutConstraint.activate([v.centerXAnchor.constraint(equalTo: b.centerXAnchor), v.centerYAnchor.constraint(equalTo: b.centerYAnchor)])
+    }
     mic.accessibilityLabel = "Hold to record a voice message"; sendB.accessibilityLabel = "Send"
     [mic, sendB].forEach { addSubview($0) }
     smiley.setImage(MessageBar.smile, for: .normal); smiley.tintColor = .label; smiley.accessibilityLabel = "Emoji"
@@ -3219,7 +3229,7 @@ final class MessageBar: UIView, UITextViewDelegate {
     place.frame = CGRect(x: 13, y: 5, width: box.bounds.width - 46, height: 20)
     sendB.frame = CGRect(x: W - 41, y: y + boxH - 15 - 15.5, width: 31, height: 31)   // (the mic's own size and place)
     cam.frame = CGRect(x: W - 79, y: by, width: 32, height: 32); mic.frame = CGRect(x: W - 41, y: y + boxH - 15 - 15.5, width: 31, height: 31)
-    sendB.isHidden = !typing; cam.isHidden = typing; mic.isHidden = typing
+    showTyping(typing)
     recV.frame = CGRect(x: 0, y: y, width: W - 60, height: 32)
     recTime.frame = CGRect(x: 42, y: 0, width: 70, height: 32)
     recHint.frame = CGRect(x: 0, y: 0, width: W, height: 32)
@@ -3236,6 +3246,34 @@ final class MessageBar: UIView, UITextViewDelegate {
     lockedSend.frame = CGRect(x: W - 41, y: 48.5, width: 31, height: 31)   // (the send's own size, 10 from the edge — Haris 2026-11-12)
     pauseB.layer.borderColor = UIColor.systemRed.resolvedColor(with: traitCollection).cgColor
     box.layer.borderColor = MessageBar.boxEdge.resolvedColor(with: traitCollection).cgColor
+  }
+  // typing starts or stops: the camera fades, the mic and send swap in the one place (E11 Console's swap, filmed in the
+  // simulator: no moment without an icon) — 0.25 s on Apple's spring
+  private func showTyping(_ t: Bool) {
+    guard t != shownTyping else { return }
+    let first = shownTyping == nil; shownTyping = t
+    let shrunk = CGAffineTransform(scaleX: 0.5, y: 0.5)
+    let (going, coming) = t ? (micSym, sendSym) : (sendSym, micSym)
+    guard !first, window != nil, !UIAccessibility.isReduceMotionEnabled else {
+      UIView.performWithoutAnimation {
+        sendB.isHidden = !t; mic.isHidden = t; cam.isHidden = t; sendB.alpha = 1; cam.alpha = 1
+        for v in [micSym, sendSym] { v.alpha = 1; v.transform = .identity }
+      }
+      return
+    }
+    UIView.performWithoutAnimation {
+      mic.isHidden = false; sendB.isHidden = false; cam.isHidden = false
+      sendB.alpha = t ? 0 : 1; cam.alpha = t ? 1 : 0
+      coming.alpha = 0; coming.transform = shrunk; going.alpha = 1; going.transform = .identity
+    }
+    UIView.animate(withDuration: 0.25, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+      self.sendB.alpha = t ? 1 : 0; self.cam.alpha = t ? 0 : 1
+      coming.alpha = 1; coming.transform = .identity; going.alpha = 0; going.transform = shrunk
+    } completion: { _ in
+      guard self.shownTyping == t else { return }
+      self.sendB.isHidden = !t; self.mic.isHidden = t; self.cam.isHidden = t
+      self.sendB.alpha = 1; self.cam.alpha = 1; going.alpha = 1; going.transform = .identity
+    }
   }
   @objc private func micHold(_ g: UILongPressGestureRecognizer) {
     switch g.state {
@@ -3634,9 +3672,17 @@ final class MessageBar: UIView, UITextViewDelegate {
     }
     replyX.accessibilityLabel = self.editing ? "Stop editing" : "Cancel the reply"
     if wasEditing != self.editing {
-      var c = sendB.configuration
-      c?.image = UIImage(systemName: self.editing ? "checkmark" : "arrow.up", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .bold))
-      sendB.configuration = c; sendB.accessibilityLabel = self.editing ? "Save" : "Send"
+      // (✓ ↔ ↑ the same swap: the old shrinking as the new grows in)
+      let img = UIImage(systemName: self.editing ? "checkmark" : "arrow.up", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .bold))
+      sendB.accessibilityLabel = self.editing ? "Save" : "Send"
+      if sendSym.window != nil, !sendB.isHidden, let had = sendSym.image {
+        let old = UIImageView(image: had); old.tintColor = sendSym.tintColor; old.contentMode = .center; old.frame = sendSym.frame
+        sendB.addSubview(old)
+        UIView.performWithoutAnimation { sendSym.image = img; sendSym.alpha = 0; sendSym.transform = CGAffineTransform(scaleX: 0.5, y: 0.5) }
+        UIView.animate(withDuration: 0.25, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+          self.sendSym.alpha = 1; self.sendSym.transform = .identity; old.alpha = 0; old.transform = CGAffineTransform(scaleX: 0.5, y: 0.5)
+        } completion: { _ in old.removeFromSuperview() }
+      } else { sendSym.image = img }
     }
     if wasEditing && !self.editing && !box.text.isEmpty { box.text = ""; textChanged() }
     invalidateIntrinsicContentSize(); setNeedsLayout()
