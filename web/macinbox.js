@@ -621,10 +621,15 @@ const MacInbox = (() => {
     if (!mItems.length) return mClose();
     if (!mQ || mQ.kind !== q.kind) mIdx = 0;
     mQ = q; if (mIdx >= mItems.length) mIdx = 0;
-    if (!mpop) { mpop = document.createElement('div'); mpop.className = 'menu mention-pop mib-mpop'; document.body.appendChild(mpop); }
-    mpop.innerHTML = `<div class="menu-label">${q.kind === '@' ? 'Mention someone' : 'Add a file of this task'}</div>` + mItems.map((it, i) => it.u
-      ? `<div class="mi asg-mi ${i === mIdx ? 'hl' : ''}" data-mib-m="${i}">${avatarHTML(it.u.id, 22)}<span class="asg-n">${esc(fullName(it.u))}<small>${esc(it.u.email)}</small></span></div>`
-      : `<div class="mi asg-mi ${i === mIdx ? 'hl' : ''}" data-mib-m="${i}"><i class="fr-ic fk-${chipKind(it.a.name)}"></i><span class="asg-n">${esc(it.a.name)}<small>${esc(fmtSize(it.a.size) || '')}</small></span></div>`).join('');
+    // (the Mac's own menu, as Haris picked — A, 2026-11-17: frosted panel, compact rows, the chosen one in Apple's blue;
+    //  @ a photo, the name and the role; # the kind's symbol in its colour, the name and the size)
+    if (!mpop) { mpop = document.createElement('div'); mpop.className = 'mib-amenu mib-mpop'; document.body.appendChild(mpop); }
+    const KIND = { image: ['image', '#30d158'], video: ['play', '#bf5af2'], pdf: ['details', '#ff453a'] };
+    mpop.innerHTML = `<div class="mib-am-h">${q.kind === '@' ? 'People' : 'Files in this task'}</div>` + mItems.map((it, i) => {
+      if (it.u) return `<div class="mib-am-r ${i === mIdx ? 'on' : ''}" data-mib-m="${i}">${avatarHTML(it.u.id, 18)}<span class="mib-am-n">${esc(fullName(it.u))}</span><small>${esc(roleOf(it.u))}</small></div>`;
+      const k = KIND[fileKind(it.a)] || ['clip', '#ff9f0a'];
+      return `<div class="mib-am-r ${i === mIdx ? 'on' : ''}" data-mib-m="${i}"><span class="mib-am-fi" style="--k:${k[1]}">${icon(k[0])}</span><span class="mib-am-n">${esc(it.a.name)}</span><small>${esc(fmtSize(it.a.size) || '')}</small></div>`;
+    }).join('');
     const box = ta.closest('.mib-box').getBoundingClientRect(), h = mpop.offsetHeight;
     mpop.style.left = box.left + 'px'; mpop.style.top = Math.max(8, box.top - h - 6) + 'px';
   }

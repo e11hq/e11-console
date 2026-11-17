@@ -1055,3 +1055,21 @@ html[data-theme="light"] .mib-pop { background: rgba(255, 255, 255, .98); box-sh
 .mib-url.dead, .mib-hl .mib-url.dead { color: #ff453a; text-decoration: line-through; text-decoration-color: rgba(255, 69, 58, .5); }
 .mib-btn.sm.ico-t { gap: 6px; padding: 0 11px 0 9px; }
 .mib-btn.sm.ico-t .ic, .mib-btn.sm.ico-t svg { width: 14px; height: 14px; }
+
+/* the Mac's own menu for @ and # (A — Haris 2026-11-17: the standard for these lists in the Mac app) */
+.mib-amenu, html.mac-chrome .mention-pop { position: fixed; z-index: 1000; width: 300px; padding: 5px; border-radius: 10px; background: rgba(40, 40, 44, .82); -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%); box-shadow: 0 0 0 .5px rgba(255, 255, 255, .14), 0 10px 30px rgba(0, 0, 0, .45); font-size: 13px; color: var(--mc-fg); animation: mibIn .12s ease; border: 0; }
+html.mac-chrome[data-theme="light"] .mib-amenu, html.mac-chrome[data-theme="light"] .mention-pop { background: rgba(246, 246, 246, .84); box-shadow: 0 0 0 .5px rgba(0, 0, 0, .12), 0 10px 30px rgba(0, 0, 0, .18); }
+.mib-am-h, html.mac-chrome .mention-pop .menu-label { font-size: 11px; font-weight: 600; color: var(--mc-dim); padding: 4px 9px 3px; text-transform: none; letter-spacing: 0; }
+.mib-am-r { display: flex; align-items: center; gap: 8px; height: 24px; padding: 0 9px; border-radius: 5px; cursor: default; }
+.mib-am-r .mib-am-n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mib-am-r small { flex: none; color: var(--mc-dim); font-size: 12px; }
+.mib-am-r.on, html.mac-chrome .mention-pop .mi.hl { background: #0a64d6; color: #fff; }
+.mib-am-r.on small, html.mac-chrome .mention-pop .mi.hl small { color: rgba(255, 255, 255, .75); }
+.mib-am-fi { width: 18px; height: 18px; display: grid; place-items: center; color: var(--k); }
+.mib-am-r.on .mib-am-fi { color: #fff; }
+.mib-am-fi .ic, .mib-am-fi svg { width: 14px; height: 14px; }
+/* the website's own @ / # list in the Mac app (a task's comments and description): the same menu */
+html.mac-chrome .mention-pop .mi { display: flex; align-items: center; gap: 8px; min-height: 24px; height: 24px; padding: 0 9px; border-radius: 5px; font-size: 13px; }
+html.mac-chrome .mention-pop .mi .av { width: 18px !important; height: 18px !important; font-size: 8px; }
+html.mac-chrome .mention-pop .asg-n { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+html.mac-chrome .mention-pop .asg-n small { margin-left: auto; font-size: 12px; color: var(--mc-dim); overflow: hidden; text-overflow: ellipsis; }
