@@ -133,19 +133,19 @@ const MacAssets = (() => {
   // ---------- C3: a folder ----------
   function folderView(c, f) {
     const top = isFilesTop(c, f), up = canUploadTo(c, f), mk = canMakeSub(c, f);
-    const subs = pinSort(subFolders(c, f).slice().sort((a, b) => !!a.finalOf - !!b.finalOf || String(b.createdAt || '').localeCompare(String(a.createdAt || ''))));
+    const subs = pinSort(subFolders(c, f).slice().sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || ''))));
     const files = pinSort(f.files.slice().sort((a, b) => a.name.localeCompare(b.name)));
     const src = f.finalOf ? task(f.finalOf) : null;
     const count = [subs.length || top ? plural(subs.length, 'folder') : '', top && !files.length ? '' : plural(files.length, 'file')].filter(Boolean).join(' · ');
     const where = `<a data-action="open-client" data-id="${c.id}">${esc(c.name)}</a>${folderAncestors(c, f).map((x) => ` › <a data-action="open-cfolder" data-id="${x.id}">${esc(x.name)}</a>`).join('')}`;
     const nfH = nfCard(c, f, true);
-    // (the new folder is typed where it will stay: inside a folder the newest come first, after the pinned ones — Haris 19:16)
+    // (inside a folder: the pinned first, then in the order they were made — the newest last, where a new one is typed — Haris 19:23)
     const empty = files.length || subs.length || nfH ? '' : `<div class="mca-none" data-key="empty"><b>${top ? 'No folders yet' : up ? 'Nothing here yet' : 'Nothing in this folder yet'}</b><span>${top ? (canAddAssets() ? 'Make a folder for each job. Final files of finished tasks are filed here too.' : 'Final files of finished tasks are filed here.') : f.finalOf ? 'The final files are filed here when the task is completed.' : up ? 'Drop files anywhere on this page, or click Upload Files.' : 'The E11 team adds files here.'}</span></div>`;
     return `<div class="mca" data-key="mca-f-${f.id}" data-page="folder">${fontFaces(files)}
       <div class="mca-head f" data-key="head">${lg(c, 44)}<div class="mca-ht"><h1>${esc(f.name)}</h1><div class="mca-meta">${where} · ${count}${f.finalOf ? ` · <span class="mca-fin">Final files</span>${src && !src.deleted ? ` · <a data-action="open-task" data-id="${src.id}">Open Task</a>` : ''}` : ''}</div></div>
         ${pill('Info', `data-mca="info-folder" data-id="${f.id}"`, SV.info)}${files.length ? pill('Download All', 'data-action="ca-download-all"', SV.down) : ''}${mk ? pill('New Folder', `data-mca="new-folder" data-parent="${f.id}"`, SV.plus, !up) : ''}${up ? pill('Upload Files', 'data-action="ca-upload"', SV.up, true) : ''}</div>
       <div class="ca-uploads mca-ups" id="ca-uploads" data-key="ups" data-keep></div>
-      ${subs.length || nfH ? `<div class="mca-cap" data-key="sc">FOLDERS</div><div class="mca-subs" data-key="subs">${(() => { const np = subs.filter(pinned).length, cards = subs.map((x) => folderCard(c, x, true)); cards.splice(np, 0, nfH); return cards.join(''); })()}</div>` : ''}
+      ${subs.length || nfH ? `<div class="mca-cap" data-key="sc">FOLDERS</div><div class="mca-subs" data-key="subs">${subs.map((x) => folderCard(c, x, true)).join('')}${nfH}</div>` : ''}
       ${files.length ? `<div class="mca-cap" data-key="ac">${plural(files.length, 'FILE')}</div><div class="mca-tgrid" data-key="ag">${files.map((a) => tile(c, f, a)).join('')}</div>` : ''}${empty}
     </div>`;
   }
@@ -405,10 +405,11 @@ const MacAssets = (() => {
     if (ov) { const o = ov; ov = null; o.classList.remove('on'); setTimeout(() => o.remove(), 160); }
   }
   document.addEventListener('dragover', (e) => {
-    if (!on() || ui.view !== 'client' || (typeof dragId !== 'undefined' && dragId) || moving || !fileDrag(e)) return;
+    if (!on() || ui.view !== 'client' || (typeof dragId !== 'undefined' && dragId) || !fileDrag(e) || [...e.dataTransfer.types].includes('application/x-e11-file')) return;
+    moving = null;   // (files from outside: no file of ours is being dragged)
     const ct = document.getElementById('content');
     const { c, f } = curFolder();
-    clearTimeout(offT); offT = setTimeout(clear, 300);
+    clearTimeout(offT); offT = setTimeout(clear, 1200);   // (a safety net: leaving the window clears it too)
     if (!c || !ct || !ct.contains(e.target) || !canAddAssets()) { clear(); return; }
     if (f) {
       if (!canUploadTo(c, f)) return;
@@ -424,7 +425,8 @@ const MacAssets = (() => {
   }, true);
   document.addEventListener('dragleave', (e) => { if ((ov || hot) && !e.relatedTarget) clear(); }, true);
   document.addEventListener('drop', (e) => {
-    if (!on() || ui.view !== 'client' || (typeof dragId !== 'undefined' && dragId) || moving || !fileDrag(e)) return;
+    if (!on() || ui.view !== 'client' || (typeof dragId !== 'undefined' && dragId) || !fileDrag(e) || [...e.dataTransfer.types].includes('application/x-e11-file')) return;
+    moving = null;   // (files from outside: no file of ours is being dragged)
     const { c, f } = curFolder();
     const card = hot, files = [...(e.dataTransfer.files || [])];
     clear();
@@ -461,15 +463,19 @@ const MacAssets = (() => {
     const fo = card && card.dataset.mcaCl === c.id && c.folders.find((x) => x.id === card.dataset.mcaFolder);
     return fo && fo.id !== moving.fid && canUploadTo(c, fo) ? { c, card, fo } : null;
   };
+  // (a drag of ours only while one is under way: files from Finder or elsewhere are never taken for it, and once the
+  //  pointer moves with no button held the drag is over, even if its end was never told — Haris 19:21)
+  const ours = (e) => { const ty = [...((e.dataTransfer && e.dataTransfer.types) || [])]; if (ty.includes('application/x-e11-file')) return true; if (ty.includes('Files')) { moving = null; return false; } return true; };
+  document.addEventListener('mousemove', (e) => { if (e.buttons) return; if (moving) moving = null; if (on() && typeof pageDrag !== 'undefined' && pageDrag) pageDrag = false; }, true);
   document.addEventListener('dragover', (e) => {
-    if (!moving) return;
+    if (!moving || !ours(e)) return;
     const m = moveTarget(e);
     e.preventDefault(); e.stopPropagation();
     e.dataTransfer.dropEffect = m ? 'move' : 'none';
     setHot(m ? m.card : null, 'Move 1 file here');
   }, true);
   document.addEventListener('drop', (e) => {
-    if (!moving) return;
+    if (!moving || !ours(e)) return;
     const m = moveTarget(e), mv = moving;
     e.preventDefault(); e.stopPropagation();
     moving = null; setHot(null);
@@ -477,7 +483,10 @@ const MacAssets = (() => {
     const src = m.c.folders.find((x) => x.id === mv.fid), a = src && src.files.find((x) => x.id === mv.aid);
     if (!a || !canDelAsset(a) || m.fo.files.some((x) => x.id === a.id)) return;
     const put = (from, to) => { from.files = from.files.filter((x) => x.id !== a.id); to.files.push(a); persist(0); render(); };
-    put(src, m.fo);
+    // (drawn again only once the drag has ended: the file's tile is still there to be told so — else the page would
+    //  think a drag of its own was still under way and take no files from Finder — Haris 19:21)
+    setTimeout(() => { if (typeof pageDrag !== 'undefined') pageDrag = false; }, 0);
+    setTimeout(() => put(src, m.fo), 0);
     toast(`Moved “${a.name}” to ${m.fo.name}`, { label: 'Undo', run: () => { const c = clientById(mv.cid), s2 = c && c.folders.find((x) => x.id === mv.fid), d2 = c && c.folders.find((x) => x.id === m.fo.id); if (s2 && d2 && d2.files.some((x) => x.id === a.id)) put(d2, s2); } }, 8000);
   }, true);
 
