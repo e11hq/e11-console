@@ -389,8 +389,8 @@ final class ThemeBlock: UIView, HomeBlock {
       x.1.layer.borderColor = on ? UIColor.systemBlue.cgColor : UIColor.clear.cgColor
       x.2.textColor = L.title
       let mark = x.3
-      mark.tintColor = on ? .systemBlue : .tertiaryLabel   // (iPhone's own symbol swap — Haris 2026-11-17 10:51)
       SymSwap.set(mark, UIImage(systemName: on ? "checkmark.circle.fill" : "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22, weight: .regular)), animated: true)
+      if mark.window != nil { UIView.animate(withDuration: SymSwap.time) { mark.tintColor = on ? .systemBlue : .tertiaryLabel } } else { mark.tintColor = on ? .systemBlue : .tertiaryLabel }
       x.0.accessibilityTraits = on ? [.button, .selected] : .button
     }
     if sw.isOn != (m == "auto") { sw.setOn(m == "auto", animated: window != nil) }
@@ -4341,9 +4341,8 @@ final class AmendSheetVC: UIViewController, UITextViewDelegate {
     let on = !ticked.contains(id)
     if on { ticked.insert(id) } else { ticked.remove(id) }
     if let b = ticks[id] {
-      // (iPhone's own symbol swap — Haris 2026-11-17 10:51)
-      b.tintColor = on ? .systemOrange : .tertiaryLabel
       SymSwap.set(b, UIImage(systemName: on ? "checkmark.circle.fill" : "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22)), animated: true)
+      UIView.animate(withDuration: SymSwap.time) { b.tintColor = on ? .systemOrange : .tertiaryLabel }
     }
     UIView.animate(withDuration: 0.25) {
       self.wills[id]?.isHidden = on

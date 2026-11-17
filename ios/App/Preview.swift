@@ -169,7 +169,7 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
     let name = playing ? "pause.fill" : "play.fill"
     let alpha: CGFloat = playing ? (chrome ? 1 : 0) : (held || atEnd ? 1 : 0)
     guard play.alpha != alpha || play.accessibilityIdentifier != name else { return }
-    // (▶ ↔ ⏸ with iPhone's own symbol swap, the button fading as it comes or goes — Haris 2026-11-17 10:51)
+    // (▶ ↔ ⏸ with the shared swap, SymSwap; the button fading as it comes or goes — Haris 2026-11-17)
     if play.accessibilityIdentifier != name {
       SymSwap.set(play, UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 30, weight: .bold)), animated: animated && play.alpha > 0 && alpha > 0)
       play.accessibilityIdentifier = name; play.accessibilityLabel = playing ? "Pause" : "Play"

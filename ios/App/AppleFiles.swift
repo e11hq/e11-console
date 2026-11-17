@@ -206,12 +206,12 @@ final class FileTile: UIView {
   var selecting = false { didSet { if selecting != oldValue { paintTick() } } }
   // (Select's circle fades in and out with Select, and ○ ↔ ✓ swaps as it's picked — they snapped: Haris 2026-11-17)
   private func paintTick() {
-    // (○ ↔ ✓ with iPhone's own symbol swap — Haris 2026-11-17 10:51)
+    // (○ ↔ ✓ with the shared swap, SymSwap — Haris 2026-11-17)
     let img = UIImage(systemName: picked ? "checkmark.circle.fill" : "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .medium))
     let set = { self.tick.tintColor = self.picked ? .systemBlue : .white; SymSwap.set(self.tick, img, animated: false) }
     guard window != nil else { tick.isHidden = !selecting; tick.alpha = 1; set(); return }
     if selecting && tick.isHidden { tick.alpha = 0; tick.isHidden = false; set() }
-    else { tick.tintColor = picked ? .systemBlue : .white; SymSwap.set(tick, img, animated: !tick.isHidden && tick.alpha > 0) }
+    else { SymSwap.set(tick, img, animated: !tick.isHidden && tick.alpha > 0); UIView.animate(withDuration: SymSwap.time) { self.tick.tintColor = self.picked ? .systemBlue : .white } }
     UIView.animate(withDuration: 0.2, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState]) { self.tick.alpha = self.selecting ? 1 : 0 } completion: { _ in
       if !self.selecting { self.tick.isHidden = true; self.tick.alpha = 1 }
     }

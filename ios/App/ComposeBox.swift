@@ -241,19 +241,10 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       showingSend = send
       // (the mic as a line icon — Haris 2026-11-02; the change a little quicker than iPhone's default)
       let img = UIImage(systemName: send ? "arrow.up" : "mic", withConfiguration: UIImage.SymbolConfiguration(pointSize: send ? 14 : 15, weight: send ? .bold : .medium))
-      // (iPhone's replace effect, as before — Haris 2026-11-17 10:42: "better before, just the black was coming before and
-      //  icon after": the circle now fills as the old symbol has gone and the new one comes up, not at the start)
-      if #available(iOS 17.0, *), !first, let img = img {
-        rightSym.setSymbolImage(img, contentTransition: .replace.downUp, options: .speed(1.6))
-      } else { rightSym.image = img }
+      // (the swap and the circle's fill together, in the same time — filmed: Haris 2026-11-17 10:55)
+      SymSwap.set(rightSym, img, animated: !first)
       let paint = { self.right.backgroundColor = send ? .label : .tertiarySystemFill; self.right.tintColor = send ? .systemBackground : .label }
-      // (delayed by hand, not with the animation's delay — the tint isn't animated and would switch at the start)
-      if first { paint() } else {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.09) { [weak self] in
-          guard let self = self, self.showingSend == send else { return }
-          UIView.animate(withDuration: 0.14, delay: 0, options: [.curveEaseInOut, .allowUserInteraction, .beginFromCurrentState], animations: paint)
-        }
-      }
+      if first { paint() } else { UIView.animate(withDuration: SymSwap.time, delay: 0, options: [.curveEaseInOut, .allowUserInteraction, .beginFromCurrentState], animations: paint) }
     }
     holdG?.isEnabled = !send
     placeholder.isHidden = !(text.text ?? "").isEmpty
@@ -992,7 +983,9 @@ final class VoiceBubble: UIView, AVAudioPlayerDelegate {
   private static func indefinite<T: IndefiniteSymbolEffect & SymbolEffect>(_ v: UIImageView, _ e: T) { v.addSymbolEffect(e, options: .repeating) }
   static func change(_ v: UIImageView, to name: String) {
     guard let i = sym(name) else { return }
-    if #available(iOS 17.0, *) { v.removeAllSymbolEffects(); v.setSymbolImage(i, contentTransition: .replace.downUp) } else { v.image = i }
+    // (▶ ↔ ⏸ with the shared swap, SymSwap — the same as every swapping icon, Haris 2026-11-17)
+    if #available(iOS 17.0, *) { v.removeAllSymbolEffects() }
+    SymSwap.set(v, i, animated: v.image != nil)
   }
   static func sym(_ n: String) -> UIImage? { UIImage(systemName: n, withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)) }
   // sent (Haris, 2026-11-02): it starts as the pulsing one was — dimmer, ••• — and settles: the pulse eases out and the
@@ -1188,13 +1181,23 @@ final class PickList: UITableView, UITableViewDataSource, UITableViewDelegate {
   }
 }
 
-// One way for every icon that turns into another icon (mic ↔ ↑, + ↔ ✕, ▶ ↔ ⏸, ○ ↔ ✓): iPhone's own symbol swap, the
-// old one going down as the new one comes up — Haris 2026-11-17 10:51 ("all other buttons in this category").
-// A button's symbol is drawn by its own image view on top (the button's own image left empty), as the comment box's.
+// One way for every icon that turns into another icon (mic ↔ ↑, + ↔ ✕, ▶ ↔ ⏸, ○ ↔ ✓) — Haris 2026-11-17: filmed in the
+// simulator side by side (the self-test's aSwapLab, ios-swap.mp4), iPhone's replace effect left an empty moment between
+// the two (the old one gone before the new one came) and the mic vanished into the circle as it filled. Here the old
+// one shrinks and fades in its own colour as the new one grows and fades in, both at once, on Apple's spring — no
+// moment without an icon. (Ours, said plainly: Apple has no swap that runs the two together.) A button's symbol is
+// drawn by its own image view on top (the button's own image left empty). Set a colour change after calling it.
 enum SymSwap {
+  static let time = 0.25
   static func set(_ v: UIImageView, _ img: UIImage?, animated: Bool) {
-    if #available(iOS 17.0, *), animated, v.window != nil, v.image != nil, let img = img { v.setSymbolImage(img, contentTransition: .replace.downUp, options: .speed(1.6)) }
-    else { v.image = img }
+    guard animated, v.window != nil, let had = v.image, !UIAccessibility.isReduceMotionEnabled else { v.image = img; return }
+    let old = UIImageView(image: had); old.contentMode = v.contentMode; old.bounds = v.bounds; old.center = v.center
+    old.tintColor = v.tintColor.resolvedColor(with: v.traitCollection); old.isUserInteractionEnabled = false
+    v.superview?.insertSubview(old, aboveSubview: v)
+    UIView.performWithoutAnimation { v.image = img; v.alpha = 0; v.transform = CGAffineTransform(scaleX: 0.5, y: 0.5) }
+    UIView.animate(withDuration: time, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+      v.alpha = 1; v.transform = .identity; old.alpha = 0; old.transform = CGAffineTransform(scaleX: 0.5, y: 0.5)
+    } completion: { _ in old.removeFromSuperview() }
   }
   static func set(_ b: UIButton, _ img: UIImage?, animated: Bool) {
     let v: UIImageView

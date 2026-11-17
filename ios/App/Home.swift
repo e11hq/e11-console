@@ -2305,13 +2305,13 @@ final class ToastCapsule: UIView {
   func cross(_ on: Bool) {
     guard on != crossed else { return }
     crossed = on
-    // (+ ↔ ✕ with iPhone's own symbol swap, the button fading in or out when it comes or goes — it snapped: Haris 2026-11-17)
+    // (+ ↔ ✕ with the shared swap, SymSwap; the button fading in or out when it comes or goes — it snapped: Haris 2026-11-17)
     let img = UIImage(systemName: on ? "xmark" : "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
     plusB.accessibilityLabel = on ? "Cancel download" : "Add"
     if plusB.window == nil { UIView.performWithoutAnimation { SymSwap.set(plusB, img, animated: false); plusB.isHidden = !roundOn } }
     else if plusB.isHidden, roundOn { UIView.performWithoutAnimation { SymSwap.set(plusB, img, animated: false); plusB.alpha = 0; plusB.isHidden = false }; UIView.animate(withDuration: 0.2) { self.plusB.alpha = 1 } }
     else if !roundOn { UIView.animate(withDuration: 0.2, animations: { self.plusB.alpha = 0 }) { _ in if !self.roundOn { self.plusB.isHidden = true; self.plusB.alpha = 1 } } }
-    else { SymSwap.set(plusB, img, animated: true) }   // (iPhone's own swap — Haris 2026-11-17 10:51)
+    else { SymSwap.set(plusB, img, animated: true) }   // (the shared swap — Haris 2026-11-17)
     setNeedsLayout()
   }
   private var timer: Timer?, touching = false, closing = false
