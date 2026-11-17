@@ -767,6 +767,10 @@ branches `stable/talk-144` and `locked/talk-144` (never moved or deleted; 137's 
 edit strip fading in and out while the message bar grows or shrinks as one (✕ no longer drops the box). On TestFlight; version
 1.0.1 in the build — the next App Store update is set to 1.0.2. Not in it, on its own branch `talk-maclink`: "Link a Device" for
 E11 Talk for Mac. Nothing changes in its look, behaviour or code without telling Haris first and his yes.
+**Remind Haris — E11 Talk's fallback server (Haris 2026-11-17 08:31: "Not now but remember this"):** Talk follows E11 Console's
+server on the same phone, but with Console not signed in there (a client contact, or Talk signed in first) it falls back to
+the **test** server (talk/project.yml `TalkServerURL: https://talk-test.e11hq.com`, Net.swift `resolve()`) — the App Store build
+too. To be made live's (talk.e11hq.com) in a later Talk update, only on his yes; raise it when Talk's next update is planned.
 **Compile checks: `-f checks=compile -f walk=no`** — without `walk=no` the walk-through for every role runs too (~20 min),
 holding the Mac (2026-11-13).
 **The App Store release waits for E11 Talk (Haris, 2026-11-11 20:16: "3"):** the Talk button (E11 Day, Clients) does nothing
