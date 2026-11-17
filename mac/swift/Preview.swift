@@ -134,6 +134,7 @@ final class MacPreview: NSView {
   private var from: NSRect?, openedAt: Int   // (openedAt: the file `from` is the thumbnail of — moved on as the page says where the one on show sits)
   var event: (([String: Any]) -> Void)?
   var onGone: (() -> Void)?
+  private var flyPic: NSImage?   // (the picture a video flew in as — it flies back out as it)
   var tileShot: NSImage?   // (the file's tile as the page shows it — what a file with no picture of its own flies out of and back into)
   private let back = NSView(), stage = NSView()
   private var content: NSView?
@@ -454,14 +455,21 @@ final class MacPreview: NSView {
       // (as Photos / E11 Talk: the picture cut to the thumbnail's own shape and corners at first, opening out to the whole
       //  picture as it grows — one layer filling its frame, its frame and corners moved by Core Animation; Haris 16:36:
       //  "the coming in from the thumbnail is not looking native")
+      if !shotFly { self.flyPic = im }
       let fly = PvFly(im, frame: r, radius: 9)
       // (under the shades, as the picture itself sits: on top of them the shades were hidden while it flew and came on in
       //  one frame as it landed — Haris 2026-11-17 "the shadow … dont have it snap")
       self.addSubview(fly, positioned: .above, relativeTo: self.stage)
       finish()
       fly.move(to: self.fit(im.size, in: shotFly ? self.shotTarget(target) : target), radius: shotFly ? 12 : 0, duration: 0.38, timing: CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1)) {
-        if shotFly {
+        let cross = {
           NSAnimationContext.runAnimationGroup({ c in c.duration = 0.2; self.stage.animator().alphaValue = 1; fly.animator().alphaValue = 0 }, completionHandler: { fly.removeFromSuperview() })
+        }
+        if shotFly { cross() }
+        else if let pv = self.content as? AVPlayerView {
+          // (a video: its picture lands at the video's own size and stays until the player shows its first frame, then the
+          //  two crossfade — it flew in as the whole tile and the player came on black: Haris 2026-11-17)
+          self.whenShowing(pv, cross)
         } else {
           self.stage.alphaValue = 1
           fly.removeFromSuperview()
@@ -475,6 +483,16 @@ final class MacPreview: NSView {
       MacLoad.image(cur["src"] as? String) { im in if let im = im { fly0(im) } }
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { MacLoad.image(t) { im in fly0(im) } }
     } else { MacLoad.image(t) { im in fly0(im) } }
+  }
+  // (calls `then` once the player has its first frame on screen — or after 3 s, whatever happens)
+  private func whenShowing(_ pv: AVPlayerView, _ then: @escaping () -> Void) {
+    let t0 = CACurrentMediaTime()
+    Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self, weak pv] tm in
+      guard let pv = pv, self != nil else { tm.invalidate(); return }
+      var ready = pv.player?.currentItem?.status == .readyToPlay
+      if #available(macOS 13.0, *) { ready = pv.isReadyForDisplay }
+      if ready || CACurrentMediaTime() - t0 > 3 { tm.invalidate(); then() }
+    }
   }
   // (where a tile's picture lands: a card in the middle, at most twice its own size)
   private func shotTarget(_ r: NSRect) -> NSRect {
@@ -503,6 +521,18 @@ final class MacPreview: NSView {
       let start = convert(fit(im.size, in: z.bounds), from: z)
       let fly = PvFly(im, frame: start, radius: 0)
       addSubview(fly, positioned: .above, relativeTo: stage); stage.alphaValue = 0   // (under the shades, which fade with the rest)
+      NSAnimationContext.runAnimationGroup { c in
+        c.duration = 0.3; self.back.animator().alphaValue = 0; self.chrome.forEach { $0.animator().alphaValue = 0 }
+      }
+      fly.move(to: r, radius: 9, duration: 0.32, timing: CAMediaTimingFunction(controlPoints: 0.3, 0.7, 0.2, 1)) { gone() }
+    } else if at == openedAt, let r = from, r.width > 4, let pv = content as? AVPlayerView, let pic = flyPic {
+      // (a video: its picture comes up over the player where the video is and flies back into its tile — Haris 2026-11-17)
+      let fly = PvFly(pic, frame: convert(fit(pic.size, in: pv.bounds), from: pv), radius: 0)
+      fly.alphaValue = 0
+      addSubview(fly, positioned: .above, relativeTo: stage)
+      NSAnimationContext.runAnimationGroup { c in
+        c.duration = 0.15; fly.animator().alphaValue = 1; self.stage.animator().alphaValue = 0
+      }
       NSAnimationContext.runAnimationGroup { c in
         c.duration = 0.3; self.back.animator().alphaValue = 0; self.chrome.forEach { $0.animator().alphaValue = 0 }
       }
