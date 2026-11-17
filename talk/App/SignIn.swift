@@ -88,8 +88,19 @@ final class SignInVC: UIViewController, WKNavigationDelegate {
     let answer = r.isForMainFrame && r.response.url?.host == Server.host && (r.response.url?.path.hasPrefix("/api/talk/") ?? false)
       && (r.response.mimeType ?? "").contains("json")
     if r.isForMainFrame, (answer ? 0 : 1) != w.alpha {
-      UIView.animate(withDuration: Crossfade.time, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { w.alpha = answer ? 0 : 1 }
-      if answer { spin.startAnimating() }
+      if answer {
+        // (the page as it was — the sign-in with its moving dots — kept as a still picture over it while the page itself is
+        //  hidden at once, and the picture fades: the answer's words were drawn under a page still fading and showed for a
+        //  moment — Haris 2026-11-17 11:43, his recording)
+        if let still = w.snapshotView(afterScreenUpdates: false) {
+          still.frame = w.frame; view.insertSubview(still, aboveSubview: w)
+          UIView.animate(withDuration: Crossfade.time, delay: 0, options: [.allowUserInteraction]) { still.alpha = 0 } completion: { _ in still.removeFromSuperview() }
+        }
+        UIView.performWithoutAnimation { w.alpha = 0 }
+        spin.startAnimating()
+      } else {
+        UIView.animate(withDuration: Crossfade.time, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { w.alpha = 1 }
+      }
     }
     decisionHandler(.allow)
   }
