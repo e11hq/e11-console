@@ -1164,9 +1164,14 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       }
       v.addArrangedSubview(bs)
     }
-    let h = UIStackView(arrangedSubviews: [ic, v]); h.spacing = 10; h.alignment = .top
-    h.translatesAutoresizingMaskIntoConstraints = false; box.addSubview(h)
-    NSLayoutConstraint.activate([h.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 14), h.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -14), h.topAnchor.constraint(equalTo: box.topAnchor, constant: 12), h.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -12)])
+    // (the icon centred on the strip's words, top to bottom — one line or three: Haris 2026-11-17 07:49 "all three icons to sit
+    //  in the middle center aligned"; with buttons under the words, on the words, not the buttons)
+    ic.translatesAutoresizingMaskIntoConstraints = false; v.translatesAutoresizingMaskIntoConstraints = false
+    box.addSubview(ic); box.addSubview(v)
+    ic.setContentHuggingPriority(.required, for: .horizontal); ic.setContentCompressionResistancePriority(.required, for: .horizontal)
+    NSLayoutConstraint.activate([ic.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 14), ic.centerYAnchor.constraint(equalTo: l.centerYAnchor),
+                                 v.leadingAnchor.constraint(equalTo: ic.trailingAnchor, constant: 10), v.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -14),
+                                 v.topAnchor.constraint(equalTo: box.topAnchor, constant: 12), v.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -12)])
     return box
   }
   private func linkLine(_ t: String, sym: String, tap: @escaping () -> Void) -> UIView {
