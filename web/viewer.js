@@ -37,12 +37,25 @@ const Viewer = (() => {
       }
       return null;
     };
+    // (the Mac: the thumbnail of the file on show is kept out of sight while its preview is up — flying back, it was already
+    //  sitting there, a second copy: Haris 2026-11-17. A data-live attribute, so the Inbox's redraw keeps it)
+    let hid = null;
+    const picEl = (el) => (el.tagName === 'IMG' ? el.closest('.mib-tpic') || el : el.querySelector('.mib-tpic') || el.querySelector('img') || el);
+    const unhide = () => { if (hid) hid.removeAttribute('data-live-pvhide'); hid = null; };
+    const hideFor = (a) => {
+      unhide();
+      const id = a && CSS.escape(String(a.id || ''));
+      if (!id) return;
+      const el = [...document.querySelectorAll(`[data-file="${id}"], [data-v="${id}"], [data-id="${id}"], [data-att="${id}"], [data-pv="${id}"]`)].map(picEl).find((x) => { const r = x.getBoundingClientRect(); return r.width > 4 && r.bottom > 0 && r.top < innerHeight; });
+      if (el) { hid = el; el.setAttribute('data-live-pvhide', ''); }
+    };
     const abs = (u) => (u ? new URL(u, location.href).href : '');
     function fileOf(a) {
       const kind = fileKind(a), ext = fileExt(a.name) || 'file';
       const who = a.addedBy ? userName(a.addedBy) : '';
       const base = { id: a.id, name: a.name, ext: ext.slice(0, 5), meta: [fmtSize(a.size), who, a.addedAt ? timeAgo(a.addedAt) : ''].filter(Boolean).join(' · ') };
-      const cover = a.thumb ? abs(posterUrl(a)) : '';
+      // (a video with no poster of its own: the picture its tile shows — it flies in and out as that, not as the whole tile)
+      const cover = a.thumb ? abs(posterUrl(a)) : kind === 'video' && a.path ? abs('/api/fthumb?path=' + encodeURIComponent(a.path) + '&id=' + encodeURIComponent(a.id || '')) : '';
       if (kind === 'image') return { ...base, kind: 'image', src: abs(imgUrl(a, 1600)), thumb: abs(imgUrl(a, 160)) };
       if (kind === 'video') return { ...base, kind: 'video', src: abs(viewUrl(a)), cover, thumb: cover };
       if (kind === 'audio') return { ...base, kind: 'audio', src: abs(fileUrl(a)) };
@@ -57,7 +70,7 @@ const Viewer = (() => {
       if (!ev) return;
       const a = ev.id ? byId(ev.id) : null;
       switch (ev.ev) {
-        case 'at': if (a) { at = list.indexOf(a); ui.previewAtt = a; if (mac) set({ fromId: a.id, from: thumbOf(a) }); } break;
+        case 'at': if (a) { at = list.indexOf(a); ui.previewAtt = a; if (mac) { unhide(); set({ fromId: a.id, from: thumbOf(a) }); hideFor(a); } } break;
         case 'pages':
           if (!a) break;
           Host.call('pdfPages', { id: a.id, path: a.path }).then((r) => {
@@ -71,7 +84,7 @@ const Viewer = (() => {
         case 'dl': if (a) Host.call('revealPath', { path: a.path }).catch((err) => set({ toast: err.cancelled ? 'Download cancelled' : 'Couldn’t download: ' + err.message })); break;
         case 'more': if (a) moreNative(a, ev.x != null ? { x: ev.x, y: ev.y } : null); break;
         case 'closed': {
-          open = false; ui.previewAtt = null;
+          open = false; ui.previewAtt = null; unhide();
           const f = after; after = null;
           if (f) setTimeout(f, 0);
           break;
@@ -102,7 +115,8 @@ const Viewer = (() => {
       open() {
         open = true;
         ui.previewAtt = list[at];
-        NativeMac.call('preview', { files: list.map(fileOf), at, from: mac ? fromRect() : null }).catch(() => { open = false; });
+        const cur = list[at];
+        NativeMac.call('preview', { files: list.map(fileOf), at, from: mac ? fromRect() : null }).then(() => { if (mac && open && ui.previewAtt === cur) hideFor(cur); }).catch(() => { open = false; });
       },
       get isOpen() { return open; },
     };

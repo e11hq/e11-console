@@ -1110,3 +1110,5 @@ html.mac-chrome .mention-pop .asg-n small { margin-left: auto; font-size: 12px; 
 .mib-sched .mib-u { background: color-mix(in srgb, #ff9f0a 10%, transparent); }
 .mib-sch-at { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #ff9f0a; }
 .mib-sch-at .ic, .mib-sch-at svg { width: 12px; height: 12px; }
+/* the Mac: the thumbnail of the file in the preview, out of sight while the preview is up (it flies out of and back into it) */
+[data-live-pvhide] { visibility: hidden; }
