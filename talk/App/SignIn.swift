@@ -87,8 +87,12 @@ final class SignInVC: UIViewController, WKNavigationDelegate {
   func webView(_ w: WKWebView, decidePolicyFor r: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
     let answer = r.isForMainFrame && r.response.url?.host == Server.host && (r.response.url?.path.hasPrefix("/api/talk/") ?? false)
       && (r.response.mimeType ?? "").contains("json")
-    if r.isForMainFrame, (answer ? 0 : 1) != w.alpha {
-      if answer {
+    // (Cloudflare's own page on the way to ours — its cream background showed for a moment before the sign-in, and after
+    //  signing out, Haris 2026-11-17 12:07, his recording: never shown, as E11 Console keeps it out of sight; shown only if
+    //  it stays, waiting for something to be typed)
+    let cf = r.isForMainFrame && Self.isCloudflare(r.response.url)
+    if r.isForMainFrame, (answer || cf ? 0 : 1) != w.alpha {
+      if answer || cf {
         // (the page as it was — the sign-in with its moving dots — kept as a still picture over it while the page itself is
         //  hidden at once, and the picture fades: the answer's words were drawn under a page still fading and showed for a
         //  moment — Haris 2026-11-17 11:43, his recording)
@@ -104,8 +108,20 @@ final class SignInVC: UIViewController, WKNavigationDelegate {
     }
     decisionHandler(.allow)
   }
+  static func isCloudflare(_ u: URL?) -> Bool {
+    guard let u = u, let h = u.host else { return false }
+    return h.hasSuffix("cloudflareaccess.com") || u.path.hasPrefix("/cdn-cgi/")
+  }
   func webView(_ w: WKWebView, didFinish n: WKNavigation!) {
     if w.alpha == 1 { spin.stopAnimating() }
+    if Self.isCloudflare(w.url) {
+      let at = w.url
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+        guard w.url == at, w.alpha == 0 else { return }
+        self?.spin.stopAnimating()
+        UIView.animate(withDuration: Crossfade.time, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { w.alpha = 1 }
+      }
+    }
     guard let u = w.url, u.host == Server.host, u.path.hasPrefix("/api/talk/") else { return }
     // back on our server with an answer: the sign-in is done — keep its cookies
     w.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cs in
