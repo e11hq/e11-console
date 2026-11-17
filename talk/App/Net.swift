@@ -5,11 +5,28 @@ import Security
    the App Store it becomes shared with E11 Console): Cloudflare's email code in a web page once, then its sign-in cookie
    is kept in the Keychain and sent with every request. Built on the test server first (talk-test.e11hq.com); on live, talk.e11hq.com, since 2026-11-17. */
 enum Server {
-  static var url: String {
-    if let s = UserDefaults.standard.string(forKey: "talk_server"), !s.isEmpty { return s }
-    return Bundle.main.object(forInfoDictionaryKey: "TalkServerURL") as? String ?? "https://talk.e11hq.com"
-  }
+  // E11 Talk follows E11 Console's server on the same phone (Haris 2026-11-17 20:32): Console on test → Talk on test; on
+  // live (or App Review's copy, which has no Talk of its own yet) → Talk on live. Console says where it is in the Keychain
+  // the two apps share (WidgetShare's "signin"). No E11 Console on the phone: the address built into the app.
+  private(set) static var url: String = pick()
   static var host: String { URL(string: url)?.host ?? "" }
+  static func pick() -> String {
+    if let s = UserDefaults.standard.string(forKey: "talk_server"), !s.isEmpty { return s }
+    let own = Bundle.main.object(forInfoDictionaryKey: "TalkServerURL") as? String ?? "https://talk.e11hq.com"
+    guard let console = consoleServer(), let h = URL(string: console)?.host else { return own }
+    return h.hasPrefix("test.") ? "https://talk-test.e11hq.com" : "https://talk.e11hq.com"
+  }
+  // (back in front: E11 Console moved to another server meanwhile → true, and Talk goes with it)
+  static func follow() -> Bool { let n = pick(); guard n != url else { return false }; url = n; return true }
+  private static func consoleServer() -> String? {
+    var q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "ae.e11.console.widget", kSecAttrAccount as String: "signin",
+                            kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne]
+    if let g = Bundle.main.object(forInfoDictionaryKey: "E11KeychainGroup") as? String, !g.hasPrefix("$(") { q[kSecAttrAccessGroup as String] = g }
+    var out: AnyObject?
+    guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data,
+          let o = try? JSONSerialization.jsonObject(with: d) as? [String: String], let s = o["server"], !s.isEmpty else { return nil }
+    return s
+  }
 }
 
 enum Keychain {
@@ -41,6 +58,8 @@ final class Net {
     return URLSession(configuration: c)
   }()
   init() { cookie = Keychain.get("cookie-" + Server.host) }
+  // (another server: its own sign-in)
+  func reloadSignIn() { stopListening(); cookie = Keychain.get("cookie-" + Server.host) }
   var signedIn: Bool { !(cookie ?? "").isEmpty }
 
   func request(_ path: String, method: String = "GET", json: [String: Any]? = nil, body: Data? = nil, type: String? = nil) -> URLRequest {

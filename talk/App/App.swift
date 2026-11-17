@@ -176,6 +176,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     else { Talk.shared.refresh { if Talk.shared.groups[g] != nil { nav.pushViewController(ChatVC(group: g), animated: true) } } }
   }
   func sceneDidBecomeActive(_ s: UIScene) {
+    // (E11 Console moved to another server while Talk was away: Talk goes with it, as if just opened)
+    if Server.follow() { Talk.shared.forget(); Net.shared.reloadSignIn(); tabs = nil; start(); NotificationCenter.default.post(name: .talkChanged, object: nil); return }
     guard Net.shared.signedIn, tabs != nil else { return }
     Net.shared.listen()
     Talk.shared.refresh { Talk.shared.prune() }; Talk.shared.sync()

@@ -30,6 +30,8 @@ targets:
       path: App/E11Talk.entitlements
       properties:
         aps-environment: development
+        # (E11 Console's Keychain group: where Console says which server it's on — Talk follows it, Haris 2026-11-17)
+        keychain-access-groups: [$(AppIdentifierPrefix)ae.e11.console.shared]
         # (the chat backup: E11 Talk's own hidden folder in the person's iCloud Drive)
         com.apple.developer.icloud-container-identifiers: [iCloud.ae.e11.talk]
         com.apple.developer.ubiquity-container-identifiers: [iCloud.ae.e11.talk]
@@ -60,4 +62,5 @@ targets:
         NSLocalNetworkUsageDescription: E11 Talk connects to the office server directly when you are in the office, so photos, videos and files move faster.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        E11KeychainGroup: $(AppIdentifierPrefix)ae.e11.console.shared
         TalkServerURL: https://talk.e11hq.com   # (live — Haris 2026-11-17 20:29: "move talk to live"; was talk-test.e11hq.com)

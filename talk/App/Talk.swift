@@ -62,11 +62,32 @@ final class Talk {
   private var logs: [String: GroupLog] = [:]
   private var lastSeq: Int { get { UserDefaults.standard.integer(forKey: "talk_seq_" + Server.host) } set { UserDefaults.standard.set(newValue, forKey: "talk_seq_" + Server.host) } }
 
-  private let dir: URL = {
-    let d = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("talk", isDirectory: true)
-    try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+  // each server's chats in a folder of their own (Talk follows E11 Console's server — Haris 2026-11-17: test's chats never
+  // mixed with live's, nor taken away as "groups this phone no longer has"). The chats from before, all on the test
+  // server, moved into its folder the first time.
+  private static let root: URL = {
+    let fm = FileManager.default
+    let d = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("talk", isDirectory: true)
+    try? fm.createDirectory(at: d, withIntermediateDirectories: true)
+    let old = ((try? fm.contentsOfDirectory(atPath: d.path)) ?? []).filter { ($0.hasPrefix("g-") || $0.hasPrefix("state-")) && $0.hasSuffix(".json") }
+    if !old.isEmpty {
+      let test = d.appendingPathComponent("talk-test.e11hq.com", isDirectory: true)
+      try? fm.createDirectory(at: test, withIntermediateDirectories: true)
+      for f in old { try? fm.moveItem(at: d.appendingPathComponent(f), to: test.appendingPathComponent(f)) }
+    }
     return d
   }()
+  private var dir: URL {
+    let d = Talk.root.appendingPathComponent(Server.host.isEmpty ? "server" : Server.host, isDirectory: true)
+    if !FileManager.default.fileExists(atPath: d.path) { try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true) }
+    return d
+  }
+  // (E11 Console went to another server: what's in memory is the other server's — let go; the new one's loads as at a start)
+  func forget() {
+    flush()
+    logs = [:]; groups = [:]; people = [:]; me = nil; contacts = []; clients = [:]; macs = []; clientOrder = []
+    pinnedGroups = []; pinnedClients = []; pinnedClientGroups = []; canMake = false; boss = false; isContact = false
+  }
   private var stateFile: URL { dir.appendingPathComponent("state-\(Server.host).json") }
   private func logFile(_ g: String) -> URL { dir.appendingPathComponent("g-\(g).json") }
 
@@ -361,7 +382,7 @@ final class Talk {
   func signOut() {
     Net.shared.stopListening(); Net.shared.cookie = nil
     logs = [:]; groups = [:]; me = nil
-    try? FileManager.default.removeItem(at: dir); try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    try? FileManager.default.removeItem(at: dir)   // (this server's chats; another server's stay)
     try? FileManager.default.removeItem(at: Net.filesDir)
     UserDefaults.standard.removeObject(forKey: "talk_seq_" + Server.host)
   }
