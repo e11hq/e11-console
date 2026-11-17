@@ -702,7 +702,9 @@ all apps as released App Store version"):** commit 26de702 on talk-chat-1, branc
 candidate). 175 = 170 + the message bar while typing: the camera fading, the mic's and send's whole buttons changing places as the
 Claude app's (0.2 s), ✓ ↔ ↑ while editing; the sign-in: the server's answer never seen (a still of the page fading over it),
 Cloudflare's own page on the way to ours never shown (its cream); the fallback server live's (talk.e11hq.com) with no E11 Console
-signed in. With E11 Console 1.2.2 build 1850 the two apps' App Store release candidates. Nothing changes in its look, behaviour or
+signed in. With E11 Console 1.2.2 build 1850 the two apps' App Store release candidates. **Both submitted for App Review 2026-11-17 12:31 / 12:35
+(manual release), "What's New" for both (Haris): "We update E11 Console / E11 Talk regularly to make it smoother for the team. This
+version includes improvements and bug fixes." — Talk 1.0.2's build 148 taken out of review for 175 (Haris: yes).** Nothing changes in its look, behaviour or
 code without telling Haris first and his yes.
 **E11 TALK — STABLE, LOCKED: build 170 — not a release candidate yet (Haris, 2026-11-16 22:45: "talk is stable now but still not yet rc"):**
 commit 4740a08 on talk-chat-1, branches `stable/talk-170` and `locked/talk-170` (never moved or deleted; 162's and earlier stay as
