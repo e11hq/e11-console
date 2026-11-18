@@ -36,6 +36,8 @@ web/macsearch.js, `.mcs*` in home.css (Search is on the test server, not yet liv
 works without telling Haris first and his yes — and a change to a shared piece they use (home.css's Mac rules, the rows, pills,
 taskContextMenu, Tip) is said to him before it's made.
 
+**The Mac app's page titles (Haris, 2026-11-18 18:14):** the top bar shows only the page's name, as Home — no icon before it, on every Mac page now and later (`html.mac-chrome #title-area .page-icon` hidden, home.css). Browsers keep theirs.
+
 **The server — LOCKED at 1.9.27 (Haris, 2026-11-10 11:51: "lock the server states to latest"):** commit 12191cb, branch
 `locked/server-1.9.27` (never moved or deleted). Its rules and screens (web/rules.js, web/appview.js, server/src) as they are
 in 1.9.27 — which notifications go to whom and which reach the phone (`onPhone`), the occasion reminders' recipients, the

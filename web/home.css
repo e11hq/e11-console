@@ -470,6 +470,8 @@ html.mac-chrome .oh-search { border: 0; background: var(--mc-field); border-radi
    their Home — Haris 11:02). Apple's own toolbar replaces it with the Mac app's next update. */
 html.mac-chrome #topbar { height: 52px; background: var(--mc-content); border-bottom: .5px solid var(--mc-line); --search-h: 30px; font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; -webkit-font-smoothing: auto; }
 html.mac-chrome #topbar .page-title { font-size: 15px; font-weight: 600; letter-spacing: normal; color: var(--mc-fg); }
+/* (the page's name only, as Home — no icon before it, on every Mac page now and later: Haris 2026-11-18 18:14) */
+html.mac-chrome #title-area .page-icon { display: none; }
 html.mac-chrome #topbar .search { width: 220px; height: 30px; padding: 0 10px; gap: 6px; border: 0; border-radius: 15px; background: var(--mc-field); box-shadow: none; }
 html.mac-chrome #topbar .search:focus-within { background: var(--mc-field); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mc-blue) 45%, transparent); }
 /* typing in it: a little wider, smoothly (Haris 2026-11-15 14:41) */
