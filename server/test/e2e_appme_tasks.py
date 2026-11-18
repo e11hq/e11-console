@@ -201,6 +201,15 @@ def applied(pre, changes):
         else: lst[j] = ch['data']
     return post
 
+# What the iPhone app's own copy gives that the page's never did — added to the app later (its typo note, the words to mark,
+# each task's "found in" line, the form's noCD): left out when comparing, the rest must match exactly (2026-11-18)
+def app_only(x, keys=(), task_keys=()):
+    if not isinstance(x, dict): return x
+    y = {k: v for k, v in x.items() if k not in keys}
+    if task_keys and isinstance(y.get('tasks'), list):
+        y['tasks'] = [{k: v for k, v in t.items() if k not in task_keys} if isinstance(t, dict) else t for t in y['tasks']]
+    return y
+
 async def main():
     subprocess.run(['fuser', '-k', f'{PORT}/tcp'], stderr=subprocess.DEVNULL)
     env = {**os.environ, 'DATA_DIR': DATA, 'AUTH_DEV': '1', 'ADMIN_EMAIL': ADMIN, 'PORT': str(PORT), 'WEB_DIR': ROOT + '/web', 'APP_VERSION': '1.6.1-test.1'}
@@ -252,7 +261,7 @@ async def main():
                 return mine
 
             def form_checks(r, who, label):
-                same(r['appForm'], r['pageForm'], f'{label}: the form\'s args')
+                same(app_only(r['appForm'], ('noCD',)), r['pageForm'], f'{label}: the form\'s args')
                 if not r.get('pageForm'): return
                 same(r['clients']['app'], r['clients']['page'], f'{label}: the Client sheet')
                 same([x['app'] for x in r['clientActs']], [x['page'] for x in r['clientActs']], f'{label}: what each client row sets ({len(r["clientActs"])})')
@@ -285,7 +294,7 @@ async def main():
                     await submit(pg, who, ev, body, f'{who}: New task ({len(st["who"])} assigned, client {st["client"] or "none"}, CD {ev["cd"]})')
                 # search
                 for x in await pg.evaluate(SEARCH, QS):
-                    same(x['app'], x['page'], f'{who}: search “{x["q"]}” ({(x["page"] or {}).get("total")} found)')
+                    same(app_only(x['app'], ('fixed', 'marks'), ('found',)), x['page'], f'{who}: search “{x["q"]}” ({(x["page"] or {}).get("total")} found)')
                 # My Tasks (not for the Office Admin)
                 if who != ARSAL:
                     for x in await pg.evaluate(MYTASKS, FCASES):
