@@ -76,9 +76,13 @@ enum KeyRec {
     showItem?.cancel()
     panel?.removeFromSuperview(); panel = nil
     cycle += 1
-    lines = ["E11 Console \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] ?? "") (\(Bundle.main.infoDictionary?["CFBundleVersion"] ?? "")) · \(UIDevice.current.systemVersion) · round \(cycle)",
-             "switches: web page out \(webOut ? "ON" : "off") (in the window: \(Main.shared.web?.superview != nil)) · keyboard held \(hold ? "ON" : "off")",
-             "compose box: \(Main.shared.composeIfMade.map { "made, first responder: \($0.text.isFirstResponder), window: \($0.window != nil)" } ?? "not made")"]
+    let info = Bundle.main.infoDictionary ?? [:]
+    let ver = "\(info["CFBundleShortVersionString"] ?? "") (\(info["CFBundleVersion"] ?? ""))"
+    let webIn: Bool = Main.shared.web?.superview != nil
+    let sw = "switches: web page out " + (webOut ? "ON" : "off") + " (in the window: \(webIn)) · keyboard held " + (hold ? "ON" : "off")
+    var box = "not made"
+    if let c = Main.shared.composeIfMade { box = "made, first responder: \(c.text.isFirstResponder), window: \(c.window != nil)" }
+    lines = ["E11 Console " + ver + " · " + UIDevice.current.systemVersion + " · round \(cycle)", sw, "compose box: " + box]
     t0 = CACurrentMediaTime()
     recording = true
     note("APP willResignActive · fr: \(responderName())")
@@ -113,12 +117,19 @@ enum KeyRec {
     p.addSubview(copy); p.addSubview(close)
     // the two switches, under the notes
     tv.frame.size.height -= 76
-    for (i, (label, on)) in [("Web page out", webOut), ("Keyboard held", hold)].enumerated() {
-      let y = p.bounds.height - 74 + CGFloat(i) * 36
-      let l = UILabel(frame: CGRect(x: 14, y: y, width: 200, height: 31)); l.text = label; l.textColor = .white; l.font = .systemFont(ofSize: 14)
-      let s = UISwitch(); s.isOn = on; s.frame.origin = CGPoint(x: p.bounds.width - s.frame.width - 14, y: y)
-      s.addAction(UIAction { [weak s] _ in guard let s = s else { return }; if i == 0 { webOut = s.isOn } else { hold = s.isOn } }, for: .valueChanged)
-      p.addSubview(l); p.addSubview(s)
+    let names = ["Web page out", "Keyboard held"]
+    let states: [Bool] = [webOut, hold]
+    for i in 0..<2 {
+      let y: CGFloat = p.bounds.height - 74 + CGFloat(i) * 36
+      let l = UILabel(frame: CGRect(x: 14, y: y, width: 200, height: 31)); l.text = names[i]; l.textColor = .white; l.font = .systemFont(ofSize: 14)
+      let sw = UISwitch(); sw.isOn = states[i]
+      sw.frame.origin = CGPoint(x: p.bounds.width - sw.frame.width - 14, y: y)
+      let which = i
+      sw.addAction(UIAction { a in
+        guard let t = a.sender as? UISwitch else { return }
+        if which == 0 { KeyRec.webOut = t.isOn } else { KeyRec.hold = t.isOn }
+      }, for: .valueChanged)
+      p.addSubview(l); p.addSubview(sw)
     }
     UIView.performWithoutAnimation { win.addSubview(p) }
     panel = p
@@ -162,3 +173,19 @@ enum KeyRec {
 
 enum KeyRecFound { static weak var last: UIResponder? }
 
+
+extension UIResponder {
+  @objc func krFind() { KeyRecFound.last = self }
+  @objc func kr_become() -> Bool {
+    let was = isFirstResponder
+    let ok = kr_become()   // (the original — swapped)
+    if ok && !was && !(self is UIWindow) { KeyRec.note("BECOME \(KeyRec.describe(self))", stack: true) }
+    return ok
+  }
+  @objc func kr_resign() -> Bool {
+    let was = isFirstResponder
+    let ok = kr_resign()
+    if was { KeyRec.note("RESIGN \(KeyRec.describe(self)) → \(ok)", stack: true) }
+    return ok
+  }
+}
