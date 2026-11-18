@@ -809,7 +809,9 @@ extension Main {
     for (i, (url, name)) in picked.enumerated() {
       let id = ids[i]
       let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
-      Uploader.send(url, name: name, task: p.taskId, cookies: serverHome.cookies, progress: { f in UploadRing.post(id, f) }) { [weak self, weak p] path in
+      // (an open task's files: their progress on their own tiles only — not on the uploads' bar too, as a comment's: Haris
+      //  2026-11-18 21:43; into the description, and from a task card in a list, the bar stays — nothing else shows them)
+      Uploader.send(url, name: name, task: p.taskId, bar: toDesc, cookies: serverHome.cookies, progress: { f in UploadRing.post(id, f) }) { [weak self, weak p] path in
         guard let self = self, let p = p else { return }
         if let path = path { done.append(["name": name, "size": size, "path": path]); sent.insert(id); UploadRing.post(id, 1) }
         else { p.dropUploads([id]) }
