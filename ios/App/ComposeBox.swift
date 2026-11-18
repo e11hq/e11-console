@@ -1105,6 +1105,11 @@ enum FileClip {
 }
 // the comment box's text: a pasted picture or file goes in as an attachment; words paste as words
 final class PasteTextView: UITextView {
+  // (TEMPORARY — the recorder's "Keyboard held" switch, KeyRec.swift: not letting go while the app comes back from Control Center)
+  override var canResignFirstResponder: Bool {
+    if KeyRec.holding { KeyRec.note("hold: refused to let go"); return false }
+    return super.canResignFirstResponder
+  }
   var onPasteFiles: (() -> Bool)?
   // copied words with mentions or file chips (in E11, anywhere): back as they were (Haris 2026-11-02)
   var onPasteRich: (([[String: Any]]) -> Bool)?

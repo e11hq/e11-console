@@ -19,13 +19,28 @@ enum KeyRec {
 
   static var allowed: Bool { (Main.shared.startInfo["owner"] as? Bool) == true }
 
+  // the two test switches (the panel): the hidden web page out while signed in · the comment box keeping the keyboard
+  // from Control Center until half a second after the app is active again
+  static var webOut: Bool { get { allowed && UserDefaults.standard.bool(forKey: "kr_webOut") } set { UserDefaults.standard.set(newValue, forKey: "kr_webOut"); placeWeb() } }
+  static var hold: Bool { get { allowed && UserDefaults.standard.bool(forKey: "kr_hold") } set { UserDefaults.standard.set(newValue, forKey: "kr_hold") } }
+  static var holding = false
+  static func placeWeb() {
+    let m = Main.shared
+    guard m.isViewLoaded, let w = m.web else { return }
+    let out = webOut && Main.boot.state == .signedIn
+    if out, w.superview != nil { w.removeFromSuperview(); note("web page taken out") }
+    if !out, w.superview == nil { m.view.insertSubview(w, at: 0); note("web page put back") }
+  }
+
   static func watch() {
     guard !watching else { return }
     watching = true
     let nc = NotificationCenter.default
-    nc.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { _ in begin() }
+    nc.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { _ in if hold { holding = true }; begin() }
     nc.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
       note("APP didBecomeActive")
+      placeWeb()
+      if holding { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { holding = false; note("hold over") } }
       guard recording else { return }
       showItem?.cancel()
       let w = DispatchWorkItem { finish() }
@@ -33,7 +48,7 @@ enum KeyRec {
       DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: w)
     }
     nc.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { _ in note("APP willEnterForeground") }
-    nc.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in note("APP didEnterBackground"); recording = false; showItem?.cancel() }
+    nc.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in note("APP didEnterBackground"); recording = false; holding = false; showItem?.cancel() }
     for (n, name) in [(UIResponder.keyboardWillShowNotification, "willShow"), (UIResponder.keyboardDidShowNotification, "didShow"),
                       (UIResponder.keyboardWillHideNotification, "willHide"), (UIResponder.keyboardDidHideNotification, "didHide"),
                       (UIResponder.keyboardWillChangeFrameNotification, "willChangeFrame"), (UIResponder.keyboardDidChangeFrameNotification, "didChangeFrame")] {
@@ -62,6 +77,7 @@ enum KeyRec {
     panel?.removeFromSuperview(); panel = nil
     cycle += 1
     lines = ["E11 Console \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] ?? "") (\(Bundle.main.infoDictionary?["CFBundleVersion"] ?? "")) · \(UIDevice.current.systemVersion) · round \(cycle)",
+             "switches: web page out \(webOut ? "ON" : "off") (in the window: \(Main.shared.web?.superview != nil)) · keyboard held \(hold ? "ON" : "off")",
              "compose box: \(Main.shared.composeIfMade.map { "made, first responder: \($0.text.isFirstResponder), window: \($0.window != nil)" } ?? "not made")"]
     t0 = CACurrentMediaTime()
     recording = true
@@ -95,6 +111,15 @@ enum KeyRec {
     let close = UIButton(type: .system); close.setTitle("Close", for: .normal); close.frame = CGRect(x: p.bounds.width - 72, y: 6, width: 60, height: 28)
     close.addAction(UIAction { [weak p] _ in p?.removeFromSuperview(); panel = nil }, for: .touchUpInside)
     p.addSubview(copy); p.addSubview(close)
+    // the two switches, under the notes
+    tv.frame.size.height -= 76
+    for (i, (label, on)) in [("Web page out", webOut), ("Keyboard held", hold)].enumerated() {
+      let y = p.bounds.height - 74 + CGFloat(i) * 36
+      let l = UILabel(frame: CGRect(x: 14, y: y, width: 200, height: 31)); l.text = label; l.textColor = .white; l.font = .systemFont(ofSize: 14)
+      let s = UISwitch(); s.isOn = on; s.frame.origin = CGPoint(x: p.bounds.width - s.frame.width - 14, y: y)
+      s.addAction(UIAction { [weak s] _ in guard let s = s else { return }; if i == 0 { webOut = s.isOn } else { hold = s.isOn } }, for: .valueChanged)
+      p.addSubview(l); p.addSubview(s)
+    }
     UIView.performWithoutAnimation { win.addSubview(p) }
     panel = p
   }
@@ -137,18 +162,3 @@ enum KeyRec {
 
 enum KeyRecFound { static weak var last: UIResponder? }
 
-extension UIResponder {
-  @objc func krFind() { KeyRecFound.last = self }
-  @objc func kr_become() -> Bool {
-    let was = isFirstResponder
-    let ok = kr_become()   // (the original — swapped)
-    if ok && !was && !(self is UIWindow) { KeyRec.note("BECOME \(KeyRec.describe(self))", stack: true) }
-    return ok
-  }
-  @objc func kr_resign() -> Bool {
-    let was = isFirstResponder
-    let ok = kr_resign()
-    if was { KeyRec.note("RESIGN \(KeyRec.describe(self)) → \(ok)", stack: true) }
-    return ok
-  }
-}

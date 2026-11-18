@@ -151,6 +151,7 @@ extension Main {
     var q = (defaults.data(forKey: "e11_quick").flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }) ?? [:]
     q["me"] = nil
     if let d = try? JSONSerialization.data(withJSONObject: q) { defaults.set(d, forKey: "e11_quick") }
+    KeyRec.placeWeb()   // (TEMPORARY — the recorder's "Web page out" switch: back for the sign-in page)
     // (the sign-in page — Cloudflare's, or App Review's own: loaded now, for signing in only)
     if web.url == nil || web.url?.scheme == "about" { loadHome() }
   }
