@@ -1325,3 +1325,67 @@ html[data-theme="light"] .mca-iw { background: #fff; box-shadow: 0 0 0 .5px rgba
 .mca-k b { font-weight: 500; text-align: right; min-width: 0; overflow-wrap: anywhere; }
 .mca-iw-act { display: flex; justify-content: flex-end; margin-top: 12px; }
 .mca-iw .mca-pill { --mca-fill: rgba(120, 120, 128, .24); --mca-fill-h: rgba(120, 120, 128, .32); }
+
+/* ===== the Mac app's Search (macsearch.js — canvas "Search — Mac" S1–S5, Haris 2026-11-18): Home's rows and pills, the
+   website's search; a quick list under the top bar's field while typing ===== */
+html.mac-chrome .mcs { gap: 12px; }
+html.mac-chrome .mcs mark { background: rgba(255, 214, 10, .30); color: inherit; border-radius: 3px; padding: 0 1px; }
+html.mac-chrome[data-theme="light"] .mcs mark, html.mac-chrome[data-theme="light"] .mcs-pop mark { background: rgba(255, 204, 0, .40); }
+html.mac-chrome .mcs-head { font-size: 13px; color: var(--mc-dim); }
+html.mac-chrome .mcs-head b { color: var(--mc-fg); font-weight: 600; }
+html.mac-chrome .mcs-fix { font-size: 12.5px; color: var(--mc-dim); margin-top: -6px; }
+html.mac-chrome .mcs-fix b { color: var(--mc-blue); font-weight: 600; }
+html.mac-chrome .mcs-flt { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--mc-dim); }
+html.mac-chrome .mcs-fc { font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 10px; background: color-mix(in srgb, var(--mc-blue) 14%, transparent); color: var(--mc-blue); }
+html.mac-chrome .mcs h2.mcs-gh { display: flex; align-items: baseline; gap: 6px; margin: 2px 0 0; font-size: 13px; font-weight: 600; color: var(--mc-fg); }
+html.mac-chrome .mcs-gh span { font-size: 12px; font-weight: 400; color: var(--mc-dim); }
+html.mac-chrome .mcs-cards { display: flex; flex-wrap: wrap; gap: 10px; }
+html.mac-chrome .mcs-card { display: flex; align-items: center; gap: 10px; min-width: 280px; padding: 10px 14px; box-sizing: border-box; border: 0; border-radius: 12px; background: var(--mc-card); color: var(--mc-fg); font: inherit; text-align: left; cursor: pointer; transition: background .15s; }
+html.mac-chrome .mcs-card:hover { background: color-mix(in srgb, var(--mc-card) 88%, var(--mc-fg)); }
+html.mac-chrome .mcs-card .av-stack { flex: none; }
+html.mac-chrome .mcs-ct { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+html.mac-chrome .mcs-ct b { font-size: 13.5px; font-weight: 600; }
+html.mac-chrome .mcs-ct small { font-size: 12px; color: var(--mc-dim); }
+html.mac-chrome .mcs-chev { margin-left: auto; padding-left: 12px; color: var(--mc-dim); font-size: 15px; }
+html.mac-chrome .mcs-ini { width: 32px; height: 32px; flex: none; border-radius: 8px; display: grid; place-items: center; color: #fff; font-size: 11.5px; font-weight: 700; }
+html.mac-chrome .mcs-ini.sm { width: 26px; height: 26px; border-radius: 7px; font-size: 10px; }
+html.mac-chrome .mcs-list { display: flex; flex-direction: column; padding: 12px 10px; }
+html.mac-chrome .mcs-list .hm-row { padding-top: 8px; padding-bottom: 8px; }
+html.mac-chrome .mcs-par { flex: none; max-width: 40%; margin-right: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--mc-dim); }
+html.mac-chrome .mcs-subs { flex: none; display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; font-size: 11px; color: var(--mc-dim); }
+html.mac-chrome .mcs-subs svg { width: 12px; height: 12px; }
+html.mac-chrome .mcs-why { font-size: 12px; color: var(--mc-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html.mac-chrome .mcs-why .sr-why b { color: var(--mc-fg); font-weight: 600; }
+html.mac-chrome .mcs .hm-t.struck { text-decoration: line-through; color: var(--mc-dim); }
+html.mac-chrome .mcs-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18vh 0 0; text-align: center; color: var(--mc-dim); font-size: 13px; }
+html.mac-chrome .mcs-empty svg { width: 44px; height: 44px; opacity: .6; }
+html.mac-chrome .mcs-empty b { font-size: 17px; font-weight: 600; color: var(--mc-fg); }
+html.mac-chrome .mcs-empty span { max-width: 420px; }
+html.mac-chrome .mcs-back { align-self: flex-start; height: 28px; padding: 0 12px; border: 0; border-radius: 14px; background: var(--mc-field); color: var(--mc-fg); font: inherit; font-size: 13px; cursor: pointer; }
+html.mac-chrome .mcs-who { display: flex; align-items: center; gap: 12px; }
+html.mac-chrome .mcs .mcs-who h1 { margin: 0; font-size: 20px; font-weight: 700; }
+html.mac-chrome .mcs-in { animation: mcsIn .18s ease-out; }
+@keyframes mcsIn { from { opacity: 0; } }
+/* the quick list under the field (S2, as Home's H2 board) */
+.mcs-pop { position: fixed; z-index: 60; width: 380px; max-height: 70vh; overflow-y: auto; padding: 4px 0 8px; box-sizing: border-box; border-radius: 12px;
+  background: rgba(40, 40, 44, .98); color: rgba(255, 255, 255, .88); box-shadow: 0 0 0 .5px rgba(255, 255, 255, .14), 0 14px 40px rgba(0, 0, 0, .5);
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; opacity: 0; transform: translateY(-4px); transition: opacity .15s, transform .15s; }
+html[data-theme="light"] .mcs-pop { background: rgba(250, 250, 252, .98); color: rgba(0, 0, 0, .85); box-shadow: 0 0 0 .5px rgba(0, 0, 0, .10), 0 14px 40px rgba(0, 0, 0, .22); }
+.mcs-pop.shown { opacity: 1; transform: none; }
+.mcs-pop mark { background: rgba(255, 214, 10, .30); color: inherit; border-radius: 2px; padding: 0 1px; }
+.mcs-qh { padding: 8px 16px 3px; font-size: 11px; font-weight: 600; color: var(--mc-dim, rgba(235, 235, 245, .55)); }
+.mcs-qi { display: flex; align-items: center; gap: 10px; width: calc(100% - 12px); margin: 0 6px; padding: 6px 10px; box-sizing: border-box; border: 0; border-radius: 7px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.mcs-qi:hover { background: var(--mc-sel, rgba(255, 255, 255, .10)); }
+.mcs-qi.on { background: var(--mc-blue, #0a84ff); color: #fff; }
+.mcs-qi.on small, .mcs-qi.on small b, .mcs-qi.on kbd { color: rgba(255, 255, 255, .85); }
+.mcs-qi .hm-pc { margin: 0 8px; }
+.mcs-qt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.mcs-qt > span { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mcs-qt small { font-size: 11px; color: var(--mc-dim, rgba(235, 235, 245, .55)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mcs-qt small .sr-why b, .mcs-qt small b { font-weight: 600; color: inherit; }
+.mcs-qi.all { margin-top: 2px; font-size: 13px; color: var(--mc-blue, #0a84ff); }
+.mcs-qi.all kbd { margin-left: auto; border: 0; background: none; box-shadow: none; padding: 0; font: 12px -apple-system, system-ui, sans-serif; color: var(--mc-dim, rgba(235, 235, 245, .55)); }
+.mcs-qi.all.on { color: #fff; }
+.mcs-qs { height: .5px; margin: 6px 16px; background: var(--mc-line, rgba(255, 255, 255, .07)); }
+.mcs-qnone { padding: 10px 16px 4px; font-size: 12.5px; color: var(--mc-dim, rgba(235, 235, 245, .55)); }
+.mcs-qt small .sr-why, .mcs-qt small .sr-why b { color: inherit; }

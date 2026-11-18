@@ -3130,7 +3130,7 @@ function renderContentNow() {
   if (Cal.owns(ui.view)) { if (!Cal.canSee() || calendarRetired()) { ui.view = calendarRetired() && Plans.canSee() ? 'plans' : 'home'; renderTitle(); return renderContent(); } Cal.render(c); if (typeof Phone !== 'undefined') Phone.decorate(c); c.scrollTop = scroll.top; return; }
   if (Plans.owns(ui.view)) { Plans.render(c); if (typeof Phone !== 'undefined') Phone.decorate(c); c.scrollTop = scroll.top; return; }
   if (ClientList.owns(ui.view)) { ClientList.render(c); c.scrollTop = scroll.top; return; }
-  if (ui.search) c.innerHTML = viewSearch();
+  if (ui.search) { if (typeof MacSearch !== 'undefined' && MacSearch.on()) MacSearch.draw(c); else c.innerHTML = viewSearch(); }   // (the Mac: macsearch.js)
   else if (ui.view === 'home') c.innerHTML = viewHome();
   else if (ui.view === 'mytasks') c.innerHTML = viewMyTasks();
   else if (ui.view === 'today') c.innerHTML = viewMyDay();
@@ -6980,9 +6980,12 @@ document.addEventListener('input', (e) => {
   const el = e.target;
   if (el.id === 'search') {
     const v = el.value;
+    // (the Mac: a quick list under the field while typing, the page staying — macsearch.js; on the Search page, as below)
+    if (typeof MacSearch !== 'undefined' && MacSearch.typed(v)) return;
     if (v.trim() && !ui.search) ui.prevView = { view: ui.view, projectId: ui.projectId };
     ui.search = v.trim() ? v : '';
     if (!ui.search && ui.prevView) { ui.view = ui.prevView.view; ui.projectId = ui.prevView.projectId; }
+    if (!ui.search && typeof MacSearch !== 'undefined') MacSearch.reset();
     renderSidebar(); renderTitle(); renderContent();
     return;
   }
