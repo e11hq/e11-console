@@ -146,6 +146,9 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
   let text = PasteTextView()
   private let placeholder = UILabel()
   private let plus = UIButton(type: .system), right = UIButton(type: .system)
+  // (↑ is its own button over the mic's place: typing, the two whole buttons change places as E11 Talk's do — Haris
+  //  2026-11-18 13:04, "exact copy of Talk's, just the button")
+  private let sendB = UIButton(type: .system)
   // (the mic / ↑ drawn by an image view of its own in the circle, its colour the button's: the button's own picture was swapped
   //  by iPhone's replace effect and then set again straight after, which cut the effect — the circle filled, the arrow came in
   //  late with a jump; Haris 2026-11-17 09:49)
@@ -193,6 +196,12 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     NSLayoutConstraint.activate([rightSym.centerXAnchor.constraint(equalTo: right.centerXAnchor), rightSym.centerYAnchor.constraint(equalTo: right.centerYAnchor)])
     let hold = UILongPressGestureRecognizer(target: self, action: #selector(holdMic(_:))); hold.minimumPressDuration = 0.18
     right.addGestureRecognizer(hold); holdG = hold
+    // (the mic always the mic, in its grey circle; ↑ in its filled one — the two looks it had, now two buttons)
+    rightSym.image = UIImage(systemName: "mic", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .medium))
+    sendB.setImage(UIImage(systemName: "arrow.up", withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .bold)), for: .normal)
+    sendB.tintColor = .systemBackground; sendB.backgroundColor = .label; sendB.layer.cornerRadius = 18
+    sendB.accessibilityLabel = "Send"; sendB.isHidden = true
+    sendB.addAction(UIAction { [weak self] _ in self?.sendTapped() }, for: .touchUpInside)
     tiles.spacing = 8; tiles.alignment = .center
     replyLabel.font = .systemFont(ofSize: 13); replyLabel.textColor = .secondaryLabel
     let x = UIButton(type: .system); x.setImage(UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold)), for: .normal); x.tintColor = .secondaryLabel
@@ -211,7 +220,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     let tilesScroll = UIScrollView(); tilesScroll.showsHorizontalScrollIndicator = false
     tilesScroll.addSubview(tiles); tiles.translatesAutoresizingMaskIntoConstraints = false
     let v = UIStackView(arrangedSubviews: [mentions, box]); v.axis = .vertical; v.spacing = 8
-    [plus, right, text, placeholder, tilesScroll, replyPill].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; box.addSubview($0) }
+    [plus, right, sendB, text, placeholder, tilesScroll, replyPill].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; box.addSubview($0) }
     v.translatesAutoresizingMaskIntoConstraints = false; addSubview(v)
     textH = text.heightAnchor.constraint(equalToConstant: 30)
     tilesH = tilesScroll.heightAnchor.constraint(equalToConstant: 0)
@@ -223,6 +232,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       text.topAnchor.constraint(equalTo: tilesScroll.bottomAnchor, constant: 4), text.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 14), text.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -14), textH,
       plus.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 8), plus.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -8), plus.widthAnchor.constraint(equalToConstant: 36), plus.heightAnchor.constraint(equalToConstant: 36),
       right.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -8), right.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -8), right.widthAnchor.constraint(equalToConstant: 36), right.heightAnchor.constraint(equalToConstant: 36),
+      sendB.centerXAnchor.constraint(equalTo: right.centerXAnchor), sendB.centerYAnchor.constraint(equalTo: right.centerYAnchor), sendB.widthAnchor.constraint(equalToConstant: 36), sendB.heightAnchor.constraint(equalToConstant: 36),
       // "(picture) Replying to Sara ✕": a grey pill filling the buttons' row between + and ↑ (mock-up "Task Comments — fully
       // Apple", approved 2026-11-09)
       replyPill.leadingAnchor.constraint(equalTo: plus.trailingAnchor, constant: 8), replyPill.centerYAnchor.constraint(equalTo: plus.centerYAnchor),
@@ -272,19 +282,31 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
   private var showingSend: Bool?
   private func paintSend() {
     let send = hasSomething || editing != nil
-    // mic ↔ ↑ as the Claude app does: the symbol swaps with iPhone's own replace effect while the circle fills
+    // mic ↔ ↑: E11 Talk's own (Chat.swift showTyping, copied — Haris 2026-11-18 13:04): the two whole buttons change places,
+    // the old one shrinking a little and fading as the new one grows back from a little smaller, both together, about 0.2 s
     if showingSend != send {
       let first = showingSend == nil
       showingSend = send
-      // (the mic as a line icon — Haris 2026-11-02; the change a little quicker than iPhone's default)
-      let img = UIImage(systemName: send ? "arrow.up" : "mic", withConfiguration: UIImage.SymbolConfiguration(pointSize: send ? 14 : 15, weight: send ? .bold : .medium))
-      // (the swap and the circle's fill together, in the same time — filmed: Haris 2026-11-17 10:55)
-      SymSwap.set(rightSym, img, animated: !first)
-      // (the new symbol in its own colour from the start — a colour fading with the circle passed through the circle's own
-      //  grey and the icon vanished halfway, filmed; only the circle's fill fades)
-      UIView.performWithoutAnimation { right.tintColor = send ? .systemBackground : .label }
-      let paint = { self.right.backgroundColor = send ? .label : .tertiarySystemFill }
-      if first { paint() } else { UIView.animate(withDuration: SymSwap.time, delay: 0, options: [.curveEaseInOut, .allowUserInteraction, .beginFromCurrentState], animations: paint) }
+      let small = CGAffineTransform(scaleX: 0.75, y: 0.75)
+      let (going, coming) = send ? (right, sendB) : (sendB, right)
+      if first || window == nil || UIAccessibility.isReduceMotionEnabled || !(right.transform == .identity || right.transform == small) {
+        UIView.performWithoutAnimation {
+          sendB.isHidden = !send; right.isHidden = send; sendB.alpha = 1; right.alpha = 1
+          sendB.transform = .identity; right.transform = .identity
+        }
+      } else {
+        UIView.performWithoutAnimation {
+          right.isHidden = false; sendB.isHidden = false
+          coming.alpha = 0; coming.transform = small; going.alpha = 1; going.transform = .identity
+        }
+        UIView.animate(withDuration: 0.2, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+          coming.alpha = 1; coming.transform = .identity; going.alpha = 0; going.transform = small
+        } completion: { _ in
+          guard self.showingSend == send else { return }
+          self.sendB.isHidden = !send; self.right.isHidden = send
+          going.alpha = 1; going.transform = .identity
+        }
+      }
     }
     holdG?.isEnabled = !send
     placeholder.isHidden = !(text.text ?? "").isEmpty
@@ -699,10 +721,10 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       }
       return
     }
-    right.isEnabled = false
+    right.isEnabled = false; sendB.isEnabled = false
     onSend?(body) { [weak self] ok in
       guard let self = self else { return }
-      self.right.isEnabled = true
+      self.right.isEnabled = true; self.sendB.isEnabled = true
       guard ok else { return }
       UINotificationFeedbackGenerator().notificationOccurred(.success)
       if key == self.draftKey { self.clear() } else { ComposeBox.drafts[key] = nil; ComposeBox.acked[key] = nil; ComposeBox.saveDrafts() }
@@ -908,7 +930,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
   private func micBack() {
     UIView.animate(withDuration: 0.22) {
       self.right.transform = .identity; self.lockHint.alpha = 0
-      self.right.backgroundColor = self.showingSend == true ? .label : .tertiarySystemFill; self.right.tintColor = self.showingSend == true ? .systemBackground : .label
+      self.right.backgroundColor = .tertiarySystemFill; self.right.tintColor = .label   // (the mic's own look — ↑ is its own button now)
     } completion: { _ in if self.recorder == nil || self.locked { self.lockHint.removeFromSuperview() } }
   }
   private func meter() {
