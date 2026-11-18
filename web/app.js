@@ -1115,7 +1115,7 @@ function notesHTML(md) {
 // The Mac app: Apple's own notification instead of the bar — Update Ready, Reload · What's New (Mac app with the command
 // updateReady, Haris 2026-11-18 11:46); an older Mac app, or notifications turned off for it: the bar, as before
 const macUpdate = {};
-window.__e11Update = (what) => { if (what === 'whatsnew') whatsNewDialog(); else reloadApp(); };
+window.__e11Update = (what) => { if (what === 'whatsnew') whatsNewDialog(); else reloadApp(document.querySelector('#update-banner.on [data-action="reload-app"]')); };   // (the bar's Reload shows its dots too)
 // (and the bar in the window as well, in the Mac pages' look — canvas "Update Ready — Mac" U2 / U4, Haris 2026-11-18 12:52: both)
 function showUpdateBanner(v) {
   const mac = Host.isMacApp && document.documentElement.classList.contains('mac-chrome');
