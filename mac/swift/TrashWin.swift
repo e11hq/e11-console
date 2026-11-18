@@ -72,23 +72,12 @@ final class TrashWindows: NSObject, NSWindowDelegate {
       let f = al.window.frame
       al.window.setFrameOrigin(NSPoint(x: (m.frame.midX - f.width / 2).rounded(), y: (m.frame.midY - f.height / 2).rounded()))
     }
-    // (a modal session run a step at a time, never runModal: runModal holds the app's main thread for as long as the alert is
-    //  up, and the page behind it — a preview open — was reloaded by WebKit while Update Ready waited: Haris 2026-11-18 17:21.
-    //  Now only the alert takes clicks and keys, as before, while the page and the preview behind it keep running)
     let show = {
       place()
-      let session = NSApp.beginModalSession(for: al.window)
-      place()
-      let t = Timer(timeInterval: 0.03, repeats: true) { t in
-        let r = NSApp.runModalSession(session)
-        if r == .continue { return }
-        t.invalidate()
-        NSApp.endModalSession(session)
-        al.window.orderOut(nil)
-        let which = r == .alertFirstButtonReturn ? "ok" : (other != nil && r == .alertSecondButtonReturn) ? "other" : "cancel"
-        done(["ok": true, "pressed": which == "ok", "button": which])
-      }
-      RunLoop.main.add(t, forMode: .common)
+      DispatchQueue.main.async { place() }   // (again once it's up — running it may move it)
+      let r = al.runModal()
+      let which = r == .alertFirstButtonReturn ? "ok" : (other != nil && r == .alertSecondButtonReturn) ? "other" : "cancel"
+      done(["ok": true, "pressed": which == "ok", "button": which])
     }
     // (asked to wait while E11 Console is behind other apps — Update Ready: the Dock icon bounces once and the alert comes
     //  as you come back, never over another app)
