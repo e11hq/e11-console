@@ -5,8 +5,9 @@
 // left" with Restore, then Client, Status, Assignees, Dates, Tags, Description, Subtasks, Checklist, Attachments (a click
 // previews it — the Mac's preview, the task's files), Comments. The page sends what to show (command trashWindow, again
 // whenever it changes; trashClose when it's gone) and is told of Restore / a preview / a close (window.__e11Trash).
-// Also here: Apple's own alert for the Trash's questions (command alert — T7): its own window, the page's title and words,
-// the first button Apple's red "destructive" one when asked, Cancel with Esc.
+// Also here: Apple's own alert (command alert) — the Trash's questions (T7) and Update Ready (Haris 2026-11-18 17:04: Reload ·
+// What's New · Later): its own window, the page's title and words, the first button Apple's red "destructive" one when
+// asked, the last one with Esc.
 import Cocoa
 
 final class TrashWindows: NSObject, NSWindowDelegate {
@@ -52,12 +53,29 @@ final class TrashWindows: NSObject, NSWindowDelegate {
     al.messageText = a["title"] as? String ?? ""
     al.informativeText = a["body"] as? String ?? ""
     let ok = al.addButton(withTitle: a["ok"] as? String ?? "OK")
-    al.addButton(withTitle: a["cancel"] as? String ?? "Cancel")
+    // (a middle button when asked — Update Ready's What's New; the last one is always the way out, with Esc)
+    let other = (a["other"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+    if let o = other { al.addButton(withTitle: o) }
+    let cancel = al.addButton(withTitle: a["cancel"] as? String ?? "Cancel")
+    cancel.keyEquivalent = "\u{1b}"
     if (a["destructive"] as? Bool) == true, #available(macOS 11.0, *) { ok.hasDestructiveAction = true }
-    DispatchQueue.main.async {
+    let show = {
       let r = al.runModal()
-      done(["ok": true, "pressed": r == .alertFirstButtonReturn])
+      let which = r == .alertFirstButtonReturn ? "ok" : (other != nil && r == .alertSecondButtonReturn) ? "other" : "cancel"
+      done(["ok": true, "pressed": which == "ok", "button": which])
     }
+    // (asked to wait while E11 Console is behind other apps — Update Ready: the Dock icon bounces once and the alert comes
+    //  as you come back, never over another app)
+    if (a["whenFront"] as? Bool) == true, !NSApp.isActive {
+      NSApp.requestUserAttention(.informationalRequest)
+      var token: NSObjectProtocol?
+      token = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
+        if let t = token { NotificationCenter.default.removeObserver(t) }
+        DispatchQueue.main.async { show() }
+      }
+      return
+    }
+    DispatchQueue.main.async { show() }
   }
 }
 
