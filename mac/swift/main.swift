@@ -557,6 +557,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       let light = (a["mode"] as? String) == "light"
       defaults.set(light, forKey: "e11_light")
       window.appearance = NSAppearance(named: light ? .aqua : .darkAqua)
+      TrashWindows.shared.follow(window.appearance)   // (the Trash's task windows too)
       window.backgroundColor = light ? .white : NSColor(srgbRed: 0.047, green: 0.051, blue: 0.059, alpha: 1)
       placeLights()
       done(["ok": true])
@@ -669,7 +670,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       if tw.event == nil { tw.event = { [weak self] e in self?.pageJS("window.__e11Trash && window.__e11Trash(\(jsonString(e)))") } }
       MacLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) { done(["ok": tw.show(a)]) }
     case "trashClose": TrashWindows.shared.close(a["key"] as? String ?? ""); done(["ok": true])
-    case "alert": TrashWindows.alert(a, done)
+    case "alert": TrashWindows.shared.main = window; TrashWindows.alert(a, done)
     // (who's signed in is the owner — or not: the Server menu shown or taken away; someone else left on Test goes back to Live)
     case "owner":
       let on = (a["on"] as? Bool) == true

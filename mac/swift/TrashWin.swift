@@ -25,6 +25,7 @@ final class TrashWindows: NSObject, NSWindowDelegate {
     }
     if (a["update"] as? Bool) == true { return true }   // (closed meanwhile: nothing to update)
     let w = TrashWindow(key: key)
+    w.appearance = main?.appearance   // (the app's own light / dark, not only the Mac's — Haris 2026-11-18 17:13)
     w.delegate = self
     w.onRestore = { [weak self] in self?.event?(["key": key, "act": "restore"]) }
     w.onFile = { [weak self] id in self?.event?(["key": key, "act": "preview", "file": id]) }
@@ -39,6 +40,8 @@ final class TrashWindows: NSObject, NSWindowDelegate {
     return true
   }
   func close(_ key: String) { wins[key]?.close() }
+  // (the app's look changed: its windows follow)
+  func follow(_ a: NSAppearance?) { wins.values.forEach { $0.appearance = a } }
   func windowWillClose(_ n: Notification) {
     guard let w = n.object as? TrashWindow else { return }
     wins[w.key] = nil
@@ -58,8 +61,20 @@ final class TrashWindows: NSObject, NSWindowDelegate {
     if let o = other { al.addButton(withTitle: o) }
     let cancel = al.addButton(withTitle: a["cancel"] as? String ?? "Cancel")
     cancel.keyEquivalent = "\u{1b}"
-    if (a["destructive"] as? Bool) == true, #available(macOS 11.0, *) { ok.hasDestructiveAction = true }
+    // (no red "destructive" button — too loud: Haris 2026-11-18 17:14; the first button is Apple's usual one)
+    _ = ok
+    let main = TrashWindows.shared.main
+    al.window.appearance = main?.appearance   // (the app's own light / dark)
+    // (in the middle of the app's window — macOS puts an alert high on the screen: Haris 17:14 "not in the center")
+    let place = {
+      guard let m = main, m.isVisible else { return }
+      al.layout()
+      let f = al.window.frame
+      al.window.setFrameOrigin(NSPoint(x: (m.frame.midX - f.width / 2).rounded(), y: (m.frame.midY - f.height / 2).rounded()))
+    }
     let show = {
+      place()
+      DispatchQueue.main.async { place() }   // (again once it's up — running it may move it)
       let r = al.runModal()
       let which = r == .alertFirstButtonReturn ? "ok" : (other != nil && r == .alertSecondButtonReturn) ? "other" : "cancel"
       done(["ok": true, "pressed": which == "ok", "button": which])
