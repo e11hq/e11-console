@@ -362,6 +362,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
     if peek { bar.isHidden = true; return }
+    infoHoldEnd(animated: false)   // (back from Message info: fitted to the keyboard down before it shows)
     if isMovingToParent { coverTitle() }
   }
   /* The list's big title folding into its bar as the chat comes in (Apple's, with the tab bar hidden as it's pushed —
@@ -1023,7 +1024,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (while a message is held — Apple's menu over the chat — the bar's room isn't read: the menu moves the message bar a
     //  little, and the chat followed by a point, the bubble seen shifting as it lifted and again as it settled — Haris
     //  2026-11-13, his recording measured frame by frame: the chat 3 pixels lower after the hold)
-    guard !holding else { return }
+    guard !holding, !infoHold else { return }
     let cover = (view.bounds.maxY - accTop).rounded()
     guard abs(cover - kb) > 0.5 else { return }
     let wasAtEnd = table.contentOffset.y + table.bounds.height >= table.contentSize.height + table.adjustedContentInset.bottom - 40
@@ -1326,11 +1327,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (the navigation's delegate only for this one slide — with one there all the time, Apple's back swipe stopped)
     n.delegate = hookDelegate
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    keyboardDownForInfo()
     n.pushViewController(MessageInfoVC(group: group, id: m.id), animated: true)
     n.transitionCoordinator?.animate(alongsideTransition: nil) { [weak self] ctx in
       guard let self = self else { return }
       self.hook = nil; n.delegate = nil
       if ctx.isCancelled {
+        self.infoHoldEnd(animated: true)   // (Message info not opened after all: the chat fitted to the keyboard down now)
         UIView.animate(withDuration: 0.3) { self.dimOthers(0, but: c) }
         c.settle(animated: true)
       } else { c.settle(animated: false); self.dimOthers(0, but: c) }
@@ -1367,7 +1370,22 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     if let sh = n.sheetPresentationController { sh.detents = [.medium(), .large()]; sh.prefersGrabberVisible = true }
     present(n, animated: true)
   }
-  private func openInfo(_ m: Msg) { navigationController?.pushViewController(MessageInfoVC(group: group, id: m.id), animated: true) }
+  private func openInfo(_ m: Msg) { keyboardDownForInfo(); navigationController?.pushViewController(MessageInfoVC(group: group, id: m.id), animated: true) }
+  /* Message info, WhatsApp's way (Haris 2026-11-18 13:18, his recording): the keyboard is put away as it opens, and isn't
+     brought back on the way back — iPhone drew it plain grey for a moment as it brought it back (his recording, 13:08).
+     The chat stays as it is while the keyboard goes; it's fitted to the keyboard down only once it's back. */
+  private var infoHold = false
+  private func keyboardDownForInfo() {
+    guard bar.box.isFirstResponder else { return }
+    infoHold = true
+    bar.box.resignFirstResponder()
+  }
+  private func infoHoldEnd(animated: Bool) {
+    guard infoHold else { return }
+    infoHold = false
+    if animated { UIView.animate(withDuration: 0.25) { self.view.layoutIfNeeded(); self.fitBottom() } }
+    else { UIView.performWithoutAnimation { view.layoutIfNeeded(); fitBottom() } }
+  }
   func startReply(_ m: Msg) { editingMsg = nil; bar.setTask(nil); replying = m; UIImpactFeedbackGenerator(style: .light).impactOccurred(); bar.box.becomeFirstResponder() }
 
   // ---------- hold: reactions and the menu ----------
