@@ -37,7 +37,7 @@ async def main():
             await E(f"(() => {{ const t = task('{tid}'); t.prio = {{ [currentUserId]: 'urgent' }}; t.cdStatus = 'approved'; t.due = addDays(todayStr(), -40); commit(); }})()"); await pg.wait_for_timeout(300)
             await pg.click('.hm-tab[data-v="late"]'); await pg.wait_for_timeout(300)
             r = pg.locator(f'.hm-lead .hm-row[data-task="{tid}"]')
-            check(await r.locator('.hm-tag.urgent').count() == 1 and (await r.locator('.hm-cd').inner_text()).strip() == '✓ CD' and 'late' in (await r.get_attribute('class')), 'a row: Urgent tag, ✓ CD chip, overdue red')
+            check(await r.locator('.hm-tag.urgent').count() == 1 and (await r.locator('.hm-cd').inner_text()).strip() == '✓ CD Approved' and 'late' in (await r.get_attribute('class')), 'a row: Urgent tag, ✓ CD Approved chip, overdue red')
             check(await E("[...document.querySelectorAll('.hm-lead .hm-row')].every(r => r.getBoundingClientRect().height >= 56)"), 'rows at least 56 tall')
             await r.click(button='right'); await pg.wait_for_timeout(200)
             mi = await E("[...document.querySelectorAll('.menu .mi')].map(m => m.textContent.trim())")
