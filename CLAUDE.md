@@ -28,6 +28,14 @@ made from an old copy of Talk (main's `talk/` folder) instead of the real app, a
   self-test, anything else — and run only what he says (Haris, 2026-11-17 23:24). (The iPhone workflow's `walk` input
   turns the walk-through on or off; its self-test runs every time today unless the workflow is changed.)
 
+**The Mac app's pages — LOCKED (Haris, 2026-11-18 15:11: "First lock, Home, client assets, search"):** as they are at main c7ab144,
+branches `locked/mac-home-c7ab144`, `locked/mac-client-assets-c7ab144`, `locked/mac-search-c7ab144` (never moved or deleted) —
+with the sidebar (`locked/mac-sidebar-0442ce5`) and the Inbox (`locked/mac-inbox-4edd3c5`) locked before. Home: web/home.js and
+office.js (the Office Admin's Home) under `html.mac-chrome`; Client Assets: web/macassets.js, `.mca*` in home.css; Search:
+web/macsearch.js, `.mcs*` in home.css (Search is on the test server, not yet live). Nothing touches how any of them looks or
+works without telling Haris first and his yes — and a change to a shared piece they use (home.css's Mac rules, the rows, pills,
+taskContextMenu, Tip) is said to him before it's made.
+
 **The server — LOCKED at 1.9.27 (Haris, 2026-11-10 11:51: "lock the server states to latest"):** commit 12191cb, branch
 `locked/server-1.9.27` (never moved or deleted). Its rules and screens (web/rules.js, web/appview.js, server/src) as they are
 in 1.9.27 — which notifications go to whom and which reach the phone (`onPhone`), the occasion reminders' recipients, the
