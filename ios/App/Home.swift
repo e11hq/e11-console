@@ -1162,6 +1162,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   // (the Inbox opens on Unread — Haris 2026-11-08: "Make the inbox open on unread"; All and Mentions a tap away)
   private(set) var inboxTab = "unread"
   private var keepSet = false
+  private var hadUnread = false   // (the last drawing had unread ones — the move to All is only for those going away)
   private var inboxRows: [String: InboxRow] = [:]
   // (rows read or opened on this phone stay in Unread until another list is picked, as Mail; one read elsewhere — the Mac,
   //  the website, another phone — leaves at once: it took two openings of the app to go, Haris 2026-11-16)
@@ -1199,9 +1200,12 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     if !keepSet, (model["rows"] as? [[String: Any]]) != nil { keepSet = true }
     // (on Unread, the last unread ones read elsewhere — the Mac, the website, another phone: to All by itself, the buttons'
     //  choice and the list moving as when it's picked; ones read here stay until another list is picked — Haris 2026-11-16)
-    if keepSet, inboxTab == "unread", keep.isEmpty, (model["rows"] as? [[String: Any]]) != nil, ((model["unread"] as? Int) ?? 0) == 0 {
+    // (only when unread ones were there and have gone — Unread picked with nothing unread stays on Unread, its "Inbox
+    //  zero": it went straight back to All, Haris 2026-11-18 21:22)
+    if keepSet, hadUnread, inboxTab == "unread", keep.isEmpty, (model["rows"] as? [[String: Any]]) != nil, ((model["unread"] as? Int) ?? 0) == 0 {
       inboxTab = "all"; catsView.choose(0, animated: window != nil); send(["ev": "tab", "tab": "all"])
     }
+    if (model["rows"] as? [[String: Any]]) != nil { hadUnread = ((model["unread"] as? Int) ?? 0) > 0 }
     content.forEach { if !($0 is InboxRow) { $0.removeFromSuperview() } }
     content = []
     var seen = Set<String>()

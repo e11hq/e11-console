@@ -585,7 +585,7 @@ extension Main {
     t.load { [weak t] in if let id = pulse { t?.pulse(id, fromInbox: true) } }
     let push = { [weak nav] in nav?.pushViewController(vc, animated: true) }
     // (opened while the task page itself is still coming in — from the Inbox: once it's there)
-    if let tc = nav.transitionCoordinator { tc.animate(alongsideTransition: nil) { _ in push() } } else { push() }
+    whenSettled(nav) { push() }   // (never waiting for good — AppleNav.swift)
   }
   // the reply page gone: the comment box back on the comments, writing to the task again; the comment it was for pulses
   func threadGone(_ p: TaskPage) {

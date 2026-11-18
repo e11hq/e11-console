@@ -8,6 +8,15 @@ import UIKit
    Step 1 (this): the task page. Next: the tabs' own screens, one by one. */
 let APPLE_NAV = true
 
+// Apple's navigation still moving (a page coming or going): `go` once it has settled — looked at every 0.05 s, and after
+// ~2 s anyway: waiting for its "done" alone, a move that never ended held the page back until the app came back, and then
+// every page asked for meanwhile opened at once (Haris 2026-11-18 21:16)
+func whenSettled(_ n: UINavigationController?, tries: Int = 0, _ go: @escaping () -> Void) {
+  guard let n = n else { return }
+  if n.transitionCoordinator == nil || tries >= 40 { go(); return }
+  DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak n] in whenSettled(n, tries: tries + 1, go) }
+}
+
 // Apple's handler for a gesture, kept: everything goes to it; ours only adds a "may it start" of its own
 final class PopGuard: NSObject, UIGestureRecognizerDelegate {
   weak var original: UIGestureRecognizerDelegate?
@@ -31,6 +40,9 @@ final class AppleNav: UINavigationController, UINavigationControllerDelegate, UI
     //  checklist's box couldn't be ticked: Haris 2026-11-07. Ours only adds: on a task's Comments it doesn't start.)
     if #available(iOS 26.0, *), let g = interactiveContentPopGestureRecognizer {
       let guardian = PopGuard(original: g.delegate) { [unowned self] _ in
+        // (never on a tab's first screen — nothing to go back to: started there, Apple's navigation stayed "moving" for good
+        //  and pages waiting for it to settle never opened until the app came back — Haris 2026-11-18 21:16, a client's page)
+        guard self.viewControllers.count > 1, self.transitionCoordinator == nil else { return false }
         guard let t = self.topViewController as? TaskVC else { return true }
         return Main.shared.taskSwipeMayGo(t.page)
       }

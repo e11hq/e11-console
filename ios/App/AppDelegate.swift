@@ -1811,13 +1811,20 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
       if clientPushWaiting === vc, !n.viewControllers.contains(vc) { ClientVC.pushed = false }
       clientPushWaiting = nil; return
     }
+    // (still moving — the Clients tab just switched to, the search bar sliding away: asked again in 0.05 s, ~2 s at most;
+    //  waiting for its "done" alone, a move that never ended held the page back for good — Haris 2026-11-18 21:16)
+    if n.transitionCoordinator != nil {
+      clientPushWaiting = vc
+      guard tries < 40 else { clientPushWaiting = nil; clientPageGone(); return }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak n] in if let n { self?.pushClient(vc, on: n, tries: tries + 1) } }
+      return
+    }
     n.pushViewController(vc, animated: n.view.window != nil && AppleTabs.shared?.ownNav === n)
     ClientTrail.note("pushed on \(n === AppleTabs.shared?.clientsNav ? "clientsNav" : n === AppleTabs.shared?.homeNav ? "homeNav" : "other") try \(tries) now \(n.viewControllers.map { String(describing: type(of: $0)) })")
     if n.viewControllers.contains(vc) { clientPushWaiting = nil; return }
     clientPushWaiting = vc
     guard tries < 40 else { clientPushWaiting = nil; clientPageGone(); return }   // (never taken: as if it had gone, nothing left half-open)
-    if let tc = n.transitionCoordinator { tc.animate(alongsideTransition: nil) { [weak self, weak n] _ in DispatchQueue.main.async { if let n { self?.pushClient(vc, on: n, tries: tries + 1) } } } }
-    else { DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak n] in if let n { self?.pushClient(vc, on: n, tries: tries + 1) } } }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak n] in if let n { self?.pushClient(vc, on: n, tries: tries + 1) } }
   }
   func clientsOwn(_ v: Bool) {
     guard v != clientsPageOwn else { return }
