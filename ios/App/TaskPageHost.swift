@@ -1060,7 +1060,9 @@ extension Main {
     let ctx: [String: Any] = ["view": view, "projectId": project ?? NSNull()]
     guard let r = AppData.shared.meModel("tasks", "newTaskForm", [ctx]), let args = r["args"] as? [String: Any], let st = r["state"] as? [String: Any] else { return false }
     let key = args["key"] as? String ?? "new-task"
-    if let open = FormSheetVC.current, open.isOpen {
+    // (one still closing — pulled down a moment ago — is gone: the new one comes once it has, onSheetHost; asked to close
+    //  again meanwhile it never answered and the new sheet never came — the re-tap test, Haris 2026-11-18 23:30)
+    if let open = FormSheetVC.current, open.isOpen, !open.isBeingDismissed {
       if open.key == key { open.expand(); return true }
       open.finish("replaced") { [weak self] in _ = self?.newTaskNative(view: view, project: project) }
       return true

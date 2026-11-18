@@ -570,7 +570,7 @@ extension Main {
         }
         // 4. Me › Client Assets › a client
         let assets = {
-          self.tab(self.tabKeys.first ?? "today"); self.selectTab("me")
+          self.tab(self.tabKeys.first ?? "today"); self.selectTab("me"); self.assetsCtl.close(animated: false); AppleTabs.shared?.meNav.popToRootViewController(animated: false)
           self.assetsCtl.command(["show": true, "me": AppData.shared.me ?? "", "start": [String: Any]()])
           DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
             guard let cid = self.assetsCtl.selfFirstClient else { all["assets"] = ["none": "no client"]; self.apple("reTap", all); return }
@@ -583,7 +583,7 @@ extension Main {
         }
         // 3. Me › Content plans › a plan
         let plans = {
-          self.tab(self.tabKeys.first ?? "today"); self.selectTab("me")
+          self.tab(self.tabKeys.first ?? "today"); self.selectTab("me"); self.assetsCtl.close(animated: false); AppleTabs.shared?.meNav.popToRootViewController(animated: false)
           DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.meCtl.selfOpen("plans") }
           DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
             let base = meNav()?.viewControllers.count ?? 0
@@ -595,7 +595,7 @@ extension Main {
         }
         // 2. Me › Team members › a member
         let team = {
-          self.tab(self.tabKeys.first ?? "today"); self.selectTab("me")
+          self.tab(self.tabKeys.first ?? "today"); self.selectTab("me"); self.assetsCtl.close(animated: false); AppleTabs.shared?.meNav.popToRootViewController(animated: false)
           DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.meCtl.selfOpen("team") }
           DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
             guard let id = self.meCtl.selfTeam()["other"] as? String else { all["team"] = ["none": "no member"]; self.meCtl.backToRoot(); DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { plans() }; return }
@@ -609,7 +609,7 @@ extension Main {
         // 1b. no Clients tab (the CD, Social…): Me › Clients
         if !self.tabKeys.contains("projects") {
           guard self.meApple else { all["clientsFromMe"] = ["none": "Me not in Apple's navigation"]; team(); return }
-          self.tab(self.tabKeys.first ?? "today"); self.selectTab("me")
+          self.tab(self.tabKeys.first ?? "today"); self.selectTab("me"); self.assetsCtl.close(animated: false); AppleTabs.shared?.meNav.popToRootViewController(animated: false)
           DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             let base = meNav()?.viewControllers.count ?? 0
             run("clientsFromMe", nav: meNav, tap: { self.openClientsFromMe() }, record: { "fromMe=\(self.clientsFromMeApple) on=\(self.clientsOn)" },

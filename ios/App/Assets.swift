@@ -143,7 +143,8 @@ final class AssetsCtl {
   //  longer there taken off too)
   func reconcile(_ vcs: [UIViewController]) {
     guard appleNav != nil else { return }
-    for s in stack where s.h !== tabRoot && !vcs.contains(where: { ($0 as? AssetsVC)?.h === s.h }) { navGone(s.h) }
+    // (a page still waiting for Apple's slide to end before it's pushed isn't gone — as Me's)
+    for s in stack where s.h !== tabRoot && !waitingPush.contains(ObjectIdentifier(s.h)) && !vcs.contains(where: { ($0 as? AssetsVC)?.h === s.h }) { navGone(s.h) }
   }
   private weak var base: UIView?   // (what the first one was opened over — a client's page, the list; hidden under it meanwhile)
   // (who's signed in: as the page or Me said, else the app's own copy's — opened from a client's page without the
@@ -155,6 +156,7 @@ final class AssetsCtl {
     set { meSaid = newValue }
   }
   private(set) var leaving = false
+  private var waitingPush = Set<ObjectIdentifier>()
   private var upBusy = false
 
   var top: HomeView? { stack.last.map { $0.h } }
@@ -389,7 +391,11 @@ final class AssetsCtl {
       pushingVC = nil
       // (Apple's navigation still sliding — a page going back: pushed once it has ended, as Me's pages; pushed during the
       //  slide, the page came but this list lost it — the re-tap test, Haris 2026-11-18 23:30)
-      whenSettled(n) { [weak n] in guard let n = n else { return }; n.pushViewController(vc, animated: animated && n.view.window != nil) }
+      let k = ObjectIdentifier(s.h); waitingPush.insert(k)
+      whenSettled(n) { [weak self, weak n] in
+        self?.waitingPush.remove(k)
+        guard let n = n else { return }; n.pushViewController(vc, animated: animated && n.view.window != nil)
+      }
       main.updateCorner()
       return
     }
