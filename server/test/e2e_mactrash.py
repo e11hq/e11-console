@@ -148,6 +148,16 @@ async def main():
             # the Mac Inbox with nothing unread opens on All
             await E("()=>{ myNotifs().forEach((n) => { n.read = true; }); go('inbox'); }"); await p.wait_for_timeout(500)
             check(await E("ui.inboxTab") == 'all', 'the Mac Inbox with nothing unread opens on All')
+            # Update Ready: Apple's alert (Reload · What's New · Later), no bar; Later → again when the app comes back to the front
+            await E("window.__calls = []; window.__alertPress = false; showUpdateBanner('9.9.9')"); await p.wait_for_timeout(400)
+            ua = [m for m in await E("window.__calls") if m['cmd'] == 'alert']
+            check(len(ua) == 1 and ua[0]['args']['title'] == 'Update Ready' and [ua[0]['args'][k] for k in ('ok', 'other', 'cancel')] == ['Reload', 'What’s New', 'Later'] and ua[0]['args']['whenFront'] is True, 'Update Ready: Apple’s alert, Reload · What’s New · Later')
+            check(await p.locator('#update-banner.on').count() == 0 and not [m for m in await E("window.__calls") if m['cmd'] == 'updateReady'], '… no bar and no notification')
+            await E("showUpdateBanner('9.9.9')"); await p.wait_for_timeout(300)
+            check(len([m for m in await E("window.__calls") if m['cmd'] == 'alert']) == 1, 'asked once, not again on every check')
+            await p.wait_for_timeout(1600)
+            await E("window.dispatchEvent(new Event('blur')); window.dispatchEvent(new Event('focus'))"); await p.wait_for_timeout(300)
+            check(len([m for m in await E("window.__calls") if m['cmd'] == 'alert']) == 2, 'Later: asked again when E11 Console comes back to the front')
             await ctx.close()
             # a browser: the website's own Trash
             ctx3 = await b.new_context(viewport={'width': 1440, 'height': 900}, extra_http_headers={'X-Dev-Email': ADMIN})

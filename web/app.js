@@ -1112,16 +1112,36 @@ function notesHTML(md) {
   return out || '<p>Improvements and fixes.</p>';
 }
 // A newer version is running on the server: offer a reload (nothing is lost, changes are saved first)
-// The Mac app: Apple's own notification instead of the bar — Update Ready, Reload · What's New (Mac app with the command
-// updateReady, Haris 2026-11-18 11:46); an older Mac app, or notifications turned off for it: the bar, as before
-const macUpdate = {};
+// The Mac app: Apple's own alert window — Update Ready, Reload · What's New · Later (Haris 2026-11-18 17:04, instead of the
+// notification and the bar); Later: it comes again the next time E11 Console comes to the front. A Mac app without the alert:
+// Apple's notification (command updateReady, 2035+) and the bar in the window, as before (canvas "Update Ready — Mac" U2 / U4)
+const macUpdate = {};   // version → 'alert' | 'later' | 'bar'
+let macAlertUp = false, macLaterAt = 0, macAway = false, macPending = null;
 window.__e11Update = (what) => { if (what === 'whatsnew') whatsNewDialog(); else reloadApp(document.querySelector('#update-banner.on [data-action="reload-app"]')); };   // (the bar's Reload shows its dots too)
+function macUpdateAlert(v) {
+  if (macAlertUp) return;
+  macAlertUp = true; macPending = v;
+  NativeMac.call('alert', { title: 'Update Ready', body: 'Reload to get the latest version.', ok: 'Reload', other: 'What’s New', cancel: 'Later', whenFront: true })
+    .then((r) => {
+      macAlertUp = false; macUpdate[v] = 'later'; macLaterAt = Date.now(); macAway = false;
+      if (r && r.button === 'ok') reloadApp(null);
+      else if (r && r.button === 'other') whatsNewDialog();
+    })
+    .catch(() => { macAlertUp = false; macUpdate[v] = 'bar'; showUpdateBanner(v); });
+}
+// (Later, or What's New: asked again once E11 Console has been left and comes back to the front)
+addEventListener('blur', () => { if (macPending && Date.now() - macLaterAt > 1500) macAway = true; });
+addEventListener('focus', () => { if (macPending && macAway && macUpdate[macPending] === 'later') { macAway = false; macUpdateAlert(macPending); } });
 // (and the bar in the window as well, in the Mac pages' look — canvas "Update Ready — Mac" U2 / U4, Haris 2026-11-18 12:52: both)
 function showUpdateBanner(v) {
   const mac = Host.isMacApp && document.documentElement.classList.contains('mac-chrome');
-  if (Host.isMacApp && !macUpdate[v]) {   // (once for each version)
-    macUpdate[v] = 'asked';
-    NativeMac.call('updateReady', { version: v }).then(() => { macUpdate[v] = 'shown'; }).catch(() => { macUpdate[v] = 'bar'; });
+  if (Host.isMacApp && macUpdate[v] !== 'bar') {   // (the Mac: Apple's alert, once for each version — no bar)
+    if (!macUpdate[v]) { macUpdate[v] = 'alert'; macUpdateAlert(v); }
+    return;
+  }
+  if (Host.isMacApp && !macUpdate[v + ':n']) {   // (an older Mac app: Apple's notification, once for each version)
+    macUpdate[v + ':n'] = 'asked';
+    NativeMac.call('updateReady', { version: v }).catch(() => {});
   }
   let el = document.getElementById('update-banner');
   if (!el) { el = document.createElement('div'); el.id = 'update-banner'; document.body.appendChild(el); }
