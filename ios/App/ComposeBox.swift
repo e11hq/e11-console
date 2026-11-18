@@ -178,6 +178,8 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     box.addSubview(glass)
     NSLayoutConstraint.activate([glass.leadingAnchor.constraint(equalTo: box.leadingAnchor), glass.trailingAnchor.constraint(equalTo: box.trailingAnchor), glass.topAnchor.constraint(equalTo: box.topAnchor), glass.bottomAnchor.constraint(equalTo: box.bottomAnchor)])
     text.font = .systemFont(ofSize: 17); text.backgroundColor = .clear; text.delegate = self
+    text.keepsOverOverlays = true   // (Control Center over the app: the keyboard stays — OverlayHold below)
+    OverlayHold.watch()
     text.onPasteFiles = { [weak self] in self?.pasteFiles() ?? false }
     text.onPasteRich = { [weak self] runs in self?.pasteRich(runs) ?? false }
     text.textContainerInset = UIEdgeInsets(top: 4, left: 0, bottom: 4, right: 0); text.textContainer.lineFragmentPadding = 0
@@ -1105,6 +1107,15 @@ enum FileClip {
 }
 // the comment box's text: a pasted picture or file goes in as an attachment; words paste as words
 final class PasteTextView: UITextView {
+  // The comment box only (ComposeBox sets it): while Control Center or Notification Centre is over the app, and for half a
+  // second after it's back, it doesn't let go of the keyboard. Closing Control Center, iPhone itself took the keyboard away
+  // and gave it straight back — the keyboard dropped halfway and came up again, every time (Haris 2026-11-18, found with his
+  // recorder: iPhone's own code, never the app's; held, iPhone leaves it alone). Going to another app is as before.
+  var keepsOverOverlays = false
+  override var canResignFirstResponder: Bool {
+    if keepsOverOverlays && OverlayHold.on { return false }
+    return super.canResignFirstResponder
+  }
   var onPasteFiles: (() -> Bool)?
   // copied words with mentions or file chips (in E11, anywhere): back as they were (Haris 2026-11-02)
   var onPasteRich: (([[String: Any]]) -> Bool)?
@@ -1271,5 +1282,37 @@ enum SymSwap {
     }
     if b.image(for: .normal) != nil { b.setImage(nil, for: .normal) }
     set(v, img, animated: animated)
+  }
+}
+
+// Control Center / Notification Centre over the app (inactive, not in the background) and the half second after it's back —
+// the comment box keeps its keyboard then (PasteTextView.keepsOverOverlays)
+enum OverlayHold {
+  private(set) static var on = false
+  private static var gen = 0
+  private static var watching = false
+  static func watch() {
+    guard !watching else { return }
+    watching = true
+    let nc = NotificationCenter.default
+    nc.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { _ in gen += 1; on = true }
+    nc.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in gen += 1; on = false }
+    nc.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
+      guard on else { return }
+      let g = gen
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        guard gen == g else { return }
+        on = false
+        // (if the app moved on in that half second — a notification tapped in Notification Centre opened something else —
+        //  the comment box no longer on show lets go now, as it would have)
+        if let t = Main.shared.composeIfMade?.text, t.isFirstResponder, !shown(t) { _ = t.resignFirstResponder() }
+      }
+    }
+  }
+  private static func shown(_ v: UIView) -> Bool {
+    guard let w = v.window, !v.isHidden, v.alpha > 0 else { return false }
+    let p = v.convert(CGPoint(x: v.bounds.midX, y: v.bounds.midY), to: w)
+    guard let hit = w.hitTest(p, with: nil) else { return false }
+    return hit === v || hit.isDescendant(of: v.superview ?? v)
   }
 }
