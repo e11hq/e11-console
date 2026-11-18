@@ -157,8 +157,8 @@ if APPLE:
         if not ok: fails.append(what)
     st, rv, rl, fc = a.get('start') or {}, a.get('review') or {}, a.get('roles') or {}, a.get('focus') or {}
     print('measure apple', json.dumps(a))
-    rt = a.get('reTap') or {}
-    for pg, res in rt.items():   # (a page's row tapped again just after ‹ — Haris 2026-11-18 22:39 / 22:56)
+    rts = [(role, ((rr or {}).get('apple') or {}).get('reTap') or {}) for role, rr in out.items()]
+    for pg, res in [(f'{role} · {k}', v) for role, rt in rts for k, v in rt.items()]:   # (a page's row tapped again just after ‹ — Haris 2026-11-18 22:39 / 22:56)
         rounds = (res or {}).get('rounds') or []
         if not rounds: print(f'retap {pg}: not run {res}'); continue
         for r in rounds:

@@ -526,6 +526,33 @@ extension Main {
         }
         let meNav = { AppleTabs.shared?.meNav }
         let kinds = { ((self.meCtl.selfPlans()["kinds"] as? [String]) ?? []).joined(separator: ",") }
+        // 5. a sheet (New task — every form sheet opens the same way): closed, then opened again `d` s after
+        let sheet = {
+          self.tab(self.tabKeys.first ?? "today")
+          var rounds: [[String: Any]] = []
+          let isUp = { (self.presentedViewController is FormSheetVC) && self.presentedViewController?.isBeingDismissed == false }
+          func go(_ i: Int) {
+            guard i < delays.count else { all["sheet"] = ["rounds": rounds]; self.apple("reTap", all); return }
+            let d = delays[i]
+            _ = self.newTaskNative(view: "home", project: nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+              let first = isUp()
+              let t0 = CACurrentMediaTime(); var log: [String] = []
+              self.presentedViewController?.dismiss(animated: true)   // (pulled down)
+              DispatchQueue.main.asyncAfter(deadline: .now() + d) {
+                log.append(String(format: "%.2f TAP closing=%@", CACurrentMediaTime() - t0, String(self.presentedViewController?.isBeingDismissed ?? false)))
+                let r = self.newTaskNative(view: "home", project: nil)
+                log.append("asked=\(r) host=\(self.sheetHost() != nil)")
+              }
+              DispatchQueue.main.asyncAfter(deadline: .now() + d + 2.6) {
+                rounds.append(["after": d, "firstOpened": first, "opened": isUp(), "log": log])
+                self.presentedViewController?.dismiss(animated: false)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { go(i + 1) }
+              }
+            }
+          }
+          go(0)
+        }
         // 4. Me › Client Assets › a client
         let assets = {
           self.tab(self.tabKeys.first ?? "today"); self.selectTab("me")
@@ -535,6 +562,7 @@ extension Main {
             run("assets", nav: { self.assetsCtl.selfNav }, tap: { self.assetsCtl.selfTapClient(cid) }, record: { self.assetsCtl.selfKinds.joined(separator: ",") },
                 opened: { self.assetsCtl.selfNav?.topViewController is AssetsVC && self.assetsCtl.selfKinds.last == "client" }) {
               self.assetsCtl.close(animated: false); self.tab(self.tabKeys.first ?? "today")
+              DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { sheet() }
             }
           }
         }
@@ -563,9 +591,22 @@ extension Main {
             }
           }
         }
+        // 1b. no Clients tab (the CD, Social…): Me › Clients
+        if !self.tabKeys.contains("projects") {
+          guard self.meApple else { all["clientsFromMe"] = ["none": "Me not in Apple's navigation"]; team(); return }
+          self.tab(self.tabKeys.first ?? "today"); self.selectTab("me")
+          DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            let base = meNav()?.viewControllers.count ?? 0
+            run("clientsFromMe", nav: meNav, tap: { self.openClientsFromMe() }, record: { "fromMe=\(self.clientsFromMeApple) on=\(self.clientsOn)" },
+                opened: { meNav()?.topViewController is ClientsFromMeVC && (meNav()?.viewControllers.count ?? 0) == base + 1 }) {
+              self.meCtl.backToRoot(); DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { team() }
+            }
+          }
+          return
+        }
         // 1. the Clients tab › a client
         let rows = (AppData.shared.screen("clients", ServerHome.clientsJSON("view=list")).model?["rows"] as? [[String: Any]]) ?? []
-        guard self.tabKeys.contains("projects"), let cid = rows.first?["id"] as? String else { all["clients"] = ["none": "no Clients tab or client"]; team(); return }
+        guard let cid = rows.first?["id"] as? String else { all["clients"] = ["none": "no client"]; team(); return }
         self.tab("projects"); AppleTabs.shared?.clientsNav.popToRootViewController(animated: false)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
           run("clients", nav: { AppleTabs.shared?.clientsNav }, tap: { self.ev(self.clientsListIfMade, ["ev": "client", "id": cid]) },
@@ -639,6 +680,32 @@ extension Main {
       ("aReTapWait61", {}),
       ("aReTapWait62", {}),
       ("aReTapWait63", {}),
+      ("aReTapWait64", {}),
+      ("aReTapWait65", {}),
+      ("aReTapWait66", {}),
+      ("aReTapWait67", {}),
+      ("aReTapWait68", {}),
+      ("aReTapWait69", {}),
+      ("aReTapWait70", {}),
+      ("aReTapWait71", {}),
+      ("aReTapWait72", {}),
+      ("aReTapWait73", {}),
+      ("aReTapWait74", {}),
+      ("aReTapWait75", {}),
+      ("aReTapWait76", {}),
+      ("aReTapWait77", {}),
+      ("aReTapWait78", {}),
+      ("aReTapWait79", {}),
+      ("aReTapWait80", {}),
+      ("aReTapWait81", {}),
+      ("aReTapWait82", {}),
+      ("aReTapWait83", {}),
+      ("aReTapWait84", {}),
+      ("aReTapWait85", {}),
+      ("aReTapWait86", {}),
+      ("aReTapWait87", {}),
+      ("aReTapWait88", {}),
+      ("aReTapWait89", {}),
       ("aLink", {
         let files = (AppData.shared.meModel("assets", "assets", [""])?["files"] as? [[String: Any]]) ?? []
         guard let f = files.first(where: { ($0["file"] as? String) != nil && CommentCell.isPic($0["name"] as? String ?? "") }), let path = f["file"] as? String else { self.apple("link", ["none": "no picture file"]); return }
