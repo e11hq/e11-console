@@ -100,7 +100,14 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     if let ev = NSAppleEventManager.shared().currentAppleEvent, ev.eventID == AEEventID(kAEOpenApplication),
        ev.paramDescriptor(forKeyword: AEKeyword(keyAEPropData))?.enumCodeValue == OSType(keyAELaunchedAsLogInItem) { AT_LOGIN = true }
     #endif
-    if SELFTEST.isEmpty { UNUserNotificationCenter.current().delegate = self }
+    if SELFTEST.isEmpty {
+      UNUserNotificationCenter.current().delegate = self
+      // "Update ready" as Apple's own notification, with its two buttons (Haris 2026-11-18 11:46 — the full version; the
+      // Mac's own style setting decides banner or alert, the app's default kept: Banner)
+      let reload = UNNotificationAction(identifier: "reload", title: "Reload", options: [.foreground])
+      let whatsNew = UNNotificationAction(identifier: "whatsnew", title: "What’s New", options: [.foreground])
+      UNUserNotificationCenter.current().setNotificationCategories([UNNotificationCategory(identifier: "e11-update", actions: [reload, whatsNew], intentIdentifiers: [], options: [])])
+    }
     NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleURL(_:withReply:)), forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
   }
   func applicationDidFinishLaunching(_ n: Notification) {
@@ -524,6 +531,22 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       guard u.range(of: "^(https?|mailto):", options: [.regularExpression, .caseInsensitive]) != nil, let url = URL(string: u) else { return done(["ok": false, "error": "Only web links can be opened"]) }
       NSWorkspace.shared.open(url); done(["ok": true])
     case "notify": notify(a); done(["ok": true])
+    // a newer version on the server (the page): Apple's notification, Reload · What's New — not allowed: the page shows its bar
+    case "updateReady":
+      if !SELFTEST.isEmpty { return done(["ok": false, "error": "Not in the self-test"]) }
+      let center = UNUserNotificationCenter.current()
+      center.requestAuthorization(options: [.alert, .badge]) { ok, _ in
+        DispatchQueue.main.async {
+          guard ok else { return done(["ok": false, "error": "Notifications are off"]) }
+          let c = UNMutableNotificationContent()
+          c.title = "Update Ready"; c.body = "Reload to get the latest version."
+          c.categoryIdentifier = "e11-update"
+          c.userInfo = ["update": a["version"] as? String ?? ""]
+          // (one at a time: a newer version takes the place of the one before)
+          center.add(UNNotificationRequest(identifier: "e11-update", content: c, trigger: nil), withCompletionHandler: nil)
+          done(["ok": true])
+        }
+      }
     case "badge":
       let n = a["n"]
       let s = (n as? NSNumber).map { $0.intValue > 0 ? "\($0.intValue)" : "" } ?? (n as? String ?? "")
@@ -860,6 +883,13 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     if #available(macOS 11.0, *) { done(remote ? [.banner, .list, .sound, .badge] : [.banner, .list]) } else { done([.alert]) }
   }
   func userNotificationCenter(_ c: UNUserNotificationCenter, didReceive r: UNNotificationResponse, withCompletionHandler done: @escaping () -> Void) {
+    // Update Ready: Reload (or the notification itself) reloads the page, saving first; What's New opens its window
+    if r.notification.request.content.categoryIdentifier == "e11-update" {
+      let what = r.actionIdentifier == "whatsnew" ? "whatsnew" : "reload"
+      if what == "reload" { c.removeDeliveredNotifications(withIdentifiers: ["e11-update"]) }
+      DispatchQueue.main.async { self.showWindow(); self.pageJS("window.__e11Update && window.__e11Update(\(jsString(what)))") }
+      return done()
+    }
     #if APPSTORE
     if let d = r.notification.request.content.userInfo["e11"] as? [String: Any] { DispatchQueue.main.async { self.openPush(d) }; return done() }
     #endif
