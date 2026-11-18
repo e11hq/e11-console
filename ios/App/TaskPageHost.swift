@@ -302,24 +302,28 @@ extension Main {
     p.onDescUpload = { [weak self, weak p] picked in guard let self = self, let p = p else { return }; self.uploadToTask(p, picked, toDesc: true) }
     // (the + sheet — your recent photos, Camera · Files: canvas "Attach panel — Talk & Console", W5, Haris 2026-11-16)
     p.onAttachFiles = { [weak self, weak p] in
-      guard let self = self, let p = p, let host = self.sheetHost() else { return }
-      Picker.shared.pick(from: host, single: false, source: "sheet", title: p.model?["title"] as? String) { [weak self, weak p] r in
-        guard let self = self, let p = p else { return }
-        let picked = ((r["files"] as? [[String: Any]]) ?? []).compactMap { f -> (URL, String)? in
-          guard let tok = f["token"] as? String, let u = Picker.shared.url(tok) else { return nil }
-          return (u, f["name"] as? String ?? "File")
+      guard let self = self, let p = p else { return }
+      self.onSheetHost { [weak self] host in guard let self = self else { return }
+        Picker.shared.pick(from: host, single: false, source: "sheet", title: p.model?["title"] as? String) { [weak self, weak p] r in
+          guard let self = self, let p = p else { return }
+          let picked = ((r["files"] as? [[String: Any]]) ?? []).compactMap { f -> (URL, String)? in
+            guard let tok = f["token"] as? String, let u = Picker.shared.url(tok) else { return nil }
+            return (u, f["name"] as? String ?? "File")
+          }
+          self.uploadToTask(p, picked)
         }
-        self.uploadToTask(p, picked)
       }
     }
     p.onSubmitFiles = { [weak self, weak p] cd in
-      guard let self = self, let p = p, let host = self.sheetHost() else { return }
-      let vc = SubmitSheetVC(task: p.taskId, cd: cd) { [weak self, weak p] files in
-        guard let self = self, let p = p else { return }
-        self.taskAct(p, ["act": "submitReview", "id": p.taskId, "files": files])
+      guard let self = self, let p = p else { return }
+      self.onSheetHost { [weak self] host in guard let self = self else { return }
+        let vc = SubmitSheetVC(task: p.taskId, cd: cd) { [weak self, weak p] files in
+          guard let self = self, let p = p else { return }
+          self.taskAct(p, ["act": "submitReview", "id": p.taskId, "files": files])
+        }
+        vc.cookies = self.serverHome.cookies
+        host.present(vc, animated: true)
       }
-      vc.cookies = self.serverHome.cookies
-      host.present(vc, animated: true)
     }
     p.onOpen = { [weak self] id in self?.openTaskPage(id, tab: "details", focus: "") }
     p.onTab = { [weak self, weak p] t in guard let self = self, let p = p else { return }; if t == "comments" { self.taskShowComments(p, focus: "") } else { self.taskHideComments() } }
@@ -334,16 +338,20 @@ extension Main {
       self.taskAct(p, ["act": "done", "id": p.taskId])
     }
     p.onSheet = { [weak self] args, pick, answer in
-      guard let self = self, let host = self.sheetHost() else { return }
-      host.present(NativeSheetVC(args, pick: pick, answer: answer), animated: true)
+      guard let self = self else { return }
+      self.onSheetHost { [weak self] host in guard let self = self else { return }
+        host.present(NativeSheetVC(args, pick: pick, answer: answer), animated: true)
+      }
     }
     p.onDate = { [weak self] which, value, answer in
-      guard let self = self, let host = self.sheetHost() else { return }
-      host.present(DateSheetVC(["value": value, "min": "", "max": "", "clearable": !value.isEmpty, "md": false]) { r in
-        if (r["cancel"] as? Bool) == true || (r["ok"] as? Bool) == false { return answer(nil) }
-        let v = (r["clear"] as? Bool) == true ? "" : (r["date"] as? String ?? "")
-        answer(v == value ? nil : v)
-      }, animated: true)
+      guard let self = self else { return }
+      self.onSheetHost { [weak self] host in guard let self = self else { return }
+        host.present(DateSheetVC(["value": value, "min": "", "max": "", "clearable": !value.isEmpty, "md": false]) { r in
+          if (r["cancel"] as? Bool) == true || (r["ok"] as? Bool) == false { return answer(nil) }
+          let v = (r["clear"] as? Bool) == true ? "" : (r["date"] as? String ?? "")
+          answer(v == value ? nil : v)
+        }, animated: true)
+      }
     }
   }
 
@@ -670,22 +678,24 @@ extension Main {
     let files = files0.map { f -> [String: Any] in var x = f; if x["file"] == nil, let p = x["path"] as? String, !p.isEmpty { x["file"] = p }; return x }
     guard i < files.count else { return }
     PreviewLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) { [weak self] in
-      guard let self = self, let host = self.sheetHost() else { return }
-      self.composeIfMade?.text.resignFirstResponder()
-      let vc = PreviewVC(["files": files.map { Main.previewItem($0) }, "at": i]) { [weak self] ev in self?.previewEvent(ev, files) }
-      self.previewVC = vc
-      // (out of the picture that was tapped, as E11 Talk's — Haris 2026-11-15; no picture there: the fade as before)
-      // (no finger on a picture — opened by a link from another app, E11 Talk's card: out of the file's own picture on the
-      //  page by its mark when it's on screen, and back into it — Haris 2026-11-15)
-      vc.keys = files.map { FileTouch.key($0) }
-      // (the best picture of it the phone already holds, read from the file as its row has it — the preview's own copy of
-      //  the file names its picture differently, so it was never found and the thumbnail flew out: Haris 2026-11-17 10:15)
-      if let p = CommentCell.picURL(files[i]) { vc.startImage = FeedLoader.shared.kept(p, px: 600) ?? FeedLoader.shared.kept(p, px: 132) }
-      // (looked for on the screen on show — Apple's tabs' window; the app's own screen behind them has none, so a file opened
-      //  by a link never found its picture and faded in: Haris 2026-11-16)
-      vc.source = FileTouch.picture() ?? FileTouch.marked(vc.keys[i], in: host.view.window ?? self.screenWindow)
-      ClientTrail.linkNote("present: touch=\(FileTouch.picture() != nil) host=\(type(of: host)) hostWindow=\(host.view.window != nil) inHost=\(FileTouch.marked(vc.keys[i], in: host.view.window) != nil) inScreen=\(FileTouch.marked(vc.keys[i], in: self.screenWindow) != nil) flies=\(vc.flies)")
-      host.present(vc, animated: !vc.flies)
+      guard let self = self else { return }
+      self.onSheetHost { [weak self] host in guard let self = self else { return }
+        self.composeIfMade?.text.resignFirstResponder()
+        let vc = PreviewVC(["files": files.map { Main.previewItem($0) }, "at": i]) { [weak self] ev in self?.previewEvent(ev, files) }
+        self.previewVC = vc
+        // (out of the picture that was tapped, as E11 Talk's — Haris 2026-11-15; no picture there: the fade as before)
+        // (no finger on a picture — opened by a link from another app, E11 Talk's card: out of the file's own picture on the
+        //  page by its mark when it's on screen, and back into it — Haris 2026-11-15)
+        vc.keys = files.map { FileTouch.key($0) }
+        // (the best picture of it the phone already holds, read from the file as its row has it — the preview's own copy of
+        //  the file names its picture differently, so it was never found and the thumbnail flew out: Haris 2026-11-17 10:15)
+        if let p = CommentCell.picURL(files[i]) { vc.startImage = FeedLoader.shared.kept(p, px: 600) ?? FeedLoader.shared.kept(p, px: 132) }
+        // (looked for on the screen on show — Apple's tabs' window; the app's own screen behind them has none, so a file opened
+        //  by a link never found its picture and faded in: Haris 2026-11-16)
+        vc.source = FileTouch.picture() ?? FileTouch.marked(vc.keys[i], in: host.view.window ?? self.screenWindow)
+        ClientTrail.linkNote("present: touch=\(FileTouch.picture() != nil) host=\(type(of: host)) hostWindow=\(host.view.window != nil) inHost=\(FileTouch.marked(vc.keys[i], in: host.view.window) != nil) inScreen=\(FileTouch.marked(vc.keys[i], in: self.screenWindow) != nil) flies=\(vc.flies)")
+        host.present(vc, animated: !vc.flies)
+      }
     }
   }
   // Copy, as the website's: the file itself isn't copied — the app remembers which file it is, and pasting it into a
@@ -1057,18 +1067,20 @@ extension Main {
     }
     let state = NewTaskState(st)
     withPhotos(args) { [weak self] a in
-      guard let self = self, let host = self.sheetHost() else { return }
-      let vc = FormSheetVC(a, event: { [weak self] ev in self?.newTaskEvent(ev, key, state) }) { [weak self] r in
-        if (r["closed"] as? String) == "discard" { self?.shownScreen?.toast(["t": "New task discarded"]) }
+      guard let self = self else { return }
+      self.onSheetHost { [weak self] host in guard let self = self else { return }
+        let vc = FormSheetVC(a, event: { [weak self] ev in self?.newTaskEvent(ev, key, state) }) { [weak self] r in
+          if (r["closed"] as? String) == "discard" { self?.shownScreen?.toast(["t": "New task discarded"]) }
+        }
+        vc.onTuck = { [weak self] t in
+          guard let self, self.formTucked != t else { return }
+          self.formTucked = t
+          self.tabBar.isUserInteractionEnabled = !t
+          UIView.animate(withDuration: 0.2) { self.tabBar.alpha = t || self.tabsHidden ? 0 : 1 }
+        }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        host.present(vc, animated: true)
       }
-      vc.onTuck = { [weak self] t in
-        guard let self, self.formTucked != t else { return }
-        self.formTucked = t
-        self.tabBar.isUserInteractionEnabled = !t
-        UIView.animate(withDuration: 0.2) { self.tabBar.alpha = t || self.tabsHidden ? 0 : 1 }
-      }
-      UIImpactFeedbackGenerator(style: .light).impactOccurred()
-      host.present(vc, animated: true)
     }
     return true
   }

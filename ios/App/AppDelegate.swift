@@ -1273,15 +1273,16 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
       guard let c = card else { return true }
       let due = c["due"] as? String ?? ""
       // the date sheet the task page uses (Today / Clear; closed any other way: nothing changes)
-      guard let host = sheetHost() else { return true }
-      host.present(DateSheetVC(["value": due, "min": "", "max": "", "clearable": !due.isEmpty, "md": false]) { r in
-        if (r["cancel"] as? Bool) == true || (r["ok"] as? Bool) == false { return }
-        let v = (r["clear"] as? Bool) == true ? "" : (r["date"] as? String ?? "")
-        if v == due { return }
-        // (the card moves at once — the phone's copy changed straight away, the server's answer confirms it: Haris
-        //  2026-11-07, it waited ~2 s)
-        serverHome.act("due", id, due: v.isEmpty ? nil : v)   // (done on the phone's copy at once — ServerHome.act)
-      }, animated: true)
+      onSheetHost { [weak self] host in guard let self = self else { return }
+        host.present(DateSheetVC(["value": due, "min": "", "max": "", "clearable": !due.isEmpty, "md": false]) { r in
+          if (r["cancel"] as? Bool) == true || (r["ok"] as? Bool) == false { return }
+          let v = (r["clear"] as? Bool) == true ? "" : (r["date"] as? String ?? "")
+          if v == due { return }
+          // (the card moves at once — the phone's copy changed straight away, the server's answer confirms it: Haris
+          //  2026-11-07, it waited ~2 s)
+          self.serverHome.act("due", id, due: v.isEmpty ? nil : v)   // (done on the phone's copy at once — ServerHome.act)
+        }, animated: true)
+      }
       return true
     case "delete":
       serverHome.act("delete", id); return true
@@ -1557,6 +1558,10 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
       // (a client tapped: its page comes in at once, from the copy — the website is only told; waiting for it made the
       //  page slow to come, Haris 2026-11-02)
       if !page, (ev["ev"] as? String) == "client", let id = ev["id"] as? String, AppData.shared.ready, self.serverClients.on {
+        // (the client's page sliding back — already off Apple's navigation: what it shows is going, so it's worked out and
+        //  pushed again; our own note said it was still open, and the tap was "nothing changed" — the re-tap test, Haris
+        //  2026-11-18 23:30)
+        if self.clientPageLeaving { self.clientRetap = true; self.serverClients.forgetDrawn() }
         self.clientsOn = "client"
         self.serverClients.query = "view=client&id=\(id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")&done=0"
         self.serverClients.refresh()
@@ -1772,7 +1777,9 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     h.bottomRoom = (tabBar.isHidden ? 40 : view.bounds.height - tabBar.frame.minY) + 96
     if !(clientsApple && page) { h.tabTop = tabBar.isHidden ? nil : tabPillTop }   // (a page pushed in Apple's navigation: its own, at the bottom — ClientsPushedVC)
     h.drawFor(mm)   // (another person's list in it — after View as…: drawn afresh, never animated from theirs)
-    if clientsWanted && h.isHidden { reveal(h, page: page); clientsOwn(false) }
+    // (and a client tapped as its page slides back — only that tap: a live change meanwhile never brings a page back)
+    let retap = page && clientRetap && clientPageLeaving; clientRetap = false
+    if clientsWanted && (h.isHidden || retap) { reveal(h, page: page); clientsOwn(false) }
   }
   // shown: the list in place; a client's page pushed in from the right over the list (as iPhone's own pages)
   private func reveal(_ h: HomeView, page: Bool) {
@@ -1808,6 +1815,12 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   // the page had gone — the app went back to the list (Haris 2026-11-16: a client tapped in search never opened). Asked
   // again as soon as it has settled, and the navigation's settling doesn't count it as gone meanwhile.
   private(set) var clientPushWaiting: ClientVC?
+  // (a client's page still counted open by us, but no longer on Apple's navigation — sliding back: Apple's says it's gone)
+  var clientRetap = false
+  var clientPageLeaving: Bool {
+    guard clientsApple, clientsOn == "client", ClientVC.pushed, clientPushWaiting == nil, let n = clientsNavNow else { return false }
+    return !n.viewControllers.contains { $0 is ClientVC }
+  }
   // (a task asked for while Apple's navigation is still sliding — opened once it has ended: openTaskPage)
   var taskOpenAsk: (String, String, String, String?)?
   var taskOpenNow = false   // (held until its navigation takes it — weak, it was gone before its second try)
@@ -2121,6 +2134,14 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     var v: UIViewController = self
     while let p = v.presentedViewController, !p.isBeingDismissed { v = p }
     return v
+  }
+  // a sheet asked for while another is still closing: shown once it has gone — sheetHost has none meanwhile, and the sheet
+  // was dropped (the re-tap test, Haris 2026-11-18 23:30); ~2 s at most, as whenSettled
+  var sheetClosing: Bool { var v: UIViewController = self; while let p = v.presentedViewController { if p.isBeingDismissed { return true }; v = p }; return false }
+  func onSheetHost(tries: Int = 0, _ go: @escaping (UIViewController) -> Void) {
+    if let h = sheetHost() { go(h); return }
+    guard sheetClosing, tries < 40 else { return }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.onSheetHost(tries: tries + 1, go) }
   }
   // where a sheet from the page goes: on the app itself, or on top of an open form / Trash sheet (a tucked draft stays
   // where it is); nil while anything else is up

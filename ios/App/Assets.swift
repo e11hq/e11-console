@@ -387,7 +387,9 @@ final class AssetsCtl {
       vc.loadViewIfNeeded()
       blocks(s.h)   // (in Apple's list now — Apple's search instead of the box)
       pushingVC = nil
-      n.pushViewController(vc, animated: animated && n.view.window != nil)
+      // (Apple's navigation still sliding — a page going back: pushed once it has ended, as Me's pages; pushed during the
+      //  slide, the page came but this list lost it — the re-tap test, Haris 2026-11-18 23:30)
+      whenSettled(n) { [weak n] in guard let n = n else { return }; n.pushViewController(vc, animated: animated && n.view.window != nil) }
       main.updateCorner()
       return
     }

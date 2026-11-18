@@ -553,6 +553,21 @@ extension Main {
           }
           go(0)
         }
+        // 4b. a task page from the first tab (fixed in build 1870 — kept checked)
+        let task = {
+          self.tab(self.tabKeys.first ?? "today")
+          guard let tid = cards.first else { all["task"] = ["none": "no task"]; self.apple("reTap", all); sheet(); return }
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            let tnav = { self.stageNav }
+            let base = tnav()?.viewControllers.count ?? 0
+            run("task", nav: tnav, tap: { self.openTaskPage(tid, tab: "details", focus: "") },
+                record: { "pages=\(self.taskPages.count) inView=\(self.taskPages.last?.superview != nil)" },
+                opened: { (tnav()?.viewControllers.count ?? 0) == base + 1 && (tnav()?.topViewController as? TaskVC).map { t in self.taskPages.contains { $0 === t.page } && t.page.superview === t.view } == true }) {
+              for x in self.taskPages { self.closeTaskPage(x, animated: false) }
+              DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { sheet() }
+            }
+          }
+        }
         // 4. Me › Client Assets › a client
         let assets = {
           self.tab(self.tabKeys.first ?? "today"); self.selectTab("me")
@@ -562,7 +577,7 @@ extension Main {
             run("assets", nav: { self.assetsCtl.selfNav }, tap: { self.assetsCtl.selfTapClient(cid) }, record: { self.assetsCtl.selfKinds.joined(separator: ",") },
                 opened: { self.assetsCtl.selfNav?.topViewController is AssetsVC && self.assetsCtl.selfKinds.last == "client" }) {
               self.assetsCtl.close(animated: false); self.tab(self.tabKeys.first ?? "today")
-              DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { sheet() }
+              DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { task() }
             }
           }
         }
@@ -706,6 +721,20 @@ extension Main {
       ("aReTapWait87", {}),
       ("aReTapWait88", {}),
       ("aReTapWait89", {}),
+      ("aReTapWait90", {}),
+      ("aReTapWait91", {}),
+      ("aReTapWait92", {}),
+      ("aReTapWait93", {}),
+      ("aReTapWait94", {}),
+      ("aReTapWait95", {}),
+      ("aReTapWait96", {}),
+      ("aReTapWait97", {}),
+      ("aReTapWait98", {}),
+      ("aReTapWait99", {}),
+      ("aReTapWait100", {}),
+      ("aReTapWait101", {}),
+      ("aReTapWait102", {}),
+      ("aReTapWait103", {}),
       ("aLink", {
         let files = (AppData.shared.meModel("assets", "assets", [""])?["files"] as? [[String: Any]]) ?? []
         guard let f = files.first(where: { ($0["file"] as? String) != nil && CommentCell.isPic($0["name"] as? String ?? "") }), let path = f["file"] as? String else { self.apple("link", ["none": "no picture file"]); return }
