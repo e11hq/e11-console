@@ -558,6 +558,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       defaults.set(light, forKey: "e11_light")
       window.appearance = NSAppearance(named: light ? .aqua : .darkAqua)
       TrashWindows.shared.follow(window.appearance)   // (the Trash's task windows too)
+      InfoWindows.shared.follow(window.appearance)   // (and Client Assets' Get Info windows)
       window.backgroundColor = light ? .white : NSColor(srgbRed: 0.047, green: 0.051, blue: 0.059, alpha: 1)
       placeLights()
       done(["ok": true])

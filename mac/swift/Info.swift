@@ -23,6 +23,7 @@ final class InfoWindows: NSObject, NSWindowDelegate {
     }
     if (a["update"] as? Bool) == true { return true }   // (closed meanwhile: nothing to update)
     let w = InfoWindow(key: key)
+    w.appearance = main?.appearance   // (the app's own light / dark, not only the Mac's — Haris 2026-11-18 17:20)
     w.delegate = self
     w.onTask = { [weak self] in self?.event?(["key": key, "act": "task"]) }
     w.fill(a)
@@ -36,6 +37,8 @@ final class InfoWindows: NSObject, NSWindowDelegate {
     return true
   }
   func close(_ key: String) { wins[key]?.close() }
+  // (the app's look changed: its windows follow)
+  func follow(_ a: NSAppearance?) { wins.values.forEach { $0.appearance = a } }
   func windowWillClose(_ n: Notification) {
     guard let w = n.object as? InfoWindow else { return }
     wins[w.key] = nil

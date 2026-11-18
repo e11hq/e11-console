@@ -212,7 +212,7 @@ final class MacPreview: NSView {
     name.frame = NSRect(x: 240, y: 13, width: max(0, bounds.width - 480), height: 18)
     meta.frame = NSRect(x: 240, y: 32, width: max(0, bounds.width - 480), height: 16)
     var x = bounds.width - 16
-    for b in [closeB, moreB, dlB, copyB] { let w = b.fit; x -= w; b.frame = NSRect(x: x, y: 13, width: w, height: 34); x -= 8 }
+    for b in [closeB, moreB, dlB, copyB] where !b.isHidden { let w = b.fit; x -= w; b.frame = NSRect(x: x, y: 13, width: w, height: 34); x -= 8 }
     prevB.frame = NSRect(x: 40, y: (bounds.height - 34) / 2, width: 34, height: 34)
     nextB.frame = NSRect(x: bounds.width - 74, y: (bounds.height - 34) / 2, width: 34, height: 34)
     let sw = thumbs.reduce(CGFloat(6)) { $0 + $1.frame.width + 6 }
@@ -266,6 +266,9 @@ final class MacPreview: NSView {
     let f = cur, k = f["kind"] as? String ?? "other"
     name.stringValue = f["name"] as? String ?? ""
     meta.stringValue = f["meta"] as? String ?? ""
+    // (a file in the Trash: no Copy Link — its link doesn't open while it's there: Haris 2026-11-18 17:19)
+    let noLink = (f["noLink"] as? Bool) == true
+    if copyB.isHidden != noLink { copyB.isHidden = noLink; needsLayout = true }
     let v: NSView
     switch k {
     case "image":
