@@ -1124,8 +1124,11 @@ function macUpdateAlert(v) {
   NativeMac.call('alert', { title: 'Update Ready', body: 'Reload to get the latest version.', ok: 'Reload', other: 'What’s New', cancel: 'Later', whenFront: true })
     .then((r) => {
       macAlertUp = false; macUpdate[v] = 'later'; macLaterAt = Date.now(); macAway = false;
-      if (r && r.button === 'ok') reloadApp(null);
-      else if (r && r.button === 'other') whatsNewDialog();
+      // (Reload or What's New with a file's preview open: the preview closes first, then the app reloads / What's New shows —
+      //  it reloaded behind the picture, still on show: Haris 2026-11-18 17:29)
+      const first = (f) => { if (ui.previewAtt) { NativeMac.call('previewSet', { close: true }).catch(() => {}); setTimeout(f, 350); } else f(); };
+      if (r && r.button === 'ok') first(() => reloadApp(null));
+      else if (r && r.button === 'other') first(() => whatsNewDialog());
     })
     .catch(() => { macAlertUp = false; macUpdate[v] = 'bar'; showUpdateBanner(v); });
 }

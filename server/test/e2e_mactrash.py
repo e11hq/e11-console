@@ -159,6 +159,12 @@ async def main():
             await p.wait_for_timeout(1600)
             await E("window.dispatchEvent(new Event('blur')); window.dispatchEvent(new Event('focus'))"); await p.wait_for_timeout(300)
             check(len([m for m in await E("window.__calls") if m['cmd'] == 'alert']) == 2, 'Later: asked again when E11 Console comes back to the front')
+            # Reload with a preview open: the preview closes first
+            await E("window.__calls = []; ui.previewAtt = { id: 'x' }; window.location.reload = () => { window.__reloaded = true; }")
+            await E("(() => { const o = NativeMac.call; NativeMac.call = (c, a) => c === 'alert' ? Promise.resolve({ ok: true, pressed: true, button: 'ok' }) : o(c, a); macUpdateAlert('9.9.10'); })()")
+            await p.wait_for_timeout(200)
+            cl = [m for m in await E("window.__calls") if m['cmd'] == 'previewSet' and m['args'].get('close')]
+            check(len(cl) == 1, 'Reload with a preview open: the preview closes first')
             await ctx.close()
             # a browser: the website's own Trash
             ctx3 = await b.new_context(viewport={'width': 1440, 'height': 900}, extra_http_headers={'X-Dev-Email': ADMIN})
