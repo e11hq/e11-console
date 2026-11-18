@@ -1128,7 +1128,8 @@ function macUpdateAlert(v) {
       //  it reloaded behind the picture, still on show: Haris 2026-11-18 17:29)
       const first = (f) => { if (ui.previewAtt) { NativeMac.call('previewSet', { close: true }).catch(() => {}); setTimeout(f, 350); } else f(); };
       if (r && r.button === 'ok') first(() => reloadApp(null));
-      else if (r && r.button === 'other') first(() => whatsNewDialog());
+      // (What's New, then its OK: Apple's Update Ready alert again at once — Haris 2026-11-18 18:05)
+      else if (r && r.button === 'other') first(() => whatsNewDialog(false, () => macUpdateAlert(v)));
     })
     .catch(() => { macAlertUp = false; macUpdate[v] = 'bar'; showUpdateBanner(v); });
 }
@@ -1175,15 +1176,15 @@ async function reloadApp(btn) {
   await shown;
   location.reload();
 }
-async function whatsNewDialog(auto) {
+async function whatsNewDialog(auto, then) {   // (then: when it's closed — Update Ready's alert comes back on the Mac)
   let r;
-  try { r = await api('GET', '/api/whatsnew'); } catch (e) { if (!auto) toast(e.message); return; }
+  try { r = await api('GET', '/api/whatsnew'); } catch (e) { if (!auto) toast(e.message); if (then) then(); return; }
   if (auto && !r.notes) return;
   // (the iPhone app: its own sheet; "All notes in Me › About" opens the app's own About)
   if (NativePop.on) { NativePop.show({ kind: 'whatsNew', version: r.name || r.version, when: r.publishedAt ? fmtDateTime(r.publishedAt) : '', sections: NativePop.sections(r.notes) }); return; }
   const root = $('#overlay-root');
   root.innerHTML = `<div class="scrim"><div class="dialog wn-dlg"><div class="wn-kick">${icon('download')}What’s new</div><h2>${esc(r.name || r.version)}</h2>${r.publishedAt ? `<div class="wn-date">${esc(fmtDateTime(r.publishedAt))}</div>` : ''}<div class="wn-notes">${notesHTML(r.notes)}</div><div class="actions"><button class="btn primary" data-r="1">Got it</button></div></div></div>`;
-  const close = () => { root.innerHTML = ''; };
+  const close = () => { root.innerHTML = ''; if (then) { const f = then; then = null; f(); } };
   $('[data-r="1"]', root).addEventListener('click', close);
   $('.scrim', root).addEventListener('click', (e) => { if (e.target.classList.contains('scrim')) close(); });
 }

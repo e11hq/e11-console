@@ -159,6 +159,14 @@ async def main():
             await p.wait_for_timeout(1600)
             await E("window.dispatchEvent(new Event('blur')); window.dispatchEvent(new Event('focus'))"); await p.wait_for_timeout(300)
             check(len([m for m in await E("window.__calls") if m['cmd'] == 'alert']) == 2, 'Later: asked again when E11 Console comes back to the front')
+            # What's New from the alert, then its OK: the alert comes back
+            await E("(() => { window.__n = 0; const o = NativeMac.call; NativeMac.call = (c, a) => { if (c !== 'alert') return o(c, a); window.__n++; return window.__n === 1 ? Promise.resolve({ ok: true, button: 'other' }) : new Promise(() => {}); }; macUpdateAlert('9.9.11'); window.__restoreCall = o; })()")
+            await p.wait_for_timeout(1200)
+            ok_btn = p.locator('.wn-dlg [data-r="1"]')
+            check(await ok_btn.count() == 1, 'What’s New from the alert opens')
+            if await ok_btn.count(): await ok_btn.click(); await p.wait_for_timeout(300)
+            check(await E("window.__n") == 2, 'its OK: Apple’s Update Ready alert again')
+            await E("NativeMac.call = window.__restoreCall; macAlertUp = false")
             # Reload with a preview open: the preview closes first
             await E("window.__calls = []; ui.previewAtt = { id: 'x' }; window.location.reload = () => { window.__reloaded = true; }")
             await E("(() => { const o = NativeMac.call; NativeMac.call = (c, a) => c === 'alert' ? Promise.resolve({ ok: true, pressed: true, button: 'ok' }) : o(c, a); macUpdateAlert('9.9.10'); })()")
