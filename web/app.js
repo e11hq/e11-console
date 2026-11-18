@@ -1112,7 +1112,17 @@ function notesHTML(md) {
   return out || '<p>Improvements and fixes.</p>';
 }
 // A newer version is running on the server: offer a reload (nothing is lost, changes are saved first)
+// The Mac app: Apple's own notification instead of the bar — Update Ready, Reload · What's New (Mac app with the command
+// updateReady, Haris 2026-11-18 11:46); an older Mac app, or notifications turned off for it: the bar, as before
+const macUpdate = {};
+window.__e11Update = (what) => { if (what === 'whatsnew') whatsNewDialog(); else reloadApp(); };
 function showUpdateBanner(v) {
+  if (Host.isMacApp && macUpdate[v] !== 'bar') {
+    if (macUpdate[v]) return;   // (asked, or shown: once for each version)
+    macUpdate[v] = 'asked';
+    NativeMac.call('updateReady', { version: v }).then(() => { macUpdate[v] = 'shown'; }).catch(() => { macUpdate[v] = 'bar'; showUpdateBanner(v); });
+    return;
+  }
   let el = document.getElementById('update-banner');
   if (!el) { el = document.createElement('div'); el.id = 'update-banner'; document.body.appendChild(el); }
   el.innerHTML = `<div class="ub-text">${icon('download')}<div><b>Update ready</b><span>Reload to get the latest version</span></div></div>
