@@ -1398,3 +1398,17 @@ html.mac-chrome #topbar .search:has(#search:not(:placeholder-shown)) .mcs-x { di
 .mcs-qi.all.on { color: #fff; }
 .mcs-qs { height: .5px; margin: 6px 16px; background: var(--mc-line, rgba(255, 255, 255, .07)); }
 .mcs-qt small .sr-why, .mcs-qt small .sr-why b { color: inherit; }
+
+/* ===== the update bar on the Mac (canvas "Update Ready — Mac" U2 / U4, Haris 2026-11-18 12:52): a glass card under the top bar,
+   the blue download mark, Apple's text, borderless pills — What's New grey, Reload blue; Apple's notification comes as well ===== */
+html.mac-chrome #update-banner { top: 64px; gap: 14px; padding: 10px 10px 10px 16px; border: 0; border-radius: 14px; background: var(--mcs-panel); backdrop-filter: blur(30px);
+  box-shadow: 0 0 0 .5px var(--mcs-edge), 0 12px 32px rgba(0, 0, 0, .45); color: var(--mc-fg); font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; font-size: 13px; }
+html.mac-chrome[data-theme="light"] #update-banner { box-shadow: 0 0 0 .5px var(--mcs-edge), 0 12px 32px rgba(0, 0, 0, .14); }
+html.mac-chrome #update-banner .ub-text { gap: 12px; }
+html.mac-chrome #update-banner .ub-ic { width: 30px; height: 30px; flex: none; border-radius: 8px; display: grid; place-items: center; background: color-mix(in srgb, var(--mc-blue) 16%, transparent); }
+html.mac-chrome #update-banner .ub-ic .ic { width: 16px; height: 16px; color: var(--mc-blue); }
+html.mac-chrome #update-banner .ub-text b { font-size: 13px; font-weight: 600; }
+html.mac-chrome #update-banner .ub-text span:not(.ub-ic) { font-size: 12px; color: var(--mc-dim); }
+html.mac-chrome #update-banner .ub-acts { margin-left: 18px; }
+html.mac-chrome #update-banner .btn { height: 28px; padding: 0 14px; border: 0; border-radius: 14px; background: var(--mc-field); color: var(--mc-fg); font: 13px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; box-shadow: none; }
+html.mac-chrome #update-banner .btn.primary { padding: 0 16px; background: var(--mc-blue); color: #fff; font-weight: 600; }

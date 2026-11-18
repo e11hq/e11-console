@@ -1116,20 +1116,32 @@ function notesHTML(md) {
 // updateReady, Haris 2026-11-18 11:46); an older Mac app, or notifications turned off for it: the bar, as before
 const macUpdate = {};
 window.__e11Update = (what) => { if (what === 'whatsnew') whatsNewDialog(); else reloadApp(); };
+// (and the bar in the window as well, in the Mac pages' look — canvas "Update Ready — Mac" U2 / U4, Haris 2026-11-18 12:52: both)
 function showUpdateBanner(v) {
-  if (Host.isMacApp && macUpdate[v] !== 'bar') {
-    if (macUpdate[v]) return;   // (asked, or shown: once for each version)
+  const mac = Host.isMacApp && document.documentElement.classList.contains('mac-chrome');
+  if (Host.isMacApp && !macUpdate[v]) {   // (once for each version)
     macUpdate[v] = 'asked';
-    NativeMac.call('updateReady', { version: v }).then(() => { macUpdate[v] = 'shown'; }).catch(() => { macUpdate[v] = 'bar'; showUpdateBanner(v); });
-    return;
+    NativeMac.call('updateReady', { version: v }).then(() => { macUpdate[v] = 'shown'; }).catch(() => { macUpdate[v] = 'bar'; });
   }
   let el = document.getElementById('update-banner');
   if (!el) { el = document.createElement('div'); el.id = 'update-banner'; document.body.appendChild(el); }
-  el.innerHTML = `<div class="ub-text">${icon('download')}<div><b>Update ready</b><span>Reload to get the latest version</span></div></div>
+  el.innerHTML = mac
+    ? `<div class="ub-text"><span class="ub-ic">${icon('download')}</span><div><b>Update Ready</b><span>Reload to get the latest version</span></div></div>
+    <div class="ub-acts"><button class="btn" data-action="whats-new">What’s New</button><button class="btn primary" data-action="reload-app">Reload</button></div>`
+    : `<div class="ub-text">${icon('download')}<div><b>Update ready</b><span>Reload to get the latest version</span></div></div>
     <div class="ub-acts"><button class="btn" data-action="whats-new">What’s new</button><button class="btn primary" data-action="reload-app">Reload</button></div>`;
   el.title = `Version ${v}`;
+  if (mac) placeUpdateBanner();
   el.classList.add('on');
 }
+// the Mac: over the middle of the page (beside the sidebar), just under the top bar
+function placeUpdateBanner() {
+  const el = document.getElementById('update-banner'), m = document.getElementById('main');
+  if (!el || !m || !document.documentElement.classList.contains('mac-chrome')) return;
+  const r = m.getBoundingClientRect();
+  el.style.left = `${r.left + r.width / 2}px`;
+}
+addEventListener('resize', placeUpdateBanner);
 async function reloadApp(btn) {
   // "Reloading" with three bouncing dots, shown for a moment so it's seen, then the normal reload
   const banner = document.getElementById('update-banner');
