@@ -115,6 +115,14 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiatedAllowingIdleSystemSleep], reason: "Keeps E11 Console live and notifications arriving")
     buildMenu()
     buildWindow()
+    // the menu bar item (MacNative.swift): what's picked in its panel, the page does; Open E11 Console brings the window
+    MenuBar.shared.main = window
+    MenuBar.shared.openApp = { [weak self] in self?.showWindow() }
+    MenuBar.shared.act = { [weak self] a in
+      guard let self = self else { return }
+      self.showWindow()
+      self.pageJS("window.__e11Bar && window.__e11Bar(\(jsonString(a)))")
+    }
     if defaults.bool(forKey: LOCK_KEY) { lock() }
     // the lock also comes back when the screen sleeps or the Mac is locked
     NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(lockNow), name: NSWorkspace.screensDidSleepNotification, object: nil)
@@ -199,7 +207,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       config.userContentController.addUserScript(WKUserScript(source: "window.__e11NativeSplash = true;", injectionTime: .atDocumentStart, forMainFrameOnly: true))
     }
     config.preferences.javaScriptCanOpenWindowsAutomatically = true
-    web = WKWebView(frame: window.contentView!.bounds, configuration: config)
+    web = E11WebView(frame: window.contentView!.bounds, configuration: config)   // (it can also drag the page's files out to Finder — MacNative.swift)
     web.autoresizingMask = [.width, .height]
     web.uiDelegate = self
     web.navigationDelegate = self
@@ -397,6 +405,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     // (a page that doesn't take the startup screen over — not E11's own, or an older one — lets it go)
     if splash != nil { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in if self?.splashHello == false { self?.endSplash() } } }
     reviewLink.isHidden = !(webView.url?.host ?? "").hasSuffix(".cloudflareaccess.com")
+    // (a page that isn't E11's — a sign-in page: no menu bar item)
+    if webView.url?.host != URL(string: SERVER)?.host { MenuBar.shared.hide() }
     if webView.url?.host == URL(string: SERVER)?.host {
       shareSignIn(); sendApnsToken(tries: 0)
       if let t = pendingFileLink { pendingFileLink = nil; pageJS("window.__e11FileLink && window.__e11FileLink(\(jsString(t)))") }
@@ -405,6 +415,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   /* ---------- file links: files.e11hq.com/f/<token> (Haris 2026-11-03) — tapped anywhere on this Mac, the App Store
      app opens (universal links) and the page opens the file where it is ---------- */
   func application(_ application: NSApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([NSUserActivityRestoring]) -> Void) -> Bool {
+    if let id = Spot.picked(userActivity) { openSpot(id); return true }   // (a Spotlight result — MacNative.swift)
     guard userActivity.activityType == NSUserActivityTypeBrowsingWeb, let u = userActivity.webpageURL else { return false }
     // a task link (files…/t/<id>, Haris 2026-11-04): the task, as e11console://task/<id> opens it
     if u.path.range(of: "^/t/[A-Za-z0-9_-]{1,80}/?$", options: .regularExpression) != nil {
@@ -480,6 +491,23 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     web?.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in WidgetShare.saveSignIn(server: SERVER, cookies: cookies) }
   }
   #endif
+  #if !APPSTORE
+  // (a Spotlight result: the Terminal-installed app too)
+  func application(_ application: NSApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([NSUserActivityRestoring]) -> Void) -> Bool {
+    if let id = Spot.picked(userActivity) { openSpot(id); return true }
+    return false
+  }
+  #endif
+  // a Spotlight result opened: the page opens it (the task, the client, Client Assets at that folder, the file); waits for it
+  func openSpot(_ id: String, tries: Int = 0) {
+    if tries == 0 { showWindow() }
+    guard tries < 40 else { return }
+    if web == nil || web.isLoading || web.url?.host != URL(string: SERVER)?.host {
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) { [weak self] in self?.openSpot(id, tries: tries + 1) }
+      return
+    }
+    pageJS("window.__e11Spot && window.__e11Spot(\(jsString(id)))")
+  }
   // links the window can't show itself (mailto:, e11console:, …) go to the Mac
   func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
     #if APPSTORE
@@ -559,6 +587,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       window.appearance = NSAppearance(named: light ? .aqua : .darkAqua)
       TrashWindows.shared.follow(window.appearance)   // (the Trash's task windows too)
       InfoWindows.shared.follow(window.appearance)   // (and Client Assets' Get Info windows)
+      MenuBar.shared.follow(window.appearance)   // (and the menu bar item's panel)
       window.backgroundColor = light ? .white : NSColor(srgbRed: 0.047, green: 0.051, blue: 0.059, alpha: 1)
       placeLights()
       done(["ok": true])
@@ -673,6 +702,15 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     case "trashClose": TrashWindows.shared.close(a["key"] as? String ?? ""); done(["ok": true])
     case "alert": TrashWindows.shared.main = window; TrashWindows.alert(a, done)
     // (who's signed in is the owner — or not: the Server menu shown or taken away; someone else left on Test goes back to Live)
+    // (MacNative.swift, Haris 2026-11-18: the menu bar item, Spotlight, signing out, files dragged out to Finder)
+    case "bar": MenuBar.shared.main = window; MacLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) {}; MenuBar.shared.apply(a); done(["ok": true, "shown": !MenuBar.shared.off])
+    case "spotlight": MacLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) { Spot.update(a); done(["ok": true]) }
+    case "signedOut": Spot.clear(); MenuBar.shared.hide(); done(["ok": true])
+    case "dragOut":
+      guard let w = web as? E11WebView, let items = a["items"] as? [[String: Any]], !items.isEmpty else { return done(["ok": false, "error": "Nothing to drag"]) }
+      w.outItems = items; w.outAt = Date()
+      MacLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) {}
+      done(["ok": true])
     case "owner":
       let on = (a["on"] as? Bool) == true
       if defaults.bool(forKey: "e11_is_owner") != on { defaults.set(on, forKey: "e11_is_owner"); buildMenu() }
@@ -683,7 +721,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     case "appInfo":
       done(["ok": true, "server": SERVER, "shell": SHELL_VERSION, "native": "swift",
             "version": info["CFBundleShortVersionString"] as? String ?? "3.0.0", "touchID": defaults.bool(forKey: LOCK_KEY),
-            "glass": FileManager.default.fileExists(atPath: Bundle.main.bundlePath + "/Contents/Resources/Assets.car"), "store": IS_STORE, "apns": IS_STORE, "sidebar": true, "preview": true, "info": true, "trashWindow": true])
+            "glass": FileManager.default.fileExists(atPath: Bundle.main.bundlePath + "/Contents/Resources/Assets.car"), "store": IS_STORE, "apns": IS_STORE, "sidebar": true, "preview": true, "info": true, "trashWindow": true, "bar": true, "spotlight": true, "dragOut": true])
     default: done(["ok": false, "error": "Unknown command " + cmd])
     }
   }
@@ -997,6 +1035,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   @objc func reloadPage(_ s: Any?) { web.reload() }
   @objc func goHome(_ s: Any?) { loadHome() }
   @objc func openInBrowser(_ s: Any?) { if let u = URL(string: SERVER + "/") { NSWorkspace.shared.open(u) } }
+  @objc func toggleBar(_ s: Any?) {
+    MenuBar.shared.toggleShown()
+    (s as? NSMenuItem)?.state = MenuBar.shared.off ? .off : .on
+  }
   @objc func zoomIn(_ s: Any?) { web.pageZoom = min(2, web.pageZoom + 0.1) }
   @objc func zoomOut(_ s: Any?) { web.pageZoom = max(0.6, web.pageZoom - 0.1) }
   @objc func zoomReset(_ s: Any?) { web.pageZoom = 1 }
@@ -1012,6 +1054,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       let m = NSMenu(title: title); items.forEach { m.addItem($0) }
       let it = NSMenuItem(); it.submenu = m; main.addItem(it); return m
     }
+    // (the menu bar item: on unless taken away here — MacNative.swift)
+    let barItem = item("Show in Menu Bar", #selector(toggleBar(_:)), "", .command, self)
+    barItem.state = MenuBar.shared.off ? .off : .on
     let lockItem = item("Lock with Touch ID", #selector(toggleLock(_:)), "", .command, self)
     lockItem.state = defaults.bool(forKey: LOCK_KEY) ? .on : .off
     let loginItem = item("Open at Login", #selector(toggleLogin(_:)), "", .command, self)
@@ -1050,7 +1095,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       item("Actual Size", #selector(zoomReset(_:)), "0", [.command, .option], self),   // (⌥⌘0: ⌘0 is the main window's, in the Window menu — both on ⌘0, View's came first and ⌘0 never brought the window back, Haris 2026-11-09)
       item("Zoom In", #selector(zoomIn(_:)), "+", .command, self),
       item("Zoom Out", #selector(zoomOut(_:)), "-", .command, self), .separator(),
-      item("Open in Browser", #selector(openInBrowser(_:)), "", .command, self),
+      item("Open in Browser", #selector(openInBrowser(_:)), "", .command, self), .separator(),
+      barItem,
     ])
     let win = sub("Window", [
       item("Minimize", #selector(NSWindow.performMiniaturize(_:)), "m"),

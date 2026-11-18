@@ -154,6 +154,8 @@ final class MacPreview: NSView {
   private var pages: [String: ([String], String?)] = [:]
   private var chromeOn = true, hideT: Timer?, leaving = false
   private var chrome: [NSView] { [topShade, footShade, name, meta, copyB, dlB, moreB, closeB, prevB, nextB, stripFx, hint, pageFx] }
+  // (the file's name at the top: dragged out to Finder, the file itself lands there — MacNative.swift, Haris 2026-11-18)
+  private let grab = PvGrab()
 
   init(files: [[String: Any]], at: Int, from: NSRect?) {
     self.files = files; self.at = max(0, min(at, files.count - 1)); self.from = from; self.openedAt = self.at
@@ -172,6 +174,11 @@ final class MacPreview: NSView {
     toastL.wantsLayer = true; toastL.drawsBackground = true; toastL.backgroundColor = NSColor(white: 0.12, alpha: 0.9); toastL.layer?.cornerRadius = 15; toastL.layer?.masksToBounds = true
     toastL.alphaValue = 0; addSubview(toastL)
     for b in [copyB, dlB, moreB, closeB, prevB, nextB] { addSubview(b) }
+    addSubview(grab)
+    grab.file = { [weak self] in
+      guard let f = self?.cur, let u = f["dl"] as? String, !u.isEmpty else { return nil }
+      return ["name": f["name"] as? String ?? "file", "url": u, "size": f["size"] ?? 0]
+    }
     copyB.onClick = { [weak self] in self?.send("copy") }
     dlB.onClick = { [weak self] in self?.send("dl") }
     moreB.onClick = { [weak self] in
@@ -211,6 +218,8 @@ final class MacPreview: NSView {
     content?.frame = stage.bounds
     name.frame = NSRect(x: 240, y: 13, width: max(0, bounds.width - 480), height: 18)
     meta.frame = NSRect(x: 240, y: 32, width: max(0, bounds.width - 480), height: 16)
+    let nw = min(name.frame.width, name.attributedStringValue.size().width + 16)
+    grab.frame = NSRect(x: name.frame.midX - nw / 2, y: 10, width: nw, height: 40)
     var x = bounds.width - 16
     for b in [closeB, moreB, dlB, copyB] where !b.isHidden { let w = b.fit; x -= w; b.frame = NSRect(x: x, y: 13, width: w, height: 34); x -= 8 }
     prevB.frame = NSRect(x: 40, y: (bounds.height - 34) / 2, width: 34, height: 34)
@@ -651,4 +660,18 @@ final class PvFly: NSView {
     CATransaction.commit()
   }
 
+}
+
+// the name of the file on show: drag it out to Finder (or Mail, Messages…) and the file itself lands there
+final class PvGrab: NSView {
+  var file: (() -> [String: Any]?)?
+  private var start: NSPoint?
+  override func mouseDown(with e: NSEvent) { start = e.locationInWindow }
+  override func mouseDragged(with e: NSEvent) {
+    guard let s = start, hypot(e.locationInWindow.x - s.x, e.locationInWindow.y - s.y) > 3, let f = file?() else { return }
+    start = nil
+    FileDrag.begin([f], from: self, event: e, image: nil)
+  }
+  override func mouseUp(with e: NSEvent) { start = nil }
+  override func resetCursorRects() { if file?() != nil { addCursorRect(bounds, cursor: .openHand) } }
 }
