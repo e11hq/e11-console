@@ -1651,13 +1651,16 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     }
     guard clientsOn == "client" else { updateCorner(); return }
     clientsOn = "list"; serverClients.query = "view=list"; clientFrom = nil
+    // (the client's page gone: the copy no longer counts it as drawn — the same client tapped again within the list's
+    //  refresh was "nothing changed" and didn't open: Haris 2026-11-18 21:57)
+    serverClients.forgetDrawn()
     if clientsWanted { DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in guard let self = self, self.clientsOn == "list" else { return }; self.serverClients.refresh() } }
     updateCorner()
   }
   // (without the website — step 9: what the page said after a client's page went back: the list, or the screen it came
   //  from with Clients no longer showing)
   func clientBackPageless() {
-    clientsOn = "list"; serverClients.query = "view=list"
+    clientsOn = "list"; serverClients.query = "view=list"; serverClients.forgetDrawn()
     if clientFrom != nil { clientsWanted = false }
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
       guard let self = self, self.clientsOn == "list" else { return }
@@ -1804,7 +1807,10 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   // just switched to, the search bar still sliding away), Apple's navigation lets the push go, and its next settling said
   // the page had gone — the app went back to the list (Haris 2026-11-16: a client tapped in search never opened). Asked
   // again as soon as it has settled, and the navigation's settling doesn't count it as gone meanwhile.
-  private(set) var clientPushWaiting: ClientVC?   // (held until its navigation takes it — weak, it was gone before its second try)
+  private(set) var clientPushWaiting: ClientVC?
+  // (a task asked for while Apple's navigation is still sliding — opened once it has ended: openTaskPage)
+  var taskOpenAsk: (String, String, String, String?)?
+  var taskOpenNow = false   // (held until its navigation takes it — weak, it was gone before its second try)
   private func pushClient(_ vc: ClientVC, on n: UINavigationController, tries: Int) {
     guard clientsOn == "client", clientsWanted, !n.viewControllers.contains(vc) else {
       // (no longer wanted before its navigation took it — left for another page: nothing of it left counted as open)

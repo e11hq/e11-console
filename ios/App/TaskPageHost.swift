@@ -8,6 +8,21 @@ import UniformTypeIdentifiers
    attaching files, New task from this). */
 extension Main {
   func openTaskPage(_ id: String, tab: String, focus: String, trash: String? = nil) {
+    // (Apple's navigation still sliding — a task tapped again as its page goes back: opened once the slide has ended, nothing
+    //  of it made before; made during the slide, it wasn't on the navigation yet as the old page's slide ended, and the
+    //  clean-up of pages gone took it — Apple's bar over an empty page, ‹ doing nothing: Haris 2026-11-18 22:08. The last
+    //  one asked meanwhile is the one opened.)
+    if APPLE_NAV, !taskOpenNow, let n = stageNav, n.transitionCoordinator != nil {
+      let waiting = taskOpenAsk != nil
+      taskOpenAsk = (id, tab, focus, trash)
+      if waiting { return }
+      whenSettled(n) { [weak self] in
+        guard let self = self, let a = self.taskOpenAsk else { return }
+        self.taskOpenAsk = nil
+        self.taskOpenNow = true; self.openTaskPage(a.0, tab: a.1, focus: a.2, trash: a.3); self.taskOpenNow = false
+      }
+      return
+    }
     endEditing()
     ProfileAskCard.current?.go()   // (a task opened: the birthday / city card slips away)
     FeedLoader.shared.cookies = serverHome.cookies   // (before anything is drawn: its pictures are fetched with it)

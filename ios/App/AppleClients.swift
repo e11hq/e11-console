@@ -234,7 +234,9 @@ final class ClientVC: ClientsPushedVC, UISearchResultsUpdating, UISearchControll
     super.viewDidDisappear(a)
     ClientTrail.note("client page disappeared moving=\(isMovingFromParent) nav=\(navigationController != nil)", stack: true)
     // (‹, the swipe back, the tab tapped again: gone — the app's own state follows)
-    if isMovingFromParent || navigationController == nil { if ClientVC.pushed { Main.shared.clientPageGone() } }
+    // (only this page's own going: a client tapped again as it slid back has its new page already — the old one's end
+    //  took the new tap away; Haris 2026-11-18 21:57)
+    if isMovingFromParent || navigationController == nil { if ClientVC.pushed, ClientVC.shared === self { Main.shared.clientPageGone() } }
   }
 }
 

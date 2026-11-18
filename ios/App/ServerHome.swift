@@ -94,6 +94,8 @@ final class ServerHome {
   }
   private var lastNoAnswer = false
   private var copyGen = -1, copyQuery = ""
+  // (what it last drew no longer on show — a client's page gone: the next refresh works it out again, never "nothing changed")
+  func forgetDrawn() { copyGen = -1 }
   private var copyDay = ""   // (the day it was worked out for — Dubai's, as the rules' today)
   static func dubaiDay() -> String {
     let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.locale = Locale(identifier: "en_US_POSIX")
