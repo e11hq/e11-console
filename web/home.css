@@ -474,7 +474,7 @@ html.mac-chrome #topbar .search { width: 220px; height: 30px; padding: 0 10px; g
 html.mac-chrome #topbar .search:focus-within { background: var(--mc-field); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mc-blue) 45%, transparent); }
 /* typing in it: a little wider, smoothly (Haris 2026-11-15 14:41) */
 html.mac-chrome #topbar .search { transition: width .25s cubic-bezier(.22, .8, .3, 1); }
-html.mac-chrome #topbar .search:focus-within { width: 300px; }
+html.mac-chrome #topbar .search:focus-within { width: 400px; }   /* (400 while typing — Haris 2026-11-18 11:00; Talk moves with it) */
 html.mac-chrome body.office-mode #topbar .search:focus-within { width: 320px; }
 html.mac-chrome #topbar .search input { font-size: 13px; color: var(--mc-fg); }
 html.mac-chrome #topbar .search input::placeholder { color: var(--mc-dim); }
@@ -1366,12 +1366,22 @@ html.mac-chrome .mcs-who { display: flex; align-items: center; gap: 12px; }
 html.mac-chrome .mcs .mcs-who h1 { margin: 0; font-size: 20px; font-weight: 700; }
 html.mac-chrome .mcs-in { animation: mcsIn .18s ease-out; }
 @keyframes mcsIn { from { opacity: 0; } }
-/* the quick list under the field (S2, as Home's H2 board) */
-.mcs-pop { position: fixed; z-index: 60; width: 380px; max-height: 70vh; overflow-y: auto; padding: 4px 0 8px; box-sizing: border-box; border-radius: 12px;
-  background: rgba(40, 40, 44, .98); color: rgba(255, 255, 255, .88); box-shadow: 0 0 0 .5px rgba(255, 255, 255, .14), 0 14px 40px rgba(0, 0, 0, .5);
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; opacity: 0; transform: translateY(-4px); transition: opacity .15s, transform .15s; }
-html[data-theme="light"] .mcs-pop { background: rgba(250, 250, 252, .98); color: rgba(0, 0, 0, .85); box-shadow: 0 0 0 .5px rgba(0, 0, 0, .10), 0 14px 40px rgba(0, 0, 0, .22); }
-.mcs-pop.shown { opacity: 1; transform: none; }
+/* the quick list and the field as one piece (S2b / S2c — Haris 2026-11-18 11:05): the field takes the list's colour, its lower
+   corners square, the list hangs from it at its width — one shape, the hairline between them */
+html.mac-chrome { --mcs-panel: rgba(44, 44, 48, .985); --mcs-edge: rgba(255, 255, 255, .16); --mcs-shadow: 0 22px 54px rgba(0, 0, 0, .55); }
+html.mac-chrome[data-theme="light"] { --mcs-panel: rgba(250, 250, 252, .985); --mcs-edge: rgba(0, 0, 0, .12); --mcs-shadow: 0 22px 54px rgba(0, 0, 0, .20); }
+html.mac-chrome #topbar .search.mcs-open, html.mac-chrome #topbar .search.mcs-open:focus-within { height: 34px; padding: 0 12px; border-radius: 12px 12px 0 0; background: var(--mcs-panel); box-shadow: 0 0 0 .5px var(--mcs-edge); }
+html.mac-chrome #topbar .search:has(#search:not(:placeholder-shown)) kbd { display: none; }
+.mcs-x { display: none; flex: none; width: 16px; height: 16px; padding: 0; border: 0; border-radius: 8px; background: color-mix(in srgb, var(--mc-dim, #98989d) 60%, transparent); color: var(--mc-content, #1c1c1e); cursor: pointer; align-items: center; justify-content: center; }
+.mcs-x svg { width: 8px; height: 8px; }
+html.mac-chrome #topbar .search:has(#search:not(:placeholder-shown)) .mcs-x { display: inline-flex; }
+.mcs-pop { position: fixed; z-index: 60; width: 400px; max-height: 70vh; overflow-y: auto; padding: 4px 0 6px; box-sizing: border-box; border-radius: 0 0 12px 12px;
+  background: var(--mcs-panel, rgba(44, 44, 48, .985)); color: var(--mc-fg, rgba(255, 255, 255, .88)); box-shadow: 0 0 0 .5px var(--mcs-edge, rgba(255, 255, 255, .16)), var(--mcs-shadow, 0 22px 54px rgba(0, 0, 0, .55));
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; opacity: 0; transition: opacity .15s; }
+.mcs-pop.shown { opacity: 1; }
+.mcs-none { padding: 10px 16px; display: flex; flex-direction: column; gap: 4px; }
+.mcs-none b { font-size: 13px; font-weight: 400; color: var(--mc-fg, #f5f5f7); }
+.mcs-none span { font-size: 12px; line-height: 1.4; color: var(--mc-dim, rgba(235, 235, 245, .55)); }
 .mcs-pop mark { background: rgba(255, 214, 10, .30); color: inherit; border-radius: 2px; padding: 0 1px; }
 .mcs-qh { padding: 8px 16px 3px; font-size: 11px; font-weight: 600; color: var(--mc-dim, rgba(235, 235, 245, .55)); }
 .mcs-qi { display: flex; align-items: center; gap: 10px; width: calc(100% - 12px); margin: 0 6px; padding: 6px 10px; box-sizing: border-box; border: 0; border-radius: 7px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
@@ -1387,5 +1397,4 @@ html[data-theme="light"] .mcs-pop { background: rgba(250, 250, 252, .98); color:
 .mcs-qi.all kbd { margin-left: auto; border: 0; background: none; box-shadow: none; padding: 0; font: 12px -apple-system, system-ui, sans-serif; color: var(--mc-dim, rgba(235, 235, 245, .55)); }
 .mcs-qi.all.on { color: #fff; }
 .mcs-qs { height: .5px; margin: 6px 16px; background: var(--mc-line, rgba(255, 255, 255, .07)); }
-.mcs-qnone { padding: 10px 16px 4px; font-size: 12.5px; color: var(--mc-dim, rgba(235, 235, 245, .55)); }
 .mcs-qt small .sr-why, .mcs-qt small .sr-why b { color: inherit; }

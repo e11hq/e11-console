@@ -127,21 +127,29 @@ const MacSearch = (() => {
     if (ppl.length) html.push('<div class="mcs-qh" data-key="qh-p">People</div>', ...ppl.map((u) => item('person', u.id, avatarStack([u.id], 26, 1), markName(fullName(u), q), esc([roleOf(u), plural(openOf(u), 'open task')].filter(Boolean).join(' · ')))));
     if (cls.length) html.push('<div class="mcs-qh" data-key="qh-c">Clients</div>', ...cls.map((p) => item('client', p.id, `<span class="mcs-ini sm" style="background:${p.color}">${esc(initials(p.name))}</span>`, sMark(p.name, r), plural(clientOpen(p), 'open task'))));
     if (r.tasks.length) html.push('<div class="mcs-qh" data-key="qh-t">Tasks</div>', ...r.tasks.map((h) => { const t = h.t, par = t.parentId && task(t.parentId); const why = searchWhy(h, r); return item('task', t.id, `<i class="hm-pc" style="background:${pColor(t)}"></i>`, `${par ? esc(par.title || 'Untitled task') + ' › ' : ''}${t.title ? sMark(t.title, r) : 'Untitled task'}`, why || `${esc(pName(t))}${t.due ? ' · due ' + esc(fmtDue(t.due)) : ''}`); }));
-    if (!items.length) html.push(`<div class="mcs-qnone" data-key="q-none">No matching tasks</div>`);
-    items.push({ kind: 'all' });
-    html.push(`<div class="mcs-qs" data-key="q-sep"></div><button type="button" class="mcs-qi all ${st.sel === items.length - 1 ? 'on' : ''}" data-qi="${items.length - 1}" data-key="q-all">See all results for “${esc(q)}”<kbd>↩</kbd></button>`);
+    // (nothing found — S2c: said in the list itself, the website's hint under it; no "See all results", nothing more to see)
+    if (!items.length) html.push(`<div class="mcs-none" data-key="q-none"><b>No results for “${esc(q)}”</b><span>Try a client name, a person, a tag — or words like “overdue”, “urgent” or “mine”.</span></div>`);
+    else {
+      items.push({ kind: 'all' });
+      html.push(`<div class="mcs-qs" data-key="q-sep"></div><button type="button" class="mcs-qi all ${st.sel === items.length - 1 ? 'on' : ''}" data-qi="${items.length - 1}" data-key="q-all">See all results for “${esc(q)}”<kbd>↩</kbd></button>`);
+    }
     st.items = items;
     return `<div class="mcs-pop" data-key="pop">${html.join('')}</div>`;
   }
+  // the list hangs from the field (S2b): right under it, its right edge on the field's (the field grows to the left, to the
+  // list's width, 400 — home.css)
+  const field = () => document.querySelector('#topbar .search');
   function place() {
-    const f = document.querySelector('#topbar .search');
+    const f = field();
     if (!pop || !f) return;
     const r = f.getBoundingClientRect();
-    pop.style.top = `${Math.round(r.bottom + 6)}px`;
-    pop.style.right = `${Math.round(innerWidth - r.right)}px`;
+    // (to the exact pixel, halves too: no seam between the field and the list)
+    pop.style.top = `${r.bottom}px`;
+    pop.style.right = `${innerWidth - r.right}px`;   // (its right edge: the field grows to the left)
   }
   function showQuick(q) {
     popQ = q;
+    const f = field(); if (f) f.classList.add('mcs-open');
     const t = document.createElement('template');
     t.innerHTML = quick(q).trim();
     const nb = t.content.firstElementChild;
@@ -152,6 +160,7 @@ const MacSearch = (() => {
   function closeQuick() {
     if (!pop) return;
     const p = pop; pop = null; st.sel = -1; st.items = [];
+    const f = field(); if (f) f.classList.remove('mcs-open');
     p.classList.add('out'); p.classList.remove('shown');
     setTimeout(() => p.remove(), 160);
   }
@@ -186,14 +195,14 @@ const MacSearch = (() => {
   document.addEventListener('keydown', (e) => {
     if (!pop || !e.target || e.target.id !== 'search') return;
     const n = st.items.length;
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && n) {
       e.preventDefault();
       st.sel = e.key === 'ArrowDown' ? (st.sel + 1) % n : (st.sel <= 0 ? n - 1 : st.sel - 1);
       showQuick(popQ);
       const on1 = pop && pop.querySelector('.mcs-qi.on'); if (on1) on1.scrollIntoView({ block: 'nearest' });
     } else if (e.key === 'Enter') {
       e.preventDefault(); e.stopImmediatePropagation();
-      pick(st.sel >= 0 ? st.sel : n - 1);
+      if (n) pick(st.sel >= 0 ? st.sel : n - 1);
     }
   }, true);
   // a click in the list: the field keeps its focus; a click anywhere else closes it
@@ -212,6 +221,22 @@ const MacSearch = (() => {
     else if (m.dataset.mcs === 'back') { st.person = null; renderContent(); }
   }, true);
   addEventListener('resize', place);
+  // the field's own ✕ (Apple's clear button) while something is typed — in place of ⌘K (shown by home.css: the field not empty)
+  function clearBtn() {
+    const f = field(), i = document.getElementById('search');
+    if (!f || !i || !on()) return;
+    if (!f.querySelector('.mcs-x')) f.insertAdjacentHTML('beforeend', '<button type="button" class="mcs-x" title="Clear" aria-label="Clear the search"><svg viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M2 2l6 6M8 2l-6 6"/></svg></button>');
+  }
+  document.addEventListener('focusin', (e) => { if (e.target && e.target.id === 'search') clearBtn(); });
+  document.addEventListener('mousedown', (e) => {
+    const x = e.target.closest && e.target.closest('.mcs-x');
+    if (!x) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    const i = document.getElementById('search');
+    i.value = ''; i.dispatchEvent(new Event('input', { bubbles: true })); i.focus();
+  }, true);
+  // the field left (Tab, another window): the list goes
+  document.addEventListener('focusout', (e) => { if (e.target && e.target.id === 'search') setTimeout(() => { if (document.activeElement && document.activeElement.id !== 'search') closeQuick(); }, 0); });
   // a task right-clicked on the Search page: the iPhone's choices (app.js taskContextMenu) — on Home, Home's own listener does it
   document.addEventListener('contextmenu', (e) => {
     if (!on() || typeof ui === 'undefined' || !ui.search || ui.view === 'home') return;
