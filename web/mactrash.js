@@ -32,10 +32,23 @@ const MacTrash = (() => {
   const FILTERS = [['all', 'All'], ['task', 'Tasks'], ['project', 'Clients'], ['file', 'Files'], ['comment', 'Comments'], ['mine', 'Deleted by me']];
   const canRestoreIt = (it) => it.type !== 'project' || isAdm(me());
 
+  // (every file's own picture, as Client Assets and the Inbox show it: a photo itself, a video its cover or the server's frame,
+  //  a PDF or a Word / PowerPoint / Excel file its first page — Haris 2026-11-18 19:15 "all attachments"; none, or it fails:
+  //  its coloured badge)
+  function picOf(a) {
+    const k = fileKind(a), ext = fileExt(a.name);
+    if (k === 'image') return imgUrl(a, 160);
+    if (a.path && (k === 'pdf' || /^(docx?|pptx?|xlsx?)$/.test(ext))) return '/api/fthumb?path=' + encodeURIComponent(a.path) + '&id=' + encodeURIComponent(a.id || '') + '&v=3';
+    if (a.thumb) return posterUrl(a);
+    if (a.path && k === 'video') return '/api/fthumb?path=' + encodeURIComponent(a.path) + '&id=' + encodeURIComponent(a.id || '');
+    return '';
+  }
+  const badge = (a) => `<i class="mib-tpic" style="background:${EXT[fileExt(a.name)] || '#87909e'}">${esc((fileExt(a.name) || 'file').toUpperCase().slice(0, 4))}</i>`;
   function chip(it, a) {
-    const pic = isImage(a) && Host.isNative
-      ? `<img class="mib-tpic" src="${imgUrl(a, 160)}" alt="" loading="lazy" draggable="false">`
-      : `<i class="mib-tpic" style="background:${EXT[fileExt(a.name)] || '#87909e'}">${esc((fileExt(a.name) || 'file').toUpperCase().slice(0, 4))}</i>`;
+    const u = Host.isNative ? picOf(a) : '';
+    const pic = u
+      ? `<img class="mib-tpic" src="${u}" alt="" loading="lazy" draggable="false" onerror="this.outerHTML=this.nextElementSibling.innerHTML"><template>${badge(a)}</template>`
+      : badge(a);
     return `<button type="button" class="mtr-fch" data-mtr="look" data-id="${it.id}" data-file="${esc(a.id)}" title="Preview ${esc(a.name)}">${pic}<span>${esc(a.name)}</span></button>`;
   }
   function row(it, i, r) {
@@ -158,11 +171,22 @@ const MacTrash = (() => {
     const who = it.auto ? 'cleaned up automatically' : `deleted by ${it.deletedBy === currentUserId ? 'you' : fullName(userById(it.deletedBy))}`;
     const st = statusInfo(t);
     const plain = (html) => { const d = document.createElement('div'); d.innerHTML = String(html).replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|h\d)>/gi, '\n'); return d.textContent.replace(/\n{3,}/g, '\n\n').trim(); };
-    const fileOf = (a) => ({ id: String(a.id), name: a.name, ext: (fileExt(a.name) || 'file').slice(0, 4), color: EXT[fileExt(a.name)] || '#87909e', pic: isImage(a) ? abs(imgUrl(a, 160)) : '' });
+    // (dl: the file itself, for dragging it out to Finder — Mac app 13 with MacNative.swift, Haris 2026-11-18)
+    const fileOf = (a) => ({ id: String(a.id), name: a.name, ext: (fileExt(a.name) || 'file').slice(0, 4), color: EXT[fileExt(a.name)] || '#87909e', pic: picOf(a) ? abs(picOf(a)) : '', sz: fmtSize(a.size) || '', ...(a.path ? { dl: abs(fileUrl(a)), size: a.size || 0 } : {}) });
+    // (a person's face for the window W2 — Haris 2026-11-18 19:16: their photo, or their initials on their colour)
+    const face = (id) => { const u = userById(id), n = fullName(u) || 'Former member'; return { name: n, ini: initials(n), color: avColor(id || 'x'), ...(u && u.avatar ? { pic: abs(fileUrl({ path: u.avatar })) } : {}) }; };
+    const goes = new Date(Date.now() + left * 86400000);
+    const p0 = t.projectId && typeof proj === 'function' ? proj(t.projectId) : null;
     return {
       key: it.id, title: t.title || 'Untitled task',
       bar: `In the Trash · ${who} ${timeAgo(it.deletedAt)} · ${left} day${left === 1 ? '' : 's'} left`,
-      canRestore: canRestoreIt(it),
+      canRestore: canRestoreIt(it), canForever: isSuper() && isAdm(me()),
+      // (W2: the window's subtitle, and its note of when it goes — no red)
+      sub: 'In the Trash · read only',
+      noteB: `${who.charAt(0).toUpperCase() + who.slice(1)} ${timeAgo(it.deletedAt)}.`,
+      note: ` Kept until ${fmtDay(ymd(goes))} — ${left} day${left === 1 ? '' : 's'} left.${canRestoreIt(it) ? ' Restore it to work on it again.' : ''}`,
+      clientColor: (p0 && p0.color) || '',
+      faces: (t.assignees || []).map(face),
       client: trashWhere(it), status: st.name, statusColor: st.color,
       people: (t.assignees || []).map((u) => fullName(userById(u)) || 'Former member'),
       dates: t.start || t.due ? `${t.start ? 'Start ' + fmtDay(t.start) : ''}${t.start && t.due ? ' → ' : ''}${t.due ? 'Due ' + fmtDay(t.due) : ''}` : '',
@@ -171,7 +195,7 @@ const MacTrash = (() => {
       subtasks: list.filter((x) => x.parentId === t.id).map((x) => ({ t: x.title || 'Untitled', done: !!x.done })),
       checklist: (t.checklist || []).map((x) => ({ t: x.text || '', done: !!x.done })),
       files: (t.attachments || []).map(fileOf),
-      comments: (t.comments || []).filter((c) => !c.deleted).map((c) => ({ name: userName(c.authorId), when: timeAgo(c.at), text: c.html ? plain(sanitizeHTML(c.html, true)) : c.text || '', files: (c.attachments || []).map(fileOf) })),
+      comments: (t.comments || []).filter((c) => !c.deleted).map((c) => ({ ...face(c.authorId), name: userName(c.authorId), when: timeAgo(c.at), text: c.html ? plain(sanitizeHTML(c.html, true)) : c.text || '', files: (c.attachments || []).map(fileOf) })),
     };
   }
   function winSend(it, update) {
@@ -198,6 +222,8 @@ const MacTrash = (() => {
     if (!e || !e.key) return;
     if (e.act === 'closed') wins.delete(e.key);
     if (e.act === 'restore') { NativeMac.call('trashClose', { key: e.key }).catch(() => {}); wins.delete(e.key); restoreTrash(e.key); }
+    // (W2's Delete Forever…: Apple's alert, as the row's; gone for good — its window goes too)
+    if (e.act === 'forever') forever(e.key).then(() => { if (!trashList().some((x) => x.id === e.key)) { NativeMac.call('trashClose', { key: e.key }).catch(() => {}); wins.delete(e.key); } });
     if (e.act === 'preview') {
       const it = trashList().find((x) => x.id === e.key);
       const list = (it && it.data && it.data.tasks) || [];

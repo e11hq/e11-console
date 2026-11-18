@@ -62,19 +62,21 @@ async def main():
             check(await p.locator('.mtr-row').count() == n and g1.split()[0] == 'Today' and g1.split()[-1] == str(n), f'every item, grouped ({g1!r})')
             check(await p.locator('.mtr-row .mtr-rnd').count() == n and await p.locator('.mtr-row .mtr-pill.pri').count() == n, 'Restore and Delete Forever on each row')
             ok = await E("""() => [...document.querySelectorAll('.mtr-row')].every((r) => { const it = trashList().find((x) => x.id === r.dataset.tr), fs = trashFiles(it);
-              const chips = [...r.querySelectorAll('.mtr-fch')]; return chips.length === Math.min(4, fs.length) && chips.every((c, i) => isImage(fs[i]) ? !!c.querySelector('img.mib-tpic') : c.querySelector('i.mib-tpic').textContent === fileExt(fs[i].name).toUpperCase().slice(0, 4))
+              const chips = [...r.querySelectorAll('.mtr-fch')]; return chips.length === Math.min(4, fs.length) && chips.every((c, i) => isImage(fs[i]) ? !!c.querySelector('img.mib-tpic') : !!c.querySelector('img.mib-tpic') || (c.querySelector('i.mib-tpic') || {}).textContent === fileExt(fs[i].name).toUpperCase().slice(0, 4))
                 && (fs.length > 4) === !!r.querySelector('.mtr-more'); })""")
-            check(ok, 'file chips: up to 4, a picture its own, anything else its badge, +N more')
+            check(ok, 'file chips: up to 4, each file its own picture (or, with none, its badge), +N more')
+            pdfs = await E("""() => [...document.querySelectorAll('.mtr-fch')].filter((c) => /\\.pdf$/i.test(c.querySelector('span').textContent)).map((c) => (c.querySelector('img.mib-tpic') || {}).src || (c.querySelector('i.mib-tpic') ? 'badge' : ''))""")
+            check(bool(pdfs) and all(x == 'badge' or '/api/fthumb' in x for x in pdfs), f'a PDF: its first page as its picture (the badge if the server has none) ({pdfs[:2]})')
             check(await p.locator('.mtr-left').first.inner_text() == '30 days left', 'days left')
             await p.screenshot(path=os.path.join(SHOTS, 'mactrash-T1.png'))
             # the PDF chip: the Mac's preview, flying from the badge, with the row's files
             await E("window.__calls = []")
-            chip = p.locator('.mtr-fch:has(i.mib-tpic)').first
+            chip = p.locator('.mtr-fch', has_text='.pdf').first
             cname = await chip.locator('span').inner_text()
             rowfiles = await chip.evaluate("(c) => trashFiles(trashList().find((x) => x.id === c.closest('.mtr-row').dataset.tr)).length")
             await chip.click(); await p.wait_for_timeout(400)
             pv = await E("window.__calls.find((m) => m.cmd === 'preview')")
-            box = await chip.locator('i.mib-tpic').bounding_box()
+            box = await chip.locator('.mib-tpic').first.bounding_box()
             fr = (pv or {}).get('args', {}).get('from') or {}
             check(bool(pv) and len(pv['args']['files']) == rowfiles and pv['args']['files'][pv['args']['at']]['name'] == cname, f'a chip opens the Mac’s preview with the row’s files, ← → ({rowfiles})')
             check(all(f.get('noLink') is True for f in (pv or {}).get('args', {}).get('files', [])), 'a file in the Trash: no Copy Link in the preview')
@@ -101,6 +103,11 @@ async def main():
             w1 = await E("window.__calls.find((m) => m.cmd === 'trashWindow')")
             check(bool(w1) and w1['args']['title'] and 'In the Trash' in w1['args']['bar'] and w1['args']['canRestore'] is True and isinstance(w1['args']['files'], list), 'a task’s row: its own Mac window, with everything it had (T4)')
             check(await p.locator('.tv-dlg').count() == 0, '… not the page’s box')
+            A = w1['args']
+            check(A.get('sub') == 'In the Trash · read only' and A.get('noteB', '').startswith('Deleted by') and 'Kept until' in A.get('note', '') and A.get('canForever') is True and all(f.get('ini') and f.get('color') for f in A.get('faces', [])) and all('ini' in c for c in A.get('comments', [])), f"W2: the window’s subtitle, its note of when it goes, Delete Forever for a Super Admin, faces ({A.get('noteB')}{A.get('note')})")
+            wf = [f for f in w1['args'].get('sections', [{}]) if False]
+            allf = await E("() => { const m = window.__calls.find((x) => x.cmd === 'trashWindow'); const out = []; JSON.stringify(m.args, (k, v) => { if (v && typeof v === 'object' && v.ext && 'pic' in v) out.push(v); return v; }); return out; }")
+            check(bool(allf) and all(f['pic'] for f in allf if f['ext'].lower() in ('png', 'pdf', 'jpg', 'mp4')), f'its own window: every file with its picture ({[(f["ext"], bool(f["pic"])) for f in allf][:4]})')
             # the Mac window's Restore
             key = w1['args']['key']
             await E(f"window.__e11Trash({{ key: '{key}', act: 'restore' }})"); await p.wait_for_timeout(800)

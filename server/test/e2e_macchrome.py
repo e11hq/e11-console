@@ -27,7 +27,7 @@ async def main():
         except Exception: time.sleep(0.1)
     urllib.request.urlopen(urllib.request.Request(BASE + '/api/sample', method='POST', data=b'{}', headers={'X-Dev-Email': 'haris@e11-digital.com', 'Content-Type': 'application/json'}))
     async with async_playwright() as pw:
-        b = await pw.chromium.launch(executable_path='/opt/pw-browsers/chromium-1194/chrome-linux/chrome')
+        b = await pw.chromium.launch(executable_path=os.environ.get('CHROME', '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'))
         async def open_app(init, theme=None):
             ctx = await b.new_context(viewport={'width': 1300, 'height': 800}, base_url=BASE)
             await ctx.add_cookies([{'name': 'e11_dev_email', 'value': 'haris@e11-digital.com', 'url': BASE}])

@@ -55,6 +55,7 @@ const Viewer = (() => {
       const kind = fileKind(a), ext = fileExt(a.name) || 'file';
       const who = a.addedBy ? userName(a.addedBy) : '';
       const base = { id: a.id, name: a.name, ext: ext.slice(0, 5), meta: [fmtSize(a.size), who, a.addedAt ? timeAgo(a.addedAt) : ''].filter(Boolean).join(' · ') , ...(a.trashed ? { noLink: true } : {}) };   // (a file in the Trash: no Copy Link — Haris 2026-11-18 17:19)
+      if (mac && a.path) { base.dl = abs(fileUrl(a)); base.size = a.size || 0; }   // (the file itself: its name dragged out to Finder lands it there — Haris 2026-11-18)
       // (a video with no poster of its own: the picture its tile shows — it flies in and out as that, not as the whole tile)
       // (a PDF or a Word / PowerPoint / Excel file too: the server's picture of its first page — it flies in and out as that,
       //  the page itself, not its tile — Haris 2026-11-17)

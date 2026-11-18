@@ -3037,6 +3037,7 @@ function updateAppBadge() {
 function renderSidebar() {
   document.body.classList.toggle('office-mode', isOffice());
   updateAppBadge();
+  if (typeof MacNative !== 'undefined') MacNative.later();   // (the Mac app's menu bar item and Spotlight — macnative.js)
   { const add = document.querySelector('.nav-heading [data-action="new-project"]'); if (add) add.style.display = isAdmin() ? '' : 'none'; }   // only Admins add clients
   if (typeof Season !== 'undefined') { const u = currentUserId && db && me(); Season.sync(u ? !!(u.prefs || {}).seasonOff : undefined); }
   $$('.nav-item[data-nav]').forEach((a) => a.classList.toggle('active', !ui.search && (ui.view === a.dataset.nav || (a.dataset.nav === 'clients' && ui.view === 'client') || (a.dataset.nav === 'plans' && ui.view === 'plan'))));
@@ -9903,6 +9904,7 @@ async function resetSampleData() {
 const signOutUrl = () => (window.E11_REVIEW ? '/review/sign-out' : '/sign-out');
 function signOut() {
   flushEdit();
+  if (typeof MacNative !== 'undefined') MacNative.signedOut();   // (the Mac app: its menu bar item and Spotlight items go)
   if (Host.isServer) { Sync.push(); setTimeout(() => { location.href = signOutUrl(); }, 300); return; }
   const email = me() ? me().email : '';
   savePref('session', null);
