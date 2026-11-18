@@ -662,6 +662,14 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       if ins.event == nil { ins.event = { [weak self] e in self?.pageJS("window.__e11Info && window.__e11Info(\(jsonString(e)))") } }
       MacLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) { done(["ok": ins.show(a)]) }
     case "infoClose": InfoWindows.shared.close(a["key"] as? String ?? ""); done(["ok": true])
+    // (the Trash: a deleted task in its own Mac window, and Apple's own alert for its questions — TrashWin.swift, Haris 2026-11-18)
+    case "trashWindow":
+      let tw = TrashWindows.shared
+      tw.main = window
+      if tw.event == nil { tw.event = { [weak self] e in self?.pageJS("window.__e11Trash && window.__e11Trash(\(jsonString(e)))") } }
+      MacLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) { done(["ok": tw.show(a)]) }
+    case "trashClose": TrashWindows.shared.close(a["key"] as? String ?? ""); done(["ok": true])
+    case "alert": TrashWindows.alert(a, done)
     // (who's signed in is the owner — or not: the Server menu shown or taken away; someone else left on Test goes back to Live)
     case "owner":
       let on = (a["on"] as? Bool) == true
@@ -673,7 +681,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     case "appInfo":
       done(["ok": true, "server": SERVER, "shell": SHELL_VERSION, "native": "swift",
             "version": info["CFBundleShortVersionString"] as? String ?? "3.0.0", "touchID": defaults.bool(forKey: LOCK_KEY),
-            "glass": FileManager.default.fileExists(atPath: Bundle.main.bundlePath + "/Contents/Resources/Assets.car"), "store": IS_STORE, "apns": IS_STORE, "sidebar": true, "preview": true, "info": true])
+            "glass": FileManager.default.fileExists(atPath: Bundle.main.bundlePath + "/Contents/Resources/Assets.car"), "store": IS_STORE, "apns": IS_STORE, "sidebar": true, "preview": true, "info": true, "trashWindow": true])
     default: done(["ok": false, "error": "Unknown command " + cmd])
     }
   }
