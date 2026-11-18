@@ -118,7 +118,6 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
   // shared screen only heard it while it was the one on show)
   override func traitCollectionDidChange(_ previous: UITraitCollection?) {
     super.traitCollectionDidChange(previous)
-    KeyRec.note("Tabs trait change: style \(previous?.userInterfaceStyle.rawValue ?? -1)→\(traitCollection.userInterfaceStyle.rawValue)")
     if previous?.userInterfaceStyle != traitCollection.userInterfaceStyle { Main.shared.followPhoneLook() }
   }
   // Home's tab on show
