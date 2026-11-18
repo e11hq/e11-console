@@ -56,8 +56,10 @@ extension Main {
     let status = http?.statusCode ?? 0
     let finalHost = http?.url?.host?.lowercased() ?? ""
     if status == 200, let j = j, (j["ok"] as? Bool) == true, let me = j["me"] as? String, !me.isEmpty { return booted(me, j) }
-    // (only a clear "sign in first" puts the app away: Cloudflare's sign-in page, or our own 401 / 403)
-    if status == 401 || status == 403 || finalHost.hasSuffix(".cloudflareaccess.com") { return signedOut() }
+    // (only a clear "sign in first" puts the app away: Cloudflare's sign-in page, our own 401 / 403 — or our own sign-in page
+    //  (signin.…): Cloudflare's instant sign-in sends a signed-out phone straight there, and the app took it for the server
+    //  out of reach — the startup logo going round for good, Haris 2026-11-18 14:19)
+    if status == 401 || status == 403 || finalHost.hasSuffix(".cloudflareaccess.com") || isSigninHost(finalHost) { return signedOut() }
     unreachable()
   }
 
