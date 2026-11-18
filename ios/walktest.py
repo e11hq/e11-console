@@ -158,12 +158,14 @@ if APPLE:
     st, rv, rl, fc = a.get('start') or {}, a.get('review') or {}, a.get('roles') or {}, a.get('focus') or {}
     print('measure apple', json.dumps(a))
     rt = a.get('reTap') or {}
-    if rt:   # (the Clients tab: a client tapped again just after ‹ — Haris 2026-11-18 22:39)
-        for r in rt.get('rounds') or []:
-            print(f"retap after {r.get('after')}s: opened={r.get('opened')} (first open {r.get('firstOpened')})")
+    for pg, res in rt.items():   # (a page's row tapped again just after ‹ — Haris 2026-11-18 22:39 / 22:56)
+        rounds = (res or {}).get('rounds') or []
+        if not rounds: print(f'retap {pg}: not run {res}'); continue
+        for r in rounds:
+            print(f"retap {pg} after {r.get('after')}s: opened={r.get('opened')} (first open {r.get('firstOpened')})")
             for l in r.get('log') or []: print('   ', l)
-            for l in r.get('trail') or []: print('    trail', l)
-        check(bool(rt.get('rounds')) and all(r.get('opened') for r in rt.get('rounds')), f"Clients: a client tapped again just after ‹ opens, at every moment {[(r.get('after'), r.get('opened')) for r in rt.get('rounds') or []]}")
+            for l in r.get('trail') or []: print('    trail', l[:160])
+        check(all(r.get('opened') for r in rounds), f"{pg}: the same row tapped again just after ‹ opens, at every moment {[(r.get('after'), r.get('opened')) for r in rounds]}")
     # live, for every role walked (the full test, Haris 2026-11-16): a change made elsewhere shows on the open page, nothing
     # else set again; skipped where a role has nothing for it (no comments, nothing unread) — said so
     for lab, rr in out.items():

@@ -281,6 +281,12 @@ final class AssetsCtl {
     push(screen("client", id, nil), animated: true); ask(["ev": "want", "client": id]) { _ in }
     return "opened"
   }
+  // (the self-test's re-tap check, Haris 2026-11-18 22:56: exactly what a client's row on All Client Assets does when tapped,
+  //  and what's open as this page's own record says)
+  func selfTapClient(_ id: String) { push(screen("client", id, nil), animated: true); ask(["ev": "want", "client": id]) { _ in } }
+  var selfKinds: [String] { stack.map { $0.kind } }
+  var selfFirstClient: String? { (models[""]?["clients"] as? [[String: Any]])?.first?["id"] as? String }
+  var selfNav: UINavigationController? { appleNav }
   var selfLift: [String: Any] { stack.last.map { $0.h.selfLiftProbe } ?? ["none": "nothing open"] }
   // (the self-test's live check: the screen on top — its client, how many folders and files it shows, its rows set again)
   var selfTop: [String: Any] {

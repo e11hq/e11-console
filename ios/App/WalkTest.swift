@@ -480,48 +480,100 @@ extension Main {
       //  nothing — the same client tapped again 0.1 / 0.3 / 0.6 / 1.0 / 1.5 s after ‹, and every 0.05 s what the app and
       //  Apple's navigation say, so the one place that holds the tap back is seen, not guessed)
       ("aReTap", {
-        let rows = (AppData.shared.screen("clients", ServerHome.clientsJSON("view=list")).model?["rows"] as? [[String: Any]]) ?? []
-        guard self.tabKeys.contains("projects"), let cid = rows.first?["id"] as? String else { self.apple("reTap", ["none": "no Clients tab or client"]); return }
-        self.tab("projects"); AppleTabs.shared?.clientsNav.popToRootViewController(animated: false)
         let delays: [Double] = [0.1, 0.3, 0.6, 1.0, 1.5]
-        var rounds: [[String: Any]] = []
-        func state(_ t0: CFTimeInterval) -> String {
-          let n = AppleTabs.shared?.clientsNav
-          let top = n.map { String(describing: type(of: $0.topViewController as Any)) } ?? "-"
-          return String(format: "%.2f", CACurrentMediaTime() - t0) + " on=\(self.clientsOn) wanted=\(self.clientsWanted) pushed=\(ClientVC.pushed) waiting=\(self.clientPushWaiting != nil) moving=\(n?.transitionCoordinator != nil) top=\(top) n=\(n?.viewControllers.count ?? -1) hidden=\(self.clientPageIfMade?.isHidden ?? true) shown=\(self.clientsShownId ?? "-")"
+        var all: [String: Any] = [:]
+        // one page, five times: opened from its list, ‹, then the same row tapped again `d` s after ‹ — every 0.05 s what
+        // Apple's navigation and the app's own record say
+        func run(_ name: String, nav: @escaping () -> UINavigationController?, tap: @escaping () -> Void, record: @escaping () -> String,
+                 opened: @escaping () -> Bool, then: @escaping () -> Void) {
+          guard let base = nav()?.viewControllers.count, base > 0 else { all[name] = ["none": "no navigation"]; then(); return }
+          var rounds: [[String: Any]] = []
+          func state(_ t0: CFTimeInterval) -> String {
+            let n = nav()
+            return String(format: "%.2f", CACurrentMediaTime() - t0) + " moving=\(n?.transitionCoordinator != nil) n=\(n?.viewControllers.count ?? -1) top=\(n?.topViewController.map { String(describing: type(of: $0)) } ?? "-") ours=\(record())"
+          }
+          func go(_ i: Int) {
+            guard i < delays.count else { all[name] = ["rounds": rounds]; self.apple("reTap", all); then(); return }
+            let d = delays[i]
+            ClientTrail.notes = []
+            tap()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+              let first = opened() && (nav()?.viewControllers.count ?? 0) == base + 1
+              let t0 = CACurrentMediaTime()
+              var log: [String] = [], last = ""
+              func watch() {
+                let st = state(t0); let k = st.split(separator: " ").dropFirst().joined(separator: " ")
+                if k != last { log.append(st); last = k }
+                if CACurrentMediaTime() - t0 < d + 2.5 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { watch() } }
+              }
+              watch()
+              nav()?.popViewController(animated: true)   // (‹)
+              DispatchQueue.main.asyncAfter(deadline: .now() + d) {
+                log.append(String(format: "%.2f", CACurrentMediaTime() - t0) + " TAP"); ClientTrail.note("tap again after \(d)")
+                tap()
+                log.append(state(t0) + " (just after the tap)")
+              }
+              DispatchQueue.main.asyncAfter(deadline: .now() + d + 2.6) {
+                let n = nav()
+                let ok = opened() && (n?.viewControllers.count ?? 0) == base + 1
+                rounds.append(["after": d, "firstOpened": first, "opened": ok, "log": log, "trail": ClientTrail.notes])
+                if let n = n, n.viewControllers.count > base { n.popToViewController(n.viewControllers[base - 1], animated: false) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { go(i + 1) }
+              }
+            }
+          }
+          go(0)
         }
-        func go(_ i: Int) {
-          guard i < delays.count else { self.apple("reTap", ["client": cid, "rounds": rounds]); return }
-          let d = delays[i]
-          ClientTrail.notes = []
-          self.ev(self.clientsListIfMade, ["ev": "client", "id": cid])   // (opened first)
-          DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
-            let opened = AppleTabs.shared?.clientsNav.topViewController is ClientVC
-            let t0 = CACurrentMediaTime()
-            var log: [String] = [], last = ""
-            func watch() {
-              let s = state(t0); let k = s.split(separator: " ").dropFirst().joined(separator: " ")
-              if k != last { log.append(s); last = k }
-              if CACurrentMediaTime() - t0 < d + 2.5 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { watch() } }
-            }
-            watch()
-            AppleTabs.shared?.clientsNav.popViewController(animated: true)   // (‹)
-            DispatchQueue.main.asyncAfter(deadline: .now() + d) {
-              log.append(String(format: "%.2f", CACurrentMediaTime() - t0) + " TAP")
-              ClientTrail.note("tap again after \(d)")
-              self.ev(self.clientsListIfMade, ["ev": "client", "id": cid])
-              log.append(state(t0) + " (just after the tap)")
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + d + 2.6) {
-              let n = AppleTabs.shared?.clientsNav
-              let ok = n?.topViewController is ClientVC && self.clientsShownId == cid
-              rounds.append(["after": d, "firstOpened": opened, "opened": ok, "log": log, "trail": ClientTrail.notes])
-              n?.popToRootViewController(animated: false)
-              DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { go(i + 1) }
+        let meNav = { AppleTabs.shared?.meNav }
+        let kinds = { ((self.meCtl.selfPlans()["kinds"] as? [String]) ?? []).joined(separator: ",") }
+        // 4. Me › Client Assets › a client
+        let assets = {
+          self.tab(self.tabKeys.first ?? "today"); self.selectTab("me")
+          self.assetsCtl.command(["show": true, "me": AppData.shared.me ?? "", "start": [String: Any]()])
+          DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            guard let cid = self.assetsCtl.selfFirstClient else { all["assets"] = ["none": "no client"]; self.apple("reTap", all); return }
+            run("assets", nav: { self.assetsCtl.selfNav }, tap: { self.assetsCtl.selfTapClient(cid) }, record: { self.assetsCtl.selfKinds.joined(separator: ",") },
+                opened: { self.assetsCtl.selfNav?.topViewController is AssetsVC && self.assetsCtl.selfKinds.last == "client" }) {
+              self.assetsCtl.close(animated: false); self.tab(self.tabKeys.first ?? "today")
             }
           }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { go(0) }
+        // 3. Me › Content plans › a plan
+        let plans = {
+          self.tab(self.tabKeys.first ?? "today"); self.selectTab("me")
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.meCtl.selfOpen("plans") }
+          DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
+            let base = meNav()?.viewControllers.count ?? 0
+            run("plans", nav: meNav, tap: { _ = self.meCtl.selfOpenPlan() }, record: kinds,
+                opened: { (meNav()?.viewControllers.count ?? 0) == base + 1 && kinds().hasSuffix(",plan") }) {
+              self.meCtl.backToRoot(); DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { assets() }
+            }
+          }
+        }
+        // 2. Me › Team members › a member
+        let team = {
+          self.tab(self.tabKeys.first ?? "today"); self.selectTab("me")
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.meCtl.selfOpen("team") }
+          DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
+            guard let id = self.meCtl.selfTeam()["other"] as? String else { all["team"] = ["none": "no member"]; self.meCtl.backToRoot(); DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { plans() }; return }
+            let base = meNav()?.viewControllers.count ?? 0
+            run("team", nav: meNav, tap: { self.meCtl.selfOpenMember(id) }, record: kinds,
+                opened: { (meNav()?.viewControllers.count ?? 0) == base + 1 && kinds().hasSuffix(",member") }) {
+              self.meCtl.backToRoot(); DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { plans() }
+            }
+          }
+        }
+        // 1. the Clients tab › a client
+        let rows = (AppData.shared.screen("clients", ServerHome.clientsJSON("view=list")).model?["rows"] as? [[String: Any]]) ?? []
+        guard self.tabKeys.contains("projects"), let cid = rows.first?["id"] as? String else { all["clients"] = ["none": "no Clients tab or client"]; team(); return }
+        self.tab("projects"); AppleTabs.shared?.clientsNav.popToRootViewController(animated: false)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+          run("clients", nav: { AppleTabs.shared?.clientsNav }, tap: { self.ev(self.clientsListIfMade, ["ev": "client", "id": cid]) },
+              record: { "on=\(self.clientsOn) pushed=\(ClientVC.pushed) waiting=\(self.clientPushWaiting != nil) hidden=\(self.clientPageIfMade?.isHidden ?? true) shown=\(self.clientsShownId ?? "-")" },
+              opened: { AppleTabs.shared?.clientsNav.topViewController is ClientVC && self.clientsShownId == cid }) {
+            AppleTabs.shared?.clientsNav.popToRootViewController(animated: false); team()
+          }
+        }
       }),
       ("aReTapWait0", {}),
       ("aReTapWait1", {}),
@@ -540,6 +592,53 @@ extension Main {
       ("aReTapWait14", {}),
       ("aReTapWait15", {}),
       ("aReTapWait16", {}),
+      ("aReTapWait17", {}),
+      ("aReTapWait18", {}),
+      ("aReTapWait19", {}),
+      ("aReTapWait20", {}),
+      ("aReTapWait21", {}),
+      ("aReTapWait22", {}),
+      ("aReTapWait23", {}),
+      ("aReTapWait24", {}),
+      ("aReTapWait25", {}),
+      ("aReTapWait26", {}),
+      ("aReTapWait27", {}),
+      ("aReTapWait28", {}),
+      ("aReTapWait29", {}),
+      ("aReTapWait30", {}),
+      ("aReTapWait31", {}),
+      ("aReTapWait32", {}),
+      ("aReTapWait33", {}),
+      ("aReTapWait34", {}),
+      ("aReTapWait35", {}),
+      ("aReTapWait36", {}),
+      ("aReTapWait37", {}),
+      ("aReTapWait38", {}),
+      ("aReTapWait39", {}),
+      ("aReTapWait40", {}),
+      ("aReTapWait41", {}),
+      ("aReTapWait42", {}),
+      ("aReTapWait43", {}),
+      ("aReTapWait44", {}),
+      ("aReTapWait45", {}),
+      ("aReTapWait46", {}),
+      ("aReTapWait47", {}),
+      ("aReTapWait48", {}),
+      ("aReTapWait49", {}),
+      ("aReTapWait50", {}),
+      ("aReTapWait51", {}),
+      ("aReTapWait52", {}),
+      ("aReTapWait53", {}),
+      ("aReTapWait54", {}),
+      ("aReTapWait55", {}),
+      ("aReTapWait56", {}),
+      ("aReTapWait57", {}),
+      ("aReTapWait58", {}),
+      ("aReTapWait59", {}),
+      ("aReTapWait60", {}),
+      ("aReTapWait61", {}),
+      ("aReTapWait62", {}),
+      ("aReTapWait63", {}),
       ("aLink", {
         let files = (AppData.shared.meModel("assets", "assets", [""])?["files"] as? [[String: Any]]) ?? []
         guard let f = files.first(where: { ($0["file"] as? String) != nil && CommentCell.isPic($0["name"] as? String ?? "") }), let path = f["file"] as? String else { self.apple("link", ["none": "no picture file"]); return }
