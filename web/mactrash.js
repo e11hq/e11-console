@@ -143,7 +143,8 @@ const MacTrash = (() => {
     const it = trashList().find((x) => x.id === id);
     const files = it ? trashFiles(it) : [];
     const a = files.find((x) => String(x.id) === String(fileId));
-    if (a) previewFile(a, files);   // (← → through the row's files, as the Inbox and Client Assets)
+    // (← → through the row's files, as the Inbox and Client Assets; marked as in the Trash: no Copy Link in the preview)
+    if (a) { const fs = files.map((x) => ({ ...x, trashed: true })); previewFile(fs[files.indexOf(a)], fs); }
   }
 
   // ---------- a deleted task in its own Mac window (T4 — TrashWin.swift); older Mac apps: the page's own box ----------
@@ -203,7 +204,7 @@ const MacTrash = (() => {
       const t = list.find((x) => !x.parentId || !list.some((y) => y.id === x.parentId)) || list[0];
       const files = t ? (t.attachments || []).concat(...(t.comments || []).map((c) => c.attachments || [])) : [];
       const a = files.find((x) => String(x.id) === String(e.file));
-      if (a) previewFile(a, (t.attachments || []).some((x) => x.id === a.id) ? t.attachments : files);
+      if (a) { const fs = ((t.attachments || []).some((x) => x.id === a.id) ? t.attachments : files).map((x) => ({ ...x, trashed: true })); previewFile(fs.find((x) => x.id === a.id), fs); }
     }
   };
 

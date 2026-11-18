@@ -54,7 +54,7 @@ const Viewer = (() => {
     function fileOf(a) {
       const kind = fileKind(a), ext = fileExt(a.name) || 'file';
       const who = a.addedBy ? userName(a.addedBy) : '';
-      const base = { id: a.id, name: a.name, ext: ext.slice(0, 5), meta: [fmtSize(a.size), who, a.addedAt ? timeAgo(a.addedAt) : ''].filter(Boolean).join(' · ') };
+      const base = { id: a.id, name: a.name, ext: ext.slice(0, 5), meta: [fmtSize(a.size), who, a.addedAt ? timeAgo(a.addedAt) : ''].filter(Boolean).join(' · ') , ...(a.trashed ? { noLink: true } : {}) };   // (a file in the Trash: no Copy Link — Haris 2026-11-18 17:19)
       // (a video with no poster of its own: the picture its tile shows — it flies in and out as that, not as the whole tile)
       // (a PDF or a Word / PowerPoint / Excel file too: the server's picture of its first page — it flies in and out as that,
       //  the page itself, not its tile — Haris 2026-11-17)
@@ -84,7 +84,7 @@ const Viewer = (() => {
             set({ id: a.id, pages: pages.map((x) => abs('/__file/' + x.split('/').map(encodeURIComponent).join('/'))), note });
           }).catch(() => set({ id: a.id, pages: [], note: 'This file couldn’t be previewed right now.' }));
           break;
-        case 'copy': if (a) copyAttachment(a); break;
+        case 'copy': if (a && !a.trashed) copyAttachment(a); break;
         case 'dl': if (a) Host.call('revealPath', { path: a.path }).catch((err) => set({ toast: err.cancelled ? 'Download cancelled' : 'Couldn’t download: ' + err.message })); break;
         case 'more': if (a) moreNative(a, ev.x != null ? { x: ev.x, y: ev.y } : null); break;
         case 'closed': {
@@ -107,7 +107,7 @@ const Viewer = (() => {
         set({ info: rows });
       } }];
       const closeThen = (f) => { set({ close: true }); setTimeout(f, 350); };
-      if (a.path && isAdm(me())) items.push({ label: 'Turn off link', icon: 'lock', danger: true, run: () => closeThen(() => FileLinks.toggle(a)) });
+      if (a.path && isAdm(me()) && !a.trashed) items.push({ label: 'Turn off link', icon: 'lock', danger: true, run: () => closeThen(() => FileLinks.toggle(a)) });
       if (client && canDelAsset(a)) items.push('-', { label: 'Trash', icon: 'trash', danger: true, run: () => closeThen(() => removeClientFile(a.id)) });
       if (onTask) items.push('-', { label: 'Remove from task', icon: 'trash', danger: true, run: () => closeThen(() => act('remove-att', a.id)) });
       // (the Mac: Apple's menu just under its ••• button)

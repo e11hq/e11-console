@@ -77,6 +77,7 @@ async def main():
             box = await chip.locator('i.mib-tpic').bounding_box()
             fr = (pv or {}).get('args', {}).get('from') or {}
             check(bool(pv) and len(pv['args']['files']) == rowfiles and pv['args']['files'][pv['args']['at']]['name'] == cname, f'a chip opens the Mac’s preview with the row’s files, ← → ({rowfiles})')
+            check(all(f.get('noLink') is True for f in (pv or {}).get('args', {}).get('files', [])), 'a file in the Trash: no Copy Link in the preview')
             check(abs(fr.get('w', 0) - box['width']) < 1 and abs(fr.get('x', 0) - box['x']) < 1, f'it flies out of the badge only, not the whole chip {fr}')
             # the filters and the search with a typo
             await p.locator('.mtr-seg button', has_text='Comments').click(); await p.wait_for_timeout(300)
