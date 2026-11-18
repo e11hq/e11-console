@@ -9,7 +9,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.2.2"   # (1.2.1 approved 2026-11-16, waiting for manual release — 1.2.2: live everywhere, the client from search, a link's preview flying)
+    MARKETING_VERSION: "1.2.3"   # (1.2.2 approved by Apple — found 2026-11-18 when TestFlight refused a new 1.2.2 build; 1.2.3: the sign-in fixes, office network, Me › Server)
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Automatic
 targets:
