@@ -67,6 +67,9 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     return prev[b.length];
   }
   const typoLimit = (w) => (w.length >= 8 ? 2 : w.length >= 4 ? 1 : 0);
+  // (two words as near: the one closest to what was typed — the same length (a swap: frod → ford, not rod), then the same first
+  //  letter, then the shorter — Haris 2026-11-18 11:16)
+  const closer = (w, f, term) => { const lw = Math.abs(w.length - term.length), lf = Math.abs(f.length - term.length); if (lw !== lf) return lw < lf; const sw = w[0] === term[0], sf = f[0] === term[0]; if (sw !== sf) return sw; return w.length < f.length; };
   function termMatches(term, vocab) {
     const out = new Map();
     let close = false;
@@ -79,7 +82,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
       vocab.forEach((w) => {
         const lim = typoLimit(term);
         const d = Math.min(editDist(term, w, lim), w.length > term.length ? editDist(term, w.slice(0, term.length), lim) : 99);
-        if (d <= lim) { out.set(w, d === 1 ? 0.45 : 0.3); if (d < bestD || (d === bestD && fuzzy && w.length < fuzzy.length)) { bestD = d; fuzzy = w; } }
+        if (d <= lim) { out.set(w, d === 1 ? 0.45 : 0.3); if (d < bestD || (d === bestD && fuzzy && closer(w, fuzzy, term))) { bestD = d; fuzzy = w; } }
       });
     }
     return { words: out, fuzzy };
