@@ -5393,7 +5393,19 @@ function toast(msg, action, ms) {
   const root = $('#toast-root');
   const el = document.createElement('div');
   el.className = 'toast';
-  el.innerHTML = `<span>${esc(msg)}</span>${action ? `<button>${esc(action.label)}</button>` : ''}`;
+  // (the Mac app: the Mac's own look — canvas "Toasts — Mac" M2 / M3, Haris 2026-11-18 18:25: a glass pill in the middle of
+  //  the page, a green ✓ for something done, the bin for something moved to the Trash or deleted, none for a problem; the
+  //  action a blue pill)
+  const mac = document.documentElement.classList.contains('mac-chrome');
+  let sym = '';
+  if (mac) {
+    const t = String(msg);
+    const bad = /^(Could ?n[’']?t|Could not|Can[’']?t|Cannot|Something went wrong|Not |Only |No |Nothing|Failed|Your role|Couldn)/i.test(t) || /fail|error|offline/i.test(t);
+    sym = bad ? '' : /trash|deleted|removed/i.test(t) ? `<i class="ts-sym bin">${icon('trash')}</i>` : `<i class="ts-sym ok">${icon('check')}</i>`;
+    const m = document.getElementById('main');
+    if (m) { const r = m.getBoundingClientRect(); root.style.left = `${r.left + r.width / 2}px`; }
+  }
+  el.innerHTML = `${sym}<span>${esc(msg)}</span>${action ? `<button>${esc(action.label)}</button>` : ''}`;
   root.appendChild(el);
   let timer = setTimeout(() => el.remove(), ms || (action ? 6000 : 3000));
   if (action) el.querySelector('button').addEventListener('click', () => { clearTimeout(timer); el.remove(); action.run(); });

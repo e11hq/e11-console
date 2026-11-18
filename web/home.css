@@ -1477,3 +1477,24 @@ html.mac-chrome .mtr-empty b { font-size: 17px; font-weight: 600; color: var(--m
 html.mac-chrome .mtr-empty span { max-width: 440px; }
 html.mac-chrome .mtr-in { animation: mtrIn .18s ease-out; }
 @keyframes mtrIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* ================= The Mac app's toasts (canvas "Toasts — Mac" M2 / M3, Haris 2026-11-18 18:25) =================
+   A glass pill in the middle of the page, the Mac's font, a small symbol, the action as a blue pill; newest at the bottom.
+   Browsers and the iPhone keep the website's toast. */
+html.mac-chrome #toast-root { bottom: 24px; gap: 8px; }
+html.mac-chrome:not(.phone) .toast { display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 8px 0 12px; box-sizing: border-box; border: 0; border-radius: 19px;
+  background: rgba(52, 52, 56, .72); -webkit-backdrop-filter: blur(28px) saturate(1.6); backdrop-filter: blur(28px) saturate(1.6);
+  box-shadow: 0 0 0 .5px rgba(255, 255, 255, .14), 0 10px 30px rgba(0, 0, 0, .40); color: rgba(255, 255, 255, .88);
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; font-size: 13px; font-weight: 400; white-space: nowrap; animation: macToastIn .22s cubic-bezier(.22, .8, .3, 1); }
+html.mac-chrome[data-theme="light"]:not(.phone) .toast { background: rgba(250, 250, 252, .78); box-shadow: 0 0 0 .5px rgba(0, 0, 0, .10), 0 10px 30px rgba(0, 0, 0, .16); color: rgba(0, 0, 0, .85); }
+html.mac-chrome:not(.phone) .toast > span { padding-right: 4px; }
+html.mac-chrome:not(.phone) .toast .ts-sym { flex: none; width: 18px; height: 18px; border-radius: 9px; display: inline-grid; place-items: center; font-style: normal; }
+html.mac-chrome:not(.phone) .toast .ts-sym svg { width: 11px; height: 11px; stroke-width: 2.4; }
+html.mac-chrome:not(.phone) .toast .ts-sym.ok { background: #30d158; color: #fff; }
+html.mac-chrome:not(.phone) .toast .ts-sym.ok svg { stroke-width: 3; }
+html.mac-chrome:not(.phone) .toast .ts-sym.bin { background: rgba(255, 255, 255, .16); color: rgba(255, 255, 255, .88); }
+html.mac-chrome[data-theme="light"]:not(.phone) .toast .ts-sym.bin { background: rgba(0, 0, 0, .08); color: rgba(0, 0, 0, .85); }
+html.mac-chrome:not(.phone) .toast button { height: 26px; padding: 0 11px; border: 0; border-radius: 13px; background: rgba(10, 132, 255, .18); color: #0a84ff; font: inherit; font-size: 12.5px; font-weight: 600; cursor: default; }
+html.mac-chrome[data-theme="light"]:not(.phone) .toast button { background: rgba(0, 122, 255, .12); color: #007aff; }
+html.mac-chrome:not(.phone) .toast button:active { filter: brightness(.9); }
+@keyframes macToastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
