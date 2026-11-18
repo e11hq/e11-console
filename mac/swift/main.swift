@@ -541,6 +541,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
           let c = UNMutableNotificationContent()
           c.title = "Update Ready"; c.body = "Reload to get the latest version."
           c.categoryIdentifier = "e11-update"
+          c.sound = .default   // (the Mac's own notification sound, as the Inbox pushes — it came silently: Haris 2026-11-18 12:23)
           c.userInfo = ["update": a["version"] as? String ?? ""]
           // (one at a time: a newer version takes the place of the one before)
           center.add(UNNotificationRequest(identifier: "e11-update", content: c, trigger: nil), withCompletionHandler: nil)
@@ -880,7 +881,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   func userNotificationCenter(_ c: UNUserNotificationCenter, willPresent n: UNNotification, withCompletionHandler done: @escaping (UNNotificationPresentationOptions) -> Void) {
     // (Apple's own from the server: also its sound and the Dock badge)
     let remote = n.request.content.userInfo["e11"] != nil
-    if #available(macOS 11.0, *) { done(remote ? [.banner, .list, .sound, .badge] : [.banner, .list]) } else { done([.alert]) }
+    // (Update Ready: its sound too, with the app in front)
+    let update = n.request.content.categoryIdentifier == "e11-update"
+    if #available(macOS 11.0, *) { done(remote ? [.banner, .list, .sound, .badge] : update ? [.banner, .list, .sound] : [.banner, .list]) } else { done(update ? [.alert, .sound] : [.alert]) }
   }
   func userNotificationCenter(_ c: UNUserNotificationCenter, didReceive r: UNNotificationResponse, withCompletionHandler done: @escaping () -> Void) {
     // Update Ready: Reload (or the notification itself) reloads the page, saving first; What's New opens its window
