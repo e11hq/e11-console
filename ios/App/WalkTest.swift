@@ -476,6 +476,70 @@ extension Main {
                              "query": self.serverClients.query, "on": self.serverClients.on, "off": self.serverClients.off, "trail": ClientTrail.notes])
         self.tab("today")
       }),
+      // (Haris 2026-11-18 22:39: on the Clients tab, back from a client's page, a tap on a client within about a second did
+      //  nothing — the same client tapped again 0.1 / 0.3 / 0.6 / 1.0 / 1.5 s after ‹, and every 0.05 s what the app and
+      //  Apple's navigation say, so the one place that holds the tap back is seen, not guessed)
+      ("aReTap", {
+        let rows = (AppData.shared.screen("clients", ServerHome.clientsJSON("view=list")).model?["rows"] as? [[String: Any]]) ?? []
+        guard self.tabKeys.contains("projects"), let cid = rows.first?["id"] as? String else { self.apple("reTap", ["none": "no Clients tab or client"]); return }
+        self.tab("projects"); AppleTabs.shared?.clientsNav.popToRootViewController(animated: false)
+        let delays: [Double] = [0.1, 0.3, 0.6, 1.0, 1.5]
+        var rounds: [[String: Any]] = []
+        func state(_ t0: CFTimeInterval) -> String {
+          let n = AppleTabs.shared?.clientsNav
+          let top = n.map { String(describing: type(of: $0.topViewController as Any)) } ?? "-"
+          return String(format: "%.2f", CACurrentMediaTime() - t0) + " on=\(self.clientsOn) wanted=\(self.clientsWanted) pushed=\(ClientVC.pushed) waiting=\(self.clientPushWaiting != nil) moving=\(n?.transitionCoordinator != nil) top=\(top) n=\(n?.viewControllers.count ?? -1) hidden=\(self.clientPageIfMade?.isHidden ?? true) shown=\(self.clientsShownId ?? "-")"
+        }
+        func go(_ i: Int) {
+          guard i < delays.count else { self.apple("reTap", ["client": cid, "rounds": rounds]); return }
+          let d = delays[i]
+          ClientTrail.notes = []
+          self.ev(self.clientsListIfMade, ["ev": "client", "id": cid])   // (opened first)
+          DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            let opened = AppleTabs.shared?.clientsNav.topViewController is ClientVC
+            let t0 = CACurrentMediaTime()
+            var log: [String] = [], last = ""
+            func watch() {
+              let s = state(t0); let k = s.split(separator: " ").dropFirst().joined(separator: " ")
+              if k != last { log.append(s); last = k }
+              if CACurrentMediaTime() - t0 < d + 2.5 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { watch() } }
+            }
+            watch()
+            AppleTabs.shared?.clientsNav.popViewController(animated: true)   // (‹)
+            DispatchQueue.main.asyncAfter(deadline: .now() + d) {
+              log.append(String(format: "%.2f", CACurrentMediaTime() - t0) + " TAP")
+              ClientTrail.note("tap again after \(d)")
+              self.ev(self.clientsListIfMade, ["ev": "client", "id": cid])
+              log.append(state(t0) + " (just after the tap)")
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + d + 2.6) {
+              let n = AppleTabs.shared?.clientsNav
+              let ok = n?.topViewController is ClientVC && self.clientsShownId == cid
+              rounds.append(["after": d, "firstOpened": opened, "opened": ok, "log": log, "trail": ClientTrail.notes])
+              n?.popToRootViewController(animated: false)
+              DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { go(i + 1) }
+            }
+          }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { go(0) }
+      }),
+      ("aReTapWait0", {}),
+      ("aReTapWait1", {}),
+      ("aReTapWait2", {}),
+      ("aReTapWait3", {}),
+      ("aReTapWait4", {}),
+      ("aReTapWait5", {}),
+      ("aReTapWait6", {}),
+      ("aReTapWait7", {}),
+      ("aReTapWait8", {}),
+      ("aReTapWait9", {}),
+      ("aReTapWait10", {}),
+      ("aReTapWait11", {}),
+      ("aReTapWait12", {}),
+      ("aReTapWait13", {}),
+      ("aReTapWait14", {}),
+      ("aReTapWait15", {}),
+      ("aReTapWait16", {}),
       ("aLink", {
         let files = (AppData.shared.meModel("assets", "assets", [""])?["files"] as? [[String: Any]]) ?? []
         guard let f = files.first(where: { ($0["file"] as? String) != nil && CommentCell.isPic($0["name"] as? String ?? "") }), let path = f["file"] as? String else { self.apple("link", ["none": "no picture file"]); return }
