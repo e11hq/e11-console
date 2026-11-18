@@ -594,9 +594,27 @@ final class E11WebView: WKWebView, NSDraggingSource {
     own.writeObjects([copyItem(pb)])
     ownPB = own
   }
-  // (WebKit starts the page's drags this way)
-  override func dragImage(_ anImage: NSImage, at viewLocation: NSPoint, offset initialOffset: NSSize, event: NSEvent, pasteboard pboard: NSPasteboard, source sourceObj: Any, slideBack slideFlag: Bool) {
-    guard let items = take() else { return super.dragImage(anImage, at: viewLocation, offset: initialOffset, event: event, pasteboard: pboard, source: sourceObj, slideBack: slideFlag) }
+  // (WebKit starts the page's drags with the older dragImage:at:offset:event:pasteboard:source:slideBack:, which Swift can't
+  //  override by its name — put in by the runtime once, the old one called for every other drag)
+  static let hook: Void = {
+    let sel = NSSelectorFromString("dragImage:at:offset:event:pasteboard:source:slideBack:")
+    guard let m = class_getInstanceMethod(WKWebView.self, sel) else { return }
+    typealias Old = @convention(c) (AnyObject, Selector, NSImage, NSPoint, NSSize, NSEvent, NSPasteboard, AnyObject, ObjCBool) -> Void
+    let call = unsafeBitCast(method_getImplementation(m), to: Old.self)
+    let blk: @convention(block) (AnyObject, NSImage, NSPoint, NSSize, NSEvent, NSPasteboard, AnyObject, ObjCBool) -> Void = { me, im, at, off, ev, pb, src, slide in
+      if let w = me as? E11WebView, w.outDrag(im, at, ev, pb, slide.boolValue) { return }
+      call(me, sel, im, at, off, ev, pb, src, slide)
+    }
+    class_addMethod(E11WebView.self, sel, imp_implementationWithBlock(blk), method_getTypeEncoding(m))
+  }()
+  override init(frame: CGRect, configuration: WKWebViewConfiguration) {
+    _ = E11WebView.hook
+    super.init(frame: frame, configuration: configuration)
+  }
+  required init?(coder: NSCoder) { super.init(coder: coder) }
+  // (the page's drag, of files: one session of ours carrying the page's own data and the files)
+  fileprivate func outDrag(_ anImage: NSImage, _ viewLocation: NSPoint, _ event: NSEvent, _ pboard: NSPasteboard, _ slideFlag: Bool) -> Bool {
+    guard let items = take() else { return false }
     keepOwn(pboard)
     let first = NSDraggingItem(pasteboardWriter: copyItem(pboard))
     let sz = anImage.size
@@ -607,6 +625,7 @@ final class E11WebView: WKWebView, NSDraggingSource {
     legacy = true
     ours = beginDraggingSession(with: [first] + rest, event: event, source: self)
     ours?.animatesToStartingPositionsOnCancelOrFail = slideFlag
+    return true
   }
   // (and newer WebKits may this way: the files added to its own items)
   override func beginDraggingSession(with items: [NSDraggingItem], event: NSEvent, source: NSDraggingSource) -> NSDraggingSession {
@@ -689,7 +708,6 @@ private final class OwnDrag: NSObject, NSDraggingInfo {
   var draggingSource: Any? { real.draggingSource }
   var draggingSequenceNumber: Int { real.draggingSequenceNumber }
   func slideDraggedImage(to p: NSPoint) { real.slideDraggedImage(to: p) }
-  func namesOfPromisedFilesDropped(atDestination u: URL) -> [String]? { nil }
   var draggingFormation: NSDraggingFormation { get { real.draggingFormation } set { real.draggingFormation = newValue } }
   var animatesToDestination: Bool { get { real.animatesToDestination } set { real.animatesToDestination = newValue } }
   var numberOfValidItemsForDrop: Int { get { real.numberOfValidItemsForDrop } set { real.numberOfValidItemsForDrop = newValue } }
