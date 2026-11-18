@@ -3161,7 +3161,7 @@ function renderContentNow() {
   else if (ui.view === 'reviews') { c.innerHTML = viewReviews(); hydrateThumbs(c); }
   else if (ui.view === 'profile') c.innerHTML = viewProfile();
   else if (ui.view === 'updates') c.innerHTML = AppIcon.isOwner() ? viewUpdates() : '<div class="empty"><div class="big">App updates are managed by the owner</div></div>';
-  else if (ui.view === 'trash') c.innerHTML = viewTrash();
+  else if (ui.view === 'trash') { if (typeof MacTrash !== 'undefined' && MacTrash.on()) MacTrash.draw(c); else c.innerHTML = viewTrash(); }   // (the Mac: mactrash.js)
   else if ((ui.view === 'clients' || ui.view === 'client') && typeof MacAssets !== 'undefined' && MacAssets.on()) { MacAssets.draw(c); if (ui.view === 'clients') { migrateClientLogos(); autoLogosAll(); } }   // (the Mac: Finder's way — macassets.js)
   else if (ui.view === 'clients') { c.innerHTML = viewClients(); migrateClientLogos(); autoLogosAll(); }
   else if (ui.view === 'client') {
@@ -5426,7 +5426,8 @@ function go(view, projectId = null) {
   if (view !== 'home' && typeof Home !== 'undefined' && Home.left) Home.left();   // (Home's checklist keeps its order only while you're on it)
   if (view === 'clients') { ui.caQ = ''; ui.caScope = null; }
   // The Inbox always opens on its unread tab (Primary on computers, Unread on phones)
-  if (view === 'inbox') { ui.inboxTab = 'primary'; if (typeof Phone !== 'undefined' && Phone.resetInbox) Phone.resetInbox(); }
+  // (the Mac app: with nothing unread it opens on All — Haris 2026-11-18 16:38)
+  if (view === 'inbox') { ui.inboxTab = typeof MacInbox !== 'undefined' && MacInbox.on() && !myNotifs().some((n) => !n.read) ? 'all' : 'primary'; if (typeof Phone !== 'undefined' && Phone.resetInbox) Phone.resetInbox(); }
   ui.view = view;
   ui.projectId = projectId;
   if (ui.search) { ui.search = ''; $('#search').value = ''; }

@@ -1412,3 +1412,64 @@ html.mac-chrome #update-banner .ub-text span:not(.ub-ic) { font-size: 12px; colo
 html.mac-chrome #update-banner .ub-acts { margin-left: 18px; }
 html.mac-chrome #update-banner .btn { height: 28px; padding: 0 14px; border: 0; border-radius: 14px; background: var(--mc-field); color: var(--mc-fg); font: 13px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; box-shadow: none; }
 html.mac-chrome #update-banner .btn.primary { padding: 0 16px; background: var(--mc-blue); color: #fff; font-weight: 600; }
+
+/* ================= The Mac app's Trash (mactrash.js — canvas "Trash — Mac" T1–T8, Haris 2026-11-18) ================= */
+html.mac-chrome #content:has(> .mtr) { background: var(--mc-content); }
+html.mac-chrome .hm.mtr { gap: 12px; padding-top: 16px; }
+html.mac-chrome .mtr > * { flex: none; }
+html.mac-chrome .mtr mark { background: rgba(255, 214, 10, .30); color: inherit; border-radius: 3px; padding: 0 1px; }
+html.mac-chrome[data-theme="light"] .mtr mark { background: rgba(255, 204, 0, .40); }
+html.mac-chrome .mtr-head { display: flex; align-items: center; gap: 16px; }
+html.mac-chrome .mtr-intro { font-size: 13px; line-height: 1.4; color: var(--mc-dim); max-width: 720px; }
+html.mac-chrome .mtr-danger { margin-left: auto; flex: none; height: 28px; padding: 0 12px; border: 0; border-radius: 14px; background: color-mix(in srgb, var(--mc-red) 14%, transparent); color: var(--mc-red); font: inherit; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; cursor: default; }
+html.mac-chrome .mtr-danger:active { background: color-mix(in srgb, var(--mc-red) 24%, transparent); }
+html.mac-chrome .mtr-search { display: flex; align-items: center; gap: 8px; width: 440px; height: 30px; padding: 0 12px; box-sizing: border-box; border-radius: 15px; background: var(--mc-field); color: var(--mc-dim); }
+html.mac-chrome .mtr-search:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--mc-blue) 45%, transparent); }
+html.mac-chrome .mtr-search input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; outline: 0; background: none; color: var(--mc-fg); font: inherit; font-size: 13px; -webkit-appearance: none; appearance: none; }
+html.mac-chrome .mtr-search input::placeholder { color: var(--mc-dim); }
+html.mac-chrome .mtr-search input::-webkit-search-cancel-button { display: none; }
+html.mac-chrome .mtr-x { display: none; flex: none; width: 16px; height: 16px; padding: 0; border: 0; border-radius: 8px; background: color-mix(in srgb, var(--mc-dim) 100%, transparent); color: var(--mc-content); place-items: center; cursor: default; }
+html.mac-chrome .mtr-x svg { width: 8px; height: 8px; }
+html.mac-chrome .mtr-search:has(input:not(:placeholder-shown)) .mtr-x { display: inline-grid; }
+html.mac-chrome .mtr-seg { display: inline-flex; align-self: flex-start; gap: 2px; padding: 2px; border-radius: 8px; background: var(--mc-field); }
+html.mac-chrome .mtr-seg button { padding: 3px 12px; border: 0; border-radius: 6px; background: none; color: var(--mc-fg); font: inherit; font-size: 12.5px; cursor: default; }
+html.mac-chrome .mtr-seg button.on { background: #636366; font-weight: 500; box-shadow: 0 1px 2px rgba(0, 0, 0, .18); }
+html.mac-chrome[data-theme="light"] .mtr-seg button.on { background: #fff; }
+html.mac-chrome .mtr-fix { margin-top: -4px; font-size: 12.5px; color: var(--mc-dim); }
+html.mac-chrome .mtr-fix b { color: var(--mc-blue); font-weight: 600; }
+html.mac-chrome .mtr h2.mtr-grp { display: flex; align-items: baseline; gap: 6px; margin: 4px 0 0; font-size: 13px; font-weight: 600; color: var(--mc-fg); }
+html.mac-chrome .mtr-grp span { font-size: 12px; font-weight: 400; color: var(--mc-dim); }
+html.mac-chrome .mtr-card { display: flex; flex-direction: column; gap: 2px; padding: 6px; border-radius: 12px; background: var(--mc-card); }
+html.mac-chrome .mtr-row { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 10px; box-sizing: border-box; border-radius: 8px; cursor: default; }
+html.mac-chrome .mtr-row.alt { background: var(--mc-row); }
+html.mac-chrome .mtr-row.opens:hover { background: var(--mc-sel); }
+html.mac-chrome .mtr-ic { flex: none; align-self: flex-start; margin-top: 2px; width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: color-mix(in srgb, var(--mc-blue) 13%, transparent); color: var(--mc-blue); }
+html.mac-chrome .mtr-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+html.mac-chrome .mtr-t { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13.5px; font-weight: 500; color: var(--mc-fg); }
+html.mac-chrome .mtr-tt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html.mac-chrome .mtr-open { flex: none; font-weight: 400; color: var(--mc-dim); }
+html.mac-chrome .mtr-sub { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; color: var(--mc-dim); }
+html.mac-chrome .mtr-sl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html.mac-chrome .mtr-ty { flex: none; padding: 1px 6px; border-radius: 5px; background: var(--mc-field); color: var(--mc-fg); font-size: 11px; font-weight: 600; }
+html.mac-chrome .mtr-files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+html.mac-chrome .mtr-fch { display: inline-flex; align-items: center; gap: 6px; max-width: 200px; height: 26px; padding: 0 9px 0 3px; border: 0; border-radius: 7px; background: var(--mc-field); color: var(--mc-fg); font: inherit; font-size: 12px; cursor: default; }
+html.mac-chrome .mtr-fch:hover { background: color-mix(in srgb, var(--mc-field) 100%, var(--mc-sel)); }
+html.mac-chrome .mtr-fch > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html.mac-chrome .mtr-fch .mib-tpic { flex: none; width: 20px; height: 20px; border-radius: 5px; object-fit: cover; }
+html.mac-chrome .mtr-fch i.mib-tpic { display: grid; place-items: center; color: #fff; font-style: normal; font-size: 7.5px; font-weight: 700; }
+html.mac-chrome .mtr-more { align-self: center; font-size: 12px; color: var(--mc-dim); }
+html.mac-chrome .mtr-left { flex: none; width: 78px; text-align: right; white-space: nowrap; font-size: 12px; color: var(--mc-dim); }
+html.mac-chrome .mtr-left.soon { color: var(--mc-red); font-weight: 600; }
+html.mac-chrome .mtr-acts { flex: none; width: 150px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+html.mac-chrome .mtr-pill { height: 26px; padding: 0 12px; border: 0; border-radius: 13px; font: inherit; font-size: 12.5px; font-weight: 500; display: inline-flex; align-items: center; gap: 5px; cursor: default; }
+html.mac-chrome .mtr-pill.pri { background: var(--mc-blue); color: #fff; }
+html.mac-chrome .mtr-pill.pri:active { filter: brightness(.9); }
+html.mac-chrome .mtr-rnd { width: 28px; height: 28px; padding: 0; border: 0; border-radius: 14px; background: var(--mc-field); color: var(--mc-dim); display: grid; place-items: center; cursor: default; }
+html.mac-chrome .mtr-rnd:hover { color: var(--mc-red); }
+html.mac-chrome .mtr-only { white-space: nowrap; font-size: 12px; color: var(--mc-dim); }
+html.mac-chrome .mtr-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 18vh 0 0; text-align: center; font-size: 13px; color: var(--mc-dim); }
+html.mac-chrome .mtr-empty svg { opacity: .45; }
+html.mac-chrome .mtr-empty b { font-size: 17px; font-weight: 600; color: var(--mc-fg); }
+html.mac-chrome .mtr-empty span { max-width: 440px; }
+html.mac-chrome .mtr-in { animation: mtrIn .18s ease-out; }
+@keyframes mtrIn { from { opacity: 0; } to { opacity: 1; } }
