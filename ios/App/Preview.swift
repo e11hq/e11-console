@@ -316,14 +316,16 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
       zoomer.contentSize = content.frame.size
     }
   }
-  func viewForZooming(in scrollView: UIScrollView) -> UIView? { (mode == "image" && !isVideo) || mode == "pages" ? content : nil }
+  // (a video zooms as a photo does, playing or paused — its player is inside the picture; ▶ / ⏸ stays in the middle at its own
+  //  size: as E11 Talk's, Haris 2026-11-18 21:47)
+  func viewForZooming(in scrollView: UIScrollView) -> UIView? { mode == "image" || mode == "pages" ? content : nil }
   func scrollViewDidZoom(_ scrollView: UIScrollView) {
     // (a zoomed-out picture stays in the middle)
     let b = scrollView.bounds.size, c = content.frame.size
     content.center = CGPoint(x: max(c.width, b.width) / 2, y: mode == "image" ? max(c.height, b.height) / 2 : c.height / 2)
   }
   @objc private func doubleTap(_ g: UITapGestureRecognizer) {
-    guard (mode == "image" && !isVideo) || mode == "pages" else { return }
+    guard mode == "image" || mode == "pages" else { return }
     if zoomer.zoomScale > 1 { zoomer.setZoomScale(1, animated: true); return }
     let p = g.location(in: content), s: CGFloat = 2.5
     let w = zoomer.bounds.width / s, h = zoomer.bounds.height / s
