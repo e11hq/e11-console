@@ -28,7 +28,7 @@ const Home = (() => {
   // as the iPhone's task rows (Mac page by page, Haris 2026-11-15 10:41): the Urgent / P1 (any number) tag after the title, the CD chip
   // on the line under it (✓ once approved), an overdue row's faint red
   const tag = (t) => { const p = t.done ? 'none' : prioOf(t); return p === 'urgent' ? '<span class="hm-tag urgent">Urgent</span>' : typeof p === 'number' ? `<span class="hm-tag">P${p}</span>` : ''; };   // (any number, as the iPhone: P1, P2…)
-  const cdTag = (t) => { const c = !t.done && CD[t.cdStatus]; return c ? `<span class="hm-cd ${t.cdStatus === 'approved' ? 'ok' : ''}" style="--c:${c.color}" title="CD Status: ${esc(c.label)}">${t.cdStatus === 'approved' ? '✓ CD Approved' : 'CD Review'}</span>` : ''; };   // (as the other pages' chip — Haris 2026-11-18 10:26)
+  const cdTag = (t) => { const c = !t.done && CD[t.cdStatus]; return c ? `<span class="hm-cd ${t.cdStatus === 'approved' ? 'ok' : ''}" style="--c:${c.color}" title="CD Status: ${esc(c.label)}">${t.cdStatus === 'approved' ? '✓ ' : ''}CD</span>` : ''; };
   const late = (t) => (!t.done && t.due && t.due < todayStr() ? 'late' : '');
   const nFiles = (t) => shownAtts(t).length;
   const svg = (d, w = 1.5) => `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
