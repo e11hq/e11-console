@@ -535,7 +535,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     case "updateReady":
       if !SELFTEST.isEmpty { return done(["ok": false, "error": "Not in the self-test"]) }
       let center = UNUserNotificationCenter.current()
-      center.requestAuthorization(options: [.alert, .badge]) { ok, _ in
+      center.requestAuthorization(options: [.alert, .badge, .sound]) { ok, _ in
         DispatchQueue.main.async {
           guard ok else { return done(["ok": false, "error": "Notifications are off"]) }
           let c = UNMutableNotificationContent()
@@ -858,7 +858,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     let title = a["title"] as? String ?? APP_NAME, body = a["body"] as? String ?? "", sub = a["subtitle"] as? String ?? ""
     let click = a["click"] as? String ?? ""
     let center = UNUserNotificationCenter.current()
-    center.requestAuthorization(options: [.alert, .badge]) { ok, _ in
+    // (always with sound: macOS sets the app's sound default from the first ask — asked without it, new Macs started silent: Haris 2026-11-18 12:43)
+    center.requestAuthorization(options: [.alert, .badge, .sound]) { ok, _ in
       DispatchQueue.main.async {
         self.notifAllowed = ok
         if ok {
