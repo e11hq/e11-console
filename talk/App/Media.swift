@@ -74,7 +74,24 @@ final class MediaVC: UIViewController, UICollectionViewDelegate, QLPreviewContro
     NotificationCenter.default.addObserver(self, selector: #selector(gone(_:)), name: .talkGone, object: nil)
     reload(animated: false, layout: false)
   }
-  @objc private func changed() { reload(animated: view.window != nil, layout: false) }
+  @objc private func changed() {
+    // (something new while at the end: it stays at the end, the new one showing)
+    let atEnd = nearEnd
+    reload(animated: view.window != nil, layout: false)
+    if atEnd { DispatchQueue.main.async { [weak self] in self?.toEnd(animated: true) } }
+  }
+  // it always opens on the latest — the end of the list (Haris 2026-11-18 19:30), placed before it shows
+  private var placed = false
+  override func viewDidLayoutSubviews() {
+    super.viewDidLayoutSubviews()
+    if !placed, view.window != nil { placed = true; toEnd(animated: false) }
+  }
+  private var endY: CGFloat { max(-cv.adjustedContentInset.top, cv.contentSize.height - cv.bounds.height + cv.adjustedContentInset.bottom) }
+  private var nearEnd: Bool { cv.contentOffset.y >= endY - 40 }
+  private func toEnd(animated: Bool) {
+    cv.layoutIfNeeded()
+    cv.setContentOffset(CGPoint(x: 0, y: endY), animated: animated)
+  }
   @objc private func gone(_ n: Notification) { if (n.object as? String) == group { navigationController?.popToRootViewController(animated: true) } }
 
   // ---------- what it shows ----------
@@ -86,7 +103,7 @@ final class MediaVC: UIViewController, UICollectionViewDelegate, QLPreviewContro
       case .files: return m.file != nil && m.kind != "photo" && m.kind != "video" && m.kind != "voice"
       case .links: return m.link != nil
       }
-    }.reversed()
+    }   // (oldest first, the latest last — as the chat: Haris 2026-11-18 19:30)
   }
   private static let monthF: DateFormatter = { let f = DateFormatter(); f.dateFormat = "LLLL yyyy"; return f }()
   private func month(_ ms: Double) -> String {
@@ -120,7 +137,7 @@ final class MediaVC: UIViewController, UICollectionViewDelegate, QLPreviewContro
           self.data.applySnapshotUsingReloadData(snap)
         }
       }
-      cv.setContentOffset(CGPoint(x: 0, y: -cv.adjustedContentInset.top), animated: false)
+      toEnd(animated: false)   // (another tab: on its latest too)
     } else { data.applySteady(snap, in: cv, animated: animated) }
   }
   private func layout() -> UICollectionViewLayout {
@@ -202,7 +219,7 @@ final class MediaVC: UIViewController, UICollectionViewDelegate, QLPreviewContro
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { c.jump(to: m.id) }
   }
   private func openMedia(_ m: Msg) {
-    let all = items(.media).reversed() as [Msg]
+    let all = items(.media)
     guard let i = all.firstIndex(where: { $0.id == m.id }) else { return }
     let v = PhotoViewerVC(items: all, at: i)
     v.source = { [weak self] x in
