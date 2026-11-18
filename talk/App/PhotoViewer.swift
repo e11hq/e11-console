@@ -359,7 +359,7 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
   private func forwardCurrent() { guard let m = items[safe: at] else { return }; dismiss(animated: true) { self.onForward?(m) } }
 }
 
-// one photo or video, zoomable (Apple's scroll view zoom; double-tap in and out); a video: its first picture with ▶
+// one photo or video, zoomable (Apple's scroll view zoom; double-tap in and out — videos too); a video: its first picture with ▶
 final class ZoomPage: UIScrollView, UIScrollViewDelegate {
   let image = UIImageView(), doubleTap = UITapGestureRecognizer()
   private let msg: Msg
@@ -396,16 +396,17 @@ final class ZoomPage: UIScrollView, UIScrollViewDelegate {
   override func layoutSubviews() {
     super.layoutSubviews()
     if zoomScale == 1 { image.frame = ZoomPage.fit(image.image?.size ?? bounds.size, in: bounds); contentSize = bounds.size }
-    viewWithTag(7)?.center = CGPoint(x: bounds.midX, y: bounds.midY)
+    if let b = viewWithTag(7) { b.center = CGPoint(x: bounds.midX, y: bounds.midY); bringSubviewToFront(b) }   // (the middle of what shows, zoomed or not)
   }
-  func viewForZooming(in s: UIScrollView) -> UIView? { msg.kind == "video" ? nil : image }
+  // (a video zooms as a photo does, playing or paused — its player is inside the picture; its ▶ / ⏸ stays in the middle at
+  //  its own size: Haris 2026-11-18 19:38)
+  func viewForZooming(in s: UIScrollView) -> UIView? { image }
   func scrollViewDidZoom(_ s: UIScrollView) {
     // (kept in the middle while it's smaller than the screen)
     let dx = max(0, (bounds.width - contentSize.width) / 2), dy = max(0, (bounds.height - contentSize.height) / 2)
     image.center = CGPoint(x: contentSize.width / 2 + dx, y: contentSize.height / 2 + dy)
   }
   @objc private func zoom(_ g: UITapGestureRecognizer) {
-    guard msg.kind != "video" else { return }
     if zoomScale > 1 { setZoomScale(1, animated: true) }
     else { let p = g.location(in: image); zoom(to: CGRect(x: p.x - 60, y: p.y - 60, width: 120, height: 120), animated: true) }
   }
