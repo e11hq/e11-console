@@ -62,6 +62,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
   //  iOS stops the app at launch)
   func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
     UNUserNotificationCenter.current().delegate = self
+    KeyRec.watch()   // (TEMPORARY — the keyboard recorder, KeyRec.swift)
     // (the Server choice left iPhone's Settings — only the owner has it now, in Me › Server: Haris 2026-11-17. A phone
     //  set to Test there goes back to Live once; App Review keeps its own link on the sign-in page)
     if !defaults.bool(forKey: "e11_server_owner_only") {
@@ -310,6 +311,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   // (the look changed: iPhone switches every screen itself — our colours hold both looks, Look.swift; only pictures are
   //  drawn again: the tab bar's icons, the task page's file chips)
   func lookTurned(_ light: Bool) {
+    KeyRec.note("lookTurned light=\(light)", stack: true)
     appStyle = light ? .light : .dark
     defaults.set(light ? "light" : "dark", forKey: "e11_look")
     taskPages.forEach { $0.light = light }
@@ -680,6 +682,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   // the bar drawn again as it is — on the tab that's showing now, never the one the last drawing had on (coming back
   // from another app it went to Home: Haris 2026-11-05)
   func redrawTabs() {
+    KeyRec.note("redrawTabs")
     guard var a = lastTabs else { return }
     // (signed out, the tab bar put away for the sign-in page: not brought back — the look changing while away redrew the
     //  signed-out person's tabs over it, their screens empty: Haris 2026-11-18 07:45, his recording)
@@ -720,6 +723,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     return ["tabs": list, "hidden": false]
   }
   func setTabs(_ a: [String: Any]) {
+    KeyRec.note("setTabs")
     if !meWatched {
       meWatched = true
       MePhoto.shared.fetch = { [weak self] u, done in self?.fetchPhoto(u, done) }
@@ -844,6 +848,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   }
   override func traitCollectionDidChange(_ previous: UITraitCollection?) {
     super.traitCollectionDidChange(previous)
+    KeyRec.note("Main trait change: style \(previous?.userInterfaceStyle.rawValue ?? -1)→\(traitCollection.userInterfaceStyle.rawValue)")
     if previous?.userInterfaceStyle != traitCollection.userInterfaceStyle, lastTabs != nil { tabBadgeKey = [:]; redrawTabs() }
     if previous?.userInterfaceStyle != traitCollection.userInterfaceStyle { followPhoneLook() }
   }

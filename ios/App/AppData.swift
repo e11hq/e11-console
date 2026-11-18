@@ -390,6 +390,7 @@ final class AppData: NSObject, URLSessionDataDelegate {
   //  took the main thread a moment and stalled the top buttons' animation coming back from a task, Haris's film 19:36)
   private(set) var gen = 0
   private func changed() {
+    DispatchQueue.main.async { KeyRec.note("AppData changed") }
     DispatchQueue.main.async {
       self.gen += 1
       if self.changePending { return }
