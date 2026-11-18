@@ -65,20 +65,7 @@ final class TrashWindows: NSObject, NSWindowDelegate {
     _ = ok
     let main = TrashWindows.shared.main
     al.window.appearance = main?.appearance   // (the app's own light / dark)
-    // (in the middle of the app's window — macOS puts an alert high on the screen: Haris 17:14 "not in the center")
-    let place = {
-      guard let m = main, m.isVisible else { return }
-      al.layout()
-      let f = al.window.frame
-      al.window.setFrameOrigin(NSPoint(x: (m.frame.midX - f.width / 2).rounded(), y: (m.frame.midY - f.height / 2).rounded()))
-    }
     let show = {
-      // (runModal puts it high on the screen as it shows it — a block queued before it never ran inside: still high, Haris
-      //  2026-11-18 18:07. So: out of sight until it's up, then moved to the middle of the app's window from inside the
-      //  alert's own run loop, then shown)
-      al.window.alphaValue = 0
-      let fix = Timer(timeInterval: 0.0, repeats: false) { _ in place(); al.window.alphaValue = 1 }
-      RunLoop.main.add(fix, forMode: .modalPanel)
       let r = al.runModal()
       let which = r == .alertFirstButtonReturn ? "ok" : (other != nil && r == .alertSecondButtonReturn) ? "other" : "cancel"
       done(["ok": true, "pressed": which == "ok", "button": which])
