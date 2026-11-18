@@ -476,7 +476,14 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
         decisionHandler(.cancel); DispatchQueue.main.async { self.showOffline() }; return
       }
     }
+    // (Cloudflare's own page on the way to our sign-in page — its cream background showed for a moment after signing out:
+    //  Haris 2026-11-18 07:43, his recording. Kept out of sight, as E11 Talk does; shown only if it stays — didFinish)
+    if response.isForMainFrame, Main.isCloudflarePage(response.response.url) { webView.alpha = 0 }
     decisionHandler(.allow)
+  }
+  static func isCloudflarePage(_ u: URL?) -> Bool {
+    guard let u = u, let h = u.host?.lowercased() else { return false }
+    return h.hasSuffix("cloudflareaccess.com") || u.path.hasPrefix("/cdn-cgi/")
   }
   func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
     // our pages draw under the status bar themselves; the Cloudflare sign-in page doesn't, so it gets the usual margins
@@ -486,7 +493,14 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     if webView.url?.host == serverHost { bootCommitted() }   // (back from signing in: the startup screen — Boot.swift)
   }
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-    if webView.alpha < 1 { webView.alpha = 1 }
+    if Main.isCloudflarePage(webView.url) {
+      // (Cloudflare's page: still out of sight — it goes on to ours by itself; shown only if it stays, waiting for something typed)
+      let at = webView.url
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+        guard webView.url == at, webView.alpha == 0 else { return }
+        UIView.animate(withDuration: 0.25, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { webView.alpha = 1 }
+      }
+    } else if webView.alpha < 1 { webView.alpha = 1 }
     let onServer = webView.url?.host == serverHost
     // (and under our own sign-in page — signin.… — since Cloudflare's page is skipped (2026-11-11): the link had gone with it)
     let signHost = webView.url?.host ?? ""
@@ -667,6 +681,9 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   // from another app it went to Home: Haris 2026-11-05)
   func redrawTabs() {
     guard var a = lastTabs else { return }
+    // (signed out, the tab bar put away for the sign-in page: not brought back — the look changing while away redrew the
+    //  signed-out person's tabs over it, their screens empty: Haris 2026-11-18 07:45, his recording)
+    if tabsHidden && bootState.state != .signedIn { return }
     let cur = selectedTabKey
     if !cur.isEmpty, var list = a["tabs"] as? [[String: Any]], list.contains(where: { ($0["v"] as? String) == cur }) {
       for i in list.indices { list[i]["on"] = (list[i]["v"] as? String) == cur }
