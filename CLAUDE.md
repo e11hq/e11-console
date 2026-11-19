@@ -38,6 +38,13 @@ taskContextMenu, Tip) is said to him before it's made.
 
 **The Mac app's page titles (Haris, 2026-11-18 18:14):** the top bar shows only the page's name, as Home — no icon before it, on every Mac page now and later (`html.mac-chrome #title-area .page-icon` hidden, home.css). Browsers keep theirs.
 
+**Everything LOCKED as it is on 2026-11-19 21:02 (Haris: "ok lock all, mark both ios apps as RC"):** website and server
+1.9.92 (main 076a27d — `locked/server-1.9.92`, `locked/e11hq-site-1.9.92`), E11 Console iPhone build 1900 (ios-nav
+447203b — `locked/ios-app-1900`), Mac app build 2052 (macapp-13 15ebfb8 — `locked/mac-app-2052`), E11 Talk build 184
+(talk-chat-1 126f467 — `locked/talk-184`); never moved or deleted. Release candidates for the App Store:
+`candidate/appstore-ios-1.2.4-build-1900` and `candidate/appstore-talk-1.0.4-build-184`. Nothing in them changes —
+behaviour or code — without telling Haris first and his yes.
+
 **The server — LOCKED at 1.9.27 (Haris, 2026-11-10 11:51: "lock the server states to latest"):** commit 12191cb, branch
 `locked/server-1.9.27` (never moved or deleted). Its rules and screens (web/rules.js, web/appview.js, server/src) as they are
 in 1.9.27 — which notifications go to whom and which reach the phone (`onPhone`), the occasion reminders' recipients, the
