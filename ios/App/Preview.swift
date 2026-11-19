@@ -38,12 +38,26 @@ enum PreviewLoad {
       DispatchQueue.main.async { done(d) }
     }.resume()
   }
+  // (pictures ready to draw, the last few opened — opened again, it's there sharp at once: Haris 2026-11-19 11:15)
+  static let pics: NSCache<NSString, UIImage> = { let c = NSCache<NSString, UIImage>(); c.countLimit = 16; return c }()
   static func image(_ s: String?, _ done: @escaping (UIImage?) -> Void) {
     guard let s, !s.isEmpty else { return done(nil) }
+    if let i = pics.object(forKey: s as NSString) { return done(i) }
     data(s) { d in
       if let d = d, UIImage(data: d) == nil, SVGRaster.looksLikeSVG(d, path: s) { SVGRaster.shared.image(d, max: 1400) { done($0) }; return }   // (an SVG, drawn on the phone)
-      done(d.flatMap { UIImage(data: $0) })
+      let i = d.flatMap { UIImage(data: $0) }.map { $0.preparingForDisplay() ?? $0 }
+      if let i { pics.setObject(i, forKey: s as NSString) }
+      done(i)
     }
+  }
+  // the full picture when the phone has it already (ready to draw) — nil otherwise, nothing fetched
+  static func ready(_ s: String?) -> UIImage? {
+    guard let s, !s.isEmpty else { return nil }
+    if let i = pics.object(forKey: s as NSString) { return i }
+    guard let d = (cache.object(forKey: s as NSString) as Data?) ?? DiskPics.get("pv:" + s), let raw = UIImage(data: d) else { return nil }
+    cache.setObject(d as NSData, forKey: s as NSString)
+    let i = raw.preparingForDisplay() ?? raw
+    pics.setObject(i, forKey: s as NSString); return i
   }
 }
 
@@ -495,6 +509,9 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
     guard flies, let src = source, var img = src.image else { return }
+    // (a photo the phone has already: it flies out sharp, and the page under it is the same picture — it flew out small and
+    //  turned sharp as it landed, every time: Haris 2026-11-19 11:15)
+    if at < files.count, (files[at]["kind"] as? String) == "image", let full = PreviewLoad.ready(files[at]["src"] as? String) { startImage = full }
     // (the best picture of it the phone already holds, in its own shape: a Recently added or search row's picture is a small
     //  square cut, and it flew out as a big blurry square before the file came — Haris 2026-11-17 09:38)
     if let better = startImage,
