@@ -687,6 +687,7 @@ final class E11WebView: WKWebView, NSDraggingSource {
       DragLog.note("our drag (newer kind): \(all.count) file(s) \(files.map { "\($0["name"] ?? "-")" })")
       let s = super.beginDraggingSession(with: all, event: event, source: source)
       ours = s; legacy = false
+      DragLog.note("drag pasteboard \(s.draggingPasteboard.name.rawValue): items=\(s.draggingPasteboard.pasteboardItems?.count ?? -1) " + (s.draggingPasteboard.pasteboardItems ?? []).enumerated().map { "#\($0.offset) \($0.element.types.map { $0.rawValue })" }.joined(separator: " "))
       return s
     }
     return super.beginDraggingSession(with: items, event: event, source: source)
@@ -716,6 +717,7 @@ final class E11WebView: WKWebView, NSDraggingSource {
     return out
   }
   func draggingSession(_ s: NSDraggingSession, willBeginAt p: NSPoint) {
+    if s === ours { DragLog.note("as it began — drag pasteboard items=\(s.draggingPasteboard.pasteboardItems?.count ?? -1) " + (s.draggingPasteboard.pasteboardItems ?? []).enumerated().map { "#\($0.offset) \($0.element.types.map { $0.rawValue })" }.joined(separator: " ")) }
     if old(s) {
       if let (sel, imp) = superIMP("draggedImage:beganAt:") { typealias F = @convention(c) (AnyObject, Selector, NSImage?, NSPoint) -> Void; unsafeBitCast(imp, to: F.self)(self, sel, nil, p) }
     } else if let (sel, imp) = superIMP("draggingSession:willBeginAtPoint:") { typealias F = @convention(c) (AnyObject, Selector, NSDraggingSession, NSPoint) -> Void; unsafeBitCast(imp, to: F.self)(self, sel, s, p) }
