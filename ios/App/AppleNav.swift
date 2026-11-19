@@ -172,7 +172,6 @@ final class TaskVC: UIViewController {
     // (the bar's frost follows the list showing — Details, the comments, a reply)
     page.onEdgeScroll = { [weak self] sv in self?.setContentScrollView(sv, for: .top) }
     page.edgeScroll(page.scroll)
-    holdEdge(true)   // (before its first frame — told in viewWillAppear, the first frame had already shown it: measured)
     page.onMenuMade = { [weak self] in self?.setMenu() }
     page.onDescEditing = { [weak self] _ in self?.setMenu() }
     setMenu()
@@ -208,18 +207,6 @@ final class TaskVC: UIViewController {
       else { navigationItem.rightBarButtonItem = UIBarButtonItem(title: nil, image: UIImage(systemName: "ellipsis"), primaryAction: nil, menu: m) }
     } else { navigationItem.rightBarButtonItem = nil }
   }
-  // (Apple's frost kept off while the page slides in, given back as it lands — Haris 2026-11-19 18:23: its list first laid
-  //  out for a 74 pt bar, then the real 116 with Details · Comments; for those first frames the page's top sat under the
-  //  bar and Apple's frost came on for a glance — measured, aTaskFrost)
-  private var edgeHeld: [UIScrollView] = []
-  private func holdEdge(_ on: Bool) {
-    guard #available(iOS 26.0, *) else { return }
-    if on {
-      edgeHeld = [page.scroll, page.feed?.scroll].compactMap { $0 }.filter { !$0.topEdgeEffect.isHidden }
-      edgeHeld.forEach { $0.topEdgeEffect.isHidden = true }
-    } else { edgeHeld.forEach { $0.topEdgeEffect.isHidden = false }; edgeHeld = [] }
-  }
-  override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); holdEdge(false) }
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
     // (Apple's bar shown over the task — only where it was hidden, the app's own navigation; Home's has it always and
