@@ -38,6 +38,8 @@ final class TrashWindows: NSObject, NSWindowDelegate {
     } else { w.center() }
     wins[key] = w
     w.makeKeyAndOrderFront(nil)
+    // (its height checked once it's up: the bar alone means it was squeezed — given its height again)
+    DispatchQueue.main.async { if w.contentLayoutRect.height < 300 { w.setContentSize(NSSize(width: w.frame.width, height: 640)) } }
     return true
   }
   func close(_ key: String) { wins[key]?.close() }
@@ -109,6 +111,7 @@ final class TrashWindow: NSWindow, NSToolbarDelegate {
     hidesOnDeactivate = false
     tabbingMode = .disallowed
     minSize = NSSize(width: 1000, height: 360)
+    contentMinSize = NSSize(width: 1000, height: 320)
     let root = NSVisualEffectView()
     root.material = .windowBackground; root.blendingMode = .behindWindow; root.state = .followsWindowActiveState
     contentView = root
@@ -138,6 +141,9 @@ final class TrashWindow: NSWindow, NSToolbarDelegate {
     NSLayoutConstraint.activate([
       scroll.leadingAnchor.constraint(equalTo: root.leadingAnchor), scroll.trailingAnchor.constraint(equalTo: sideScroll.leadingAnchor),
       scroll.topAnchor.constraint(equalTo: root.topAnchor), scroll.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+      // (never smaller than this: the scroll areas have no height of their own, and the window came up as its bar alone —
+      //  Haris 2026-11-19 12:24)
+      root.heightAnchor.constraint(greaterThanOrEqualToConstant: 320),
       sideScroll.widthAnchor.constraint(equalToConstant: R + 36), sideScroll.trailingAnchor.constraint(equalTo: root.trailingAnchor),
       sideScroll.topAnchor.constraint(equalTo: root.topAnchor), sideScroll.bottomAnchor.constraint(equalTo: root.bottomAnchor),
       shade.leadingAnchor.constraint(equalTo: sideScroll.leadingAnchor), shade.trailingAnchor.constraint(equalTo: sideScroll.trailingAnchor),

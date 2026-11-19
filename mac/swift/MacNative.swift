@@ -72,7 +72,8 @@ final class MenuBar: NSObject {
     it.length = pad + w + (bw > 0 ? 4 + bw : 0) + pad
     let h = b.bounds.height > 0 ? b.bounds.height : NSStatusBar.system.thickness
     mark.frame = NSRect(x: pad, y: ((h - 13) / 2).rounded(), width: w, height: 13)
-    badge.frame = NSRect(x: pad + w + 4, y: ((h - 13) / 2).rounded(), width: bw, height: 13)
+    // (level with the wordmark's letters, which sit a point lower in its box — Haris 2026-11-19 12:28)
+    badge.frame = NSRect(x: pad + w + 4, y: ((h - 13) / 2).rounded() + (b.isFlipped ? 1 : -1), width: bw, height: 13)
     b.setAccessibilityLabel(n > 0 ? "E11 Console, \(n) unread" : "E11 Console")
   }
   @objc private func clicked(_ s: Any?) {
@@ -81,7 +82,8 @@ final class MenuBar: NSObject {
   private func openPanel() {
     guard let b = item?.button, let bw = b.window else { return }
     let p = BarPanel()
-    p.appearance = main?.appearance
+    // (the Mac's own light or dark — the menu bar's — not the app's: Haris 2026-11-19 12:28)
+    p.appearance = MenuBar.system()
     p.pick = { [weak self] a in
       guard let self = self else { return }
       self.closePanel()
@@ -96,6 +98,7 @@ final class MenuBar: NSObject {
     x = max(vis.minX + 8, min(x, vis.maxX - size.width - 8))
     p.setFrameTopLeftPoint(NSPoint(x: x, y: r.minY - 6))
     panel = p
+    watchTheme()
     b.highlight(true)
     p.orderFrontRegardless(); p.makeKey()
     // (a click anywhere else, Esc, or the app's window coming forward: it goes)
@@ -112,7 +115,18 @@ final class MenuBar: NSObject {
     item?.button?.highlight(false)
     panel?.orderOut(nil); panel = nil
   }
-  func follow(_ ap: NSAppearance?) { panel?.appearance = ap; panel?.fill(model) }
+  func follow(_ ap: NSAppearance?) { panel?.appearance = MenuBar.system(); panel?.fill(model) }
+  static func system() -> NSAppearance? {
+    NSAppearance(named: UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark" ? .darkAqua : .aqua)
+  }
+  private var themeWatch: Any?
+  func watchTheme() {
+    guard themeWatch == nil else { return }
+    themeWatch = DistributedNotificationCenter.default().addObserver(forName: Notification.Name("AppleInterfaceThemeChangedNotification"), object: nil, queue: .main) { [weak self] _ in
+      guard let self = self, let p = self.panel else { return }
+      p.appearance = MenuBar.system(); let m = self.model; p.fill([:]); p.fill(m)
+    }
+  }
 }
 
 // the count: white on red, a circle as tall as the wordmark (a pill for two or three figures)
@@ -160,6 +174,8 @@ final class BarPanel: NSPanel {
     collectionBehavior = [.transient, .ignoresCycle, .fullScreenAuxiliary]
     let root = NSView(frame: NSRect(x: 0, y: 0, width: BarPanel.W, height: 200))
     root.autoresizingMask = [.width, .height]
+    // (cut to the glass's own rounded shape — a square edge showed round it: Haris 2026-11-19 12:28)
+    root.wantsLayer = true; root.layer?.cornerRadius = 16; root.layer?.cornerCurve = .continuous; root.layer?.masksToBounds = true
     glass.frame = root.bounds; glass.autoresizingMask = [.width, .height]
     root.addSubview(glass)
     body.frame = glass.bounds; body.autoresizingMask = [.width, .height]
@@ -204,6 +220,7 @@ final class BarPanel: NSPanel {
     NSAnimationContext.endGrouping()
     let top = frame.maxY
     setFrame(NSRect(x: frame.minX, y: top - y, width: W, height: y), display: true)
+    invalidateShadow()   // (its shadow from its rounded shape, as it is now)
   }
 }
 
