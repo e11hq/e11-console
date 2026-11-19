@@ -70,6 +70,7 @@ extension Main {
     // (kept for Me's own rows — the owner, the Test site rows, the version — also offline: step 9)
     var keep = j; keep["days"] = nil
     if JSONSerialization.isValidJSONObject(keep), let d = try? JSONSerialization.data(withJSONObject: keep) { defaults.set(d, forKey: "e11_start") }
+    OccasionIcon.take(j["icons"])   // (the app's icon on occasions)
     DeviceKey.refresh(self)   // (signed in for good on this phone: its device key — our own sign-in)
     // (the startup screen: reached — and nothing of this person on the phone yet: setting up, until their copy is in)
     splashHeard = true

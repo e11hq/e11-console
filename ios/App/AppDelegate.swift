@@ -2019,6 +2019,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     return ["kind": kind, "on": defaults.bool(forKey: LOCK_KEY)]
   }
   func becameActive() {
+    OccasionIcon.apply()   // (the app's icon on occasions — today's, Dubai)
     let away = awayAt.map { Date().timeIntervalSince($0) } ?? 0
     if defaults.bool(forKey: LOCK_KEY), lockView == nil, !authing, launchLock || away > 600 { lock() }
     else if lockView != nil, !authing { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.unlock() } }   // (asked again on coming back)
