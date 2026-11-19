@@ -139,9 +139,12 @@ final class BarBadge: NSView {
   override func draw(_ r: NSRect) {
     NSColor.systemRed.setFill()
     NSBezierPath(roundedRect: bounds, xRadius: bounds.height / 2, yRadius: bounds.height / 2).fill()
-    let at: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 9.5, weight: .bold), .foregroundColor: NSColor.white]
+    let f = NSFont.systemFont(ofSize: 9.5, weight: .bold)
+    let at: [NSAttributedString.Key: Any] = [.font: f, .foregroundColor: NSColor.white]
     let s = (text as NSString).size(withAttributes: at)
-    (text as NSString).draw(at: NSPoint(x: ((bounds.width - s.width) / 2).rounded(), y: ((bounds.height - s.height) / 2).rounded() + 0.5), withAttributes: at)
+    // (the digits centred by their own height, not the line's — they sat 1.5 pt high: Haris 2026-11-19 13:41)
+    let y = (bounds.height - f.capHeight) / 2 + f.descender
+    (text as NSString).draw(at: NSPoint(x: ((bounds.width - s.width) / 2).rounded(), y: (y * 2).rounded() / 2), withAttributes: at)
   }
 }
 
