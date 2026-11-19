@@ -160,6 +160,8 @@ if APPLE:
     for role, rr in out.items():   # (the search pilot on the Clients list — Haris 2026-11-19 12:06)
         sr = ((rr or {}).get('apple') or {}).get('srch')
         if sr: print('srch', role, json.dumps(sr))
+        sv2 = ((rr or {}).get('apple') or {}).get('svgTwice')
+        if sv2: print('svgTwice', role, json.dumps(sv2))   # (an SVG opened twice — Haris 2026-11-19 19:22)
         fp = ((rr or {}).get('apple') or {}).get('findPrev')
         if fp: print('findPrev', role, json.dumps(fp))   # (a search result's file opened and closed — Haris 2026-11-19 18:52)
         fk = ((rr or {}).get('apple') or {}).get('findKb')

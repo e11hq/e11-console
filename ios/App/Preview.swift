@@ -44,7 +44,9 @@ enum PreviewLoad {
     guard let s, !s.isEmpty else { return done(nil) }
     if let i = pics.object(forKey: s as NSString) { return done(i) }
     data(s) { d in
-      if let d = d, UIImage(data: d) == nil, SVGRaster.looksLikeSVG(d, path: s) { SVGRaster.shared.image(d, max: 1400) { done($0) }; return }   // (an SVG, drawn on the phone)
+      // (an SVG, drawn on the phone — and kept ready like a photo: it returned before the keeping, so it was drawn again
+      //  every time it opened: Haris 2026-11-19 19:22)
+      if let d = d, UIImage(data: d) == nil, SVGRaster.looksLikeSVG(d, path: s) { SVGRaster.shared.image(d, max: 1400) { i in if let i { pics.setObject(i, forKey: s as NSString) }; done(i) }; return }
       let i = d.flatMap { UIImage(data: $0) }.map { $0.preparingForDisplay() ?? $0 }
       if let i { pics.setObject(i, forKey: s as NSString) }
       done(i)
