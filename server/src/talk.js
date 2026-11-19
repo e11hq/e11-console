@@ -25,7 +25,7 @@ const PHONE_MS = 30 * 86400000;         // a linked Mac goes when its phone hasn
 const rid = (p) => p + '-' + crypto.randomBytes(8).toString('hex');
 const clip = (s, n) => String(s == null ? '' : s).slice(0, n);
 
-export function createTalk({ dataDir, store, access, apns = null, now = () => Date.now(), dbFile, links = () => null, signinCode = null, onUnread = null, keepFor = null }) {
+export function createTalk({ dataDir, store, access, apns = null, now = () => Date.now(), dbFile, links = () => null, signinCode = null, onUnread = null, keepFor = null, icons = null }) {
   const file = dbFile || path.join(dataDir, 'db', 'talk.sqlite');
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
   const relay = path.join(dataDir, 'talk-relay');
@@ -199,7 +199,9 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     const known = new Set(people.map((p) => p.id));
     for (const id of ids) if (!known.has(id)) { const x = personOfId(id); if (x) people.push(isContactId(id) ? x : { ...x, gone: true }); }
     const out = { ok: true, me: { ...personOf(u), canMake: !isFree(u), boss: isBoss(u), opts: optsOf(u.id) }, clients: clientsFor(u), groups, people, pins, seq: Q.lastSeq.get().s || 0,
-      macs: macsOf(u.id).map((m) => ({ id: m.id, name: m.name, linkedAt: m.linked_at, seenAt: m.seen_at })) };
+      macs: macsOf(u.id).map((m) => ({ id: m.id, name: m.name, linkedAt: m.linked_at, seenAt: m.seen_at })),
+      // (the app's icon on occasions, as E11 Console's — appstart.js icons; Haris 2026-11-19 09:42)
+      icons: (() => { try { return icons ? icons() : null; } catch { return null; } })() };
     // Super Admins and Office Admins: every client contact (to add them, or to a group)
     if (isBoss(u)) {
       const count = db.prepare('SELECT COUNT(*) AS n FROM members m JOIN groups g ON g.id = m.grp WHERE m.uid = ? AND g.gone = 0');

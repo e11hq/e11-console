@@ -94,7 +94,7 @@ export function createServer(cfg) {
   // E11 Talk (talk.js): its own database, its own phones for notifications (the same Apple key, its own app)
   const talkApns = createApns({ store, keyFile: cfg.apnsKeyFile, keyId: cfg.apnsKeyId, teamId: cfg.apnsTeamId, topic: cfg.talkTopic || 'ae.e11.talk.ios', kvPrefix: 'talk-apns', hosts: cfg.apnsHosts, connectOpts: cfg.apnsConnectOpts });
   let talk = null;
-  const talkNow = () => talk || (talk = createTalk({ dataDir, store, access, apns: talkApns, dbFile: cfg.talkDbFile, now: cfg.now || (() => Date.now()), links: () => fileLinks, signinCode: talkSigninCode, onUnread: talkUnreadTell, keepFor: review ? REVIEW_USER_ID : null }));
+  const talkNow = () => talk || (talk = createTalk({ dataDir, store, access, apns: talkApns, dbFile: cfg.talkDbFile, now: cfg.now || (() => Date.now()), links: () => fileLinks, signinCode: talkSigninCode, icons: () => appStart.icons(store.get('meta', 'main') || {}, (cfg.now || Date.now)(), appIcon.info()), onUnread: talkUnreadTell, keepFor: review ? REVIEW_USER_ID : null }));
   // (E11 Talk's unread count on E11 Console's Talk button: to that person's open apps, as it changes)
   function talkUnreadTell(uids) { if (!talk) return; const set = new Set(uids.map(String)); for (const s of streams) if (set.has(s.userId)) { try { send(s, 'talkUnread', { n: talk.unreadFor(s.userId) }); } catch { /* fine */ } } }
   function talkContact(e) { try { return talkNow().contactByEmail(e); } catch { return null; } }

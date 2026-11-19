@@ -60,6 +60,32 @@ export function createAppStart({ webDir }) {
     return { sid, key, title: (greetOf && greetOf[sid]) || S.name, sub: S.name + ' · from all of us at E11', pic: `icons/seasonal/${sid}.png`, tile: S.tile };
   }
 
+  // the iPhone apps' icon (E11 Console and E11 Talk — Haris 2026-11-19 09:42): the occasions' days from today for the next
+  // two months, by the website's own rules (app.js SEASON_WHEN / autoSeason: Ramadan the whole month, the Eids their
+  // calendar days), and the owner's pick on My profile › Mac app icon when it isn't Automatic (a seasonal one, or the
+  // everyday icon for any other). The app shows, on a Dubai day, the one that started latest.
+  function iconsFor(O, today, icon) {
+    if (!seasons || !when) return null;
+    if (icon && !icon.auto) return { pick: icon.preset && seasons[icon.preset] ? icon.preset : 'everyday', days: [] };
+    const last = plus(today, 60), y = Number(today.slice(0, 4));
+    const occ = O.between(plus(today, -35), last), days = [];
+    for (const [sid, w] of Object.entries(when)) {
+      if (!seasons[sid]) continue;
+      const spans = w[0] === 'md' ? [y - 1, y, y + 1].map((yy) => [`${yy}-${w[1]}`, w[2] ? `${yy}-${w[2]}` : null])
+        : occ.filter((o) => o.key === w[1]).map((o) => [o.date, o.end || null]);
+      for (const [from, end] of spans) {
+        const to = end || (w[2] === 'month' ? plus(from, 29) : from);
+        if (to >= today && from <= last) days.push({ sid, from, to });
+      }
+    }
+    days.sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0));
+    return { pick: null, days };
+  }
+  function icons(meta, now = Date.now(), icon = null) {
+    load();
+    try { return iconsFor(occasions(meta || {}), dubaiDay(now), icon); } catch { return null; }
+  }
+
   function start(u, meta, now = Date.now(), icon = null) {
     load();
     const O = occasions(meta || {});
@@ -76,7 +102,8 @@ export function createAppStart({ webDir }) {
     const cd = !!cdU && cdU === u.id;
     const name = String(u.name || String(u.email || '').split('@')[0] || '').trim().split(/\s+/)[0] || '';
     let greet = null; try { greet = greetFor(O, today, icon); } catch { greet = null; }
-    return { me: u.id, name, cd, label4: cd ? 'Review requests' : 'Client Assets', days, greet };
+    let icons = null; try { icons = iconsFor(O, today, icon); } catch { icons = null; }
+    return { me: u.id, name, cd, label4: cd ? 'Review requests' : 'Client Assets', days, greet, icons };
   }
-  return { start };
+  return { start, icons };
 }
