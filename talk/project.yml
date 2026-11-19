@@ -9,10 +9,38 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.0.4"   # (1.0.3 = build 179, approved 2026-11-19 — 1.0.4: Photos/Files/Links latest last, video zoom. Before: 1.0.2 = build 175, in App Store review 2026-11-17 — 1.0.3: the office network)
+    MARKETING_VERSION: "1.0.5"   # (1.0.4 = build 184, in App Store review 2026-11-19 — 1.0.5: ✓✓ when the notification arrives. (1.0.3 = build 179, approved 2026-11-19 — 1.0.4: Photos/Files/Links latest last, video zoom. Before: 1.0.2 = build 175, in App Store review 2026-11-17 — 1.0.3: the office network)
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Automatic
 targets:
+  # Tells the server each message notification reached this phone — the sender's ✓✓ while Talk is closed (Notify/)
+  E11TalkNotify:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Notify
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ae.e11.talk.ios.notify
+        PRODUCT_NAME: E11TalkNotify
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: Notify/E11TalkNotify.entitlements
+        SKIP_INSTALL: YES
+    entitlements:
+      path: Notify/E11TalkNotify.entitlements
+      properties:
+        # (E11 Talk's own Keychain items: the server and its sign-in, which the app keeps there)
+        keychain-access-groups: ["$(AppIdentifierPrefix)ae.e11.talk.ios"]
+    info:
+      path: Notify/Info.plist
+      properties:
+        CFBundleDisplayName: E11 Talk
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
   # (the App Store screenshots' UI test — never part of the app itself)
   E11TalkUITests:
     type: bundle.ui-testing
@@ -30,6 +58,8 @@ targets:
   E11Talk:
     type: application
     platform: iOS
+    dependencies:
+      - target: E11TalkNotify
     # (the scheme with the App Store screenshots' UI test — talk/UITests, talk.yml mode=shots)
     scheme:
       testTargets: [E11TalkUITests]

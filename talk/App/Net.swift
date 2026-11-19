@@ -68,8 +68,9 @@ final class Net {
     c.timeoutIntervalForRequest = 30
     return URLSession(configuration: c)
   }()
-  init() { cookie = Keychain.get("cookie-" + Server.host) }
-  func reload() { stopListening(); cookie = Keychain.get("cookie-" + Server.host) }   // (another server: its own sign-in)
+  // (the server kept in the Keychain too: the notification helper tells it the message reached this phone — Notify/)
+  init() { cookie = Keychain.get("cookie-" + Server.host); Keychain.set(Server.url, "notify-server") }
+  func reload() { stopListening(); cookie = Keychain.get("cookie-" + Server.host); Keychain.set(Server.url, "notify-server") }   // (another server: its own sign-in)
   var signedIn: Bool {
     #if DEBUG
     if Server.devEmail != nil { return true }
