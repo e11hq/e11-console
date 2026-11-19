@@ -958,9 +958,9 @@ extension Main {
           sv.setContentOffset(CGPoint(x: 0, y: maxY), animated: false)
           DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
             NotificationCenter.default.removeObserver(o)
-            let last = sv.visibleCells.map { $0.convert($0.bounds, to: nil).maxY }.max() ?? -1
+            let cells = (sv as? UICollectionView)?.visibleCells ?? []; let last = cells.map { $0.convert($0.bounds, to: nil).maxY }.max() ?? -1
             let barEnd = sv.convert(sv.bounds, to: nil).maxY - (sv.adjustedContentInset.bottom - sv.contentInset.bottom) - sv.verticalScrollIndicatorInsets.bottom   // (the scroll bar's end: the view's foot less the safe area and its own inset)
-            self.apple("findKb", ["kbTop": Int(kbTop), "lastResultBottom": Int(last), "barEnd": Int(barEnd), "cells": sv.visibleCells.count,
+            self.apple("findKb", ["kbTop": Int(kbTop), "lastResultBottom": Int(last), "barEnd": Int(barEnd), "cells": cells.count,
                                   "insetBottom": Int(sv.contentInset.bottom), "adjBottom": Int(sv.adjustedContentInset.bottom), "barInset": Int(sv.verticalScrollIndicatorInsets.bottom),
                                   "ok": kbTop > 0 && last > 0 && last <= kbTop + 1 && barEnd <= kbTop + 1])
             self.shownScreen?.selfFindDone()
