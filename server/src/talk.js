@@ -119,6 +119,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   function roleOf(u) {
     if (!u) return '';
     if (u.id === cdId()) return 'Creative Director';
+    if ((((store.get('meta', 'main') || {}).socialMgrIds) || []).includes(u.id)) return 'Social Manager';   // (as E11 Console shows them — Haris 2026-11-19 09:26)
     if (u.title) return String(u.title);
     return access.isSuper(u) ? (u.role === 'admin' ? 'Super Admin' : ROLE[u.role] || 'Admin') : ROLE[u.role] || '';
   }
