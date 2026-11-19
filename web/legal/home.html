@@ -98,15 +98,18 @@ a{color:#2997ff}a:hover{text-decoration:underline}
 (function(){var lid=document.querySelector('.lidf'),img=document.querySelector('.lidf img'),park=document.querySelector('.park'),box=document.getElementById('lapbox'),sec=document.getElementById('console'),st=document.querySelector('.stage');
 if(!lid||!park||!box||!sec||!st)return;var de=document.documentElement,q=0;
 function f(){q=0;if(innerWidth<981){de.classList.remove('lapjs');lid.style.transform=park.style.transform='';return}de.classList.add('lapjs');
-var y=scrollY,T=sec.getBoundingClientRect().top+y,s0=T-48,s1=T+sec.offsetHeight-innerHeight,p=s1>s0?Math.min(1,Math.max(0,(y-s0)/(s1-s0))):1;
+var y=scrollY,T=sec.getBoundingClientRect().top+y,s0=T-48;
 var g=document.querySelector('#console .grow>div:last-child')||document.querySelector('#console .grow'),tb=g.getBoundingClientRect().bottom+y;
-var s=.64+.26*p,B0=box.getBoundingClientRect().bottom+y-40,a=p*Math.PI/2;
-/* (closed, a little smaller and where it sat before — 170 below the words, or just above the window's foot; opening, it
-   drifts down to its place as it grows — the parallax — Haris 2026-11-19 15:19) */
-var ls=1+.1142*p,U0=Math.max(0,B0-Math.min(innerHeight-28,tb+170)),u=U0*(1-p);
-lid.style.transform='translateZ(-685px) scale('+ls+') scaleX('+(1+.182*Math.cos(a))+') rotateX('+(-90*(1-p))+'deg)';park.style.transform='translateY('+(-u)+'px) scale('+s+')';
+/* (closed, a little smaller and where it sat before — 170 below the words, or just above the window's foot; then it moves
+   up the screen only a little slower than the page — a gentle parallax, never dropping down the screen, which left a gap
+   above it and a felt moment when it began (Haris 2026-11-19 15:31) — and is in its place, open, when it has come 60 px up
+   the screen; the lid and the growing eased in and out) */
+var B0=box.getBoundingClientRect().bottom+y-40,Y0=Math.min(innerHeight-28,tb+170),U0=Math.max(0,B0-Y0),se=s0+U0+60;
+var p=se>s0?Math.min(1,Math.max(0,(y-s0)/(se-s0))):1,e=p*p*(3-2*p);
+var s=.64+.26*e,a=e*Math.PI/2,ls=1+.1142*e,u=U0*(1-p);
+lid.style.transform='translateZ(-685px) scale('+ls+') scaleX('+(1+.182*Math.cos(a))+') rotateX('+(-90*(1-e))+'deg)';park.style.transform='translateY('+(-u)+'px) scale('+s+')';
 /* (then measured: the lid's real top on screen, the laptop moved down by whatever still reaches over the links) */
-if(u>0){var top=img.getBoundingClientRect().top+y,over=tb+36-top;if(over>0){u=Math.max(0,u-over);park.style.transform='translateY('+(-u)+'px) scale('+s+')'}}}
+if(u>0){var top=img.getBoundingClientRect().top+y,over=tb+16-top;if(over>0){u=Math.max(0,u-over);park.style.transform='translateY('+(-u)+'px) scale('+s+')'}}}
 function ask(){if(!q)q=requestAnimationFrame(f)}addEventListener('scroll',ask,{passive:true});addEventListener('resize',ask);addEventListener('load',f);f()})()</script>
 <script>(function(){var a=document.querySelector('nav a[href="#talk"]'),t=document.getElementById('talk');if(!a||!t)return;a.addEventListener('click',function(e){if(innerWidth<981)return;e.preventDefault();var top=t.getBoundingClientRect().top+scrollY,s0=top-48,s1=top+t.offsetHeight-innerHeight;scrollTo({top:s0+.75*(s1-s0),behavior:'smooth'});history.replaceState(null,'','#talk')})})()</script>
 </body></html>
