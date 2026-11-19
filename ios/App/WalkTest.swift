@@ -975,36 +975,54 @@ extension Main {
       ("aFindKbW0", {}), ("aFindKbW1", {}),
       // (a file opened from Client Assets' search and closed: why it flew back or faded — the preview's own note, and whether
       //  its picture in the results was found on screen as it opened and as it closed — Haris 2026-11-19 18:52)
-      ("aFindPrev", {
+      // (a file opened from Client Assets' search and closed — Haris 2026-11-19 18:49 / 19:07: in steps, each with its own
+      //  picture, reading Client Assets' own list — the first runs read Me's list, which is open under it)
+      ("aFindPrevOpen", {
         self.tab(self.tabKeys.first ?? "today"); self.selectTab("me"); self.assetsCtl.close(animated: false); AppleTabs.shared?.meNav.popToRootViewController(animated: false)
         self.assetsCtl.command(["show": true, "me": AppData.shared.me ?? "", "start": [String: Any]()])
-        // (Client Assets' own search, as a finger would: its search bar opened and "e" typed — the test's find helper isn't
-        //  wired on this page, so the first run searched nothing)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-          guard let vc = self.assetsCtl.selfNav?.topViewController, let sc = vc.navigationItem.searchController else { return }
-          sc.isActive = true; sc.searchBar.text = "e"; sc.searchResultsUpdater?.updateSearchResults(for: sc)
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
-          guard let cv = self.shownScreen?.appleScroll as? UICollectionView else { self.apple("findPrev", ["none": "no list", "top": String(describing: type(of: self.assetsCtl.selfNav?.topViewController as Any))]); return }
-          let ips = cv.indexPathsForVisibleItems.sorted()
-          guard let ip = ips.first(where: { ip in (cv.cellForItem(at: ip)?.contentView.subviews.isEmpty == false) && cv.numberOfSections > ip.section }) else { self.apple("findPrev", ["none": "no result", "cells": ips.count]); return }
-          var o: [String: Any] = ["cells": ips.count, "tapped": "\(ip.section)/\(ip.item)", "shownScreen": String(describing: type(of: self.shownScreen as Any))]
-          cv.delegate?.collectionView?(cv, didSelectItemAt: ip)
-          DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            o["previewOpen"] = self.previewVC != nil
-            o["openInfo"] = self.previewVC.map { $0.walkInfo } ?? [:]
-            o["searching"] = (self.shownScreen?.geo()["searching"] as? Bool) ?? false
-            o["cellsWhileOpen"] = cv.indexPathsForVisibleItems.count
-            self.previewVC?.close()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-              o["closedHow"] = PreviewVC.lastClose
-              self.apple("findPrev", o)
-              self.assetsCtl.selfNav?.topViewController?.navigationItem.searchController?.isActive = false; self.assetsCtl.close(animated: false); self.tab(self.tabKeys.first ?? "today")
-            }
-          }
-        }
       }),
-      ("aFindPrevW0", {}), ("aFindPrevW1", {}), ("aFindPrevW2", {}),
+      ("aFindPrevSearch", {
+        let files = (AppData.shared.meModel("assets", "assets", [""])?["files"] as? [[String: Any]]) ?? []
+        let name = (files.first { CommentCell.isPic($0["name"] as? String ?? "") }?["name"] as? String) ?? "e"
+        let q = String(name.prefix(3))
+        var o: [String: Any] = ["query": q, "top": String(describing: type(of: self.assetsCtl.selfNav?.topViewController as Any)), "assetsOpen": self.assetsCtl.isOpen]
+        if let vc = self.assetsCtl.selfNav?.topViewController, let sc = vc.navigationItem.searchController {
+          sc.isActive = true; sc.searchBar.text = q; sc.searchResultsUpdater?.updateSearchResults(for: sc); o["searched"] = true
+        } else { o["searched"] = false }
+        self.apple("findPrev", o)
+      }),
+      ("aFindPrevTap", {
+        var o = (((self.selfResult["apple"] as? [String: Any])?["findPrev"]) as? [String: Any]) ?? [:]
+        guard let cv = self.assetsCtl.shown?.appleScroll as? UICollectionView else { o["none"] = "no Client Assets list"; self.apple("findPrev", o); return }
+        // (each row on screen: its words, its pictures — drawn or not, how wide — and the file mark on each)
+        var rows: [String] = [], pick: IndexPath?
+        for ip in cv.indexPathsForVisibleItems.sorted() {
+          guard let c = cv.cellForItem(at: ip) else { continue }
+          var ivs: [UIImageView] = []; func walk(_ v: UIView) { if let iv = v as? UIImageView { ivs.append(iv) }; v.subviews.forEach(walk) }; walk(c.contentView)
+          let words = (c.contentConfiguration as? UIListContentConfiguration)?.text ?? ""
+          let pics = ivs.map { "\($0.image != nil ? "img" : "none")w\(Int($0.bounds.width))mark=\(FileTouch.markOf($0) ?? "-")" }.joined(separator: "|")
+          rows.append("\(ip.section)/\(ip.item) \(words) [\(pics)]")
+          if pick == nil, words.contains(".") { pick = ip }
+        }
+        o["rows"] = rows
+        guard let ip = pick else { o["none"] = "no file row"; self.apple("findPrev", o); return }
+        o["tapped"] = rows.first { $0.hasPrefix("\(ip.section)/\(ip.item) ") } ?? ""
+        FileTouch.note(cv.cellForItem(at: ip))
+        cv.delegate?.collectionView?(cv, didSelectItemAt: ip)
+        self.apple("findPrev", o)
+      }),
+      ("aFindPrevShown", {
+        var o = (((self.selfResult["apple"] as? [String: Any])?["findPrev"]) as? [String: Any]) ?? [:]
+        o["preview"] = self.previewVC.map { $0.walkInfo } ?? ["shown": false]
+        self.apple("findPrev", o)
+        self.previewVC?.close()
+      }),
+      ("aFindPrevClosed", {
+        var o = (((self.selfResult["apple"] as? [String: Any])?["findPrev"]) as? [String: Any]) ?? [:]
+        o["closedHow"] = PreviewVC.lastClose
+        self.apple("findPrev", o)
+        self.assetsCtl.selfNav?.topViewController?.navigationItem.searchController?.isActive = false; self.assetsCtl.close(animated: false); self.tab(self.tabKeys.first ?? "today")
+      }),
       ("aSrchTab", { self.tab(self.tabKeys.first ?? "today")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self.tab("projects"); DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { self.srchAdd("tabBack") } } }),
       ("aLink", {

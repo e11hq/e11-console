@@ -811,6 +811,13 @@ enum MediaKeep {
 final class FileTouch: UIGestureRecognizer {
   private static weak var view: UIView?
   private static var point: CGPoint = .zero, at = Date.distantPast
+  // (the self-test's finger: the touch a real tap would leave — on the row's picture, at its middle)
+  static func note(_ cell: UIView?) {
+    guard let c = cell else { return }
+    var ivs: [UIImageView] = []; func walk(_ v: UIView) { if let iv = v as? UIImageView { ivs.append(iv) }; v.subviews.forEach(walk) }; walk(c)
+    let v: UIView = ivs.first { $0.image != nil } ?? c
+    view = v; point = v.convert(CGPoint(x: v.bounds.midX, y: v.bounds.midY), to: nil); at = Date()
+  }
   static func watch(_ w: UIWindow) {
     let g = FileTouch(target: nil, action: nil); g.cancelsTouchesInView = false; g.delaysTouchesBegan = false; g.delaysTouchesEnded = false
     w.addGestureRecognizer(g)
@@ -840,6 +847,7 @@ final class FileTouch: UIGestureRecognizer {
     for iv in ivs { objc_setAssociatedObject(iv, &markKey, nil, .OBJC_ASSOCIATION_COPY_NONATOMIC) }
     if let f = f, let iv = ivs.first(where: { $0.image != nil && $0.bounds.width >= 20 }) ?? ivs.first(where: { $0.image != nil }) { mark(iv, f) }
   }
+  static func markOf(_ iv: UIImageView) -> String? { objc_getAssociatedObject(iv, &markKey) as? String }   // (the self-test reads a picture's mark)
   static func marked(_ key: String, in w: UIWindow?) -> UIImageView? {
     guard !key.isEmpty, let w = w else { return nil }
     func walk(_ v: UIView) -> UIImageView? {
