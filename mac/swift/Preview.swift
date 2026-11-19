@@ -36,6 +36,11 @@ enum MacLoad {
     }.resume()
   }
   static func image(_ s: String?, _ done: @escaping (NSImage?) -> Void) { data(s) { d in done(d.flatMap { NSImage(data: $0) }) } }
+  // (the picture when it's here already — nil otherwise, nothing asked for)
+  static func cachedImage(_ s: String?) -> NSImage? {
+    guard let s = s, !s.isEmpty, let d = cache.object(forKey: s as NSString) else { return nil }
+    return NSImage(data: d as Data)
+  }
 }
 
 /* ---------- Apple's glass: Liquid Glass on macOS 26 (NSGlassEffectView — Haris 2026-11-15 16:23: "the buttons are not
@@ -135,6 +140,7 @@ final class MacPreview: NSView {
   var event: (([String: Any]) -> Void)?
   var onGone: (() -> Void)?
   private var flyPic: NSImage?   // (the picture a video flew in as — it flies back out as it)
+  private weak var flying: PvFly?   // (the picture flying out — sharpened in flight when the full one comes)
   var tileShot: NSImage?   // (the file's tile as the page shows it — what a file with no picture of its own flies out of and back into)
   private let back = NSView(), stage = NSView()
   private var content: NSView?
@@ -469,6 +475,7 @@ final class MacPreview: NSView {
       //  "the coming in from the thumbnail is not looking native")
       if !shotFly { self.flyPic = im }
       let fly = PvFly(im, frame: r, radius: 9)
+      self.flying = fly
       // (under the shades, as the picture itself sits: on top of them the shades were hidden while it flew and came on in
       //  one frame as it landed — Haris 2026-11-17 "the shadow … dont have it snap")
       self.addSubview(fly, positioned: .above, relativeTo: self.stage)
@@ -503,8 +510,20 @@ final class MacPreview: NSView {
     //  16:23 — else the thumbnail)
     if t.isEmpty { fly0(nil) }   // (no picture of its own: its tile's)
     else if (cur["kind"] as? String) == "image" {
-      MacLoad.image(cur["src"] as? String) { im in if let im = im { fly0(im) } }
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { MacLoad.image(t) { im in fly0(im) } }
+      // (it flies at once: the full picture when the Mac has it already, else its small one — sharpened in flight as the
+      //  full one comes. It waited up to a third of a second for the full one, the tile already gone: an empty spot for a
+      //  moment — Haris 2026-11-19 11:28)
+      let src = cur["src"] as? String
+      if let full = MacLoad.cachedImage(src) { fly0(full) }
+      else {
+        fly0(MacLoad.cachedImage(t))   // (none: the tile's own picture)
+        MacLoad.image(src) { [weak self] im in
+          guard let self = self, let im = im, let f = self.flying, f.superview != nil, let l = f.layer else { return }
+          self.flyPic = im
+          let fade = CATransition(); fade.type = .fade; fade.duration = 0.18
+          l.add(fade, forKey: "sharp"); l.contents = im.cgImage(forProposedRect: nil, context: nil, hints: nil) ?? im
+        }
+      }
     } else { MacLoad.image(t) { im in fly0(im) } }
   }
   // (calls `then` once Apple's PDF view has its document — or after 3 s)
