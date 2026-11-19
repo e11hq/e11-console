@@ -5,8 +5,9 @@
 /* (desktop: the features' rows and the apps' carousel — Haris 2026-11-19 19:56; phones keep their own) */
 .mob{display:none}.dsk{display:block}
 @media (max-width: 980px){.dsk{display:none !important}.mob{display:flex !important}}
-.frow{margin:0 calc(50% - 50vw);}
-.fscroll{display:flex;gap:20px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;padding:16px max(16px, calc(50vw - 510px)) 32px;scroll-padding-left:max(16px, calc(50vw - 510px));scrollbar-width:none;overscroll-behavior-x:contain}
+/* (the cards come up after the heading, as it does — Haris 2026-11-19 20:34) */
+.frow{margin:0 calc(50% - 50vw);animation:rise linear both;animation-timeline:view(block 25% 20%);animation-range:entry-crossing 0px entry-crossing 420px}
+.fscroll{display:flex;gap:20px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;padding:16px max(16px, calc(50vw - 510px)) 60px;margin-bottom:-28px;scroll-padding-left:max(16px, calc(50vw - 510px));scrollbar-width:none;overscroll-behavior-x:contain}
 .fscroll::-webkit-scrollbar{display:none}
 .fcard>div:last-child>div{max-width:none !important;width:100% !important;box-sizing:border-box}
 /* (no empty middle: the picture takes the card's room under the words, centred and a little bigger — Haris 2026-11-19 20:02) */
