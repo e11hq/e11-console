@@ -718,6 +718,16 @@ final class E11WebView: WKWebView, NSDraggingSource {
   }
   func draggingSession(_ s: NSDraggingSession, willBeginAt p: NSPoint) {
     if s === ours { DragLog.note("as it began — drag pasteboard items=\(s.draggingPasteboard.pasteboardItems?.count ?? -1) " + (s.draggingPasteboard.pasteboardItems ?? []).enumerated().map { "#\($0.offset) \($0.element.types.map { $0.rawValue })" }.joined(separator: " ")) }
+    // (WebKit wrote its own page data over the drag after it started, so Finder saw no file at all and turned it down —
+    //  measured in the drag notes, Haris 2026-11-19 19:59: the files put back as the drag begins; the page's own data is
+    //  kept apart already, for a drop back on the window)
+    if s === ours, !FileDrag.keepP.isEmpty {
+      let pb = s.draggingPasteboard
+      if !(pb.types ?? []).contains(NSPasteboard.PasteboardType("com.apple.NSFilePromiseItemMetaData")) {
+        pb.clearContents(); pb.writeObjects(FileDrag.keepP)
+        DragLog.note("files put back — drag pasteboard items=\(pb.pasteboardItems?.count ?? -1) " + (pb.pasteboardItems ?? []).enumerated().map { "#\($0.offset) \($0.element.types.map { $0.rawValue })" }.joined(separator: " "))
+      }
+    }
     if old(s) {
       if let (sel, imp) = superIMP("draggedImage:beganAt:") { typealias F = @convention(c) (AnyObject, Selector, NSImage?, NSPoint) -> Void; unsafeBitCast(imp, to: F.self)(self, sel, nil, p) }
     } else if let (sel, imp) = superIMP("draggingSession:willBeginAtPoint:") { typealias F = @convention(c) (AnyObject, Selector, NSDraggingSession, NSPoint) -> Void; unsafeBitCast(imp, to: F.self)(self, sel, s, p) }
