@@ -995,6 +995,8 @@ extension Main {
         var o = (((self.selfResult["apple"] as? [String: Any])?["findPrev"]) as? [String: Any]) ?? [:]
         guard let cv = self.assetsCtl.shown?.appleScroll as? UICollectionView else { o["none"] = "no Client Assets list"; self.apple("findPrev", o); return }
         // (each row on screen: its words, its pictures — drawn or not, how wide — and the file mark on each)
+        let allFiles = (AppData.shared.meModel("assets", "assets", [""])?["files"] as? [[String: Any]]) ?? []
+        let picIds = Set(allFiles.filter { CommentCell.isPic($0["name"] as? String ?? "") }.map { FileTouch.key($0) })
         var rows: [String] = [], pick: IndexPath?
         for ip in cv.indexPathsForVisibleItems.sorted() {
           guard let c = cv.cellForItem(at: ip) else { continue }
@@ -1002,7 +1004,8 @@ extension Main {
           let words = (c.contentConfiguration as? UIListContentConfiguration)?.text ?? ""
           let pics = ivs.map { "\($0.image != nil ? "img" : "none")w\(Int($0.bounds.width))mark=\(FileTouch.markOf($0) ?? "-")" }.joined(separator: "|")
           rows.append("\(ip.section)/\(ip.item) \(words) [\(pics)]")
-          if pick == nil, words.contains(".") { pick = ip }
+          // (a picture file's row, by its mark — the rows' names aren't in Apple's configuration, so words came back empty)
+          if pick == nil, ivs.contains(where: { iv in FileTouch.markOf(iv).map { picIds.contains($0) } ?? false }) { pick = ip }
         }
         o["rows"] = rows
         guard let ip = pick else { o["none"] = "no file row"; self.apple("findPrev", o); return }
