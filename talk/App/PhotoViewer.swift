@@ -48,6 +48,9 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     for i in max(0, at - 1)...min(items.count - 1, at + 1) where pages[i].image.image == nil {
       if let f = items[i].file { pages[i].image.image = ZoomPage.quick(items[i], f) }
     }
+    // (the one opened, already on the phone: the full photo from the first frame — it showed the chat's small picture and
+    //  turned sharp a moment later, every time: Haris 2026-11-19 11:15)
+    if at < items.count, let f = items[at].file, let full = ZoomPage.full(items[at], f) { pages[at].image.image = full }
 
     // the top: ‹ · who and when · •••
     // (Apple's own glass, as Photos — Haris 2026-11-14; before iOS 26 the grey capsule as before)
@@ -206,7 +209,7 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     let whole = r == src.bounds
     // (an album's photo: its own picture read now from the phone — an album keeps only its grid, so there was nothing to
     //  fly and the viewer stood black until the photo was read, Haris 2026-11-12)
-    guard let img = m.file.flatMap({ ZoomPage.quick(m, $0) }) ?? (whole ? (src as? UIImageView)?.image : nil) else { return }
+    guard let img = m.file.flatMap({ ZoomPage.full(m, $0) ?? ZoomPage.quick(m, $0) }) ?? (whole ? (src as? UIImageView)?.image : nil) else { return }
     let from = src.convert(r, to: w)
     // (the flying picture starts as the bubble's photo looks — its corners and its shades — and the photo in the bubble
     //  is hidden meanwhile: nothing of it shows twice, nothing appears afterwards, Haris 2026-11-12)
@@ -490,10 +493,25 @@ final class ZoomPage: UIScrollView, UIScrollViewDelegate {
     }
   }
   static func picture(_ m: Msg, _ f: Msg.FileRef, _ done: @escaping (UIImage?) -> Void) {
+    if m.kind == "photo", let i = fulls.object(forKey: f.id as NSString) { return done(i) }
     Net.shared.file(f.id) { url in DispatchQueue.main.async {
       guard let url = url else { done(nil); return }
       if m.kind == "video" { BubbleCell.frame(url, f.id) { i in DispatchQueue.main.async { done(i) } } }
-      else { done(UIImage(contentsOfFile: url.path)) }
+      else {
+        let i = UIImage(contentsOfFile: url.path).map { $0.preparingForDisplay() ?? $0 }
+        if let i = i { fulls.setObject(i, forKey: f.id as NSString) }
+        done(i)
+      }
     } }
+  }
+  // (full photos ready to draw — the last few opened; and one already on the phone, read now: Haris 2026-11-19 11:15)
+  private static let fulls: NSCache<NSString, UIImage> = { let c = NSCache<NSString, UIImage>(); c.countLimit = 16; return c }()
+  static func full(_ m: Msg, _ f: Msg.FileRef) -> UIImage? {
+    guard m.kind == "photo" else { return nil }
+    if let i = fulls.object(forKey: f.id as NSString) { return i }
+    let u = Net.local(f.id)
+    guard FileManager.default.fileExists(atPath: u.path), let raw = UIImage(contentsOfFile: u.path) else { return nil }
+    let i = raw.preparingForDisplay() ?? raw
+    fulls.setObject(i, forKey: f.id as NSString); return i
   }
 }
