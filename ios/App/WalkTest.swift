@@ -978,9 +978,14 @@ extension Main {
       ("aFindPrev", {
         self.tab(self.tabKeys.first ?? "today"); self.selectTab("me"); self.assetsCtl.close(animated: false); AppleTabs.shared?.meNav.popToRootViewController(animated: false)
         self.assetsCtl.command(["show": true, "me": AppData.shared.me ?? "", "start": [String: Any]()])
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { self.shownScreen?.selfFind("e") }
+        // (Client Assets' own search, as a finger would: its search bar opened and "e" typed — the test's find helper isn't
+        //  wired on this page, so the first run searched nothing)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+          guard let vc = self.assetsCtl.selfNav?.topViewController, let sc = vc.navigationItem.searchController else { return }
+          sc.isActive = true; sc.searchBar.text = "e"; sc.searchResultsUpdater?.updateSearchResults(for: sc)
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
-          guard let cv = self.shownScreen?.appleScroll as? UICollectionView else { self.apple("findPrev", ["none": "no list"]); return }
+          guard let cv = self.shownScreen?.appleScroll as? UICollectionView else { self.apple("findPrev", ["none": "no list", "top": String(describing: type(of: self.assetsCtl.selfNav?.topViewController as Any))]); return }
           let ips = cv.indexPathsForVisibleItems.sorted()
           guard let ip = ips.first(where: { ip in (cv.cellForItem(at: ip)?.contentView.subviews.isEmpty == false) && cv.numberOfSections > ip.section }) else { self.apple("findPrev", ["none": "no result", "cells": ips.count]); return }
           var o: [String: Any] = ["cells": ips.count, "tapped": "\(ip.section)/\(ip.item)", "shownScreen": String(describing: type(of: self.shownScreen as Any))]
@@ -994,7 +999,7 @@ extension Main {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
               o["closedHow"] = PreviewVC.lastClose
               self.apple("findPrev", o)
-              self.shownScreen?.selfFindDone(); self.assetsCtl.close(animated: false); self.tab(self.tabKeys.first ?? "today")
+              self.assetsCtl.selfNav?.topViewController?.navigationItem.searchController?.isActive = false; self.assetsCtl.close(animated: false); self.tab(self.tabKeys.first ?? "today")
             }
           }
         }
