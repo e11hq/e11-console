@@ -7919,8 +7919,9 @@ async function pickIntoFolder() {
   } catch (e) { toast('Could not add files: ' + e.message); }
 }
 // Drag-and-drop upload in 2 MB pieces with a progress row per file
-async function uploadIntoFolder(fileList) {
-  const { c, f } = curFolder();
+// (at: { c, f } — a folder other than the one open: a folder dropped from Finder fills the folders it makes; Haris 2026-11-19 20:40)
+async function uploadIntoFolder(fileList, at) {
+  const { c, f } = at || curFolder();
   if (!f || !canUploadTo(c, f)) { if (f && isFilesTop(c, f)) toast('Open a folder first'); else if (f && f.finalOf) toast('Filed when the task is done'); return; }
   const box = $('#ca-uploads');
   const rows = [...fileList].map((file) => {

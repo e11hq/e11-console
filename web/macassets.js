@@ -457,20 +457,20 @@ const MacAssets = (() => {
       //  only the whole page took it before — Haris 2026-11-19 12:20)
       const sub = e.target.closest('.mca [data-mca-folder]');
       const so = sub && sub.dataset.mcaFolder !== f.id && c.folders.find((x) => x.id === sub.dataset.mcaFolder);
-      if (so && canUploadTo(c, so)) {
+      if (so && (canUploadTo(c, so) || canMakeSub(c, so))) {
         hideOv(); setHot(sub, nFiles(e));
         e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy';
         return;
       }
       setHot(null);
-      if (!canUploadTo(c, f)) { hideOv(); e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'none'; return; }
+      if (!canUploadTo(c, f) && !canMakeSub(c, f)) { hideOv(); e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'none'; return; }
       e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy';
       showOv(f, nFiles(e));
       return;
     }
     const card = e.target.closest('.mca-fgrid [data-mca-folder]');
     const fo = card && c.folders.find((x) => x.id === card.dataset.mcaFolder);
-    setHot(fo && canUploadTo(c, fo) ? card : null, nFiles(e));
+    setHot(fo && (canUploadTo(c, fo) || canMakeSub(c, fo)) ? card : null, nFiles(e));
     e.preventDefault(); e.stopPropagation();
     e.dataTransfer.dropEffect = hot ? 'copy' : 'none';   // (anywhere else on a client's page: nothing happens)
   }, true);
@@ -480,6 +480,10 @@ const MacAssets = (() => {
     moving = null;   // (files from outside: no file of ours is being dragged)
     const { c, f } = curFolder();
     const card = hot, files = [...(e.dataTransfer.files || [])];
+    // (a folder from Finder comes as a folder, with what's in it — read now: the drop's items last only while it's handled)
+    const entries = [...(e.dataTransfer.items || [])].map((it) => (it.kind === 'file' && it.webkitGetAsEntry ? it.webkitGetAsEntry() : null));
+    const tree = entries.some((x) => x && x.isDirectory);
+    const put = (to) => (tree ? dropTree(c, to, entries) : uploadIntoFolder(files));
     clear();
     if (!c) return;
     if (f && card) {
@@ -487,20 +491,57 @@ const MacAssets = (() => {
       e.preventDefault(); e.stopPropagation();
       if (!files.length) return;
       PageHistory.mark(); ui.folderId = card.dataset.mcaFolder; const ct = document.getElementById('content'); if (ct) ct.scrollTop = 0; render(); PageHistory.mark();
-      uploadIntoFolder(files);
+      put(c.folders.find((x) => x.id === card.dataset.mcaFolder));
       return;
     }
     if (f) {
-      if (!canUploadTo(c, f)) return;
+      if (!canUploadTo(c, f) && !(tree && canMakeSub(c, f))) return;
       e.preventDefault(); e.stopPropagation();
-      if (files.length) uploadIntoFolder(files);
+      if (files.length) put(f);
       return;
     }
     e.preventDefault(); e.stopPropagation();
     if (!card || !files.length) return;
     PageHistory.mark(); ui.folderId = card.dataset.mcaFolder; const ct = document.getElementById('content'); if (ct) ct.scrollTop = 0; render(); PageHistory.mark();
-    uploadIntoFolder(files);
+    put(c.folders.find((x) => x.id === card.dataset.mcaFolder));
   }, true);
+  // (a folder dropped from Finder, Haris 2026-11-19 20:40: made here as a folder of the same name — "name 2" if one's
+  //  here already — with its own folders and files in it, as deep as folders may go here; deeper ones' files go in the
+  //  deepest folder made. Where no folder can be made, its files go in the folder they were dropped on, if files may go
+  //  there. Hidden files (.DS_Store) are left out.)
+  async function dropTree(c, to, entries) {
+    if (!c || !to) return;
+    const fileOf = (en) => new Promise((ok) => en.file(ok, () => ok(null)));
+    const kids = (dir) => new Promise((ok) => { const r = dir.createReader(), all = []; const next = () => r.readEntries((b) => { if (!b.length) return ok(all); all.push(...b); next(); }, () => ok(all)); next(); });
+    const jobs = [];
+    let refused = 0, made = 0;
+    const add = (into, list) => { if (!list.length) return; if (canUploadTo(c, into)) jobs.push({ f: into, files: list }); else refused += list.length; };
+    async function walk(dir, parent) {
+      let into = parent;
+      if (canMakeSub(c, parent)) {
+        let name = dir.name, n = 2;
+        while (folderDup(c, name, null, parent.id)) name = `${dir.name} ${n++}`;
+        into = newFolder(c, name, false, parent); made++;
+      }
+      const list = await kids(dir), mine = [];
+      for (const k of list) {
+        if (k.name.startsWith('.')) continue;
+        if (k.isDirectory) await walk(k, into);
+        else { const fl = await fileOf(k); if (fl) mine.push(fl); }
+      }
+      add(into, mine);
+    }
+    const loose = [];
+    for (const en of entries) {
+      if (!en || en.name.startsWith('.')) continue;
+      if (en.isDirectory) await walk(en, to);
+      else { const fl = await fileOf(en); if (fl) loose.push(fl); }
+    }
+    add(to, loose);
+    if (made) { persist(0); render(); }
+    if (refused) toast(`${refused === 1 ? '1 file' : refused + ' files'} couldn’t go here — open a folder first`);
+    for (const j of jobs) await uploadIntoFolder(j.files, { c, f: j.f });
+  }
 
   // ---------- a file held and dragged onto a folder card: moved there (as C6's client page — Haris 19:08) ----------
   // (only the app's list changes: the file stays where it's kept on disk, its link and copies pasted in tasks keep working)
