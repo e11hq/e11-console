@@ -23,7 +23,7 @@
 .fnav{max-width:1020px;margin:4px auto 0;padding:0 16px;display:flex;justify-content:flex-end;gap:12px}
 .fbtn{width:44px;height:44px;border-radius:50%;border:0;background:#e8e8ed;color:#1d1d1f;display:grid;place-items:center;cursor:pointer;transition:background .2s,opacity .2s}
 .fbtn:hover{background:#dcdce1}.fbtn:disabled{opacity:.35;cursor:default}
-.gcar{--sw:min(1100px, 84vw);margin:0 calc(50% - 50vw)}
+.gcar{--sw:min(1100px, 84vw);margin:0 calc(50% - 50vw);animation:rise linear both;animation-timeline:view(block 25% 20%);animation-range:entry-crossing 0px entry-crossing 420px}
 .gtrack{display:flex;gap:24px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;padding:4px calc((100vw - var(--sw)) / 2) 8px;scrollbar-width:none}
 .gtrack::-webkit-scrollbar{display:none}
 .gctl{display:flex;justify-content:center;align-items:center;gap:14px;margin-top:22px}
