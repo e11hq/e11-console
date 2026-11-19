@@ -776,11 +776,13 @@ extension Main {
         let rows = (AppData.shared.screen("clients", ServerHome.clientsJSON("view=list")).model?["rows"] as? [[String: Any]]) ?? []
         guard let cid = rows.first?["id"] as? String else { self.srchAddAny("back", ["none": "no client"]); return }
         self.tab("projects"); AppleTabs.shared?.clientsNav.popToRootViewController(animated: false)
-        let starts: [(String, CGFloat)] = [("top", 0), ("tucked", 70), ("part", 30)]
+        // (and, as Haris does — 15:06 — a scroll right after coming back: up a little and let go, or pulled down and let go,
+        //  0.35 s after ‹)
+        let starts: [(String, CGFloat, CGFloat)] = [("top", 0, 0), ("tucked", 70, 0), ("part", 30, 0), ("top+up", 0, 60), ("top+pull", 0, -60), ("tucked+pull", 70, -60)]
         var out: [String: Any] = ["clients": rows.count]
         func go(_ i: Int) {
           guard i < starts.count else { self.srchAddAny("back", out); return }
-          let (name, dy) = starts[i]
+          let (name, dy, flick) = starts[i]
           if let sv = self.clientsListIfMade?.appleScroll { sv.setContentOffset(CGPoint(x: 0, y: -sv.adjustedContentInset.top + dy), animated: false) }
           DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
             let before = self.srchLine(CACurrentMediaTime())
@@ -794,6 +796,19 @@ extension Main {
               }
               watch()
               AppleTabs.shared?.clientsNav.popViewController(animated: true)   // (‹)
+              if flick != 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                  log.append(String(format: "%.2f SCROLL %d", CACurrentMediaTime() - t0, Int(flick)))
+                  if let sv = self.clientsListIfMade?.appleScroll {
+                    let y0 = sv.contentOffset.y; sv.setContentOffset(CGPoint(x: 0, y: y0 + flick), animated: true)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                      log.append(String(format: "%.2f LET GO", CACurrentMediaTime() - t0))
+                      let top = -sv.adjustedContentInset.top, maxY = max(top, sv.contentSize.height + sv.adjustedContentInset.bottom - sv.bounds.height)
+                      sv.setContentOffset(CGPoint(x: 0, y: min(maxY, max(top, sv.contentOffset.y))), animated: true)
+                    }
+                  }
+                }
+              }
               DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 out[name] = ["before": before, "log": log]
                 AppleTabs.shared?.clientsNav.popToRootViewController(animated: false)
@@ -804,7 +819,7 @@ extension Main {
         }
         go(0)
       }),
-      ("aSrchBackW0", {}), ("aSrchBackW1", {}), ("aSrchBackW2", {}), ("aSrchBackW3", {}), ("aSrchBackW4", {}), ("aSrchBackW5", {}),
+      ("aSrchBackW0", {}), ("aSrchBackW1", {}), ("aSrchBackW2", {}), ("aSrchBackW3", {}), ("aSrchBackW4", {}), ("aSrchBackW5", {}), ("aSrchBackW6", {}), ("aSrchBackW7", {}), ("aSrchBackW8", {}), ("aSrchBackW9", {}), ("aSrchBackW10", {}), ("aSrchBackW11", {}),
       ("aSrchTab", { self.tab(self.tabKeys.first ?? "today")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self.tab("projects"); DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { self.srchAdd("tabBack") } } }),
       ("aLink", {
