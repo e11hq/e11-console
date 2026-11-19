@@ -943,6 +943,31 @@ extension Main {
         run(0)
       }),
       ("aTaskFrostW0", {}), ("aTaskFrostW1", {}), ("aTaskFrostW2", {}), ("aTaskFrostW3", {}), ("aTaskFrostW4", {}),
+      // (search with the keyboard up, scrolled to the end: the last result and the scroll bar's end above the keyboard —
+      //  Haris 2026-11-19 18:48)
+      ("aFindKb", {
+        var kbTop: CGFloat = -1
+        let o = NotificationCenter.default.addObserver(forName: UIResponder.keyboardDidShowNotification, object: nil, queue: .main) { n in
+          if let r = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue { kbTop = r.minY }
+        }
+        self.tab(self.tabKeys.first ?? "today")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self.shownScreen?.selfFind("a") }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+          guard let sv = self.shownScreen?.appleScroll else { self.apple("findKb", ["none": "no list"]); return }
+          let maxY = max(-sv.adjustedContentInset.top, sv.contentSize.height + sv.adjustedContentInset.bottom - sv.bounds.height)
+          sv.setContentOffset(CGPoint(x: 0, y: maxY), animated: false)
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            NotificationCenter.default.removeObserver(o)
+            let last = sv.visibleCells.map { $0.convert($0.bounds, to: nil).maxY }.max() ?? -1
+            let barEnd = sv.convert(sv.bounds, to: nil).maxY - (sv.adjustedContentInset.bottom - sv.contentInset.bottom) - sv.verticalScrollIndicatorInsets.bottom   // (the scroll bar's end: the view's foot less the safe area and its own inset)
+            self.apple("findKb", ["kbTop": Int(kbTop), "lastResultBottom": Int(last), "barEnd": Int(barEnd), "cells": sv.visibleCells.count,
+                                  "insetBottom": Int(sv.contentInset.bottom), "adjBottom": Int(sv.adjustedContentInset.bottom), "barInset": Int(sv.verticalScrollIndicatorInsets.bottom),
+                                  "ok": kbTop > 0 && last > 0 && last <= kbTop + 1 && barEnd <= kbTop + 1])
+            self.shownScreen?.selfFindDone()
+          }
+        }
+      }),
+      ("aFindKbW0", {}), ("aFindKbW1", {}),
       ("aSrchTab", { self.tab(self.tabKeys.first ?? "today")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self.tab("projects"); DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { self.srchAdd("tabBack") } } }),
       ("aLink", {

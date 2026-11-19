@@ -1272,8 +1272,12 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     if let cv = list {
       // (Apple's list: its cells place the boxes, headings and cards; the room under the last card kept as before)
       if cv.frame != bounds { cv.frame = bounds }
-      let bottom = max(0, endRoom - safeAreaInsets.bottom)
+      // (the keyboard up — searching: the list's end and its scroll bar above it, the last results not behind it — Haris
+      //  2026-11-19 18:48; before, only the tab bar's room was kept)
+      let kb = max(0, keyboardH - safeAreaInsets.bottom)
+      let bottom = max(0, endRoom - safeAreaInsets.bottom, kb)
       if cv.contentInset.bottom != bottom { cv.contentInset.bottom = bottom }
+      if cv.verticalScrollIndicatorInsets.bottom != kb { cv.verticalScrollIndicatorInsets.bottom = kb }
       if catsView.superview === catsWrap { catsView.frame = CGRect(x: 0, y: 0, width: W, height: MailCats.H) }
       let bw = (W - 32 - 16) / 3, bh: CGFloat = 1 + 10 + 41 + 15 + 12 + 1
       for (i, v) in stats.enumerated() {
