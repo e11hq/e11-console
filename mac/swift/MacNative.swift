@@ -493,25 +493,9 @@ enum Spot {
 }
 
 /* ================= dragging files out to Finder ================= */
-// (notes on each step of a drag out, to find why Finder turns it down — Haris 2026-11-19 19:33; the app's own Logs folder,
-//  ~/Library/Containers/<the app>/Data/Library/Logs/E11-drag.log, the last 200 lines kept)
+// (the drag notes taken out once the drag to Finder worked — Haris 2026-11-19 20:50: nothing written)
 enum DragLog {
-  static let url: URL = {
-    let d = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0].appendingPathComponent("Logs", isDirectory: true)
-    try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
-    return d.appendingPathComponent("E11-drag.log")
-  }()
-  private static let q = DispatchQueue(label: "draglog")
-  static func note(_ s: String) {
-    let line = ISO8601DateFormatter().string(from: Date()) + " " + s + "\n"
-    q.async {
-      var t = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-      t += line
-      let lines = t.split(separator: "\n", omittingEmptySubsequences: false)
-      if lines.count > 220 { t = lines.suffix(200).joined(separator: "\n") }
-      try? t.write(to: url, atomically: true, encoding: .utf8)
-    }
-  }
+  @inline(__always) static func note(_ s: @autoclosure () -> String) {}
 }
 
 // a file { name, url, size } or a folder { name, folder: true, files: [...], folders: [...] } from the page, promised to
