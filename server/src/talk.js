@@ -367,6 +367,16 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     sweep();
     return { ok: true };
   }
+  // one message's notification reached this person's phone — E11 Talk's notification helper says so (Haris 2026-11-19
+  // 21:42): the group's other people get "got" up to it, as ack() gives them, so the sender sees ✓✓ while Talk is still
+  // closed. Nothing is marked fetched — the app still collects everything when it opens. A linked Mac doesn't count.
+  function got(u, groupId, msgId) {
+    if (!u || isMacId(u.id)) return { ok: true };
+    const g = Q.group.get(String(groupId || '')), s = msgId ? Q.getSent.get(String(msgId)) : null;
+    if (!g || !s || s.grp !== g.id || !member(g, u.id) || s.by === u.id) return { ok: false, error: 'Not found' };
+    emit(g, 'got', { upto: String(msgId) }, u.id, memberIds(g).filter((m) => m !== u.id));
+    return { ok: true };
+  }
   function filesIn(data) {
     const f = data && data.file, k = data && data.link;   // (a link preview's picture and icon go with it too)
     return [...(f && f.id ? [f.id] : []), ...(k && k.img && k.img.id ? [k.img.id] : []), ...(k && k.icon && k.icon.id ? [k.icon.id] : []), ...(Array.isArray(data && data.files) ? data.files : [])];
@@ -1137,6 +1147,6 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   const isAdminOf = (u, gid) => { const g = Q.group.get(gid); return !!g && isAdmin(u, g); };
   // (whose E11 Console key — board 53's card: name, role, colour)
   function personByEmail(e) { const u = access.userByEmail(e); if (u) return personOf(u); const k = contactByEmail(e); return k ? { id: k.id, name: k.name, role: 'Client', photo: null, color: null } : null; }
-  return { state, act, sync, ack, unreadFor, reviewDemo, sample, upload, tasksChanged, peopleChanged, linksChanged, contactByEmail, personByEmail, fileFor, filePath, fetched, listen, sweep, isAdminOf,
+  return { state, act, sync, ack, got, unreadFor, reviewDemo, sample, upload, tasksChanged, peopleChanged, linksChanged, contactByEmail, personByEmail, fileFor, filePath, fetched, listen, sweep, isAdminOf,
     linkCode, linkStatus, macFor, unlinkMac, macCode, macStatus, macByKey, userById, history, hasFiles, resend, close: () => { clearInterval(sweepTimer); for (const set of listeners.values()) for (const r of set) try { r.end(); } catch { /* fine */ } db.close(); } };
 }

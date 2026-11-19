@@ -68,6 +68,23 @@ test('messages are passed on: each member gets them, and they go once every phon
   assert.equal((await sync('sm', 0)).events.length, 0, 'once everyone has it, it’s gone from the server');
 });
 
+test('a notification reached the phone: the others get "got" for that message, nothing is marked fetched (Haris 2026-11-19 21:42)', async () => {
+  const got = async (who, b) => (await fetch(base + '/api/talk/got', { method: 'POST', headers: H(who), body: JSON.stringify(b) })).json();
+  for (const w of ['am', 'des', 'sm']) { const s = await sync(w); if (s.last) await ack(w, s.last); }
+  const m = await act('am', { act: 'send', group: G, text: 'Delivered?', cid: 'c-got' });
+  assert.ok(m.ok);
+  assert.ok((await got('des', { groupId: G, msgId: m.id })).ok);
+  const a = await sync('am');
+  const g = a.events.find((e) => e.type === 'got' && e.by === 'u-des');
+  assert.ok(g && g.upto === m.id, 'the sender is told Yousef’s phone has it');
+  assert.ok((await sync('des')).events.some((e) => e.type === 'msg' && e.id === m.id), 'still waiting for Yousef’s app');
+  assert.ok(!(await sync('des')).events.some((e) => e.type === 'got' && e.by === 'u-des'), 'not sent back to himself');
+  assert.equal((await got('adm', { groupId: G, msgId: m.id })).ok, false, 'not someone outside the group');
+  assert.equal((await got('am', { groupId: G, msgId: m.id })).ok, false, 'not the sender');
+  assert.equal((await got('des', { groupId: G, msgId: 'nope' })).ok, false, 'not a message that isn’t there');
+  for (const w of ['am', 'des', 'sm']) { const s = await sync(w); if (s.last) await ack(w, s.last); }
+});
+
 test('a contact card and a place, from the + sheet (Haris 2026-11-16)', async () => {
   const c = await act('am', { act: 'send', group: G, contact: { name: 'Print House', phones: [{ label: 'work', value: '+971 4 555 0100' }, { label: 'x', value: 'not a number' }], emails: [{ label: 'work', value: 'hi@print.ae' }] } });
   assert.ok(c.ok);

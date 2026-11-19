@@ -707,6 +707,7 @@ export function createServer(cfg) {
       if (p === '/api/talk/sample' && req.method === 'POST') { if (!testCopy || !isOwner(req.realUser || u)) return json(res, 403, { ok: false, error: 'Only the owner, on the test site' }); return out(t.sample(req.realUser || u)); }
       if (p === '/api/talk/sync' && req.method === 'GET') return out(t.sync(dev, url.searchParams.get('after'), url.searchParams.get('limit')));
       if (p === '/api/talk/ack' && req.method === 'POST') { const b = await readBody(req, 16 * 1024); return out(t.ack(dev, b.upto)); }
+      if (p === '/api/talk/got' && req.method === 'POST') { const b = await readBody(req, 16 * 1024); return out(t.got(dev, b.groupId, b.msgId)); }
       if (p === '/api/talk/stream' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
         res.write('retry: 3000\n\n');
