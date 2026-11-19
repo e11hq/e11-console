@@ -20,6 +20,7 @@ a{color:#2997ff}a:hover{text-decoration:underline}
   /* (each rises from the moment a fifth of the screen shows it until its top is three quarters of the way up — Haris
      2026-11-19 10:56: it began as soon as it peeped in and was over too soon) */
   .rise{animation:rise linear both;animation-timeline:view(block 25% 20%);animation-range:entry-crossing 0% exit-crossing 0%}
+  @keyframes riseM{from{transform:translateY(24px) scale(.98);opacity:0}to{transform:none;opacity:1}}
   @keyframes rise{from{transform:translateY(90px) scale(.96);opacity:0}to{transform:none;opacity:1}}
   .grow{animation:grow linear both;animation-timeline:view();animation-range:entry 0% cover 40%}
   @keyframes grow{from{transform:scale(.9);opacity:0}to{transform:none;opacity:1}}
@@ -55,7 +56,7 @@ a{color:#2997ff}a:hover{text-decoration:underline}
   @media (max-width: 980px){.stage{view-timeline-name:--mac}.lid{animation-timeline:--mac;animation-range:entry 60% cover 52%}.park{animation:none}}
   /* (on a phone the closed laptop sat low, under all the room its open lid needs — Haris 2026-11-19 17:06: it sits up near
      the links, its lid opening over them as it comes up, the words shrinking a little and fading out first, as on the Mac) */
-  @media (max-width: 980px){#console-peek{padding-top:24px !important}.stage{margin-top:calc(-685px * var(--k) * .88)}.lid.lidf{animation-timeline:scroll(root);animation-range:0px 260px;animation-timing-function:ease-in-out}#console .grow{transform-origin:50% 50%;animation:wordsOut ease-in-out both;animation-timeline:scroll(root);animation-range:0px 150px}}
+  @media (max-width: 980px){#console-peek,#talk-peek{padding-top:24px !important}#get{padding-top:16px !important}#get h2{margin-top:8px !important}#console{min-height:calc(100svh - 48px)}.rise{animation-name:riseM}.stage{margin-top:calc(-685px * var(--k) * .88)}.lid.lidf{animation-timeline:scroll(root);animation-range:0px 260px;animation-timing-function:ease-in-out}#console .grow{transform-origin:50% 50%;animation:wordsOut ease-in-out both;animation-timeline:scroll(root);animation-range:0px 150px}}
   /* (closed: the lid down on the laptop, lifting up as it opens — not swung out the other way: Haris 2026-11-19 10:52) */
   @keyframes lid{from{transform:translateZ(-678px) translateY(-2px) rotateX(-90deg)}to{transform:translateZ(-678px) rotateX(0)}}
   .lidf{animation-name:lidf}
