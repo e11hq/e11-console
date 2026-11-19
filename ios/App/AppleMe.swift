@@ -224,8 +224,10 @@ final class MePageVC: ClientsPushedVC, UISearchResultsUpdating, UISearchBarDeleg
       s.searchBar.delegate = self
       if !scopes.isEmpty { s.searchBar.scopeButtonTitles = scopes; s.searchBar.showsScopeBar = true; if #available(iOS 16.0, *) { s.scopeBarActivation = .manual } }
       search = s
-      // (a page opened from a list: Apple's search that tucks away as it scrolls and comes back pulled down — Haris 2026-11-19 15:16)
-      navigationItem.hidesSearchBarWhenScrolling = true
+      // (a page opened from a list: Apple's search that tucks away as it scrolls and comes back pulled down — Haris 2026-11-19 15:16;
+      //  but not with tabs on the search — Team members' Active · Past: tucked, Apple hid only the field and left the tabs
+      //  showing and dead until the search was pulled fully back — always shown there: Haris 2026-11-19 16:41)
+      navigationItem.hidesSearchBarWhenScrolling = scopes.isEmpty
       if #available(iOS 16.0, *) { navigationItem.preferredSearchBarPlacement = .stacked }
       navigationItem.searchController = s   // (given once where it goes is told — ClientVC)
     }
