@@ -820,6 +820,91 @@ extension Main {
         go(0)
       }),
       ("aSrchBackW0", {}), ("aSrchBackW1", {}), ("aSrchBackW2", {}), ("aSrchBackW3", {}), ("aSrchBackW4", {}), ("aSrchBackW5", {}), ("aSrchBackW6", {}), ("aSrchBackW7", {}), ("aSrchBackW8", {}), ("aSrchBackW9", {}), ("aSrchBackW10", {}), ("aSrchBackW11", {}),
+      // (pages opened from a list, their search tucking away — Haris 2026-11-19 15:16; Client Assets is a tab for some roles
+      //  and opened from Me for others, both kept as they are: 15:16): a client's page, Team members, All Client Assets — each
+      //  opened fresh every round, at its top or scrolled, a page opened from it, ‹, a scroll right after; every 0.03 s the
+      //  bar, the search and the list)
+      ("aPush", {
+        var out: [String: Any] = [:]
+        let rounds: [(String, CGFloat, CGFloat, Bool)] = [("open", 0, 0, false), ("top", 0, 0, true), ("top+pull", 0, -60, true), ("top+up", 0, 60, true), ("scrolled", 250, 0, true), ("scrolled+pull", 250, -60, true)]
+        func line(_ nav: UINavigationController?, _ pg: UIViewController?, _ t0: CFTimeInterval) -> String {
+          let nb = nav?.navigationBar, sb = pg?.navigationItem.searchController?.searchBar, sv = (pg as? ClientsPushedVC)?.h.appleScroll
+          let f = sb.flatMap { b in b.window.map { _ in b.convert(b.bounds, to: nil) } } ?? .zero
+          return String(format: "%.2f bar=%d sy=%d sh=%d off=%d in=%d n=%d top=%@", CACurrentMediaTime() - t0, Int(nb?.frame.height ?? -1), Int(f.minY), Int(f.height),
+                        Int(sv?.contentOffset.y ?? 0), Int(sv?.adjustedContentInset.top ?? 0), nav?.viewControllers.count ?? -1,
+                        nav?.topViewController.map { String(describing: type(of: $0)) } ?? "-")
+        }
+        func page(_ name: String, nav: @escaping () -> UINavigationController?, open: @escaping () -> Void, child: @escaping () -> Void, then: @escaping () -> Void) {
+          var res: [String: Any] = [:]
+          func go(_ i: Int) {
+            guard i < rounds.count else { out[name] = res; self.srchAddAny("push", out); then(); return }
+            let (rn, dy, flick, kid) = rounds[i]
+            open()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+              let n = nav(), pg = n?.topViewController
+              let fresh = line(n, pg, CACurrentMediaTime())
+              if dy > 0, let sv = (pg as? ClientsPushedVC)?.h.appleScroll { sv.setContentOffset(CGPoint(x: 0, y: -sv.adjustedContentInset.top + dy), animated: true) }
+              DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                let before = line(n, pg, CACurrentMediaTime())
+                guard kid else { res[rn] = ["fresh": fresh, "before": before]; go(i + 1); return }
+                child()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+                  let t0 = CACurrentMediaTime(); var log: [String] = [], last = ""
+                  func watch() {
+                    let l = line(n, pg, t0); let k = l.split(separator: " ").dropFirst().joined(separator: " ")
+                    if k != last { log.append(l); last = k }
+                    if CACurrentMediaTime() - t0 < 1.8 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { watch() } }
+                  }
+                  watch()
+                  n?.popViewController(animated: true)   // (‹)
+                  if flick != 0 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                      log.append(String(format: "%.2f SCROLL %d", CACurrentMediaTime() - t0, Int(flick)))
+                      if let sv = (pg as? ClientsPushedVC)?.h.appleScroll {
+                        sv.setContentOffset(CGPoint(x: 0, y: sv.contentOffset.y + flick), animated: true)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                          log.append(String(format: "%.2f LET GO", CACurrentMediaTime() - t0))
+                          let top = -sv.adjustedContentInset.top, maxY = max(top, sv.contentSize.height + sv.adjustedContentInset.bottom - sv.bounds.height)
+                          sv.setContentOffset(CGPoint(x: 0, y: min(maxY, max(top, sv.contentOffset.y))), animated: true)
+                        }
+                      }
+                    }
+                  }
+                  DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { res[rn] = ["fresh": fresh, "before": before, "log": log]; go(i + 1) }
+                }
+              }
+            }
+          }
+          go(0)
+        }
+        let meNav = { AppleTabs.shared?.meNav }
+        let tid = cards.first
+        let assets = {
+          page("assets", nav: { self.assetsCtl.selfNav }, open: {
+            self.tab(self.tabKeys.first ?? "today"); self.selectTab("me"); self.assetsCtl.close(animated: false); AppleTabs.shared?.meNav.popToRootViewController(animated: false)
+            self.assetsCtl.command(["show": true, "me": AppData.shared.me ?? "", "start": [String: Any]()])
+          }, child: { if let c = self.assetsCtl.selfFirstClient { self.assetsCtl.selfTapClient(c) } }) {
+            self.assetsCtl.close(animated: false); self.tab(self.tabKeys.first ?? "today")
+          }
+        }
+        let team = {
+          page("team", nav: meNav, open: {
+            self.tab(self.tabKeys.first ?? "today"); self.selectTab("me"); self.assetsCtl.close(animated: false); AppleTabs.shared?.meNav.popToRootViewController(animated: false)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.meCtl.selfOpen("team") }
+          }, child: { if let id = self.meCtl.selfTeam()["other"] as? String { self.meCtl.selfOpenMember(id) } }) {
+            self.meCtl.backToRoot(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { assets() }
+          }
+        }
+        let rows = (AppData.shared.screen("clients", ServerHome.clientsJSON("view=list")).model?["rows"] as? [[String: Any]]) ?? []
+        guard self.tabKeys.contains("projects"), let cid = rows.first?["id"] as? String, let t = tid else { out["client"] = ["none": "no Clients tab, client or task"]; team(); return }
+        page("client", nav: { AppleTabs.shared?.clientsNav }, open: {
+          self.tab("projects"); AppleTabs.shared?.clientsNav.popToRootViewController(animated: false)
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.ev(self.clientsListIfMade, ["ev": "client", "id": cid]) }
+        }, child: { self.openTaskPage(t, tab: "details", focus: "") }) {
+          AppleTabs.shared?.clientsNav.popToRootViewController(animated: false); DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { team() }
+        }
+      }),
+      ("aPushW0", {}), ("aPushW1", {}), ("aPushW2", {}), ("aPushW3", {}), ("aPushW4", {}), ("aPushW5", {}), ("aPushW6", {}), ("aPushW7", {}), ("aPushW8", {}), ("aPushW9", {}), ("aPushW10", {}), ("aPushW11", {}), ("aPushW12", {}), ("aPushW13", {}), ("aPushW14", {}), ("aPushW15", {}), ("aPushW16", {}), ("aPushW17", {}), ("aPushW18", {}), ("aPushW19", {}), ("aPushW20", {}), ("aPushW21", {}), ("aPushW22", {}), ("aPushW23", {}), ("aPushW24", {}), ("aPushW25", {}), ("aPushW26", {}), ("aPushW27", {}), ("aPushW28", {}), ("aPushW29", {}), ("aPushW30", {}), ("aPushW31", {}), ("aPushW32", {}), ("aPushW33", {}), ("aPushW34", {}), ("aPushW35", {}), ("aPushW36", {}), ("aPushW37", {}), ("aPushW38", {}), ("aPushW39", {}), ("aPushW40", {}), ("aPushW41", {}), ("aPushW42", {}), ("aPushW43", {}), ("aPushW44", {}), ("aPushW45", {}), ("aPushW46", {}), ("aPushW47", {}), ("aPushW48", {}), ("aPushW49", {}), ("aPushW50", {}), ("aPushW51", {}), ("aPushW52", {}), ("aPushW53", {}), ("aPushW54", {}), ("aPushW55", {}), ("aPushW56", {}), ("aPushW57", {}), ("aPushW58", {}), ("aPushW59", {}),
       ("aSrchTab", { self.tab(self.tabKeys.first ?? "today")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self.tab("projects"); DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { self.srchAdd("tabBack") } } }),
       ("aLink", {

@@ -91,7 +91,7 @@ try:
                 seen.add(st); last = time.time()
                 w = (res.get('walk') or [{}])[-1]
                 bad = w.get('lost') or w.get('issues')
-                if n == 0 or bad or st == 'done' or 'aSrch' in st:   # (the search pilot: a picture of each moment)
+                if n == 0 or bad or st == 'done' or 'aSrch' in st or 'aPush' in st:   # (the search pilot: a picture of each moment)
                     sh('xcrun', 'simctl', 'io', udid, 'screenshot', os.path.join(SHOTS, f'{n:02d}-{tag}-{st}.png'))
             # (the keyboard-on-return check: the app sent to another app and brought back, as a person does)
             if st and st.endswith('_aKbAway') and st not in seen_away:
