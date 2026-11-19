@@ -91,7 +91,7 @@ try:
                 seen.add(st); last = time.time()
                 w = (res.get('walk') or [{}])[-1]
                 bad = w.get('lost') or w.get('issues')
-                if n == 0 or bad or st == 'done' or 'aSrch' in st or 'aPush' in st:   # (the search pilot: a picture of each moment)
+                if n == 0 or bad or st == 'done' or 'aSrch' in st or 'aPush' in st or 'aTaskFrost' in st:   # (the search pilot: a picture of each moment)
                     sh('xcrun', 'simctl', 'io', udid, 'screenshot', os.path.join(SHOTS, f'{n:02d}-{tag}-{st}.png'))
             # (the keyboard-on-return check: the app sent to another app and brought back, as a person does)
             if st and st.endswith('_aKbAway') and st not in seen_away:
@@ -160,6 +160,8 @@ if APPLE:
     for role, rr in out.items():   # (the search pilot on the Clients list — Haris 2026-11-19 12:06)
         sr = ((rr or {}).get('apple') or {}).get('srch')
         if sr: print('srch', role, json.dumps(sr))
+        tf = ((rr or {}).get('apple') or {}).get('taskFrost')
+        if tf: print('taskFrost', role, json.dumps(tf))   # (the task page's frost as it opens — Haris 2026-11-19 18:15)
     rts = [(role, ((rr or {}).get('apple') or {}).get('reTap') or {}) for role, rr in out.items()]
     for pg, res in [(f'{role} · {k}', v) for role, rt in rts for k, v in rt.items()]:   # (a page's row tapped again just after ‹ — Haris 2026-11-18 22:39 / 22:56)
         rounds = (res or {}).get('rounds') or []

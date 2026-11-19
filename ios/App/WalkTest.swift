@@ -905,6 +905,44 @@ extension Main {
         }
       }),
       ("aPushW0", {}), ("aPushW1", {}), ("aPushW2", {}), ("aPushW3", {}), ("aPushW4", {}), ("aPushW5", {}), ("aPushW6", {}), ("aPushW7", {}), ("aPushW8", {}), ("aPushW9", {}), ("aPushW10", {}), ("aPushW11", {}), ("aPushW12", {}), ("aPushW13", {}), ("aPushW14", {}), ("aPushW15", {}), ("aPushW16", {}), ("aPushW17", {}), ("aPushW18", {}), ("aPushW19", {}), ("aPushW20", {}), ("aPushW21", {}), ("aPushW22", {}), ("aPushW23", {}), ("aPushW24", {}), ("aPushW25", {}), ("aPushW26", {}), ("aPushW27", {}), ("aPushW28", {}), ("aPushW29", {}), ("aPushW30", {}), ("aPushW31", {}), ("aPushW32", {}), ("aPushW33", {}), ("aPushW34", {}), ("aPushW35", {}), ("aPushW36", {}), ("aPushW37", {}), ("aPushW38", {}), ("aPushW39", {}), ("aPushW40", {}), ("aPushW41", {}), ("aPushW42", {}), ("aPushW43", {}), ("aPushW44", {}), ("aPushW45", {}), ("aPushW46", {}), ("aPushW47", {}), ("aPushW48", {}), ("aPushW49", {}), ("aPushW50", {}), ("aPushW51", {}), ("aPushW52", {}), ("aPushW53", {}), ("aPushW54", {}), ("aPushW55", {}), ("aPushW56", {}), ("aPushW57", {}), ("aPushW58", {}), ("aPushW59", {}),
+      // (the task page opening: the frost Haris saw for a glance as it slides in, 2026-11-19 18:15 — every frame for 1.2 s:
+      //  the page's list, where it is against its top, Apple's frost under the bar (hidden or not), Home's list under it,
+      //  and the bar's own background; three openings)
+      ("aTaskFrost", {
+        guard let tid = cards.first else { self.apple("taskFrost", ["none": "no task"]); return }
+        var runs: [[String]] = []
+        func bg(_ v: UIView?) -> String {
+          guard let v = v else { return "-" }
+          var out: [String] = []
+          func walk(_ x: UIView, _ d: Int) { let n = String(describing: type(of: x)); if n.contains("Background") || n.contains("Effect") || n.contains("Pocket") { out.append("\(n):\(String(format: "%.2f", x.alpha))\(x.isHidden ? "h" : "")") }; if d < 4 { x.subviews.forEach { walk($0, d + 1) } } }
+          walk(v, 0); return out.joined(separator: ",")
+        }
+        func run(_ i: Int) {
+          guard i < 3 else { self.apple("taskFrost", ["runs": runs]); return }
+          self.tab(self.tabKeys.first ?? "today")
+          DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            let nav = self.stageNav, home = Main.shared.homeIfMade?.appleScroll
+            let t0 = CACurrentMediaTime(); var log: [String] = [], last = ""
+            self.openTaskPage(tid, tab: "details", focus: "")
+            func watch() {
+              let vc = nav?.topViewController as? TaskVC, sv = vc?.page.scroll
+              var e = "-"
+              if #available(iOS 26.0, *), let sv = sv { e = sv.topEdgeEffect.isHidden ? "hidden" : String(describing: sv.topEdgeEffect.style) }
+              let k = String(format: "top=%@ task[off=%d in=%d edge=%@] home[off=%d in=%d] bar=%@", nav?.topViewController.map { String(describing: type(of: $0)) } ?? "-",
+                             Int(sv?.contentOffset.y ?? 0), Int(sv?.adjustedContentInset.top ?? 0), e, Int(home?.contentOffset.y ?? 0), Int(home?.adjustedContentInset.top ?? 0), bg(nav?.navigationBar))
+              if k != last { log.append(String(format: "%.3f ", CACurrentMediaTime() - t0) + k); last = k }
+              if CACurrentMediaTime() - t0 < 1.2 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.008) { watch() } }
+            }
+            watch()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+              runs.append(log); for x in self.taskPages { self.closeTaskPage(x, animated: false) }
+              DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { run(i + 1) }
+            }
+          }
+        }
+        run(0)
+      }),
+      ("aTaskFrostW0", {}), ("aTaskFrostW1", {}), ("aTaskFrostW2", {}), ("aTaskFrostW3", {}), ("aTaskFrostW4", {}),
       ("aSrchTab", { self.tab(self.tabKeys.first ?? "today")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self.tab("projects"); DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { self.srchAdd("tabBack") } } }),
       ("aLink", {
