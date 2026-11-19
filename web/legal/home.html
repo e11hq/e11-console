@@ -20,7 +20,8 @@
 /* (Apple's hover: the card grows a touch, its shadow deeper) */
 .fcard{transition:transform .35s cubic-bezier(.2,.8,.2,1),box-shadow .35s}
 .fcard:hover{transform:scale(1.02);box-shadow:0 14px 34px rgba(0,0,0,.10) !important}
-.fnav{max-width:1020px;margin:4px auto 0;padding:0 16px;display:flex;justify-content:flex-end;gap:12px}
+/* (above the cards' row: its room for their shadow reaches under the buttons, and Safari let it take their clicks — Haris 20:44) */
+.fnav{max-width:1020px;margin:4px auto 0;padding:0 16px;display:flex;justify-content:flex-end;gap:12px;position:relative;z-index:2}
 .fbtn{width:44px;height:44px;border-radius:50%;border:0;background:#e8e8ed;color:#1d1d1f;display:grid;place-items:center;cursor:pointer;transition:background .2s,opacity .2s}
 .fbtn:hover{background:#dcdce1}.fbtn:disabled{opacity:.35;cursor:default}
 .gcar{--sw:min(1100px, 84vw);margin:0 calc(50% - 50vw);animation:rise linear both;animation-timeline:view(block 25% 20%);animation-range:entry-crossing 0px entry-crossing 420px}
