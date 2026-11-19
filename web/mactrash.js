@@ -58,7 +58,7 @@ const MacTrash = (() => {
     const chips = files.slice(0, 4).map((a) => chip(it, a)).join('') + (files.length > 4 ? `<span class="mtr-more">+${files.length - 4} more</span>` : '');
     const act = (canRestoreIt(it) ? `<button type="button" class="mtr-pill pri" data-mtr="restore" data-id="${it.id}">${sv(RESTORE, 13, 2.1)}Restore</button>` : '<span class="mtr-only">Admins restore clients</span>')
       + (isSuper() ? `<button type="button" class="mtr-rnd" data-mtr="forever" data-id="${it.id}" title="Delete Forever" aria-label="Delete Forever">${sv(BIN, 14)}</button>` : '');
-    return `<div class="mtr-row ${i % 2 === 0 ? 'alt' : ''} ${task ? 'opens' : ''}" data-key="r-${it.id}" data-tr="${it.id}"${task ? ` data-mtr="open" data-id="${it.id}" title="Open to see it (view only)"` : ''}>
+    return `<div class="mtr-row ${i % 2 === 0 ? 'alt' : ''} ${task ? 'opens' : ''}" data-key="r-${it.id}" data-tr="${it.id}"${task ? ` data-mtr="open" data-id="${it.id}"` : ''}>
       <span class="mtr-ic">${sv(IC[it.type] || BIN)}</span>
       <span class="mtr-main"><span class="mtr-t"><span class="mtr-tt">${mk(trashTitle(it))}</span>${task ? '<span class="mtr-open">›</span>' : ''}</span>
         <span class="mtr-sub"><span class="mtr-ty">${TRASH_TYPE[it.type] || ''}</span><span class="mtr-sl">${mk(trashWhere(it))} · ${who} · ${esc(timeAgo(it.deletedAt))}</span></span>
