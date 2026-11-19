@@ -954,11 +954,16 @@ extension Main {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self.shownScreen?.selfFind("a") }
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
           guard let sv = self.shownScreen?.appleScroll else { self.apple("findKb", ["none": "no list"]); return }
-          let maxY = max(-sv.adjustedContentInset.top, sv.contentSize.height + sv.adjustedContentInset.bottom - sv.bounds.height)
-          sv.setContentOffset(CGPoint(x: 0, y: maxY), animated: false)
+          // (to the very end: Apple's list sizes its rows as they come, so its end is gone to again until it stays put)
+          func toEnd() { sv.layoutIfNeeded(); sv.setContentOffset(CGPoint(x: 0, y: max(-sv.adjustedContentInset.top, sv.contentSize.height + sv.adjustedContentInset.bottom - sv.bounds.height)), animated: false); sv.layoutIfNeeded() }
+          for _ in 0..<6 { toEnd() }
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { toEnd() }
           DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
             NotificationCenter.default.removeObserver(o)
-            let cells = (sv as? UICollectionView)?.visibleCells ?? []; let last = cells.map { $0.convert($0.bounds, to: nil).maxY }.max() ?? -1
+            let cv = sv as? UICollectionView, cells = cv?.visibleCells ?? []
+            // (the list's very last row — not the lowest one drawn, which may sit past the screen's foot)
+            let lastIP: IndexPath? = cv.flatMap { c in (0..<c.numberOfSections).reversed().first { c.numberOfItems(inSection: $0) > 0 }.map { IndexPath(item: c.numberOfItems(inSection: $0) - 1, section: $0) } }
+            let last = lastIP.flatMap { cv?.layoutAttributesForItem(at: $0) }.map { cv!.convert($0.frame, to: nil).maxY } ?? -1
             let barEnd = sv.convert(sv.bounds, to: nil).maxY - (sv.adjustedContentInset.bottom - sv.contentInset.bottom) - sv.verticalScrollIndicatorInsets.bottom   // (the scroll bar's end: the view's foot less the safe area and its own inset)
             self.apple("findKb", ["kbTop": Int(kbTop), "lastResultBottom": Int(last), "barEnd": Int(barEnd), "cells": cells.count,
                                   "insetBottom": Int(sv.contentInset.bottom), "adjBottom": Int(sv.adjustedContentInset.bottom), "barInset": Int(sv.verticalScrollIndicatorInsets.bottom),
