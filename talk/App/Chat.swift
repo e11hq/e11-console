@@ -649,6 +649,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   @objc private func head() {
     guard let g = Talk.shared.groups[group] else { return }
     let T = Talk.shared
+    // (the group's card at the start: brought up to date as soon as the group itself changes — a description saved came
+    //  with its note, but the card kept "Add description" until the next message: Haris 2026-11-19 09:28)
+    if let c = sigs["#intro"], c != IntroCell.sig(g) { reload(animated: true) }
     // (a new name or picture crossfades in place — the no-snap rule)
     var hs = Hasher(); hs.combine(g.name); hs.combine(g.pic); hs.combine(T.clients[g.client]?.logo)
     let hsig = hs.finalize()
