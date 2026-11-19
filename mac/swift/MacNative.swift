@@ -72,8 +72,8 @@ final class MenuBar: NSObject {
     it.length = pad + w + (bw > 0 ? 4 + bw : 0) + pad
     let h = b.bounds.height > 0 ? b.bounds.height : NSStatusBar.system.thickness
     mark.frame = NSRect(x: pad, y: ((h - 13) / 2).rounded(), width: w, height: 13)
-    // (level with the wordmark's letters, which sit a point lower in its box — Haris 2026-11-19 12:28)
-    badge.frame = NSRect(x: pad + w + 4, y: ((h - 13) / 2).rounded() + (b.isFlipped ? 1 : -1), width: bw, height: 13)
+    // (centred as the wordmark is, nothing nudged — the nudge put it a point low: Haris 2026-11-19 13:25)
+    badge.frame = NSRect(x: pad + w + 4, y: ((h - 13) / 2).rounded(), width: bw, height: 13)
     b.setAccessibilityLabel(n > 0 ? "E11 Console, \(n) unread" : "E11 Console")
   }
   @objc private func clicked(_ s: Any?) {
