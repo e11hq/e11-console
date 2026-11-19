@@ -14,7 +14,9 @@ a{color:#2997ff}a:hover{text-decoration:underline}
   @keyframes turn{from{transform:perspective(1400px) rotateY(-38deg) rotateX(10deg) translateX(140px) scale(.86);opacity:.35}to{transform:perspective(1400px) rotateY(0) rotateX(0) translateX(0) scale(1);opacity:1}}
   .turn2{animation:turn2 linear both;animation-timeline:view();animation-range:entry 10% cover 50%}
   @keyframes turn2{from{transform:perspective(1400px) rotateY(30deg) translateX(-120px) translateZ(-200px);opacity:0}to{transform:perspective(1400px) rotateY(-8deg) translateX(0) translateZ(0);opacity:1}}
-  .rise{animation:rise linear both;animation-timeline:view();animation-range:entry 0% entry 90%}
+  /* (each rises from the moment a fifth of the screen shows it until its top is three quarters of the way up — Haris
+     2026-11-19 10:56: it began as soon as it peeped in and was over too soon) */
+  .rise{animation:rise linear both;animation-timeline:view(block 25% 20%);animation-range:entry-crossing 0% exit-crossing 0%}
   @keyframes rise{from{transform:translateY(90px) scale(.96);opacity:0}to{transform:none;opacity:1}}
   .grow{animation:grow linear both;animation-timeline:view();animation-range:entry 0% cover 40%}
   @keyframes grow{from{transform:scale(.9);opacity:0}to{transform:none;opacity:1}}
