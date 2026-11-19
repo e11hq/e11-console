@@ -98,17 +98,17 @@ a{color:#2997ff}a:hover{text-decoration:underline}
 (function(){var lid=document.querySelector('.lidf'),img=document.querySelector('.lidf img'),park=document.querySelector('.park'),box=document.getElementById('lapbox'),sec=document.getElementById('console'),st=document.querySelector('.stage');
 if(!lid||!park||!box||!sec||!st)return;var de=document.documentElement,q=0;
 var words=[].slice.call(document.querySelectorAll('#console .grow>*'));
-/* (the Mac, Haris 2026-11-19 15:53: it moves with the page exactly as the words do — nothing of its own — closed at the
-   first screen's foot; as it comes up its lid opens and may cover the words, which fade out just before the lid reaches
-   them; fully open while its top is still clear of the menu bar, then it scrolls on as the page) */
-var S=.72,yb=0;
-function place(){box.style.marginTop='0px';var y=scrollY,B0=box.getBoundingClientRect().bottom+y-40;yb=innerHeight-24;box.style.marginTop=Math.min(0,yb-B0)+'px'}
-function f(){q=0;if(innerWidth<981){de.classList.remove('lapjs');lid.style.transform=park.style.transform=box.style.marginTop='';words.forEach(function(w){w.style.opacity=''});return}
+/* (the Mac, Haris 2026-11-19 15:53 / 15:55: closed at the first screen's foot, it stays there while the words scroll up —
+   fading out just before the lid reaches them — and its lid opens; as the opening ends the black banner's foot reaches the
+   window's, and from there the laptop goes on up with the banner to the next part) */
+var S=.85,yb=0,YE=600;
+function place(){box.style.marginTop='0px';box.style.paddingBottom='40px';var y=scrollY,B0=box.getBoundingClientRect().bottom+y-40;yb=innerHeight-24;
+YE=Math.max(360,Math.round(innerHeight*.66));box.style.marginTop=Math.min(0,yb-B0)+'px';box.style.paddingBottom=(40+Math.max(0,YE-16))+'px'}
+function f(){q=0;if(innerWidth<981){de.classList.remove('lapjs');lid.style.transform=park.style.transform=box.style.marginTop=box.style.paddingBottom='';words.forEach(function(w){w.style.opacity=''});return}
 if(!de.classList.contains('lapjs')){de.classList.add('lapjs');place()}
-var y=scrollY,k=st.getBoundingClientRect().width/1200,H=733*k*S,ye=Math.max(80,yb-H-48-24),p=Math.min(1,Math.max(0,y/ye)),e=p*p*(3-2*p);
-var a=e*Math.PI/2,ls=1+.1142*e;
-lid.style.transform='translateZ(-685px) scale('+ls+') scaleX('+(1+.182*Math.cos(a))+') rotateX('+(-90*(1-e))+'deg)';park.style.transform='scale('+S+')';
-var lt=img.getBoundingClientRect().top,op=1;
+var y=scrollY,p=Math.min(1,Math.max(0,y/YE)),e=p*p*(3-2*p),a=e*Math.PI/2,ls=1+.1142*e;
+lid.style.transform='translateZ(-685px) scale('+ls+') scaleX('+(1+.182*Math.cos(a))+') rotateX('+(-90*(1-e))+'deg)';park.style.transform='translateY('+Math.min(Math.max(y,0),YE)+'px) scale('+S+')';
+var lt=img.getBoundingClientRect().top;
 words.forEach(function(w){var b=w.getBoundingClientRect().bottom;var o=Math.min(1,Math.max(0,(lt-b)/90));w.style.opacity=o<1?String(o):''})}
 function ask(){if(!q)q=requestAnimationFrame(f)}addEventListener('scroll',ask,{passive:true});addEventListener('resize',function(){if(de.classList.contains('lapjs'))place();ask()});addEventListener('load',f);f()})()</script>
 <script>(function(){var a=document.querySelector('nav a[href="#talk"]'),t=document.getElementById('talk');if(!a||!t)return;a.addEventListener('click',function(e){if(innerWidth<981)return;e.preventDefault();var top=t.getBoundingClientRect().top+scrollY,s0=top-48,s1=top+t.offsetHeight-innerHeight;scrollTo({top:s0+.75*(s1-s0),behavior:'smooth'});history.replaceState(null,'','#talk')})})()</script>
