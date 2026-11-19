@@ -615,15 +615,16 @@ final class E11WebView: WKWebView, NSDraggingSource {
   // (the page's drag, of files: one session of ours carrying the page's own data and the files)
   fileprivate func outDrag(_ anImage: NSImage, _ viewLocation: NSPoint, _ event: NSEvent, _ pboard: NSPasteboard, _ slideFlag: Bool) -> Bool {
     guard let items = take() else { return false }
+    // (only the files go in the drag — the page's own data kept apart, shown to the page alone when it's dropped back on
+    //  the window. Its own item went too: Finder counted 2 for one file and took neither — Haris 2026-11-19 12:20)
     keepOwn(pboard)
-    let first = NSDraggingItem(pasteboardWriter: copyItem(pboard))
     let sz = anImage.size
-    first.setDraggingFrame(NSRect(x: viewLocation.x, y: isFlipped ? viewLocation.y - sz.height : viewLocation.y, width: sz.width, height: sz.height), contents: anImage)
-    let rest = FileDrag.providers(items).map { pv -> NSDraggingItem in
-      let d = NSDraggingItem(pasteboardWriter: pv); d.setDraggingFrame(first.draggingFrame, contents: nil); return d
+    let frame = NSRect(x: viewLocation.x, y: isFlipped ? viewLocation.y - sz.height : viewLocation.y, width: sz.width, height: sz.height)
+    let all = FileDrag.providers(items).enumerated().map { i, pv -> NSDraggingItem in
+      let d = NSDraggingItem(pasteboardWriter: pv); d.setDraggingFrame(frame, contents: i == 0 ? anImage : nil); return d
     }
     legacy = true
-    ours = beginDraggingSession(with: [first] + rest, event: event, source: self)
+    ours = beginDraggingSession(with: all, event: event, source: self)
     ours?.animatesToStartingPositionsOnCancelOrFail = slideFlag
     return true
   }
@@ -631,9 +632,11 @@ final class E11WebView: WKWebView, NSDraggingSource {
   override func beginDraggingSession(with items: [NSDraggingItem], event: NSEvent, source: NSDraggingSource) -> NSDraggingSession {
     if ours == nil, let files = take() {
       keepOwn(NSPasteboard(name: .drag))
-      let f = items.first?.draggingFrame ?? .zero
-      let rest = FileDrag.providers(files).map { pv -> NSDraggingItem in let d = NSDraggingItem(pasteboardWriter: pv); d.setDraggingFrame(f, contents: nil); return d }
-      let s = super.beginDraggingSession(with: items + rest, event: event, source: source)
+      let f = items.first?.draggingFrame ?? .zero, pic = items.first?.imageComponentsProvider
+      let all = FileDrag.providers(files).enumerated().map { i, pv -> NSDraggingItem in
+        let d = NSDraggingItem(pasteboardWriter: pv); d.draggingFrame = f; if i == 0 { d.imageComponentsProvider = pic }; return d
+      }
+      let s = super.beginDraggingSession(with: all, event: event, source: source)
       ours = s; legacy = false
       return s
     }
