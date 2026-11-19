@@ -172,6 +172,7 @@ final class TaskVC: UIViewController {
     // (the bar's frost follows the list showing — Details, the comments, a reply)
     page.onEdgeScroll = { [weak self] sv in self?.setContentScrollView(sv, for: .top) }
     page.edgeScroll(page.scroll)
+    holdEdge(true)   // (before its first frame — told in viewWillAppear, the first frame had already shown it: measured)
     page.onMenuMade = { [weak self] in self?.setMenu() }
     page.onDescEditing = { [weak self] _ in self?.setMenu() }
     setMenu()
@@ -221,7 +222,6 @@ final class TaskVC: UIViewController {
   override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); holdEdge(false) }
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
-    if isMovingToParent, a { holdEdge(true) }
     // (Apple's bar shown over the task — only where it was hidden, the app's own navigation; Home's has it always and
     //  isn't told again: told during the slide back it drew its search box anew, the box's glass coming in at the end —
     //  Haris 2026-11-07, E11 Talk never does it)
