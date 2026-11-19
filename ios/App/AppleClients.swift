@@ -213,8 +213,8 @@ final class ClientVC: ClientsPushedVC, UISearchResultsUpdating, UISearchControll
     // (where it goes, told before it's given — told after, Apple's bar placed it again as the page slid in and its box's
     //  glass came in late: Haris 2026-11-10 18:00, the Files app's doesn't)
     // (shown at the top as the approved mock-up's board 2 — under the bar, as Client Assets')
-    // (a page opened from a list: Apple's search that tucks away as it scrolls and comes back pulled down — Haris 2026-11-19 15:16)
-    navigationItem.hidesSearchBarWhenScrolling = true
+    // (always shown again — the tucking search taken out of the pages opened from a list: Haris 2026-11-19 16:09)
+    navigationItem.hidesSearchBarWhenScrolling = false
     if #available(iOS 16.0, *) { navigationItem.preferredSearchBarPlacement = .stacked }
     navigationItem.searchController = s
     h.onAppleResign = { [weak self] in self?.search?.searchBar.resignFirstResponder() }
@@ -271,8 +271,8 @@ final class AssetsVC: ClientsPushedVC, UISearchResultsUpdating, UISearchControll
       s.searchResultsUpdater = self; s.delegate = self
       s.searchBar.placeholder = "Search every client’s files"; s.searchBar.autocorrectionType = .no
       search = s
-      // (a page opened from a list: Apple's search that tucks away as it scrolls and comes back pulled down — Haris 2026-11-19 15:16)
-      navigationItem.hidesSearchBarWhenScrolling = true
+      // (always shown again — the tucking search taken out of the pages opened from a list: Haris 2026-11-19 16:09)
+      navigationItem.hidesSearchBarWhenScrolling = false
       if #available(iOS 16.0, *) { navigationItem.preferredSearchBarPlacement = .stacked }
       navigationItem.searchController = s   // (given once where it goes is told — ClientVC)
       return
@@ -284,8 +284,8 @@ final class AssetsVC: ClientsPushedVC, UISearchResultsUpdating, UISearchControll
       s.searchResultsUpdater = self
       s.searchBar.autocorrectionType = .no
       search = s
-      // (a page opened from a list: Apple's search that tucks away as it scrolls and comes back pulled down — Haris 2026-11-19 15:16)
-      navigationItem.hidesSearchBarWhenScrolling = true
+      // (always shown again — the tucking search taken out of the pages opened from a list: Haris 2026-11-19 16:09)
+      navigationItem.hidesSearchBarWhenScrolling = false
       if #available(iOS 16.0, *) { navigationItem.preferredSearchBarPlacement = .stacked }
       navigationItem.searchController = s   // (given once where it goes is told — ClientVC)
     }
