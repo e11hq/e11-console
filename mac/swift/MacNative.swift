@@ -493,16 +493,40 @@ enum Spot {
 }
 
 /* ================= dragging files out to Finder ================= */
+// (notes on each step of a drag out, to find why Finder turns it down — Haris 2026-11-19 19:33; the app's own Logs folder,
+//  ~/Library/Containers/<the app>/Data/Library/Logs/E11-drag.log, the last 200 lines kept)
+enum DragLog {
+  static let url: URL = {
+    let d = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0].appendingPathComponent("Logs", isDirectory: true)
+    try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+    return d.appendingPathComponent("E11-drag.log")
+  }()
+  private static let q = DispatchQueue(label: "draglog")
+  static func note(_ s: String) {
+    let line = ISO8601DateFormatter().string(from: Date()) + " " + s + "\n"
+    q.async {
+      var t = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+      t += line
+      let lines = t.split(separator: "\n", omittingEmptySubsequences: false)
+      if lines.count > 220 { t = lines.suffix(200).joined(separator: "\n") }
+      try? t.write(to: url, atomically: true, encoding: .utf8)
+    }
+  }
+}
+
 // a file { name, url, size } or a folder { name, folder: true, files: [...], folders: [...] } from the page, promised to
 // wherever it's dropped and fetched with the app's sign-in once it is
 final class OutPromise: NSObject, NSFilePromiseProviderDelegate {
   let item: [String: Any]
   init(_ item: [String: Any]) { self.item = item }
-  func filePromiseProvider(_ p: NSFilePromiseProvider, fileNameForType t: String) -> String { FileDrag.safe(item["name"] as? String ?? "file") }
+  func filePromiseProvider(_ p: NSFilePromiseProvider, fileNameForType t: String) -> String { DragLog.note("Finder asked the name: \(item["name"] ?? "-") type=\(t)"); return FileDrag.safe(item["name"] as? String ?? "file") }
   func filePromiseProvider(_ p: NSFilePromiseProvider, writePromiseTo url: URL, completionHandler done: @escaping (Error?) -> Void) {
     // (dropped back on the window itself: the page's own drop, nothing fetched)
+    DragLog.note("Finder asked for the file at \(url.path) inside=\(FileDrag.inside)")
     if FileDrag.inside { return done(NSError(domain: "E11Console", code: 1, userInfo: [NSLocalizedDescriptionKey: "Dropped in the app"])) }
-    FileDrag.write(item, to: url) ? done(nil) : done(NSError(domain: "E11Console", code: 2, userInfo: [NSLocalizedDescriptionKey: "Couldn’t download " + (item["name"] as? String ?? "the file")]))
+    let ok = FileDrag.write(item, to: url)
+    DragLog.note("file written: \(ok)")
+    ok ? done(nil) : done(NSError(domain: "E11Console", code: 2, userInfo: [NSLocalizedDescriptionKey: "Couldn’t download " + (item["name"] as? String ?? "the file")]))
   }
   func operationQueue(for p: NSFilePromiseProvider) -> OperationQueue { FileDrag.queue }
 }
@@ -534,7 +558,7 @@ enum FileDrag {
       for f in item["folders"] as? [[String: Any]] ?? [] { ok = write(f, to: free(url, safe(f["name"] as? String ?? "Folder"))) && ok }
       return ok
     }
-    guard let s = item["url"] as? String, let src = URL(string: s) else { return false }
+    guard let s = item["url"] as? String, let src = URL(string: s) else { DragLog.note("no url for \(item["name"] ?? "-")"); return false }
     let size = (item["size"] as? NSNumber)?.int64Value ?? 0
     // Finder's own progress on the file's icon while it comes down
     _ = FileManager.default.createFile(atPath: url.path, contents: nil)
@@ -548,6 +572,7 @@ enum FileDrag {
     var ok = false
     let task = URLSession.shared.downloadTask(with: r) { tmp, resp, err in
       defer { wait.signal() }
+      DragLog.note("download: status=\((resp as? HTTPURLResponse)?.statusCode ?? -1) error=\(err?.localizedDescription ?? "-")")
       guard err == nil, let tmp = tmp, ((resp as? HTTPURLResponse)?.statusCode ?? 0) / 100 == 2 else { return }
       do { _ = try FileManager.default.replaceItemAt(url, withItemAt: tmp); ok = true } catch {
         try? FileManager.default.removeItem(at: url)
@@ -600,6 +625,7 @@ final class E11WebView: WKWebView, NSDraggingSource {
   private var ownPB: NSPasteboard?
   private func take() -> [[String: Any]]? {
     defer { outItems = nil }
+    DragLog.note("drag started: page's files=\(outItems?.count ?? -1) age=\(String(format: "%.2f", Date().timeIntervalSince(outAt)))s")
     guard let it = outItems, !it.isEmpty, Date().timeIntervalSince(outAt) < 4 else { return nil }
     return it
   }
@@ -645,6 +671,7 @@ final class E11WebView: WKWebView, NSDraggingSource {
       let d = NSDraggingItem(pasteboardWriter: pv); d.setDraggingFrame(frame, contents: i == 0 ? anImage : nil); return d
     }
     legacy = true
+    DragLog.note("our drag (older kind): \(all.count) file(s) \(items.map { "\($0["name"] ?? "-")" })")
     ours = beginDraggingSession(with: all, event: event, source: self)
     ours?.animatesToStartingPositionsOnCancelOrFail = slideFlag
     return true
@@ -657,6 +684,7 @@ final class E11WebView: WKWebView, NSDraggingSource {
       let all = FileDrag.providers(files).enumerated().map { i, pv -> NSDraggingItem in
         let d = NSDraggingItem(pasteboardWriter: pv); d.draggingFrame = f; if i == 0 { d.imageComponentsProvider = pic }; return d
       }
+      DragLog.note("our drag (newer kind): \(all.count) file(s) \(files.map { "\($0["name"] ?? "-")" })")
       let s = super.beginDraggingSession(with: all, event: event, source: source)
       ours = s; legacy = false
       return s
@@ -683,7 +711,9 @@ final class E11WebView: WKWebView, NSDraggingSource {
       typealias F = @convention(c) (AnyObject, Selector, NSDraggingSession, Int) -> UInt
       op = NSDragOperation(rawValue: unsafeBitCast(imp, to: F.self)(self, sel, s, c.rawValue))
     }
-    return s === ours && c == .outsideApplication ? op.union(.copy) : op
+    let out = s === ours && c == .outsideApplication ? op.union(.copy) : op
+    if c == .outsideApplication { DragLog.note("allowed outside: ours=\(s === ours) op=\(out.rawValue)") }
+    return out
   }
   func draggingSession(_ s: NSDraggingSession, willBeginAt p: NSPoint) {
     if old(s) {
@@ -697,6 +727,7 @@ final class E11WebView: WKWebView, NSDraggingSource {
   }
   func draggingSession(_ s: NSDraggingSession, endedAt p: NSPoint, operation op: NSDragOperation) {
     let mine = s === ours
+    DragLog.note("drag ended: ours=\(mine) operation=\(op.rawValue) (0 = turned down)")
     if old(s) {
       if let (sel, imp) = superIMP("draggedImage:endedAt:operation:") { typealias F = @convention(c) (AnyObject, Selector, NSImage?, NSPoint, UInt) -> Void; unsafeBitCast(imp, to: F.self)(self, sel, nil, p, op.rawValue) }
     } else if let (sel, imp) = superIMP("draggingSession:endedAtPoint:operation:") { typealias F = @convention(c) (AnyObject, Selector, NSDraggingSession, NSPoint, UInt) -> Void; unsafeBitCast(imp, to: F.self)(self, sel, s, p, op.rawValue) }

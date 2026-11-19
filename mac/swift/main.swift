@@ -709,6 +709,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     case "dragOut":
       guard let w = web as? E11WebView, let items = a["items"] as? [[String: Any]], !items.isEmpty else { return done(["ok": false, "error": "Nothing to drag"]) }
       w.outItems = items; w.outAt = Date()
+      DragLog.note("page said dragOut: \(items.map { "\($0["name"] ?? "-") url=\(($0["url"] as? String).map { _ in "yes" } ?? "no")" })")
       MacLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) {}
       done(["ok": true])
     case "owner":
