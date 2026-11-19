@@ -142,6 +142,10 @@ his yes send it with the "Send to TestFlight" workflow (testflight.yml, its buil
 Every time Haris says yes and it's sent, tell him in the same reply what changed since the last TestFlight build, as
 short points (new / better / fixed — from the commits between the two builds) — Haris 2026-11-04.
 
+**App Store "What's New" — always the same one line (Haris, 2026-11-19 22:10):** "We update E11 Console regularly to make
+it smoother for the team. This version includes improvements and bug fixes." (E11 Talk: the same with "E11 Talk"). Never a
+list of changes.
+
 **Commits in Haris's name (Haris, 2026-11-06):** every commit from now on is authored as
 `Muhammad Haris Sharif <haris.insights@gmail.com>`, with Claude as co-author (the `Co-Authored-By: Claude …` line). The
 commits before stay as they are — published history is never rewritten.
