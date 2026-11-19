@@ -649,7 +649,7 @@ const NativeSide = (() => {
       NativeSheet.personFor(currentUserId).then((v) => { mePic = v; later(); }).catch(() => {});
     }
     const theme = document.querySelector('#sidebar .theme-toggle');
-    const auto = ((typeof db !== 'undefined' && db && db.meta && db.meta.prefs) || {}).themeMode === 'auto';
+    const auto = themePref() === 'auto';
     const light = document.documentElement.dataset.theme === 'light';
     const dotEl = document.getElementById('save-dot'), lab = document.getElementById('save-label');
     const create = document.querySelector('#sidebar .create-btn');
@@ -10085,7 +10085,7 @@ const Splash = (() => {
       days[ds] = { g, alone: !!(g && Occasions.alone(g)), rise: hm(t.rise), set: hm(t.set) };
     }
     const m = remembered();
-    toApp({ memo: { themeMode: m.themeMode || 'dark', name: m.name || '', cd: !!m.cd, native: NATIVE_SPLASH, days } });
+    toApp({ memo: { themeMode: m.themeMode || themeDefault(), name: m.name || '', cd: !!m.cd, native: NATIVE_SPLASH, days } });
   }
   const TICK = '<svg viewBox="0 0 16 16" fill="none" stroke="#0c0d0f" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7"/></svg>';
   const remembered = () => { try { return JSON.parse(localStorage.getItem('e11-splash') || '{}') || {}; } catch (e) { return {}; } };
@@ -10121,7 +10121,8 @@ const Splash = (() => {
     if (!el) return;
     const mem = remembered();
     try { dressUp(mem.iconAuto !== false && !mem.season ? autoSeason(todayStr()) : mem.season); } catch (e) { /* keep the everyday look */ }
-    const light = (mem.themeMode === 'auto' ? sunTheme() : mem.themeMode === 'light' ? 'light' : 'dark') === 'light';
+    const tm = mem.themeMode || themeDefault();
+    const light = (tm === 'auto' ? sunTheme() : tm === 'light' ? 'light' : 'dark') === 'light';
     el.classList.toggle('light', light);
     // the page behind the startup screen matches it, so no dark edges show around it on the iPhone
     document.documentElement.style.backgroundColor = light ? '#ffffff' : '#0c0d0f';
@@ -10358,14 +10359,13 @@ function setTheme(mode) {
   Splash.remember({ theme: mode });
   // (the iPhone app keeps Automatic going by itself — Part B step 1: the setting and today's sunrise / sunset with it)
   let extra = {};
-  try { const pm = ((db && db.meta && db.meta.prefs) || {}).themeMode; const t = Theme.sun(new Date()); extra = { themeMode: pm === 'light' || pm === 'auto' ? pm : 'dark', rise: t.rise.toISOString(), set: t.set.toISOString() }; } catch (e) { /* not ready yet */ }
+  try { const pm = themePref(); const t = Theme.sun(new Date()); extra = { themeMode: pm, rise: t.rise.toISOString(), set: t.set.toISOString() }; } catch (e) { /* not ready yet */ }
   Host.call('setAppearance', { mode, ...extra }).catch(() => {});
 }
 // The sun/moon button shows the current appearance: sun = light, moon = dark, half circle = Automatic
 function paintThemeButtons() {
   const light = document.documentElement.dataset.theme === 'light';
-  const pm = ((typeof db !== 'undefined' && db && db.meta && db.meta.prefs) || {}).themeMode;
-  const auto = pm === 'auto';
+  const auto = themePref() === 'auto';
   const title = `${auto ? `Automatic — ${light ? 'light' : 'dark'} now` : light ? 'Light mode' : 'Dark mode'}. Click for ${light ? 'dark' : 'light'} mode`;
   document.querySelectorAll('.theme-toggle').forEach((b) => { b.innerHTML = icon(auto ? 'theme-auto' : light ? 'sun' : 'moon'); b.title = title; b.setAttribute('aria-label', title); });
 }
@@ -10397,7 +10397,7 @@ function sunTheme(now = new Date()) { const t = sunTimesDubai(now); return now >
 const Theme = (() => {
   const sun = sunTimesDubai;
   const autoTheme = (now = new Date()) => { const t = sun(now); return now >= t.rise && now < t.set ? 'light' : 'dark'; };
-  const mode = () => { const m = ((db && db.meta.prefs) || {}).themeMode; return m === 'light' || m === 'auto' ? m : 'dark'; };
+  const mode = () => themePref();
   const apply = () => setTheme(mode() === 'auto' ? autoTheme() : mode());
   function setMode(m) { const v = m === 'light' || m === 'dark' ? m : 'auto'; savePref('themeMode', v); Splash.remember({ themeMode: v }); apply(); }
   setInterval(() => { if (db && currentUserId && mode() === 'auto') apply(); }, 60000);
@@ -10411,6 +10411,9 @@ const Theme = (() => {
   return { apply, setMode, mode, autoTheme, sun, times, picker, cards };
 })();
 function applyThemePref() { Theme.apply(); }
+// (the look for someone who has never picked one: Automatic in the Mac app — Haris 2026-11-19 12:43 — Dark elsewhere, as before)
+function themeDefault() { return typeof Host !== 'undefined' && Host.isMacApp ? 'auto' : 'dark'; }
+function themePref() { const m = ((typeof db !== 'undefined' && db && db.meta && db.meta.prefs) || {}).themeMode; return m === 'light' || m === 'dark' || m === 'auto' ? m : themeDefault(); }
 function initSidebar() {
   const y = $('#copy-year');
   if (y) y.textContent = String(new Date().getFullYear());
