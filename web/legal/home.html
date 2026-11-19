@@ -102,8 +102,12 @@ var words=[].slice.call(document.querySelectorAll('#console .grow>*'));
    fading out just before the lid reaches them — and its lid opens; as the opening ends the black banner's foot reaches the
    window's, and from there the laptop goes on up with the banner to the next part) */
 var S=.85,yb=0,YE=600;
-function place(){box.style.marginTop='0px';box.style.paddingBottom='40px';var y=scrollY,B0=box.getBoundingClientRect().bottom+y-40;yb=innerHeight-24;
-YE=Math.max(360,Math.round(innerHeight*.66));box.style.marginTop=Math.min(0,yb-B0)+'px';box.style.paddingBottom=(40+Math.max(0,YE-16))+'px'}
+function place(){box.style.marginTop='0px';box.style.paddingBottom='40px';var y=scrollY,B0=box.getBoundingClientRect().bottom+y-40;
+/* (closed where it sat before — 170 below the words, or just above the window's foot: Haris 2026-11-19 16:14; as big as fits
+   open under the menu bar from there) */
+var gg=document.querySelector('#console .grow'),tb0=gg.getBoundingClientRect().bottom+y;yb=Math.min(innerHeight-28,tb0+170);
+var k0=st.getBoundingClientRect().width/1200;S=Math.min(.85,(yb-48-24)/(733*k0));
+YE=Math.max(360,Math.round(innerHeight*.66));box.style.marginTop=Math.min(0,yb-B0)+'px';box.style.paddingBottom=Math.max(40,innerHeight+YE-yb)+'px'}
 function f(){q=0;if(innerWidth<981){de.classList.remove('lapjs');lid.style.transform=park.style.transform=box.style.marginTop=box.style.paddingBottom='';words.forEach(function(w){w.style.opacity=''});return}
 if(!de.classList.contains('lapjs')){de.classList.add('lapjs');place()}
 var y=scrollY,p=Math.min(1,Math.max(0,y/YE)),e=p*p*(3-2*p),a=e*Math.PI/2,ls=1+.1142*e;
