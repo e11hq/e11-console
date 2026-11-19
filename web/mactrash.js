@@ -115,16 +115,23 @@ const MacTrash = (() => {
     });
     while (a.childNodes.length > neu.length) a.lastChild.remove();
   }
+  // (the page as it was last shown, kept while another page is up: coming back, it's put back and only what changed is
+  //  drawn — its files' pictures were made afresh and loaded again each time: Haris 2026-11-19 12:13)
+  let kept = null;
   function draw(c) {
     const cur = c.firstElementChild;
     const t = document.createElement('template');
     t.innerHTML = view().trim();
     const nb = t.content.firstElementChild;
     if (cur && c.children.length === 1 && cur.classList.contains('mtr')) morph(cur, nb);
-    else {
+    else if (kept) {
+      c.innerHTML = ''; c.appendChild(kept); morph(kept, nb);
+      const inp = kept.querySelector('#mtr-q'); if (inp) inp.value = ui.trashQ || '';
+    } else {
       c.innerHTML = ''; c.appendChild(nb);
       const inp = nb.querySelector('#mtr-q'); if (inp) inp.value = ui.trashQ || '';
     }
+    kept = c.firstElementChild;
     winRefresh();
   }
   const redraw = () => { const c = $('#content'); if (c && on() && ui.view === 'trash' && !ui.search) draw(c); };
