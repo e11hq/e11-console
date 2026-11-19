@@ -91,7 +91,7 @@ try:
                 seen.add(st); last = time.time()
                 w = (res.get('walk') or [{}])[-1]
                 bad = w.get('lost') or w.get('issues')
-                if n == 0 or bad or st == 'done' or 'aSrch' in st or 'aPush' in st or 'aTaskFrost' in st or 'aFindKb' in st:   # (the search pilot: a picture of each moment)
+                if n == 0 or bad or st == 'done' or 'aSrch' in st or 'aPush' in st or 'aTaskFrost' in st or 'aFindKb' in st or 'aFindPrev' in st:   # (the search pilot: a picture of each moment)
                     sh('xcrun', 'simctl', 'io', udid, 'screenshot', os.path.join(SHOTS, f'{n:02d}-{tag}-{st}.png'))
             # (the keyboard-on-return check: the app sent to another app and brought back, as a person does)
             if st and st.endswith('_aKbAway') and st not in seen_away:
@@ -160,6 +160,8 @@ if APPLE:
     for role, rr in out.items():   # (the search pilot on the Clients list — Haris 2026-11-19 12:06)
         sr = ((rr or {}).get('apple') or {}).get('srch')
         if sr: print('srch', role, json.dumps(sr))
+        fp = ((rr or {}).get('apple') or {}).get('findPrev')
+        if fp: print('findPrev', role, json.dumps(fp))   # (a search result's file opened and closed — Haris 2026-11-19 18:52)
         fk = ((rr or {}).get('apple') or {}).get('findKb')
         if fk: print('findKb', role, json.dumps(fk))   # (search results above the keyboard — Haris 2026-11-19 18:48)
         tf = ((rr or {}).get('apple') or {}).get('taskFrost')

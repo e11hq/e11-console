@@ -968,6 +968,33 @@ extension Main {
         }
       }),
       ("aFindKbW0", {}), ("aFindKbW1", {}),
+      // (a file opened from Client Assets' search and closed: why it flew back or faded — the preview's own note, and whether
+      //  its picture in the results was found on screen as it opened and as it closed — Haris 2026-11-19 18:52)
+      ("aFindPrev", {
+        self.tab(self.tabKeys.first ?? "today"); self.selectTab("me"); self.assetsCtl.close(animated: false); AppleTabs.shared?.meNav.popToRootViewController(animated: false)
+        self.assetsCtl.command(["show": true, "me": AppData.shared.me ?? "", "start": [String: Any]()])
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { self.shownScreen?.selfFind("e") }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+          guard let cv = self.shownScreen?.appleScroll as? UICollectionView else { self.apple("findPrev", ["none": "no list"]); return }
+          let ips = cv.indexPathsForVisibleItems.sorted()
+          guard let ip = ips.first(where: { ip in (cv.cellForItem(at: ip)?.contentView.subviews.isEmpty == false) && cv.numberOfSections > ip.section }) else { self.apple("findPrev", ["none": "no result", "cells": ips.count]); return }
+          var o: [String: Any] = ["cells": ips.count, "tapped": "\(ip.section)/\(ip.item)", "shownScreen": String(describing: type(of: self.shownScreen as Any))]
+          cv.delegate?.collectionView?(cv, didSelectItemAt: ip)
+          DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            o["previewOpen"] = self.previewVC != nil
+            o["openInfo"] = self.previewVC.map { $0.walkInfo } ?? [:]
+            o["searching"] = (self.shownScreen?.geo()["searching"] as? Bool) ?? false
+            o["cellsWhileOpen"] = cv.indexPathsForVisibleItems.count
+            self.previewVC?.close()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+              o["closedHow"] = PreviewVC.lastClose
+              self.apple("findPrev", o)
+              self.shownScreen?.selfFindDone(); self.assetsCtl.close(animated: false); self.tab(self.tabKeys.first ?? "today")
+            }
+          }
+        }
+      }),
+      ("aFindPrevW0", {}), ("aFindPrevW1", {}), ("aFindPrevW2", {}),
       ("aSrchTab", { self.tab(self.tabKeys.first ?? "today")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self.tab("projects"); DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { self.srchAdd("tabBack") } } }),
       ("aLink", {
