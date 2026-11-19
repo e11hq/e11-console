@@ -53,6 +53,9 @@ a{color:#2997ff}a:hover{text-decoration:underline}
   @keyframes park{from{transform:translateY(calc(-1 * var(--lapUp, 0px))) scale(.72)}to{transform:none}}
   /* (on a phone the banner is hardly taller than the screen: the lid opens as the laptop comes in, as before) */
   @media (max-width: 980px){.stage{view-timeline-name:--mac}.lid{animation-timeline:--mac;animation-range:entry 60% cover 52%}.park{animation:none}}
+  /* (on a phone the closed laptop sat low, under all the room its open lid needs — Haris 2026-11-19 17:06: it sits up near
+     the links, its lid opening over them as it comes up, the words shrinking a little and fading out first, as on the Mac) */
+  @media (max-width: 980px){.stage{margin-top:calc(-685px * var(--k) * .88)}.lid.lidf{animation-timeline:scroll(root);animation-range:0px 260px;animation-timing-function:ease-in-out}#console .grow{transform-origin:50% 50%;animation:wordsOut ease-in-out both;animation-timeline:scroll(root);animation-range:0px 150px}}
   /* (closed: the lid down on the laptop, lifting up as it opens — not swung out the other way: Haris 2026-11-19 10:52) */
   @keyframes lid{from{transform:translateZ(-678px) translateY(-2px) rotateX(-90deg)}to{transform:translateZ(-678px) rotateX(0)}}
   .lidf{animation-name:lidf}
