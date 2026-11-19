@@ -1756,8 +1756,10 @@ final class IntroCell: UITableViewCell {
     pic.translatesAutoresizingMaskIntoConstraints = false
     let picBox = UIView(); picBox.translatesAutoresizingMaskIntoConstraints = false; picBox.addSubview(pic)
     // the camera badge: Apple's symbol on a small round button
-    badge.setImage(UIImage(systemName: "camera", withConfiguration: UIImage.SymbolConfiguration(pointSize: 9, weight: .bold)), for: .normal)
-    badge.tintColor = .black; badge.backgroundColor = Look.dyn(0xF5F5F7, 0xE5E5EA); badge.layer.cornerRadius = 9
+    // (filled, a little smaller in its circle so it's clear of the edge; black circle and white camera in light, white
+    //  circle and black camera in dark — Haris 2026-11-19 09:32)
+    badge.setImage(UIImage(systemName: "camera.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 7, weight: .semibold)), for: .normal)
+    badge.tintColor = Look.dyn(0x000000, 0xFFFFFF); badge.backgroundColor = Look.dyn(0xFFFFFF, 0x000000); badge.layer.cornerRadius = 9
     badge.accessibilityLabel = "Change the picture"
     badge.addAction(UIAction { [weak self] _ in self?.onPic?() }, for: .touchUpInside)
     badge.translatesAutoresizingMaskIntoConstraints = false; picBox.addSubview(badge)
