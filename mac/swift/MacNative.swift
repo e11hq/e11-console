@@ -66,8 +66,9 @@ final class MenuBar: NSObject {
   }
   private func count(_ n: Int) {
     guard let it = item, let b = it.button else { return }
-    badge.text = n <= 0 ? "" : n > 99 ? "99+" : String(n)
-    badge.isHidden = n <= 0
+    // (no count in the menu bar — only the E11. mark; the unread count stays in the panel: Haris 2026-11-19 13:48)
+    badge.text = ""
+    badge.isHidden = true
     let pad: CGFloat = 6, w: CGFloat = 13 * 301 / 136, bw = badge.isHidden ? 0 : badge.width
     it.length = pad + w + (bw > 0 ? 4 + bw : 0) + pad
     let h = b.bounds.height > 0 ? b.bounds.height : NSStatusBar.system.thickness
