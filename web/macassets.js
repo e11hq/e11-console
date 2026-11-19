@@ -581,6 +581,29 @@ const MacAssets = (() => {
     e.preventDefault(); e.stopPropagation();
     moving = null; setHot(null);
     if (!m) return;
+    moveTo(m, mv);
+  }, true);
+  // (the Mac app's own drag — macnative.js: the page's web drag is stopped, the app tells where it is and where it was
+  //  let go; the same highlight, move, Undo and spring back as the web drag's — Haris 2026-11-19 20:10)
+  if (on()) window.__e11CaDrag = {
+    at(x, y, inside) {
+      if (!moving) return false;
+      const el = inside ? document.elementFromPoint(x, y) : null, m = el ? moveTarget({ target: el }) : null;
+      setHot(m ? m.card : null, 'Move 1 file here');
+      return !!m;
+    },
+    end(x, y, inside, op) {
+      const d = drag, mv = moving;
+      const el = mv && inside && (op & 16) ? document.elementFromPoint(x, y) : null, m = el ? moveTarget({ target: el }) : null;
+      drag = null; moving = null; setHot(null);
+      if (typeof pageDrag !== 'undefined') pageDrag = false;
+      if (m) { if (d) d.moved = true; moveTo(m, mv); }
+      if (!d) return;
+      if (!d.moved && !op) springBack(d);
+      else d.t.removeAttribute('data-live-moving');
+    },
+  };
+  function moveTo(m, mv) {
     if (drag) drag.moved = true;
     const src = m.c.folders.find((x) => x.id === mv.fid), a = src && src.files.find((x) => x.id === mv.aid);
     if (!a || !canDelAsset(a) || m.fo.files.some((x) => x.id === a.id)) return;
@@ -590,7 +613,7 @@ const MacAssets = (() => {
     setTimeout(() => { if (typeof pageDrag !== 'undefined') pageDrag = false; }, 0);
     setTimeout(() => put(src, m.fo), 0);
     toast(`Moved “${a.name}” to ${m.fo.name}`, { label: 'Undo', run: () => { const c = clientById(mv.cid), s2 = c && c.folders.find((x) => x.id === mv.fid), d2 = c && c.folders.find((x) => x.id === m.fo.id); if (s2 && d2 && d2.files.some((x) => x.id === a.id)) put(d2, s2); } }, 8000);
-  }, true);
+  }
 
   // ---------- uploads under way: small cards floating at the window's bottom right, one stacked on another, each with its
   //  ✕; one done fades out by itself (Haris 19:37). Kept on the window, not the page: going elsewhere doesn't stop them. ----------

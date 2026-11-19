@@ -201,9 +201,21 @@ const MacNative = (() => {
   }
   function undo() { if (made) { made.removeAttribute('draggable'); made = null; } }
   function start(e) {
-    if (!has('dragOut')) return;
+    if (!has('dragOut') && !has('dragNative')) return;
     const o = outOf(e.target);
     if (!o) return;
+    // (the Mac app's own drag, as Finder's: the page's web drag stopped before it starts — WebKit wrote its own data over
+    //  the files once it had, and Finder took nothing (measured in the drag notes, Haris 2026-11-19 20:10). The app says
+    //  where it is as it moves and where it was let go: Client Assets' moves into a folder are done from that)
+    if (has('dragNative')) {
+      e.preventDefault();
+      const pic = o.el.querySelector('.mca-tp') || o.el, r = pic.getBoundingClientRect();
+      dragging = true;
+      NativeMac.call('dragNative', { items: o.items, name: o.items[0].name, rect: { x: r.left, y: r.top, w: r.width, h: r.height } })
+        .then((res) => { if (!res || !res.ok) window.__e11DragEnd(0, 0, false, 0); })
+        .catch(() => window.__e11DragEnd(0, 0, false, 0));
+      return;
+    }
     // (told first — the Mac app adds the files to the drag WebKit starts right after)
     NativeMac.call('dragOut', { items: o.items }).catch(() => {});
     try { e.dataTransfer.setData('application/x-e11-out', '1'); } catch (x) { /* */ }
@@ -219,6 +231,10 @@ const MacNative = (() => {
     if (e.type === 'dragover' && e.dataTransfer) e.dataTransfer.dropEffect = 'none';
   }
   function end() { dragging = false; undo(); }
+  // (the app's drag: where it is — true when it's over somewhere that takes it — and where it was let go; op 16 a move
+  //  the window took, 1 a copy Finder took, 0 turned down)
+  window.__e11DragAt = (x, y, inside) => !!(window.__e11CaDrag && window.__e11CaDrag.at(x, y, inside));
+  window.__e11DragEnd = (x, y, inside, op) => { try { if (window.__e11CaDrag) window.__e11CaDrag.end(x, y, inside, op); } finally { end(); } };
   if (on()) {
     document.addEventListener('pointerdown', down, true);
     document.addEventListener('pointerup', () => setTimeout(() => { if (!dragging) undo(); }, 0), true);
