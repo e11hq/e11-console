@@ -215,6 +215,7 @@ final class Talk {
     groups = gs
     if let p = j["pins"] as? [String: Any] { pinnedGroups = p["groups"] as? [String] ?? []; pinnedClients = p["clients"] as? [String] ?? []; pinnedClientGroups = p["clientGroups"] as? [String] ?? []; pinnedClientsTab = p["clientsTab"] as? [String] ?? [] }
     if save, let d = try? JSONSerialization.data(withJSONObject: j) { try? d.write(to: stateFile, options: .atomic) }
+    OccasionIcon.take(j["icons"])   // (the app's icon on occasions)
     NotificationCenter.default.post(name: .talkChanged, object: nil)
   }
 

@@ -247,6 +247,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
     else { Talk.shared.refresh { if Talk.shared.groups[g] != nil { nav.pushViewController(ChatVC(group: g), animated: true) } } }
   }
   func sceneDidBecomeActive(_ s: UIScene) {
+    OccasionIcon.apply()   // (the app's icon on occasions — today's, Dubai)
     guard Net.shared.signedIn, tabs != nil else { return }
     Net.shared.listen()
     // (signed in through E11 Console, and Console signed out since — its key gone: Talk signs out too, the plan)
