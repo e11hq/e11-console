@@ -60,7 +60,9 @@ final class ClientsVC: UIViewController, TabRoot, UISearchResultsUpdating, UISea
     s.searchBar.autocorrectionType = .no
     search = s
     navigationItem.searchController = s
-    navigationItem.hidesSearchBarWhenScrolling = false
+    // (the pilot, Haris 2026-11-19 12:06: Apple's own search that tucks away as the list scrolls and comes back pulled
+    //  down — the Clients list only, nothing of ours moving the bar or the list)
+    navigationItem.hidesSearchBarWhenScrolling = true
     // (its list in it from the start, as the Inbox's — Haris 2026-11-08)
     BigLine.prime(self, "clients")
     if Main.shared.clientsApple { adopt(Main.shared.clientsListMade()) }

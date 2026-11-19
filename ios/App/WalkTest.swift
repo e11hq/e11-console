@@ -159,6 +159,18 @@ extension Main {
     guard let t = AppleTabs.shared, let i = tabKeys.firstIndex(of: k), let vcs = t.viewControllers, i < vcs.count else { return "?" }
     return vcs[i].tabBarItem.badgeValue ?? ""
   }
+  // (the Clients list's bar at this moment: its height, the search bar's place, the list's top — the search pilot)
+  private func srchState() -> [String: Any] {
+    let n = AppleTabs.shared?.clientsNav, nb = n?.navigationBar, vc = n?.viewControllers.first as? ClientsVC
+    let sb = vc?.search?.searchBar, sv = clientsListIfMade?.appleScroll
+    let f = sb.flatMap { b in b.window.map { _ in b.convert(b.bounds, to: nil) } } ?? .zero
+    return ["bar": Int(nb?.frame.height ?? -1), "barBottom": Int(nb.map { $0.convert($0.bounds, to: nil).maxY } ?? -1),
+            "search": [Int(f.minY), Int(f.height)], "searchShown": f.height > 8 && (sb?.alpha ?? 0) > 0.5 && f.minY >= 0,
+            "offset": Int(sv?.contentOffset.y ?? 0), "inset": Int(sv?.adjustedContentInset.top ?? 0)]
+  }
+  private func srchAdd(_ k: String) {
+    var d = ((selfResult["apple"] as? [String: Any])?["srch"] as? [String: Any]) ?? [:]; d[k] = srchState(); apple("srch", d)
+  }
   private func apple(_ k: String, _ v: [String: Any]) { var a = (selfResult["apple"] as? [String: Any]) ?? [:]; a[k] = v; selfResult["apple"] = a }
 
   // The icon-swap lab: the app's swapping icons at their real sizes and colours —
@@ -735,6 +747,19 @@ extension Main {
       ("aReTapWait101", {}),
       ("aReTapWait102", {}),
       ("aReTapWait103", {}),
+      // (the search pilot on the Clients list, Haris 2026-11-19 12:06: where Apple's bar, its big title and its search are
+      //  at each moment — opened, scrolled down, back at the top, pulled down, after another tab — and a picture of each)
+      ("aSrchOpen", { self.tab("projects"); AppleTabs.shared?.clientsNav.popToRootViewController(animated: false)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { self.srchAdd("open") } }),
+      ("aSrchDown", { if let sv = self.clientsListIfMade?.appleScroll { sv.setContentOffset(CGPoint(x: 0, y: sv.contentOffset.y + 320), animated: true) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { self.srchAdd("down") } }),
+      ("aSrchTop", { if let sv = self.clientsListIfMade?.appleScroll { sv.setContentOffset(CGPoint(x: 0, y: -sv.adjustedContentInset.top), animated: true) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { self.srchAdd("top") } }),
+      ("aSrchPull", { if let sv = self.clientsListIfMade?.appleScroll { sv.setContentOffset(CGPoint(x: 0, y: -sv.adjustedContentInset.top - 70), animated: true)
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { sv.setContentOffset(CGPoint(x: 0, y: -sv.adjustedContentInset.top), animated: true) } }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { self.srchAdd("pull") } }),
+      ("aSrchTab", { self.tab(self.tabKeys.first ?? "today")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self.tab("projects"); DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { self.srchAdd("tabBack") } } }),
       ("aLink", {
         let files = (AppData.shared.meModel("assets", "assets", [""])?["files"] as? [[String: Any]]) ?? []
         guard let f = files.first(where: { ($0["file"] as? String) != nil && CommentCell.isPic($0["name"] as? String ?? "") }), let path = f["file"] as? String else { self.apple("link", ["none": "no picture file"]); return }
