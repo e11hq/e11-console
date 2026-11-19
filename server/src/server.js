@@ -865,6 +865,11 @@ export function createServer(cfg) {
         const f = path.join(webDir, 'legal', 'home.html');
         if (fs.existsSync(f)) { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=300' }); return res.end(req.method === 'HEAD' ? undefined : fs.readFileSync(f)); }
       }
+      // (the picture a shared link shows, and the tab icon browsers ask for by name — Haris 2026-11-19 20:56)
+      if (p === '/og.jpg' || p === '/favicon.ico') {
+        const f = path.join(webDir, 'legal', p === '/og.jpg' ? 'og.jpg' : 'favicon.png');
+        if (fs.existsSync(f)) { res.writeHead(200, { 'Content-Type': p === '/og.jpg' ? 'image/jpeg' : 'image/png', 'Cache-Control': 'public, max-age=86400' }); return res.end(req.method === 'HEAD' ? undefined : fs.readFileSync(f)); }
+      }
       if (p !== '/privacy' && p !== '/support') { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Not found'); }
     }
     // The privacy policy and support page (web/legal): public, no sign-in, no data — the App Store links to them
