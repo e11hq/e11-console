@@ -440,6 +440,7 @@ const MacAssets = (() => {
     hot = card;
     if (card) { const m = card.querySelector('.mca-fm'); if (m) m.setAttribute('data-live-hot', typeof n === 'string' ? n : `Drop ${n ? plural(n, 'file') : 'files'} here`); }
   }
+  function hideOv() { if (ov) { const o = ov; ov = null; o.classList.remove('on'); setTimeout(() => o.remove(), 160); } }
   function clear() {
     clearTimeout(offT); setHot(null);
     if (ov) { const o = ov; ov = null; o.classList.remove('on'); setTimeout(() => o.remove(), 160); }
@@ -452,7 +453,17 @@ const MacAssets = (() => {
     clearTimeout(offT); offT = setTimeout(clear, 1200);   // (a safety net: leaving the window clears it too)
     if (!c || !ct || !ct.contains(e.target) || !canAddAssets()) { clear(); return; }
     if (f) {
-      if (!canUploadTo(c, f)) return;
+      // (over one of this folder's own folders — a small one too: into that one, as the big cards on a client's page;
+      //  only the whole page took it before — Haris 2026-11-19 12:20)
+      const sub = e.target.closest('.mca [data-mca-folder]');
+      const so = sub && sub.dataset.mcaFolder !== f.id && c.folders.find((x) => x.id === sub.dataset.mcaFolder);
+      if (so && canUploadTo(c, so)) {
+        hideOv(); setHot(sub, nFiles(e));
+        e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy';
+        return;
+      }
+      setHot(null);
+      if (!canUploadTo(c, f)) { hideOv(); e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'none'; return; }
       e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy';
       showOv(f, nFiles(e));
       return;
@@ -471,6 +482,14 @@ const MacAssets = (() => {
     const card = hot, files = [...(e.dataTransfer.files || [])];
     clear();
     if (!c) return;
+    if (f && card) {
+      // (into one of the folder's own folders)
+      e.preventDefault(); e.stopPropagation();
+      if (!files.length) return;
+      PageHistory.mark(); ui.folderId = card.dataset.mcaFolder; const ct = document.getElementById('content'); if (ct) ct.scrollTop = 0; render(); PageHistory.mark();
+      uploadIntoFolder(files);
+      return;
+    }
     if (f) {
       if (!canUploadTo(c, f)) return;
       e.preventDefault(); e.stopPropagation();
@@ -492,7 +511,8 @@ const MacAssets = (() => {
     const { c, f, a } = fileOf(t.dataset.mcaFile);
     if (!a || !canDelAsset(a)) { e.preventDefault(); return; }
     moving = { cid: c.id, fid: f.id, aid: a.id };
-    e.dataTransfer.effectAllowed = 'move';
+    // (moved inside the app, copied out to Finder — 'move' alone, Finder couldn't take it: Haris 2026-11-19 12:20)
+    e.dataTransfer.effectAllowed = 'copyMove';
     try { e.dataTransfer.setData('application/x-e11-file', a.id); } catch (x) { /* */ }
     // (what's dragged: the file small, as Finder's — its picture and its name under it — Haris 19:24); the tile itself
     //  is gone from its place until it's let go (19:28)
