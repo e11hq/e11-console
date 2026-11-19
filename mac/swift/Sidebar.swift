@@ -148,6 +148,20 @@ final class SideThemePair: FlippedView {
   let sun = SideIcon(sideSymbol("sun", 12.5), "Light"), moon = SideIcon(sideSymbol("moon", 12.5), "Dark")
   var onPick: ((Bool) -> Void)?   // (true: light)
   var light = false { didSet { if light != oldValue { look() } } }
+  // (Automatic turning light or dark by itself: the knob slides across to it as the app changes — Haris 2026-11-19 12:45)
+  private var placed = false   // (its first look, as the app opens: just set, nothing slides)
+  func slide(to l: Bool) {
+    if !placed { placed = true; light = l; return }
+    guard l != light else { return }
+    guard window != nil, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { light = l; return }
+    let to = l ? NSRect(x: 2, y: 2, width: 28, height: 24) : NSRect(x: 30, y: 2, width: 28, height: 24)
+    sliding = true; light = l
+    NSAnimationContext.runAnimationGroup({ c in
+      c.duration = 0.35; c.timingFunction = CAMediaTimingFunction(controlPoints: 0.3, 0.9, 0.3, 1); c.allowsImplicitAnimation = true
+      knob.animator().frame = to
+    }, completionHandler: { [weak self] in self?.sliding = false })
+  }
+  private var sliding = false
   private let knob = NSView()
   override init(frame: NSRect) {
     super.init(frame: frame)
@@ -168,7 +182,7 @@ final class SideThemePair: FlippedView {
     super.layout()
     sun.frame = NSRect(x: 2, y: 2, width: 28, height: 24)
     moon.frame = NSRect(x: 30, y: 2, width: 28, height: 24)
-    knob.frame = light ? sun.frame : moon.frame
+    if !sliding { knob.frame = light ? sun.frame : moon.frame }
   }
   private func look() {
     sun.img.contentTintColor = light ? .labelColor : .secondaryLabelColor
@@ -496,7 +510,7 @@ final class Sidebar: NSView {
     if hiddenMode && !wasHidden { peekArmed = false; peeking = false }   // (just hidden with the pointer on the button: not shown again until it leaves)
     topRow.isHidden = !on; edgeHot.isHidden = !(on && hiddenMode)
     guard on else { isHidden = true; if wasOn { host?.sideLayoutChanged(animated: false) }; return }
-    themePair.light = (m["light"] as? Bool) == true
+    themePair.slide(to: (m["light"] as? Bool) == true)
     let b = (m["back"] as? Bool) == true, f = (m["fwd"] as? Bool) == true
     topRow.set(back: b, fwd: f, hidden: hiddenMode)
     buildRows()
