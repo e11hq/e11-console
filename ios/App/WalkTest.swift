@@ -1026,24 +1026,34 @@ extension Main {
         self.apple("findPrev", o)
         self.assetsCtl.selfNav?.topViewController?.navigationItem.searchController?.isActive = false; self.assetsCtl.close(animated: false); self.tab(self.tabKeys.first ?? "today")
       }),
-      // (an SVG opened twice: the second time from the pictures kept ready, not drawn again — Haris 2026-11-19 19:22)
-      ("aSvgTwice", {
-        let files = (AppData.shared.meModel("assets", "assets", [""])?["files"] as? [[String: Any]]) ?? []
-        guard let f = files.first(where: { ($0["name"] as? String ?? "").lowercased().hasSuffix(".svg") }), let src = f["src"] as? String else { self.apple("svgTwice", ["none": "no svg file", "files": files.count]); return }
-        var o: [String: Any] = ["name": f["name"] ?? "", "readyBefore": PreviewLoad.ready(src) != nil]
-        let t0 = CACurrentMediaTime()
-        PreviewLoad.image(src) { i1 in
-          o["first"] = ["ms": Int((CACurrentMediaTime() - t0) * 1000), "got": i1 != nil]
-          o["readyAfter"] = PreviewLoad.ready(src) != nil
-          let t1 = CACurrentMediaTime()
-          PreviewLoad.image(src) { i2 in
-            o["second"] = ["ms": Int((CACurrentMediaTime() - t1) * 1000), "got": i2 != nil, "same": i1 != nil && i1 === i2]
-            o["ok"] = (o["readyAfter"] as? Bool) == true && i1 != nil && i1 === i2
-            self.apple("svgTwice", o)
-          }
-        }
+      // (an SVG opened twice: the second time from the pictures kept ready, not drawn again — Haris 2026-11-19 19:22 / 19:33:
+      //  taken from Client Assets' own search, where the logos are — the first run looked in a list with no SVGs)
+      ("aSvgOpen", {
+        self.tab(self.tabKeys.first ?? "today"); self.selectTab("me"); self.assetsCtl.close(animated: false); AppleTabs.shared?.meNav.popToRootViewController(animated: false)
+        self.assetsCtl.command(["show": true, "me": AppData.shared.me ?? "", "start": [String: Any]()])
       }),
-      ("aSvgTwiceW0", {}),
+      ("aSvgSearch", {
+        if let vc = self.assetsCtl.selfNav?.topViewController, let sc = vc.navigationItem.searchController { sc.isActive = true; sc.searchBar.text = "logo"; sc.searchResultsUpdater?.updateSearchResults(for: sc) }
+      }),
+      ("aSvgFirst", {
+        guard let cv = self.assetsCtl.shown?.appleScroll as? UICollectionView, let ip = cv.indexPathsForVisibleItems.sorted().first else { self.apple("svgTwice", ["none": "no rows"]); return }
+        FileTouch.note(cv.cellForItem(at: ip)); cv.delegate?.collectionView?(cv, didSelectItemAt: ip)
+        self.apple("svgTwice", ["row": "\(ip.section)/\(ip.item)"])
+      }),
+      ("aSvgFirstShown", {
+        var o = (((self.selfResult["apple"] as? [String: Any])?["svgTwice"]) as? [String: Any]) ?? [:]
+        let info = self.previewVC.map { $0.walkInfo } ?? [:]
+        o["name"] = info["name"] ?? ""; o["kind"] = info["kind"] ?? ""
+        let src = info["src"] as? String ?? ""
+        o["readyAfterFirst"] = PreviewLoad.ready(src) != nil
+        let t0 = CACurrentMediaTime()
+        PreviewLoad.image(src) { i in o["second"] = ["ms": Int((CACurrentMediaTime() - t0) * 1000), "got": i != nil, "fromStore": PreviewLoad.ready(src).map { $0 === i } ?? false]; self.apple("svgTwice", o) }
+        self.apple("svgTwice", o)
+        self.previewVC?.close()
+      }),
+      ("aSvgDone", {
+        self.assetsCtl.selfNav?.topViewController?.navigationItem.searchController?.isActive = false; self.assetsCtl.close(animated: false); self.tab(self.tabKeys.first ?? "today")
+      }),
       ("aSrchTab", { self.tab(self.tabKeys.first ?? "today")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self.tab("projects"); DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { self.srchAdd("tabBack") } } }),
       ("aLink", {

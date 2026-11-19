@@ -388,7 +388,8 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
   private var closed = false
   // (the self-test's reading — ios/walktest.py --apple: how it opened and, once closed, how it went)
   static var lastClose = ""
-  var walkInfo: [String: Any] { ["shown": true, "source": source != nil, "sourceWindow": source?.window != nil, "openedAt": openedAt, "at": at, "key": keys[safe: at] ?? "", "flies": flies] }
+  var walkInfo: [String: Any] { ["shown": true, "source": source != nil, "sourceWindow": source?.window != nil, "openedAt": openedAt, "at": at, "key": keys[safe: at] ?? "", "flies": flies,
+                                 "src": (files[safe: at]?["src"] as? String) ?? "", "name": (files[safe: at]?["name"] as? String) ?? "", "kind": (files[safe: at]?["kind"] as? String) ?? ""] }
   private var pull: UIPanGestureRecognizer?
 
   init(_ a: [String: Any], event: @escaping ([String: Any]) -> Void) {
