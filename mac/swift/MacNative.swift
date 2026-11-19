@@ -611,6 +611,49 @@ enum FileDrag {
     _ = v.beginDraggingSession(with: dItems, event: e, source: OutSource.shared)
   }
 }
+// (the app's drag of the page's files: a copy to Finder, a move inside the window — where the page takes it)
+final class NativeSource: NSObject, NSDraggingSource {
+  weak var web: E11WebView?
+  init(_ w: E11WebView) { web = w }
+  func draggingSession(_ s: NSDraggingSession, sourceOperationMaskFor c: NSDraggingContext) -> NSDragOperation { c == .outsideApplication ? .copy : .move }
+  func draggingSession(_ s: NSDraggingSession, movedTo p: NSPoint) { web?.nativeMoved(p) }
+  func draggingSession(_ s: NSDraggingSession, endedAt p: NSPoint, operation op: NSDragOperation) { web?.nativeEnded(p, op) }
+}
+// (where the app's drag starts from: over the whole page, never in the way of a click)
+final class DragHost: NSView {
+  override var isFlipped: Bool { true }
+  override func hitTest(_ p: NSPoint) -> NSView? { nil }
+}
+extension FileDrag {
+  // the file small, as Finder's: its picture, and its name under it on blue (as the page's own — Haris 19:24)
+  static func ghost(_ pic: NSImage?, name: String, items: [[String: Any]]) -> NSImage {
+    let first = items.first ?? [:]
+    let ext = ((first["name"] as? String ?? "") as NSString).pathExtension
+    let p = pic ?? ((first["folder"] as? Bool) == true ? NSWorkspace.shared.icon(for: .folder) : NSWorkspace.shared.icon(for: UTType(filenameExtension: ext) ?? .data))
+    let w: CGFloat = 96, h = max(24, min(120, (w * p.size.height / max(1, p.size.width)).rounded()))
+    let font = NSFont.systemFont(ofSize: 11), attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.white]
+    let nm = NSAttributedString(string: name, attributes: attrs)
+    let tw = min(124, ceil(nm.size().width) + 12), th: CGFloat = 16
+    let W = max(w, tw) + 28, H = 6 + h + 4 + th + 6
+    return NSImage(size: NSSize(width: W, height: H), flipped: true) { _ in
+      let pr = NSRect(x: (W - w) / 2, y: 6, width: w, height: h)
+      NSGraphicsContext.saveGraphicsState()
+      let sh = NSShadow(); sh.shadowBlurRadius = 6; sh.shadowOffset = NSSize(width: 0, height: -3); sh.shadowColor = NSColor.black.withAlphaComponent(0.35); sh.set()
+      NSColor.white.setFill(); NSBezierPath(roundedRect: pr, xRadius: 6, yRadius: 6).fill()
+      NSGraphicsContext.restoreGraphicsState()
+      NSGraphicsContext.saveGraphicsState()
+      NSBezierPath(roundedRect: pr, xRadius: 6, yRadius: 6).addClip()
+      p.draw(in: pr)
+      NSGraphicsContext.restoreGraphicsState()
+      let lr = NSRect(x: (W - tw) / 2, y: pr.maxY + 4, width: tw, height: th)
+      NSColor.controlAccentColor.setFill(); NSBezierPath(roundedRect: lr, xRadius: 4, yRadius: 4).fill()
+      let para = NSMutableParagraphStyle(); para.lineBreakMode = .byTruncatingMiddle; para.alignment = .center
+      var a2 = attrs; a2[.paragraphStyle] = para
+      NSAttributedString(string: name, attributes: a2).draw(in: lr.insetBy(dx: 6, dy: 1))
+      return true
+    }
+  }
+}
 final class OutSource: NSObject, NSDraggingSource {
   static let shared = OutSource()
   func draggingSession(_ s: NSDraggingSession, sourceOperationMaskFor c: NSDraggingContext) -> NSDragOperation { c == .outsideApplication ? .copy : [] }
@@ -746,20 +789,91 @@ final class E11WebView: WKWebView, NSDraggingSource {
     if mine { ours = nil; legacy = true; ownPB = nil; DispatchQueue.main.asyncAfter(deadline: .now() + 1) { FileDrag.inside = false } }
   }
 
+  // ---- the app's own drag of the page's files (command dragNative — Haris 2026-11-19 20:10): the page stops its web
+  //  drag, and the drag is started here as Finder's, its file promises written by AppKit alone, so WebKit never writes
+  //  over them. Over the window, the page is told where it is (Client Assets lights the folder it would go in) and where
+  //  it was let go; nothing of it reaches WebKit's own drop. ----
+  private var lastMouse: NSEvent?
+  override func mouseDown(with e: NSEvent) { lastMouse = e; super.mouseDown(with: e) }
+  override func mouseDragged(with e: NSEvent) { lastMouse = e; super.mouseDragged(with: e) }
+  private lazy var dragHost: DragHost = { let h = DragHost(frame: bounds); h.autoresizingMask = [.width, .height]; addSubview(h); return h }()
+  fileprivate var native: NSDraggingSession?
+  private var nativeSrc: NativeSource?
+  fileprivate var hotOK = false
+  private var asking = false, askAgain: NSPoint?
+  private func isNative(_ d: NSDraggingInfo?) -> Bool { if let s = native, let d = d { return d.draggingSequenceNumber == s.draggingSequenceNumber }; return false }
+  // (a point on the screen as the page's own: its spot in the page, and whether it's over the page at all)
+  private func pagePoint(_ screen: NSPoint) -> (x: Double, y: Double, inside: Bool) {
+    guard let w = window else { return (0, 0, false) }
+    let wp = w.convertPoint(fromScreen: screen), vp = convert(wp, from: nil), z = max(0.1, pageZoom)
+    return (Double(vp.x / z), Double((isFlipped ? vp.y : bounds.height - vp.y) / z), w.isVisible && bounds.contains(vp))
+  }
+  func nativeDrag(_ items: [[String: Any]], rect r: CGRect, name: String, done: @escaping (Bool) -> Void) {
+    guard native == nil, let e = lastMouse, NSEvent.pressedMouseButtons & 1 == 1 else {
+      DragLog.note("app's drag: not started — mouse=\(lastMouse != nil) held=\(NSEvent.pressedMouseButtons & 1)"); return done(false)
+    }
+    let z = max(0.1, pageZoom)
+    let go: (NSImage?) -> Void = { [weak self] pic in
+      guard let self = self else { return done(false) }
+      guard NSEvent.pressedMouseButtons & 1 == 1, self.native == nil else { DragLog.note("app's drag: let go before it began"); return done(false) }
+      let img = FileDrag.ghost(pic, name: name, items: items)
+      let p = self.dragHost.convert(e.locationInWindow, from: nil), sz = img.size
+      let all = FileDrag.providers(items).enumerated().map { i, pv -> NSDraggingItem in
+        let d = NSDraggingItem(pasteboardWriter: pv)
+        d.setDraggingFrame(NSRect(x: p.x - sz.width / 2 + CGFloat(i * 6), y: p.y - sz.height / 2 + CGFloat(i * 6), width: sz.width, height: sz.height), contents: i == 0 ? img : nil)
+        return d
+      }
+      let src = NativeSource(self)
+      self.nativeSrc = src; self.hotOK = false
+      let s = self.dragHost.beginDraggingSession(with: all, event: e, source: src)
+      s.animatesToStartingPositionsOnCancelOrFail = true
+      self.native = s
+      DragLog.note("app's drag began: \(items.map { "\($0["name"] ?? "-")" }) pasteboard items=\(s.draggingPasteboard.pasteboardItems?.count ?? -1) " + (s.draggingPasteboard.pasteboardItems ?? []).enumerated().map { "#\($0.offset) \($0.element.types.map { $0.rawValue })" }.joined(separator: " "))
+      done(true)
+    }
+    guard r.width > 1, r.height > 1 else { return go(nil) }
+    let c = WKSnapshotConfiguration()
+    c.rect = CGRect(x: r.minX * z, y: r.minY * z, width: r.width * z, height: r.height * z)
+    c.afterScreenUpdates = false
+    takeSnapshot(with: c) { im, _ in go(im) }
+  }
+  fileprivate func nativeMoved(_ p: NSPoint) {
+    if asking { askAgain = p; return }
+    asking = true
+    let q = pagePoint(p)
+    evaluateJavaScript("window.__e11DragAt ? window.__e11DragAt(\(q.x), \(q.y), \(q.inside)) : false") { [weak self] r, _ in
+      guard let self = self else { return }
+      self.hotOK = q.inside && (r as? Bool) == true
+      self.asking = false
+      if let n = self.askAgain { self.askAgain = nil; if self.native != nil { self.nativeMoved(n) } }
+    }
+  }
+  fileprivate func nativeEnded(_ p: NSPoint, _ op: NSDragOperation) {
+    let q = pagePoint(p)
+    DragLog.note("app's drag ended: operation=\(op.rawValue) (1 copy to Finder, 16 moved in the app, 0 turned down) over the page=\(q.inside)")
+    native = nil; nativeSrc = nil; hotOK = false; askAgain = nil
+    evaluateJavaScript("window.__e11DragEnd && window.__e11DragEnd(\(q.x), \(q.y), \(q.inside), \(op.rawValue))", completionHandler: nil)
+    // (the press WebKit saw never had its letting go — given it, far off the page, so nothing under it is clicked)
+    if let w = window, let up = NSEvent.mouseEvent(with: .leftMouseUp, location: NSPoint(x: -10000, y: -10000), modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                   windowNumber: w.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0) { super.mouseUp(with: up) }
+    lastMouse = nil
+  }
+
   // ---- as the drop's destination: our drag over the window shows the page only its own data ----
   private func seen(_ d: NSDraggingInfo) -> NSDraggingInfo {
     guard let s = ours, let pb = ownPB, d.draggingSequenceNumber == s.draggingSequenceNumber else { return d }
     return OwnDrag(d, pb)
   }
-  override func draggingEntered(_ d: NSDraggingInfo) -> NSDragOperation { super.draggingEntered(seen(d)) }
-  override func draggingUpdated(_ d: NSDraggingInfo) -> NSDragOperation { super.draggingUpdated(seen(d)) }
-  override func draggingExited(_ d: NSDraggingInfo?) { super.draggingExited(d.map { seen($0) }) }
-  override func prepareForDragOperation(_ d: NSDraggingInfo) -> Bool { super.prepareForDragOperation(seen(d)) }
+  override func draggingEntered(_ d: NSDraggingInfo) -> NSDragOperation { isNative(d) ? (hotOK ? .move : []) : super.draggingEntered(seen(d)) }
+  override func draggingUpdated(_ d: NSDraggingInfo) -> NSDragOperation { isNative(d) ? (hotOK ? .move : []) : super.draggingUpdated(seen(d)) }
+  override func draggingExited(_ d: NSDraggingInfo?) { if isNative(d) { return }; super.draggingExited(d.map { seen($0) }) }
+  override func prepareForDragOperation(_ d: NSDraggingInfo) -> Bool { isNative(d) ? hotOK : super.prepareForDragOperation(seen(d)) }
   override func performDragOperation(_ d: NSDraggingInfo) -> Bool {
+    if isNative(d) { return hotOK }
     if ours != nil { FileDrag.inside = true }
     return super.performDragOperation(seen(d))
   }
-  override func concludeDragOperation(_ d: NSDraggingInfo?) { super.concludeDragOperation(d.map { seen($0) }) }
+  override func concludeDragOperation(_ d: NSDraggingInfo?) { if isNative(d) { return }; super.concludeDragOperation(d.map { seen($0) }) }
 }
 
 // the drag as the page is shown it: everything as it is, but the page's own data only

@@ -712,6 +712,12 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       DragLog.note("page said dragOut: \(items.map { "\($0["name"] ?? "-") url=\(($0["url"] as? String).map { _ in "yes" } ?? "no")" })")
       MacLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) {}
       done(["ok": true])
+    case "dragNative":
+      guard let w = web as? E11WebView, let items = a["items"] as? [[String: Any]], !items.isEmpty else { return done(["ok": false, "error": "Nothing to drag"]) }
+      let r = a["rect"] as? [String: Any] ?? [:], n = { (k: String) in CGFloat((r[k] as? NSNumber)?.doubleValue ?? 0) }
+      DragLog.note("page said dragNative: \(items.map { "\($0["name"] ?? "-") url=\(($0["url"] as? String).map { _ in "yes" } ?? "no")" })")
+      MacLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) {}
+      w.nativeDrag(items, rect: CGRect(x: n("x"), y: n("y"), width: n("w"), height: n("h")), name: a["name"] as? String ?? (items[0]["name"] as? String ?? "file")) { ok in done(["ok": ok]) }
     case "owner":
       let on = (a["on"] as? Bool) == true
       if defaults.bool(forKey: "e11_is_owner") != on { defaults.set(on, forKey: "e11_is_owner"); buildMenu() }
@@ -722,7 +728,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     case "appInfo":
       done(["ok": true, "server": SERVER, "shell": SHELL_VERSION, "native": "swift",
             "version": info["CFBundleShortVersionString"] as? String ?? "3.0.0", "touchID": defaults.bool(forKey: LOCK_KEY),
-            "glass": FileManager.default.fileExists(atPath: Bundle.main.bundlePath + "/Contents/Resources/Assets.car"), "store": IS_STORE, "apns": IS_STORE, "sidebar": true, "preview": true, "info": true, "trashWindow": true, "bar": true, "spotlight": true, "dragOut": true])
+            "glass": FileManager.default.fileExists(atPath: Bundle.main.bundlePath + "/Contents/Resources/Assets.car"), "store": IS_STORE, "apns": IS_STORE, "sidebar": true, "preview": true, "info": true, "trashWindow": true, "bar": true, "spotlight": true, "dragOut": true, "dragNative": true])
     default: done(["ok": false, "error": "Unknown command " + cmd])
     }
   }
