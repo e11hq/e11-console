@@ -168,8 +168,20 @@ extension Main {
             "search": [Int(f.minY), Int(f.height)], "searchShown": f.height > 8 && (sb?.alpha ?? 0) > 0.5 && f.minY >= 0,
             "offset": Int(sv?.contentOffset.y ?? 0), "inset": Int(sv?.adjustedContentInset.top ?? 0)]
   }
+  private func srchAddAny(_ k: String, _ v: Any) {
+    var d = ((selfResult["apple"] as? [String: Any])?["srch"] as? [String: Any]) ?? [:]; d[k] = v; apple("srch", d)
+  }
   private func srchAdd(_ k: String) {
     var d = ((selfResult["apple"] as? [String: Any])?["srch"] as? [String: Any]) ?? [:]; d[k] = srchState(); apple("srch", d)
+  }
+  // (one line of the Clients list's bar at this moment, for the back-to-the-list watch: the bar's height, the search bar's
+  //  top and height, the list's offset and top inset, its content height against its own — Haris 2026-11-19 15:05)
+  private func srchLine(_ t0: CFTimeInterval) -> String {
+    let n = AppleTabs.shared?.clientsNav, nb = n?.navigationBar, vc = n?.viewControllers.first as? ClientsVC
+    let sb = vc?.search?.searchBar, sv = clientsListIfMade?.appleScroll
+    let f = sb.flatMap { b in b.window.map { _ in b.convert(b.bounds, to: nil) } } ?? .zero
+    return String(format: "%.2f bar=%d sy=%d sh=%d off=%d in=%d n=%d", CACurrentMediaTime() - t0, Int(nb?.frame.height ?? -1), Int(f.minY), Int(f.height),
+                  Int(sv?.contentOffset.y ?? 0), Int(sv?.adjustedContentInset.top ?? 0), n?.viewControllers.count ?? -1)
   }
   private func apple(_ k: String, _ v: [String: Any]) { var a = (selfResult["apple"] as? [String: Any]) ?? [:]; a[k] = v; selfResult["apple"] = a }
 
@@ -758,6 +770,41 @@ extension Main {
       ("aSrchPull", { if let sv = self.clientsListIfMade?.appleScroll { sv.setContentOffset(CGPoint(x: 0, y: -sv.adjustedContentInset.top - 70), animated: true)
           DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { sv.setContentOffset(CGPoint(x: 0, y: -sv.adjustedContentInset.top), animated: true) } }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { self.srchAdd("pull") } }),
+      // (back to the list from a client — the jump Haris saw, 2026-11-19 15:02: from the list at the top, with the search tucked,
+      //  and just pulled; a client opened, ‹, and every 0.03 s for 1.8 s where the bar, the search and the list are)
+      ("aSrchBack", {
+        let rows = (AppData.shared.screen("clients", ServerHome.clientsJSON("view=list")).model?["rows"] as? [[String: Any]]) ?? []
+        guard let cid = rows.first?["id"] as? String else { self.srchAddAny("back", ["none": "no client"]); return }
+        self.tab("projects"); AppleTabs.shared?.clientsNav.popToRootViewController(animated: false)
+        let starts: [(String, CGFloat)] = [("top", 0), ("tucked", 70), ("part", 30)]
+        var out: [String: Any] = ["clients": rows.count]
+        func go(_ i: Int) {
+          guard i < starts.count else { self.srchAddAny("back", out); return }
+          let (name, dy) = starts[i]
+          if let sv = self.clientsListIfMade?.appleScroll { sv.setContentOffset(CGPoint(x: 0, y: -sv.adjustedContentInset.top + dy), animated: false) }
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            let before = self.srchLine(CACurrentMediaTime())
+            self.ev(self.clientsListIfMade, ["ev": "client", "id": cid])
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+              let t0 = CACurrentMediaTime(); var log: [String] = [], last = ""
+              func watch() {
+                let l = self.srchLine(t0); let k = l.split(separator: " ").dropFirst().joined(separator: " ")
+                if k != last { log.append(l); last = k }
+                if CACurrentMediaTime() - t0 < 1.8 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { watch() } }
+              }
+              watch()
+              AppleTabs.shared?.clientsNav.popViewController(animated: true)   // (‹)
+              DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                out[name] = ["before": before, "log": log]
+                AppleTabs.shared?.clientsNav.popToRootViewController(animated: false)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { go(i + 1) }
+              }
+            }
+          }
+        }
+        go(0)
+      }),
+      ("aSrchBackW0", {}), ("aSrchBackW1", {}), ("aSrchBackW2", {}), ("aSrchBackW3", {}), ("aSrchBackW4", {}), ("aSrchBackW5", {}),
       ("aSrchTab", { self.tab(self.tabKeys.first ?? "today")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self.tab("projects"); DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { self.srchAdd("tabBack") } } }),
       ("aLink", {
