@@ -3350,7 +3350,8 @@ const NativeMe = (() => {
       jobs.push(api(fresh ? 'POST' : 'GET', '/api/updates', fresh ? { action: 'check' } : undefined).then((s) => { about.updates = updatesOf(s); }).catch((e) => { about.updates = { error: e.message }; }));
       jobs.push(loadVideo(false));
       // (Cloudflare storage — the owner's line, Haris 2026-11-20 19:41)
-      jobs.push(api('GET', '/api/r2/usage').then((u) => { about.r2 = r2Lines(u); }).catch((e) => { about.r2 = { head: 'Couldn’t check', sub: e.message }; }));
+      // (sent the moment it's known — it waited for the slowest check and stayed on "Checking…", Haris 2026-11-21 00:05)
+      jobs.push(api('GET', '/api/r2/usage').then((u) => { about.r2 = r2Lines(u); }).catch((e) => { about.r2 = { head: 'Couldn’t check', sub: e.message }; }).then(sendAbout));
     }
     sendAbout();
     await Promise.all(jobs);
