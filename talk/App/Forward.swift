@@ -9,6 +9,7 @@ final class ForwardVC: UIViewController, UICollectionViewDelegate, UISearchResul
   private let msgs: [Msg], from: String
   private var msg: Msg { msgs[0] }
   private var cv: UICollectionView!
+  private var kbRoom: KeyboardRoom?
   private var data: UICollectionViewDiffableDataSource<String, String>!
   private var picked: [String] = []            // group ids, in the order picked
   private var query = ""
@@ -43,6 +44,8 @@ final class ForwardVC: UIViewController, UICollectionViewDelegate, UISearchResul
     cv.autoresizingMask = [.flexibleWidth, .flexibleHeight]; cv.allowsMultipleSelection = true; cv.delegate = self
     cv.keyboardDismissMode = .interactive
     view.addSubview(cv)
+    // (the keyboard up — searching: the last chats above it)
+    kbRoom = KeyboardRoom(view) { [weak self] _ in self?.view.setNeedsLayout() }
 
     let rowReg = UICollectionView.CellRegistration<UICollectionViewListCell, String> { [weak self] cell, _, key in
       guard let self = self, let g = Talk.shared.groups[String(key.dropFirst(2))] else { return }
@@ -101,7 +104,9 @@ final class ForwardVC: UIViewController, UICollectionViewDelegate, UISearchResul
     sendBar.frame = CGRect(x: 0, y: view.bounds.height - h, width: W, height: h)
     names.frame = CGRect(x: 20, y: 10, width: W - 96, height: 44)
     sendB.frame = CGRect(x: W - 64, y: 10, width: 44, height: 44)
-    cv.contentInset.bottom = picked.isEmpty ? 0 : 64
+    let kb = kbRoom?.extra ?? 0
+    cv.contentInset.bottom = max(picked.isEmpty ? 0 : 64, kb)
+    if cv.verticalScrollIndicatorInsets.bottom != kb { cv.verticalScrollIndicatorInsets.bottom = kb }
   }
 
   // RECENT: the five chats most lately busy; ALL GROUPS: every group by name — searching: the matching ones, one list
