@@ -251,17 +251,15 @@ final class Talk {
       touched.forEach { NotificationCenter.default.post(name: .talkGroup, object: $0) }
       if !touched.isEmpty { NotificationCenter.default.post(name: .talkChanged, object: nil); self.badge() }
       if groupChanged { self.refresh() }
-      /* "Got it" only once the photos, videos, voice notes and files that came are on this phone: the server lets a
-         message's file go as soon as every phone has said so — said before the file was fetched, it was gone ("That file
-         isn't on the server any more", Haris 2026-11-12). A file that can't be fetched now: nothing said, so the same
-         messages come again on the next sync and it's tried again. */
+      /* "Got it" at once, as WhatsApp: the messages show straight away, with their blurred pictures, and the photos, videos,
+         voice notes and files come behind them, three at a time (catchUp, with their rings) — they waited for every file
+         first, and on a slow line your own messages stayed on the clock behind them (Haris 2026-11-20 16:58). The server
+         keeps each file until every phone has downloaded it, and a day more (1.9.111). Only a link's small preview picture
+         and site icon still come first. A file that can't be fetched now: tried again by the next catchUp. */
       let files = evs.flatMap { e -> [String] in
         guard (e["type"] as? String) == "msg" else { return [] }
         let k = e["link"] as? [String: Any]
-        // (a link's preview picture and site icon too; a photo, video or file only when Auto-download takes it now — the
-        //  rest stay on the server for this phone, downloaded with a tap or once Wi-Fi is back)
-        let fileId = Auto.now(e["kind"] as? String ?? "file") ? (e["file"] as? [String: Any])?["id"] as? String : nil
-        return [fileId, (k?["img"] as? [String: Any])?["id"] as? String, (k?["icon"] as? [String: Any])?["id"] as? String]
+        return [(k?["img"] as? [String: Any])?["id"] as? String, (k?["icon"] as? [String: Any])?["id"] as? String]
           .compactMap { $0 }.filter { !$0.hasPrefix("local-") && !FileManager.default.fileExists(atPath: Net.local($0).path) }
       }
       self.syncing = true
@@ -269,6 +267,7 @@ final class Talk {
         guard let self = self else { return }
         self.syncing = false
         if ok, last > self.lastSeq { self.lastSeq = last; Net.shared.post("/api/talk/ack", ["upto": last]) }
+        if !touched.isEmpty { self.catchUp() }
         // (more only when this one brought some — a server that said "more" with nothing kept the phone asking again at once,
         //  over and over, found 2026-11-13)
         if ok && (((j["more"] as? Bool) == true && !evs.isEmpty) || self.again) { self.again = false; self.sync(done) } else { self.again = false; done?() }
@@ -276,9 +275,10 @@ final class Talk {
     }
   }
   // Auto-download: what a switch or the network kept back, now that it may come (the last 30 days; three at a time)
-  private var catching = false
+  private var catching = false, catchAgain = false
   func catchUp() {
-    guard !catching, me != nil else { return }
+    guard me != nil else { return }
+    if catching { catchAgain = true; return }   // (new ones while some are coming: looked at again once those are in)
     let since = Date().timeIntervalSince1970 * 1000 - Auto.keep
     var want: [(id: String, size: Int, kind: String)] = []
     for g in groups.keys {
@@ -292,7 +292,7 @@ final class Talk {
     catching = true
     var running = 0
     func next() {
-      if want.isEmpty && running == 0 { catching = false; return }
+      if want.isEmpty && running == 0 { catching = false; if catchAgain { catchAgain = false; catchUp() }; return }
       // (Wi-Fi gone again, or a switch turned off: the rest wait)
       while running < 3, let w = want.first {
         want.removeFirst()
@@ -300,7 +300,7 @@ final class Talk {
         running += 1
         Downloads.shared.start(w.id, size: w.size) { _ in running -= 1; next() }
       }
-      if running == 0 { catching = false }
+      if running == 0 { catching = false; if catchAgain { catchAgain = false; catchUp() } }
     }
     next()
   }

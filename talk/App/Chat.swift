@@ -1151,26 +1151,40 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     replying = nil
     toBottom(true)
   }
+  // (photos made ready off the screen's own thread, one after another in the order chosen — ten photos at once had the
+  //  screen wait for each to be read and shrunk; Haris 2026-11-20 17:08)
+  private static let readyQ = DispatchQueue(label: "talk.send.ready", qos: .userInitiated)
+  // a photo as WhatsApp sends one (Haris 2026-11-20 17:08: "lets use the whatsapp's strategy"): 2048 across, or HD 4096
+  // across — never the camera's full original (that's a file) — read straight down to that size by iPhone's own ImageIO,
+  // turned the right way up. (Before: drawn at the screen's 3× — a "2048" photo went at 6144 across, an HD one whole.)
+  static func photoData(_ d: Data, hd: Bool) -> (data: Data, w: Double, h: Double)? {
+    guard let src = CGImageSourceCreateWithData(d as CFData, nil) else { return nil }
+    let o: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
+                              kCGImageSourceThumbnailMaxPixelSize: hd ? 4096 : 2048, kCGImageSourceShouldCacheImmediately: true]
+    guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, o as CFDictionary),
+          let out = UIImage(cgImage: cg).jpegData(compressionQuality: 0.8) else { return nil }
+    return (out, Double(cg.width), Double(cg.height))
+  }
   fileprivate func sendFile(_ url: URL, kind: String, name: String, caption: String = "", hd: Bool = false, album: String? = nil) {
     if kind == "video" { sendVideo(url, name: name, caption: caption, hd: hd, album: album); return }
-    guard let d = try? Data(contentsOf: url) else { toast("Couldn’t read that file"); return }
-    var w: Double? = nil, h: Double? = nil, data = d
-    var kind = kind
-    if kind == "photo", let img = UIImage(data: d) {
-      // (a photo shrunk to 2048 across, as WhatsApp sends one)
-      // (HD: the photo at its full size)
-      let s = hd ? 1 : min(1, 2048 / max(img.size.width, img.size.height))
-      let sized = s < 1 ? UIGraphicsImageRenderer(size: CGSize(width: img.size.width * s, height: img.size.height * s)).image { _ in img.draw(in: CGRect(origin: .zero, size: CGSize(width: img.size.width * s, height: img.size.height * s))) } : img
-      data = sized.jpegData(compressionQuality: hd ? 0.92 : 0.8) ?? d
-      w = Double(sized.size.width); h = Double(sized.size.height)
-    } else if kind == "photo" { kind = "file" }
-    let tmpId = "local-" + UUID().uuidString
-    let local = FileManager.default.temporaryDirectory.appendingPathComponent(tmpId)
-    try? data.write(to: local)
-    let fname = kind == "photo" ? (name as NSString).deletingPathExtension + ".jpg" : name
-    Talk.shared.send(group, text: caption, reply: replying, file: Msg.FileRef(id: tmpId, name: fname, size: data.count, kind: kind, w: w, h: h, secs: nil), localFile: local, upload: data, album: kind == "photo" ? album : nil)
+    let reply = replying
     replying = nil
-    toBottom(true)
+    ChatVC.readyQ.async { [weak self] in
+      guard let d = try? Data(contentsOf: url) else { DispatchQueue.main.async { toast("Couldn’t read that file") }; return }
+      var w: Double? = nil, h: Double? = nil, data = d
+      var kind = kind
+      if kind == "photo", let p = ChatVC.photoData(d, hd: hd) { data = p.data; w = p.w; h = p.h }
+      else if kind == "photo" { kind = "file" }
+      let tmpId = "local-" + UUID().uuidString
+      let local = FileManager.default.temporaryDirectory.appendingPathComponent(tmpId)
+      try? data.write(to: local)
+      let fname = kind == "photo" ? (name as NSString).deletingPathExtension + ".jpg" : name
+      DispatchQueue.main.async {
+        guard let self = self else { return }
+        Talk.shared.send(self.group, text: caption, reply: reply, file: Msg.FileRef(id: tmpId, name: fname, size: data.count, kind: kind, w: w, h: h, secs: nil), localFile: local, upload: data, album: kind == "photo" ? album : nil)
+        self.toBottom(true)
+      }
+    }
   }
 
   // ---------- reading ----------
