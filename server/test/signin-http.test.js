@@ -153,4 +153,6 @@ test("a client contact (E11 Talk only): their first code when added, a password,
   const sk = await post('/api/signin/device', { name: 'iPhone' }, H('lina@e11.test'));
   const sw = await api('who', { key: sk.key });
   assert.equal(sw.name, 'Lina Haddad'); assert.equal((await api('who', { key: 'nope.nope' })).ok, false);
+  // (the email too — the apps' own sign-in screens show it under the name)
+  assert.equal(sw.email, 'lina@e11.test'); assert.equal(who.email, 'layla@oasis.test');
 });

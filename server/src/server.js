@@ -823,9 +823,15 @@ export function createServer(cfg) {
       // (the app, after Face ID / Touch ID: its device key instead of the password)
       if (what === 'device') { const x = signin.useDevice(body.key); return x.ok ? finish(res, x.email, r) : json(res, 200, x); }
       // (E11 Talk, before Face ID: whose E11 Console key this is — board 53's "Continue as …"; the key is the secret)
+      // (and the email, and the name from E11 Console's own people when E11 Talk doesn't have them — the apps' own sign-in
+      //  screens: "Welcome back, …" / "Continue as …" with the email under it, Haris 2026-11-20 09:22)
       if (what === 'who') {
-        const e = signin.keyEmail(body.key), w = e ? talkNow().personByEmail(e) : null;
-        return json(res, 200, w ? { ok: true, name: w.name || e, role: w.role || '', color: w.color || null } : { ok: false });
+        const e = signin.keyEmail(body.key);
+        if (!e) return json(res, 200, { ok: false });
+        const w = talkNow().personByEmail(e), u = w ? null : access.userByEmail(e);
+        if (!w && !u) return json(res, 200, { ok: false });
+        const p = w || u;
+        return json(res, 200, { ok: true, name: p.name || e, role: p.role || '', color: p.color || null, email: e });
       }
     }
     return json(res, 404, { ok: false, error: 'Not found' });
