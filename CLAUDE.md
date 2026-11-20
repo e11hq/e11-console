@@ -24,9 +24,9 @@ made from an old copy of Talk (main's `talk/` folder) instead of the real app, a
 - Before sending any build: the build number read exactly from its own line (`… build N signed`), checked by eye, never
   pulled loosely out of text.
 - When unsure, stop and check — never jump in.
-- Before starting any build, ask Haris which checks to run with it — the walk-through for every role, the simulator
-  self-test, anything else — and run only what he says (Haris, 2026-11-17 23:24). (The iPhone workflow's `walk` input
-  turns the walk-through on or off; its self-test runs every time today unless the workflow is changed.)
+- **No self-tests and no walk-throughs on any build, unless Haris asks for them by name for that build** (Haris,
+  2026-11-20 23:30 — replaces asking before each build, 2026-11-17 23:24). Every app: iPhone `ios.yml` with
+  `checks=none` and `walk=no`; Mac and Talk workflows likewise with their checks off. Don't ask which checks; build quick.
 
 **The Mac app's pages — LOCKED (Haris, 2026-11-18 15:11: "First lock, Home, client assets, search"):** as they are at main c7ab144,
 branches `locked/mac-home-c7ab144`, `locked/mac-client-assets-c7ab144`, `locked/mac-search-c7ab144` (never moved or deleted) —
