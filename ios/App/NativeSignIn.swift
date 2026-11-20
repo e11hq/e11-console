@@ -71,12 +71,14 @@ final class SignInFlow {
   // the first screen: "Continue as …" (Talk, with Console's key), "Welcome back" (this phone's key), else the form
   func begin() {
     if let k = continueKey ?? key {
-      screen.show(continueKey != nil ? .continueAs : .welcome, email: email, name: nil, color: nil)
+      screen.show(continueKey != nil ? .continueAs : .welcome, email: continueKey != nil ? "" : email, name: nil, color: nil)
       api.post("who", ["key": k]) { [weak self] j in
         guard let self = self else { return }
         if (j?["ok"] as? Bool) == true, let n = j?["name"] as? String, !n.isEmpty {
           self.who = (n, UIColor(signInHex: j?["color"] as? String))
-          self.screen.setPerson(name: n, color: self.who?.color)
+          // (the key's own email — the server says it since 2026-11-20; kept for the form's Email too)
+          if let e = j?["email"] as? String, !e.isEmpty { self.email = e; UserDefaults.standard.set(e, forKey: "e11_signin_email") }
+          self.screen.setPerson(name: n, color: self.who?.color, email: self.email)
         }
       }
     } else {
@@ -439,7 +441,7 @@ final class SignInScreen: UIView, UITextFieldDelegate {
         self.foot.text = nil
       case .continueAs:
         self.titleL.text = self.first.isEmpty ? "Continue?" : "Continue as\n\(self.first)?"
-        self.sub.text = "You’re signed in to E11 Console\non this iPhone"
+        self.sub.text = "You’re signed in to E11 Console\non this iPhone" + (e.isEmpty ? "" : " as \(e)")
         mc?.title = self.first.isEmpty ? "Continue" : "Continue as \(self.first)"
         mc?.image = UIImage(systemName: Self.bioSymbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .medium))
         self.foot.text = "\(self.brand.app) is always the account E11 Console is signed in as — to change it, sign out of E11 Console."
@@ -458,9 +460,9 @@ final class SignInScreen: UIView, UITextFieldDelegate {
     else if isForm, focusPassword, !e.isEmpty { DispatchQueue.main.async { self.f2.becomeFirstResponder() } }
   }
   // who "Welcome back" / "Continue as" is, once the server has said
-  func setPerson(name n: String, color c: UIColor?) {
+  func setPerson(name n: String, color c: UIColor?, email e: String) {
     guard mode == .welcome || mode == .continueAs else { name = n; color = c; return }
-    show(mode, email: email, name: n, color: c)
+    show(mode, email: e, name: n, color: c)
   }
 
   private static var bioType: LABiometryType { let c = LAContext(); var e: NSError?; _ = c.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &e); return c.biometryType }
