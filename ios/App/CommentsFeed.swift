@@ -119,7 +119,8 @@ final class FeedLoader {
     cookies { c in
       guard let url = URL(string: path.hasPrefix("http") ? path : serverURL() + path) else { return done(nil) }
       var r = URLRequest(url: url); if !c.isEmpty { r.setValue(c, forHTTPHeaderField: "Cookie") }
-      URLSession.shared.dataTask(with: r) { d, res, _ in
+      // (from R2 when it has a fast copy, the sign-in left behind — R2Native; else the office, as before)
+      R2Files.dataTask(r) { d, res, _ in
         let ok = ((res as? HTTPURLResponse)?.statusCode ?? 200) == 200
         // (an SVG: drawn on the phone and kept as a PNG — SVGRaster)
         if ok, let d = d, UIImage(data: d) == nil, SVGRaster.looksLikeSVG(d, path: path) {
@@ -143,7 +144,7 @@ final class FeedLoader {
     cookies { c in
       guard let url = URL(string: path.hasPrefix("http") ? path : serverURL() + path) else { return done(nil) }
       var r = URLRequest(url: url); if !c.isEmpty { r.setValue(c, forHTTPHeaderField: "Cookie") }
-      URLSession.shared.dataTask(with: r) { d, _, _ in DispatchQueue.main.async { done(d) } }.resume()
+      R2Files.dataTask(r) { d, _, _ in DispatchQueue.main.async { done(d) } }.resume()   // (R2Native)
     }
   }
   // (one ask per link however many rows show it at once — they waited on the same answer, asked twice: the full test, 2026-11-16)

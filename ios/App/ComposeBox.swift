@@ -35,6 +35,8 @@ enum Uploader {
     let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
     let job = UploadCenter.shared.begin(name, size, bar: bar)
     var over = false
+    // (a file is 5 GB at most — Haris 2026-11-20 19:53; the server refuses more)
+    if size > 5_000_000_000 { UploadCenter.shared.end(job); return done(nil) }
     let finish: (String?) -> Void = { p in
       guard !over else { return }
       over = true
@@ -115,13 +117,80 @@ enum Uploader {
       next = piece
       go(0, then: pump)
     }
+    // R2's way (server 1.9.114+): where to put it (the server keeps its place in the office), its 8 MB parts three side by
+    // side straight to R2 — each by iPhone itself (Transfers), no sign-in with them — then "it's all there". Anything that
+    // doesn't work: what was started is let go and the file goes the usual way, from the start.
+    func viaR2(_ c: String) {
+      var start: [String: Any] = ["name": name, "size": size]
+      if let d = dest { start["dest"] = d } else { start["taskId"] = task }
+      R2Files.post("/api/host/r2Start", start, cookie: c) { j, _ in
+        guard !over else { return }
+        guard let j = j, (j["ok"] as? Bool) == true, let path = j["path"] as? String else { return attempt(nil, c) }
+        let urls: [String] = (j["put"] as? String).map { [$0] } ?? (j["urls"] as? [String] ?? [])
+        let part = Int64((j["part"] as? NSNumber)?.int64Value ?? max(size, 1))
+        guard !urls.isEmpty, part > 0 else { return attempt(nil, c) }
+        var etags = [String](repeating: "", count: urls.count), next = 0, going = 0, quit = false
+        var gone: Int64 = 0, partly: [Int: Int64] = [:]
+        let report = {
+          let at = min(size, gone + partly.values.reduce(0, +))
+          UploadCenter.shared.step(job, at)
+          progress(size > 0 ? Double(at) / Double(size) : 1)
+        }
+        let giveUp: () -> Void = {
+          guard !quit else { return }
+          quit = true
+          UploadCenter.shared.running[job]?.forEach { $0.cancel() }; UploadCenter.shared.running[job] = nil
+          R2Files.post("/api/host/trashMany", ["paths": [path]], cookie: c) { _, _ in }
+          if over || UploadCenter.shared.cancelled(job) { return finish(nil) }
+          UploadCenter.shared.step(job, 0); progress(0)
+          attempt(nil, c)
+        }
+        func put(_ i: Int) {
+          let off = Int64(i) * part, len = min(part, size - off)
+          guard let fh = try? FileHandle(forReadingFrom: url) else { return giveUp() }
+          try? fh.seek(toOffset: UInt64(off))
+          let data = (try? fh.read(upToCount: Int(len))) ?? Data()
+          try? fh.close()
+          guard let u = URL(string: urls[i]) else { return giveUp() }
+          var r = URLRequest(url: u); r.httpMethod = "PUT"
+          let t = Transfers.shared.upload(r, body: data, sent: { n in guard !quit else { return }; partly[i] = min(n, Int64(data.count)); report() }) { resp, _ in
+            going -= 1
+            guard !over, !quit else { return }
+            guard resp?.statusCode == 200 else { return giveUp() }
+            etags[i] = resp?.value(forHTTPHeaderField: "ETag") ?? ""
+            partly[i] = nil; gone += Int64(data.count); report()
+            pump()
+          }
+          if let t = t { UploadCenter.shared.running[job, default: []].append(t) } else { going -= 1; giveUp() }
+        }
+        func pump() {
+          guard !over, !quit else { return }
+          if UploadCenter.shared.cancelled(job) { quit = true; R2Files.post("/api/host/trashMany", ["paths": [path]], cookie: c) { _, _ in }; return finish(nil) }
+          while going < together && next < urls.count { let i = next; next += 1; going += 1; put(i) }
+          if going == 0 && next >= urls.count {
+            var end: [String: Any] = ["path": path]
+            if j["urls"] != nil { end["etags"] = etags }
+            cookies { c2 in DispatchQueue.main.async {
+              R2Files.post("/api/host/r2Done", end, cookie: c2) { d, _ in
+                guard !over, !quit else { return }
+                guard (d?["ok"] as? Bool) == true else { return giveUp() }
+                finish(path)
+              }
+            } }
+          }
+        }
+        pump()
+      }
+    }
     cookies { c in DispatchQueue.main.async {
       guard !over else { return }
       // (in the office: a pass for this file, from the server — none: the usual way)
       var body: [String: Any] = ["kind": "up", "name": name, "size": size]
       if let d = dest { body["dest"] = d } else { body["taskId"] = task }
-      Office.pass(body, cookie: c) { p in attempt(p, c) }
+      // (not in the office: straight into Cloudflare R2, the office pulls it in — R2Native; the usual way if that can't)
+      Office.pass(body, cookie: c) { p in if p != nil { attempt(p, c) } else { viaR2(c) } }
     } }
+
   }
 }
 
