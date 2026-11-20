@@ -26,6 +26,11 @@ services:
       - APNS_KEY_FILE=/data/keys/AuthKey_PASTE_KEY_ID.p8
       - APNS_KEY_ID=PASTE_KEY_ID
       - APNS_TEAM_ID=PASTE_TEAM_ID
+      # E11 Talk's message files in Cloudflare R2 (bucket e11-talk-files; the token "E11 Talk server (e11-talk-files)")
+      - R2_ACCOUNT_ID=b3aa5be224723a4af7f1efc3af99a5ed
+      - R2_BUCKET=e11-talk-files
+      - R2_ACCESS_KEY_ID=PASTE_R2_ACCESS_KEY_ID
+      - R2_SECRET_ACCESS_KEY=PASTE_R2_SECRET_ACCESS_KEY
     volumes:
       - /share/E11Console/live:/data
       - "/share/E11 Share:/share:ro"   # the projects shared folder, READ-ONLY (files picked from it are copied on the NAS)

@@ -34,6 +34,11 @@ const cfg = {
   apnsKeyId: env.APNS_KEY_ID || '',
   apnsTeamId: env.APNS_TEAM_ID || '',
   apnsTopic: env.APNS_TOPIC || 'ae.e11.console.ios',
+  // E11 Talk's message files in Cloudflare R2 (r2.js): the bucket and its key — set on the NAS only, never shared
+  r2Account: env.R2_ACCOUNT_ID || '',
+  r2KeyId: env.R2_ACCESS_KEY_ID || '',
+  r2Secret: env.R2_SECRET_ACCESS_KEY || '',
+  r2Bucket: env.R2_BUCKET || '',
   // The App Review copy only (review.js): the demo account's password — set on the NAS's "review" app, never elsewhere
   reviewPassword: env.REVIEW_PASSWORD || '',
   reviewEmail: env.REVIEW_EMAIL || '',

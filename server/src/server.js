@@ -51,6 +51,8 @@ import { createFileLinks } from './flinks.js';
 import { createPlans } from './plans.js';
 import { createReview, resetDue, REVIEW_USER_ID } from './review.js';
 import { demoData, DEMO_REVIEWER } from './demo.js';
+import { createR2 } from './r2.js';
+import { Readable } from 'node:stream';
 
 const BODY_LIMIT = 12 * 1024 * 1024; // 2 MB upload pieces arrive as ~2.7 MB of base64
 
@@ -94,7 +96,9 @@ export function createServer(cfg) {
   // E11 Talk (talk.js): its own database, its own phones for notifications (the same Apple key, its own app)
   const talkApns = createApns({ store, keyFile: cfg.apnsKeyFile, keyId: cfg.apnsKeyId, teamId: cfg.apnsTeamId, topic: cfg.talkTopic || 'ae.e11.talk.ios', kvPrefix: 'talk-apns', hosts: cfg.apnsHosts, connectOpts: cfg.apnsConnectOpts });
   let talk = null;
-  const talkNow = () => talk || (talk = createTalk({ dataDir, store, access, apns: talkApns, dbFile: cfg.talkDbFile, now: cfg.now || (() => Date.now()), links: () => fileLinks, signinCode: talkSigninCode, icons: () => appStart.icons(store.get('meta', 'main') || {}, (cfg.now || Date.now)(), appIcon.info()), onUnread: talkUnreadTell, keepFor: review ? REVIEW_USER_ID : null }));
+  // (E11 Talk's message files in Cloudflare R2 when its keys are set — r2.js; Haris 2026-11-20 17:52)
+  const talkR2 = createR2({ account: cfg.r2Account, keyId: cfg.r2KeyId, secret: cfg.r2Secret, bucket: cfg.r2Bucket, endpoint: cfg.r2Endpoint || '', now: cfg.now || (() => Date.now()), fetchImpl: cfg.r2Fetch || null });
+  const talkNow = () => talk || (talk = createTalk({ dataDir, store, access, apns: talkApns, dbFile: cfg.talkDbFile, now: cfg.now || (() => Date.now()), links: () => fileLinks, signinCode: talkSigninCode, icons: () => appStart.icons(store.get('meta', 'main') || {}, (cfg.now || Date.now)(), appIcon.info()), onUnread: talkUnreadTell, keepFor: review ? REVIEW_USER_ID : null, r2: talkR2 }));
   // (E11 Talk's unread count on E11 Console's Talk button: to that person's open apps, as it changes)
   function talkUnreadTell(uids) { if (!talk) return; const set = new Set(uids.map(String)); for (const s of streams) if (set.has(s.userId)) { try { send(s, 'talkUnread', { n: talk.unreadFor(s.userId) }); } catch { /* fine */ } } }
   function talkContact(e) { try { return talkNow().contactByEmail(e); } catch { return null; } }
@@ -646,6 +650,37 @@ export function createServer(cfg) {
   }
   // E11 Talk over the office network (office.js passes 'talkup' / 'talkfile'): a piece of a file being sent, or a message's
   // file fetched — as /api/talk/upload and /api/talk/file/…, for the person the pass is for (Haris 2026-11-17 20:13)
+  async function talkR2Out(t, f, req, res, dev) {
+    const key = t.r2Key(f);
+    const k = f.fkey ? Buffer.from(f.fkey, 'base64') : null;
+    const type = mimeOf(f.name);
+    try {
+      if (!k) {
+        const r = await t.r2.get(key);
+        if (!r.ok) return json(res, 404, { ok: false, error: 'That file has gone' });
+        res.writeHead(200, { 'Content-Type': type, 'Content-Length': f.size, 'Cache-Control': 'private, max-age=86400' });
+        if (req.method === 'HEAD') return res.end();
+        res.on('finish', () => t.fetched(dev, f.id));
+        return Readable.fromWeb(r.body).pipe(res);
+      }
+      // (locked on the phone with AES-GCM, Apple's "combined" form: 12 bytes of nonce, the file, 16 bytes of tag)
+      const len = f.size - 28;
+      if (len < 0) return json(res, 404, { ok: false, error: 'That file has gone' });
+      const tr = await t.r2.get(key, `bytes=${f.size - 16}-${f.size - 1}`);
+      const nr = await t.r2.get(key, 'bytes=0-11');
+      if (!tr.ok || !nr.ok) return json(res, 404, { ok: false, error: 'That file has gone' });
+      const tag = Buffer.from(await tr.arrayBuffer()), nonce = Buffer.from(await nr.arrayBuffer());
+      res.writeHead(200, { 'Content-Type': type, 'Content-Length': len, 'Cache-Control': 'private, max-age=86400' });
+      if (req.method === 'HEAD') return res.end();
+      if (len === 0) { res.end(); return t.fetched(dev, f.id); }
+      const r = await t.r2.get(key, `bytes=12-${f.size - 17}`);
+      if (!r.ok) return res.destroy();
+      const d = crypto.createDecipheriv('aes-256-gcm', k, nonce); d.setAuthTag(tag);
+      d.on('error', () => res.destroy());
+      res.on('finish', () => t.fetched(dev, f.id));
+      return Readable.fromWeb(r.body).pipe(d).pipe(res);
+    } catch (e) { console.error('talk r2 read:', e.message); if (!res.headersSent) return json(res, 502, { ok: false, error: 'Couldn’t reach the file' }); res.destroy(); }
+  }
   async function talkLocal(pass, url, req, res) {
     const t = talkNow();
     if (!t) return json(res, 404, { ok: false, error: 'Not found' });
@@ -729,12 +764,21 @@ export function createServer(cfg) {
         if (macId || req.talkMac) return json(res, 403, { ok: false, error: 'Only on the phone' });
         if (!office.info(req).local) return json(res, 409, { ok: false, error: 'Not in the office' });
         const who = { u: dev.id, person: dev.person || null };
-        if (b.kind === 'file') { const f = t.fileFor(dev, String(b.id || '')); if (!f) return json(res, 404, { ok: false, error: 'That file has gone' }); return out({ ok: true, ...office.ticket(dev, { k: 'talkfile', ...who, fid: f.id }) }); }
+        if (b.kind === 'file') { const f = t.fileFor(dev, String(b.id || '')); if (!f) return json(res, 404, { ok: false, error: 'That file has gone' }); if (f.store === 'r2') return json(res, 409, { ok: false, error: 'In R2' }); return out({ ok: true, ...office.ticket(dev, { k: 'talkfile', ...who, fid: f.id }) }); }
         return out({ ok: true, ...office.ticket(dev, { k: 'talkup', ...who }) });
       }
+      // a message's file straight to R2 (newer phones): where to put it, then "it's all there"
+      if (p === '/api/talk/r2/start' && req.method === 'POST') { const b = await readBody(req, 16 * 1024); return out(await t.r2Start(u, b.name, b.size)); }
+      if (p === '/api/talk/r2/done' && req.method === 'POST') { const b = await readBody(req, 64 * 1024); return out(await t.r2Done(u, b.id, b.etags)); }
       if (p.startsWith('/api/talk/file/') && (req.method === 'GET' || req.method === 'HEAD')) {
         const f = t.fileFor(dev, p.slice('/api/talk/file/'.length));
         if (!f) return json(res, 404, { ok: false, error: 'That file has gone' });
+        if (f.store === 'r2') {
+          // (newer phones, ?r2=1: off to R2 itself for 15 minutes — it reaches the phone locked, the phone unlocks it. Counted
+          //  as fetched now: the file stays a day more for a download that breaks — 1.9.111)
+          if (url.searchParams.get('r2') === '1' && t.r2 && t.r2.on) { t.fetched(dev, f.id); res.writeHead(302, { Location: t.r2.getUrl(t.r2Key(f)), 'Cache-Control': 'no-store' }); return res.end(); }
+          return talkR2Out(t, f, req, res, dev);
+        }
         const full = t.filePath(f), size = fs.statSync(full).size;
         const m = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || ''));
         const type = mimeOf(f.name);

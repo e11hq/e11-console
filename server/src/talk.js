@@ -28,7 +28,7 @@ const PHONE_MS = 30 * 86400000;         // a linked Mac goes when its phone hasn
 const rid = (p) => p + '-' + crypto.randomBytes(8).toString('hex');
 const clip = (s, n) => String(s == null ? '' : s).slice(0, n);
 
-export function createTalk({ dataDir, store, access, apns = null, now = () => Date.now(), dbFile, links = () => null, signinCode = null, onUnread = null, keepFor = null, icons = null }) {
+export function createTalk({ dataDir, store, access, apns = null, now = () => Date.now(), dbFile, links = () => null, signinCode = null, onUnread = null, keepFor = null, icons = null, r2 = null }) {
   const file = dbFile || path.join(dataDir, 'db', 'talk.sqlite');
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
   const relay = path.join(dataDir, 'talk-relay');
@@ -64,6 +64,11 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   try { db.exec('ALTER TABLE link_codes ADD COLUMN ticket TEXT'); } catch { /* already there */ }
   try { db.exec('ALTER TABLE link_codes ADD COLUMN key TEXT'); } catch { /* already there */ }
   try { db.exec('ALTER TABLE needs ADD COLUMN got INTEGER'); } catch { /* already there */ }
+  // (a message's file in Cloudflare R2 — store 'r2', its upload while parts are going (r2up), and the key it's locked with on
+  //  the phone (fkey: so apps that fetch through this server get it unlocked) — Haris 2026-11-20 17:52)
+  try { db.exec('ALTER TABLE files ADD COLUMN store TEXT'); } catch { /* already there */ }
+  try { db.exec('ALTER TABLE files ADD COLUMN r2up TEXT'); } catch { /* already there */ }
+  try { db.exec('ALTER TABLE files ADD COLUMN fkey TEXT'); } catch { /* already there */ }
   const q = (sql) => db.prepare(sql);
   const Q = {
     group: q('SELECT * FROM groups WHERE id = ? AND gone = 0'),
@@ -396,7 +401,9 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       // (a group's picture stays while the group uses it — a phone signed out and in again, or a new one, fetches it again:
       //  it was let go once everyone had it, and group pictures went missing — Haris 2026-11-14)
       if (db.prepare('SELECT 1 FROM groups WHERE pic = ? AND gone = 0 LIMIT 1').get(id)) continue;
-      try { fs.rmSync(path.join(relay, id), { force: true }); } catch { /* fine */ }
+      const f = Q.getFile.get(id);
+      if (f && f.store === 'r2') { if (r2 && r2.on) r2.del(r2Key(f)).catch((e) => console.error('talk r2 delete:', e.message)); }
+      else { try { fs.rmSync(path.join(relay, id), { force: true }); } catch { /* fine */ } }
       Q.dropFile.run(id);
     }
   }
@@ -877,7 +884,10 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
             w: Number(b.file.w) || null, h: Number(b.file.h) || null, secs: Number(b.file.secs) || null,
             wave: typeof b.file.wave === 'string' ? clip(b.file.wave.replace(/[^A-Za-z0-9+/=]/g, ''), 400) : null,
             // (a photo's or video's tiny picture, made on the phone that sent it: shown blurred until the real one is downloaded)
-            ...(typeof b.file.thumb === 'string' && b.file.thumb.length <= 4000 ? { thumb: b.file.thumb.replace(/[^A-Za-z0-9+/=]/g, '') } : {}) };   // (a voice message's waveform, made on the phone that recorded it)
+            ...(typeof b.file.thumb === 'string' && b.file.thumb.length <= 4000 ? { thumb: b.file.thumb.replace(/[^A-Za-z0-9+/=]/g, '') } : {}),
+            // (in R2, locked on the phone: the key to open it, for the group's phones — R2 only ever has it locked)
+            ...(f.store === 'r2' && typeof b.file.key === 'string' && /^[A-Za-z0-9+/]{43}=$/.test(b.file.key) ? { key: b.file.key } : {}) };
+          if (file.key && f.fkey !== file.key) db.prepare('UPDATE files SET fkey = ? WHERE id = ?').run(file.key, f.id);   // (a voice message's waveform, made on the phone that recorded it)
         }
         // (a task shared with # — staff groups only, a task this person sees; its card made here)
         let task = null;
@@ -1067,6 +1077,39 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     return pic ? f : null;
   }
   const filePath = (f) => path.join(relay, f.id);
+  // ---------- a message's file through Cloudflare R2: straight from the phone and back (Haris 2026-11-20 17:52) ----------
+  const r2Key = (f) => 'msg/' + f.id;   // (msg/: the bucket's 31-day safety rule)
+  const R2_MAX = 1024 * 1024 * 1024 + 4096;   // (1 GB, the apps' limit, and the lock's few bytes)
+  async function r2Start(u, name, size) {
+    if (!r2 || !r2.on) return bad('Not here', 404);
+    size = Number(size);
+    if (!Number.isInteger(size) || size <= 0) return bad('Bad size');
+    if (size > R2_MAX) return bad('That file is too big (1 GB at most)');
+    const id = rid('f');
+    Q.newFile.run(id, u.id, clip(name || 'File', 200).replace(/[\\/]/g, '-'), now());
+    db.prepare("UPDATE files SET store = 'r2', size = ? WHERE id = ?").run(size, id);
+    try {
+      const s = await r2.start(r2Key({ id }), size);
+      if (s.upload) db.prepare('UPDATE files SET r2up = ? WHERE id = ?').run(s.upload, id);
+      return { ok: true, id, ...(s.put ? { put: s.put } : { part: s.part, urls: s.urls }) };
+    } catch (e) { Q.dropFile.run(id); return bad(e.message, 502); }
+  }
+  async function r2Done(u, id, etags) {
+    const f = Q.getFile.get(String(id || ''));
+    if (!f || f.by !== u.id || f.store !== 'r2') return bad('Upload not found — please try again', 404);
+    if (f.done) return { ok: true, id: f.id, size: f.size, done: true };
+    try {
+      if (f.r2up) {
+        if (!Array.isArray(etags) || etags.length !== Math.ceil(f.size / r2.PART)) return bad('Part of the file didn’t arrive — please try again');
+        await r2.complete(r2Key(f), f.r2up, etags.map(String));
+      }
+      const got = await r2.size(r2Key(f));
+      if (got !== f.size) return bad('Part of the file didn’t arrive — please try again');
+    } catch (e) { return bad(e.message, 502); }
+    db.prepare('UPDATE files SET done = 1, r2up = NULL WHERE id = ?').run(f.id);
+    return { ok: true, id: f.id, size: f.size, done: true };
+  }
+
   // a phone has the whole file now: it waits for that person no more (Auto-download off — Haris 2026-11-13)
   function fetched(u, id) {
     Q.gotNeed.run(now(), String(id), u.id);
@@ -1159,6 +1202,6 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   const isAdminOf = (u, gid) => { const g = Q.group.get(gid); return !!g && isAdmin(u, g); };
   // (whose E11 Console key — board 53's card: name, role, colour)
   function personByEmail(e) { const u = access.userByEmail(e); if (u) return personOf(u); const k = contactByEmail(e); return k ? { id: k.id, name: k.name, role: 'Client', photo: null, color: null } : null; }
-  return { state, act, sync, ack, got, unreadFor, reviewDemo, sample, upload, tasksChanged, peopleChanged, linksChanged, contactByEmail, personByEmail, fileFor, filePath, fetched, listen, sweep, isAdminOf,
+  return { r2, r2Key, r2Start, r2Done, state, act, sync, ack, got, unreadFor, reviewDemo, sample, upload, tasksChanged, peopleChanged, linksChanged, contactByEmail, personByEmail, fileFor, filePath, fetched, listen, sweep, isAdminOf,
     linkCode, linkStatus, macFor, unlinkMac, macCode, macStatus, macByKey, userById, history, hasFiles, resend, close: () => { clearInterval(sweepTimer); for (const set of listeners.values()) for (const r of set) try { r.end(); } catch { /* fine */ } db.close(); } };
 }
