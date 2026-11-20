@@ -72,8 +72,30 @@ final class PaddedBadge: UILabel {
   override func sizeThatFits(_ size: CGSize) -> CGSize { let s = super.sizeThatFits(size); return CGSize(width: s.width + 12, height: 20) }
 }
 
+/// How much of a page the keyboard covers, past the page's own bottom (the tab bar, the home line): the room a long list
+/// keeps for it, so searching, its last results can still be scrolled up above the keyboard (Haris 2026-11-20)
+final class KeyboardRoom {
+  private var tokens: [NSObjectProtocol] = []
+  private(set) var extra: CGFloat = 0
+  init(_ v: UIView, _ changed: @escaping (CGFloat) -> Void) {
+    let nc = NotificationCenter.default
+    tokens.append(nc.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self, weak v] n in
+      guard let self = self, let v = v, v.window != nil, let end = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue else { return }
+      let r = v.convert(end, from: nil)
+      let e = max(0, v.bounds.maxY - r.minY - v.safeAreaInsets.bottom)
+      if e != self.extra { self.extra = e; changed(e) }
+    })
+    tokens.append(nc.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] _ in
+      guard let self = self, self.extra != 0 else { return }
+      self.extra = 0; changed(0)
+    })
+  }
+  deinit { tokens.forEach { NotificationCenter.default.removeObserver($0) } }
+}
+
 class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UISearchControllerDelegate {
   let table = UITableView(frame: .zero, style: .plain)
+  private var kbRoom: KeyboardRoom?
   var data: UITableViewDiffableDataSource<String, Row>!
   let search = UISearchController(searchResultsController: nil)
   var query: String { (search.searchBar.text ?? "").trimmingCharacters(in: .whitespaces).lowercased() }
@@ -106,6 +128,8 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
     table.sectionHeaderTopPadding = 6
     view.addSubview(table)
     setContentScrollView(table, for: .top)
+    // (the keyboard up — searching a long list: the last results above it, and the scroll bar ending there too)
+    kbRoom = KeyboardRoom(view) { [weak self] e in self?.table.contentInset.bottom = e; self?.table.verticalScrollIndicatorInsets.bottom = e }
     table.register(AgencyCell.self, forCellReuseIdentifier: AgencyCell.id)
     table.register(GroupCell.self, forCellReuseIdentifier: GroupCell.id)
     data = UITableViewDiffableDataSource<String, Row>(tableView: table) { [weak self] tv, ip, row in
