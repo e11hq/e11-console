@@ -294,7 +294,9 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
   private let card = NSView(), sep = NSView()
   private let emailF = NSTextField(), pwF = NSSecureTextField(), pw2F = NSSecureTextField()
   private let icon1 = NSImageView(), icon2 = NSImageView()
-  private let codeF = NSTextField()
+  // the code: four boxes, one digit each, as the iPhone's (Haris 2026-11-20 12:46)
+  private let codeRow = NSStackView()
+  private var boxes: [DigitField] = []
   private let mainB = PillButton(), secondB = PillButton(), linkB = NSButton(title: "", target: nil, action: nil)
   private let errL = NSTextField(wrappingLabelWithString: ""), foot = NSTextField(wrappingLabelWithString: ""), waitL = NSTextField(labelWithString: "Signing in…")
   private let reviewB = NSButton(title: "App Review sign-in", target: nil, action: nil), backB = NSButton(title: "", target: nil, action: nil)
@@ -327,10 +329,19 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
     for i in [icon1, icon2] { i.contentTintColor = .secondaryLabelColor; i.translatesAutoresizingMaskIntoConstraints = false; card.addSubview(i) }
     sep.wantsLayer = true; sep.translatesAutoresizingMaskIntoConstraints = false; card.addSubview(sep)
 
-    codeF.font = .monospacedDigitSystemFont(ofSize: 30, weight: .semibold); codeF.alignment = .center
-    codeF.isBordered = false; codeF.drawsBackground = false; codeF.focusRingType = .none; codeF.wantsLayer = true
-    codeF.layer?.cornerRadius = 14; codeF.layer?.borderWidth = 1; codeF.delegate = self
-    codeF.placeholderString = "4-digit code"; codeF.cell?.usesSingleLineMode = true
+    codeRow.orientation = .horizontal; codeRow.spacing = 12
+    for i in 0..<4 {
+      let b = DigitField()
+      b.font = .systemFont(ofSize: 28, weight: .semibold); b.alignment = .center
+      b.isBordered = false; b.drawsBackground = false; b.focusRingType = .none; b.wantsLayer = true
+      b.layer?.cornerRadius = 12; b.layer?.borderWidth = 0.5; b.delegate = self; b.tag = 100 + i
+      b.cell?.usesSingleLineMode = true
+      b.onFocus = { [weak self] in self?.markBoxes() }
+      b.setAccessibilityLabel("Digit \(i + 1)")
+      b.translatesAutoresizingMaskIntoConstraints = false
+      NSLayoutConstraint.activate([b.widthAnchor.constraint(equalToConstant: 58), b.heightAnchor.constraint(equalToConstant: 66)])
+      boxes.append(b); codeRow.addArrangedSubview(b)
+    }
 
     mainB.target = self; mainB.action = #selector(mainTapped)
     secondB.target = self; secondB.action = #selector(secondTapped); secondB.filled = false
@@ -346,7 +357,7 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
     loading.style = .spinning; loading.controlSize = .small; loading.isDisplayedWhenStopped = false
 
     stack.orientation = .vertical; stack.alignment = .centerX; stack.spacing = 0
-    for v in [icon, avatar, greet, titleL, sub, card, codeF, errL, mainB, secondB, linkB, foot, waitL] as [NSView] { stack.addArrangedSubview(v) }
+    for v in [icon, avatar, greet, titleL, sub, card, codeRow, errL, mainB, secondB, linkB, foot, waitL] as [NSView] { stack.addArrangedSubview(v) }
     for v in [stack, reviewB, backB, loading] as [NSView] { v.translatesAutoresizingMaskIntoConstraints = false; addSubview(v) }
     let W: CGFloat = 400
     let center = stack.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -20); center.priority = .defaultLow
@@ -363,7 +374,6 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
       sub.widthAnchor.constraint(equalTo: stack.widthAnchor), errL.widthAnchor.constraint(equalTo: stack.widthAnchor),
       foot.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -28), waitL.widthAnchor.constraint(equalTo: stack.widthAnchor),
       card.widthAnchor.constraint(equalTo: stack.widthAnchor), card.heightAnchor.constraint(equalToConstant: 112.5),
-      codeF.widthAnchor.constraint(equalToConstant: 220), codeF.heightAnchor.constraint(equalToConstant: 62),
       mainB.widthAnchor.constraint(equalTo: stack.widthAnchor), mainB.heightAnchor.constraint(equalToConstant: 52),
       secondB.widthAnchor.constraint(equalTo: stack.widthAnchor), secondB.heightAnchor.constraint(equalToConstant: 48),
       icon1.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 18), icon1.centerYAnchor.constraint(equalTo: card.topAnchor, constant: 28),
@@ -384,7 +394,7 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
     ])
     stack.setCustomSpacing(26, after: icon); stack.setCustomSpacing(26, after: avatar)
     stack.setCustomSpacing(6, after: greet); stack.setCustomSpacing(6, after: titleL)
-    stack.setCustomSpacing(26, after: sub); stack.setCustomSpacing(18, after: card); stack.setCustomSpacing(18, after: codeF)
+    stack.setCustomSpacing(26, after: sub); stack.setCustomSpacing(18, after: card); stack.setCustomSpacing(18, after: codeRow)
     stack.setCustomSpacing(10, after: errL); stack.setCustomSpacing(12, after: mainB); stack.setCustomSpacing(10, after: secondB)
     stack.setCustomSpacing(8, after: linkB); stack.setCustomSpacing(12, after: foot)
     stack.alphaValue = 0; reviewB.alphaValue = 0; backB.isHidden = true   // (nothing until the first step is shown)
@@ -402,12 +412,23 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
       card.layer?.backgroundColor = (dark ? NSColor.white.withAlphaComponent(0.08) : NSColor.white).cgColor
       card.layer?.borderColor = (dark ? NSColor.white.withAlphaComponent(0.16) : NSColor.black.withAlphaComponent(0.07)).cgColor
       sep.layer?.backgroundColor = (dark ? NSColor.white.withAlphaComponent(0.16) : NSColor.black.withAlphaComponent(0.08)).cgColor
-      codeF.layer?.backgroundColor = card.layer?.backgroundColor
-      codeF.layer?.borderColor = NSColor.labelColor.withAlphaComponent(0.5).cgColor
       avatar.layer?.borderColor = (dark ? NSColor.white.withAlphaComponent(0.22) : NSColor.black.withAlphaComponent(0.06)).cgColor
       avatar.layer?.backgroundColor = (color ?? g).cgColor
     }
     mainB.paint(); secondB.paint()
+    markBoxes()
+  }
+  // the boxes: the one being typed in has the text's colour round it
+  private func markBoxes() {
+    let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+    effectiveAppearance.performAsCurrentDrawingAppearance {
+      for b in boxes {
+        let on = b.currentEditor() != nil
+        b.layer?.backgroundColor = (dark ? NSColor.white.withAlphaComponent(0.08) : NSColor.white).cgColor
+        b.layer?.borderColor = on ? NSColor.labelColor.cgColor : (dark ? NSColor.white.withAlphaComponent(0.16) : NSColor.black.withAlphaComponent(0.08)).cgColor
+        b.layer?.borderWidth = on ? 2 : 0.5
+      }
+    }
   }
   private func hex(_ v: Int) -> NSColor { NSColor(srgbRed: CGFloat((v >> 16) & 0xff) / 255, green: CGFloat((v >> 8) & 0xff) / 255, blue: CGFloat(v & 0xff) / 255, alpha: 1) }
   override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); paint() }
@@ -451,7 +472,7 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
       self.setBusy(false)
       self.icon.isHidden = isPerson; self.avatar.isHidden = !isPerson
       self.greet.isHidden = !(isForm || isPerson); self.greet.stringValue = self.greeting()
-      self.card.isHidden = !(isForm || isSet); self.codeF.isHidden = !isCode
+      self.card.isHidden = !(isForm || isSet); self.codeRow.isHidden = !isCode
       self.secondB.isHidden = m != .welcome
       self.linkB.isHidden = !(isForm || m == .welcome)
       self.backB.isHidden = !isCode
@@ -472,7 +493,7 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
         self.mainB.set("Continue")
         self.foot.stringValue = owner ? "Then set a password, and add the team from the owner’s view.\n5 wrong tries lock it for an hour — never for good."
                                       : "A code works once, only for this email, for 24 hours.\nAfter 5 wrong tries it stops — ask for a new one."
-        self.codeF.stringValue = ""
+        self.boxes.forEach { $0.stringValue = "" }
       case .setPassword:
         self.titleL.stringValue = "Set your password"
         self.sub.stringValue = "The app opens once it’s set. Next time, sign in with your email and this password."
@@ -495,7 +516,7 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
       self.paint()
       self.layoutSubtreeIfNeeded()
       // (where typing starts)
-      if isCode { self.window?.makeFirstResponder(self.codeF) }
+      if isCode { self.window?.makeFirstResponder(self.boxes[0]) }
       else if isSet { self.window?.makeFirstResponder(self.pwF) }
       else if isForm { self.window?.makeFirstResponder(focusPassword && !e.isEmpty ? self.pwF : self.emailF) }
       else { self.window?.makeFirstResponder(nil) }
@@ -528,18 +549,18 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
   func setBusy(_ on: Bool) {
     mainB.busy = on
     for b in [mainB, secondB, linkB, reviewB, backB] as [NSButton] { b.isEnabled = !on }
-    for f in [emailF, pwF, pw2F, codeF] as [NSTextField] { f.isEnabled = !on }
+    for f in [emailF, pwF, pw2F] + boxes as [NSTextField] { f.isEnabled = !on }
     if on { errL.isHidden = true }
     if !on { isWaiting = false; waitL.isHidden = true }
   }
   func setWaiting(_ on: Bool) { setBusy(on); isWaiting = on; window?.makeFirstResponder(nil); waitL.isHidden = !on }
-  func clearCode() { codeF.stringValue = ""; window?.makeFirstResponder(codeF) }
+  func clearCode() { boxes.forEach { $0.stringValue = "" }; window?.makeFirstResponder(boxes[0]) }
 
   @objc private func mainTapped() {
     switch mode {
     case .form: onSignIn?(emailF.stringValue, pwF.stringValue)
     case .code:
-      let c = codeF.stringValue.filter(\.isNumber)
+      let c = boxes.map { $0.stringValue }.joined().filter(\.isNumber)
       guard c.count == 4 else { return showError("Enter all 4 digits.") }
       onCode?(c)
     case .setPassword:
@@ -566,12 +587,34 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
     else if f === pwF, mode == .setPassword { window?.makeFirstResponder(pw2F) }
     else { mainTapped() }
   }
-  // the code: digits only, four at most; the fourth sends it
+  // the code's four boxes: one digit each, on to the next; four pasted go in at once; the fourth sends it (as the iPhone's)
   func controlTextDidChange(_ n: Notification) {
-    guard (n.object as? NSTextField) === codeF else { return }
-    let d = String(codeF.stringValue.filter(\.isNumber).prefix(4))
-    if d != codeF.stringValue { codeF.stringValue = d }
-    if d.count == 4 { mainTapped() }
+    guard let b = n.object as? DigitField, let i = boxes.firstIndex(of: b) else { return }
+    let d = b.stringValue.filter(\.isNumber)
+    guard !d.isEmpty else { b.stringValue = ""; return }
+    for (j, ch) in d.prefix(4 - i).enumerated() { boxes[i + j].stringValue = String(ch) }
+    if boxes.allSatisfy({ !$0.stringValue.isEmpty }) { window?.makeFirstResponder(nil); markBoxes(); mainTapped() }
+    else { window?.makeFirstResponder(boxes[min(3, i + d.count)]) }
+  }
+  // Delete in an empty box goes back to the one before (and clears it); Return sends the code
+  func control(_ c: NSControl, textView: NSTextView, doCommandBy sel: Selector) -> Bool {
+    guard let b = c as? DigitField, let i = boxes.firstIndex(of: b) else { return false }
+    if sel == #selector(NSResponder.deleteBackward(_:)), b.stringValue.isEmpty, i > 0 {
+      boxes[i - 1].stringValue = ""; window?.makeFirstResponder(boxes[i - 1]); return true
+    }
+    if sel == #selector(NSResponder.insertNewline(_:)) { mainTapped(); return true }
+    return false
+  }
+  func controlTextDidEndEditing(_ n: Notification) { if n.object is DigitField { DispatchQueue.main.async { self.markBoxes() } } }
+}
+
+// one box of the code: tells the screen when it's being typed in (its outline)
+final class DigitField: NSTextField {
+  var onFocus: (() -> Void)?
+  override func becomeFirstResponder() -> Bool {
+    let ok = super.becomeFirstResponder()
+    DispatchQueue.main.async { self.onFocus?() }
+    return ok
   }
 }
 
