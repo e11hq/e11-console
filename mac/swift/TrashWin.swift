@@ -58,20 +58,44 @@ final class TrashWindows: NSObject, NSWindowDelegate {
     al.alertStyle = .informational
     al.messageText = a["title"] as? String ?? ""
     al.informativeText = a["body"] as? String ?? ""
-    let ok = al.addButton(withTitle: a["ok"] as? String ?? "OK")
-    // (a middle button when asked — Update Ready's What's New; the last one is always the way out, with Esc)
-    let other = (a["other"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-    if let o = other { al.addButton(withTitle: o) }
-    let cancel = al.addButton(withTitle: a["cancel"] as? String ?? "Cancel")
-    cancel.keyEquivalent = "\u{1b}"
-    // (no red "destructive" button — too loud: Haris 2026-11-18 17:14; the first button is Apple's usual one)
-    _ = ok
+    // (every question's buttons as Apple's own, the same everywhere — Haris 2026-11-20 13:14: the answer first, blue, with
+    //  Return; a delete / trash one Apple's red; Cancel last, plain, with Esc. Nothing over Apple's look)
+    let danger = (a["danger"] as? Bool) == true || (a["destructive"] as? Bool) == true
+    var result: (NSApplication.ModalResponse) -> [String: Any]
+    if let choices = a["choices"] as? [[String: Any]], !choices.isEmpty {
+      // (several answers — the main one first, a way out last with Esc; the page gets back which one: index)
+      var order = Array(choices.indices)
+      if let p = order.firstIndex(where: { (choices[$0]["primary"] as? Bool) == true }) { order.insert(order.remove(at: p), at: 0) }
+      if let c = order.firstIndex(where: { (choices[$0]["cancel"] as? Bool) == true }) { order.append(order.remove(at: c)) }
+      for (n, k) in order.enumerated() {
+        let b = al.addButton(withTitle: choices[k]["label"] as? String ?? "")
+        if (choices[k]["danger"] as? Bool) == true { b.hasDestructiveAction = true }
+        if (choices[k]["cancel"] as? Bool) == true { b.keyEquivalent = "\u{1b}" }
+        else if n > 0 { b.keyEquivalent = "" }
+      }
+      result = { r in
+        let n = r.rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
+        guard n >= 0, n < order.count else { return ["ok": true, "pressed": false] }
+        return ["ok": true, "pressed": true, "index": order[n]]
+      }
+    } else {
+      let ok = al.addButton(withTitle: a["ok"] as? String ?? "OK")
+      if danger { ok.hasDestructiveAction = true }
+      // (a middle button when asked — Update Ready's What's New; the last one is always the way out, with Esc)
+      let other = (a["other"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+      if let o = other { al.addButton(withTitle: o) }
+      // (cancel: "" — a note with only its one button)
+      let cancelText = a["cancel"] as? String ?? "Cancel"
+      if !cancelText.isEmpty { al.addButton(withTitle: cancelText).keyEquivalent = "\u{1b}" }
+      result = { r in
+        let which = r == .alertFirstButtonReturn ? "ok" : (other != nil && r == .alertSecondButtonReturn) ? "other" : "cancel"
+        return ["ok": true, "pressed": which == "ok", "button": which]
+      }
+    }
     let main = TrashWindows.shared.main
     al.window.appearance = main?.appearance   // (the app's own light / dark)
     let show = {
-      let r = al.runModal()
-      let which = r == .alertFirstButtonReturn ? "ok" : (other != nil && r == .alertSecondButtonReturn) ? "other" : "cancel"
-      done(["ok": true, "pressed": which == "ok", "button": which])
+      done(result(al.runModal()))
     }
     // (asked to wait while E11 Console is behind other apps — Update Ready: the Dock icon bounces once and the alert comes
     //  as you come back, never over another app)

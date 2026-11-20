@@ -19,7 +19,7 @@ import ServiceManagement
 
 // Version of this Mac app's native part. Raise it when a change here needs everyone to reinstall: the web app
 // then shows a required-update banner in older Mac apps. (The earlier script app was 1–6.)
-let SHELL_VERSION = 13   // 13: Apple's menu on a right-click (command menu), the sidebar as Claude's — edge to edge, hidden completely or shown over the page on hover (room 252 / 0) · 12: the sidebar is the Mac's own (glass on macOS 26; Sidebar.swift; command sidebar / window.__e11Side) · 10: fast office use (shared-folder copies, office-network uploads and downloads) · 11: office-network downloads show their progress
+let SHELL_VERSION = 14   // 14: every question of the page as Apple's own alert (command alert: danger, choices) · 13: Apple's menu on a right-click (command menu), the sidebar as Claude's — edge to edge, hidden completely or shown over the page on hover (room 252 / 0) · 12: the sidebar is the Mac's own (glass on macOS 26; Sidebar.swift; command sidebar / window.__e11Side) · 10: fast office use (shared-folder copies, office-network uploads and downloads) · 11: office-network downloads show their progress
 
 let info = Bundle.main.infoDictionary ?? [:]
 let env = ProcessInfo.processInfo.environment
