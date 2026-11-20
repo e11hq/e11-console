@@ -31,6 +31,7 @@ services:
       - R2_BUCKET=e11-talk-files
       - R2_ACCESS_KEY_ID=PASTE_R2_ACCESS_KEY_ID
       - R2_SECRET_ACCESS_KEY=PASTE_R2_SECRET_ACCESS_KEY
+      - R2_CONSOLE_BUCKET=e11-console-files   # E11 Console's files (the same key, both buckets)
     volumes:
       - /share/E11Console/live:/data
       - "/share/E11 Share:/share:ro"   # the projects shared folder, READ-ONLY (files picked from it are copied on the NAS)

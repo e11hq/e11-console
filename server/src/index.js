@@ -39,6 +39,7 @@ const cfg = {
   r2KeyId: env.R2_ACCESS_KEY_ID || '',
   r2Secret: env.R2_SECRET_ACCESS_KEY || '',
   r2Bucket: env.R2_BUCKET || '',
+  r2ConsoleBucket: env.R2_CONSOLE_BUCKET || '',   // E11 Console's files (consoler2.js)
   // The App Review copy only (review.js): the demo account's password — set on the NAS's "review" app, never elsewhere
   reviewPassword: env.REVIEW_PASSWORD || '',
   reviewEmail: env.REVIEW_EMAIL || '',

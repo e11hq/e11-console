@@ -52,6 +52,7 @@ import { createPlans } from './plans.js';
 import { createReview, resetDue, REVIEW_USER_ID } from './review.js';
 import { demoData, DEMO_REVIEWER } from './demo.js';
 import { createR2 } from './r2.js';
+import { createConsoleR2 } from './consoler2.js';
 import { Readable } from 'node:stream';
 
 const BODY_LIMIT = 12 * 1024 * 1024; // 2 MB upload pieces arrive as ~2.7 MB of base64
@@ -254,6 +255,12 @@ export function createServer(cfg) {
   // Light viewing copies of videos (viewcopy.js): every video in tasks, comments, Client Assets and plans, in the
   // background; checked a minute after start, every 3 minutes, and a few seconds after changes arrive
   const views = createViewCopies({ files, dri: cfg.driDir || '/dev/dri', minSize: cfg.viewMinSize });
+  // (E11 Console's files: a fast copy in Cloudflare R2 for a while — consoler2.js; Haris 2026-11-20 19:44. Counted with
+  //  Talk's files under one ceiling)
+  const consoleR2 = createConsoleR2({ r2: createR2({ account: cfg.r2Account, keyId: cfg.r2KeyId, secret: cfg.r2Secret, bucket: cfg.r2ConsoleBucket, endpoint: cfg.r2Endpoint || '', now: cfg.now || (() => Date.now()), fetchImpl: cfg.r2Fetch || null }),
+    files, dataDir, dbFile: cfg.r2DbFile, now: cfg.now || (() => Date.now()), talkBytes: () => { try { return talk ? talk.r2Bytes() : 0; } catch { return 0; } }, rules: cfg.r2Rules, settleMs: cfg.r2SettleMs });
+  // (every upload's piece — the apps' and the office network's — copied up to R2 a minute after the last one)
+  { const wc = files.commands.writeChunk; files.commands.writeChunk = (a, u) => { const out = wc(a, u); consoleR2.touched(out.path); return out; }; }
   // File links (flinks.js): one short public link per file, files.e11hq.com/f/<token> (the test copy: its own)
   const testCopy = /-test\./.test(version);
   const filesUrl = cfg.filesUrl || (cfg.dev ? '' : testCopy ? 'https://files-test.e11hq.com' : 'https://files.e11hq.com');
@@ -1738,7 +1745,7 @@ export function createServer(cfg) {
         if (why) return json(res, 403, { ok: false, error: why });
         try { return json(res, 200, { ok: true, job: office.startCopy(u, target, b) }); } catch (e) { return json(res, e.status || 500, { ok: false, error: e.message }); }
       }
-      if (p === '/api/share/status') { const st = office.status(u, b.job); return st ? json(res, 200, { ok: true, ...st }) : json(res, 404, { ok: false, error: 'No such copy' }); }
+      if (p === '/api/share/status') { const st = office.status(u, b.job); if (st && st.state === 'done' && st.file) consoleR2.touched(st.file.path); return st ? json(res, 200, { ok: true, ...st }) : json(res, 404, { ok: false, error: 'No such copy' }); }
       if (p === '/api/share/cancel') { office.cancel(u, b.job); return json(res, 200, { ok: true }); }
     }
     if (p === '/api/local/ticket' && req.method === 'POST') {
@@ -1757,6 +1764,18 @@ export function createServer(cfg) {
 
     if (p.startsWith('/api/host/') && req.method === 'POST') {
       const cmd = p.slice('/api/host/'.length);
+      // a file straight into R2 from outside the office (newer apps): where to put it, then "it's all there" — consoler2.js
+      if (cmd === 'r2Start' || cmd === 'r2Done') {
+        const b = await readBody(req, 64 * 1024);
+        if (cmd === 'r2Start') {
+          const why = uploadDenied(u, b); if (why) return json(res, 403, { ok: false, error: why });
+          const r = await consoleR2.startUpload(u, b.dest ? { dest: String(b.dest) } : { taskId: String(b.taskId || '') }, b.name, b.size);
+          if (r.ok) uploads.set(r.path, { userId: u.id, at: Date.now() });
+          return json(res, r.ok ? 200 : r.status || 400, r);
+        }
+        const r = await consoleR2.finishUpload(u, b.path, b.etags);
+        return json(res, r.ok ? 200 : r.status || 400, r);
+      }
       const fn = files.commands[cmd === 'writeChunkBin' ? 'writeChunk' : cmd];
       if (!fn) return json(res, 404, { ok: false, error: 'Unknown command ' + cmd });
       // writeChunkBin: the same as writeChunk, with the details in the address and the piece as raw bytes
@@ -1770,6 +1789,8 @@ export function createServer(cfg) {
       } else body = await readBody(req, cmd === 'expenseReport' ? 96 * 1024 * 1024 : BODY_LIMIT);   // up to a year of report pages
       const manager = access.isAdm(u) || u.role === 'am';
       const deny = (msg) => json(res, 403, { ok: false, error: msg || 'Not allowed' });
+      // (a file still being pulled in from R2: its thumbnail, preview or copy waits for it)
+      for (const x of [body.path, body.src, ...(Array.isArray(body.paths) ? body.paths : [])]) if (typeof x === 'string') await consoleR2.ready(x);
       if (cmd === 'writeChunk' || bin) {
         { const why = uploadDenied(u, body); if (why) return deny(why); }
         // later pieces may only be added to a file this person started uploading
@@ -1798,6 +1819,7 @@ export function createServer(cfg) {
         // the app's own check only sees what that person sees. (Items still in the app's Trash are checked by the app.)
         body = { paths: unusedPaths(paths) };
         body.paths.forEach((x) => views.remove(x));   // (its light copy goes too)
+        consoleR2.remove(body.paths);   // (and its fast copy in R2)
       }
       if (cmd === 'claimPdf' && (body.receipts || []).some((x) => !access.canReadFile(u, String(x || '')) || !String(x || '').startsWith('Claims/'))) return deny();
       if (['thumb', 'processImage', 'docPreview', 'pdfPages'].includes(cmd) && !access.canReadFile(u, String(body.path || '')) && !(cmd === 'processImage' && uploads.get(body.path) && uploads.get(body.path).userId === u.id)) return deny();
@@ -1828,9 +1850,24 @@ export function createServer(cfg) {
     if (p.startsWith('/__file/') && (req.method === 'GET' || req.method === 'HEAD')) {
       const rel = p.slice('/__file/'.length);
       if (!access.canReadFile(u, rel)) return json(res, 403, { ok: false, error: 'Not allowed' });
-      if (url.searchParams.get('w')) return files.serveSized(req, res, rel, url.searchParams.get('w'));
-      if (url.searchParams.get('view')) return files.serve(req, res, views.viewPath(rel));   // a video's light copy (when ready)
-      return files.serve(req, res, rel);
+      // (the file itself, its smaller photo or its light video copy — from R2 when it has a fast copy, else from the office;
+      //  a file still being pulled in from R2 comes from R2 — consoler2.js)
+      let show = rel;
+      if (url.searchParams.get('w')) { await consoleR2.ready(rel); const sized = await files.makeSized(rel, url.searchParams.get('w')); if (sized) show = files.rel(sized); }
+      else if (url.searchParams.get('view')) { await consoleR2.ready(rel); show = views.viewPath(rel); }   // a video's light copy (when ready)
+      // (a browser — the website, the Mac app's pages — or an app that asks for it (r2=1); the apps' own native fetches
+      //  carry the sign-in by hand, which would follow the redirect to R2, so they keep the office until they strip it)
+      const native = /CFNetwork|Darwin\//.test(String(req.headers['user-agent'] || '')) && url.searchParams.get('r2') !== '1';
+      const fast = native ? null : consoleR2.link(show, { download: url.searchParams.get('dl') === '1' });
+      if (fast) { res.writeHead(302, { Location: fast, 'Cache-Control': 'private, max-age=600' }); return res.end(); }
+      await consoleR2.ready(show);
+      return files.serve(req, res, show);
+    }
+
+    // (the owner's About: how much Cloudflare R2 holds, Console's and Talk's, and what it means this month)
+    if (p === '/api/r2/usage' && req.method === 'GET') {
+      if (!isOwner(u)) return json(res, 403, { ok: false, error: 'Only the owner' });
+      return json(res, 200, { ok: true, ...consoleR2.usage() });
     }
 
     if (p.startsWith('/api/')) return json(res, 404, { ok: false, error: 'Not found' });
@@ -1952,7 +1989,7 @@ export function createServer(cfg) {
   server.keepAliveTimeout = 65000;
 
   return {
-    server, store, files, cfSync, webPush, get talk() { return talkNow(); },
+    server, store, files, cfSync, webPush, consoleR2, get talk() { return talkNow(); },
     listen: (port, host) => new Promise((ok) => {
       // the office-network port (HTTPS, own certificate), when the NAS has it set up
       if (cfg.localPort) office.listen(cfg.localPort, office.localHandler({ readRaw, json, users: (id) => store.get('users', String(id)), uploads, canStill: (u, target, fp) => (fp ? access.canReadFile(u, fp) : !uploadDenied(u, target)), talk: talkLocal }));
@@ -1961,7 +1998,7 @@ export function createServer(cfg) {
     office, apns,
     digest, holidays, occRemind, birthdays, scheduled, daily, views, scanVideos, pruneNotifications,
     loadDemo,
-    close: () => new Promise((ok) => { clearInterval(demoTimer); digest.stop(); holidays.stop(); occRemind.stop(); birthdays.stop(); scheduled.stop(); daily.stop(); apns.close(); talkApns.close(); if (talk) talk.close(); scanTimers.forEach((x) => { clearTimeout(x); clearInterval(x); }); office.close(); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
+    close: () => new Promise((ok) => { clearInterval(demoTimer); digest.stop(); holidays.stop(); occRemind.stop(); birthdays.stop(); scheduled.stop(); daily.stop(); apns.close(); talkApns.close(); if (talk) talk.close(); scanTimers.forEach((x) => { clearTimeout(x); clearInterval(x); }); office.close(); consoleR2.close(); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
     broadcastVersion: (v) => { for (const s of streams) send(s, 'version', { version: v }); },
   };
 }

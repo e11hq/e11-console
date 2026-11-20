@@ -28,8 +28,8 @@ export function createR2({ account, keyId, secret, bucket, endpoint = '', now = 
   const host = endpoint ? new URL(endpoint).host : `${account}.r2.cloudflarestorage.com`;
   const base = endpoint ? new URL(endpoint).origin : `https://${host}`;
   const go = fetchImpl || ((...a) => fetch(...a));
-  const url = (method, key, query = {}, expires = 900) => {
-    const u = presign({ method, host, path: `/${bucket}/${key}`, query, keyId, secret, expires, now: now() });
+  const url = (method, key, query = {}, expires = 900, at = now()) => {
+    const u = presign({ method, host, path: `/${bucket}/${key}`, query, keyId, secret, expires, now: at });
     return endpoint ? base + u.slice(`https://${host}`.length) : u;
   };
   const PART = 8 * 1024 * 1024;
@@ -57,8 +57,17 @@ export function createR2({ account, keyId, secret, bucket, endpoint = '', now = 
       const r = await go(url('HEAD', key), { method: 'HEAD' });
       return r.ok ? Number(r.headers.get('content-length')) : null;
     },
-    // a phone fetching it: straight from R2, for 15 minutes
-    getUrl: (key) => url('GET', key, {}, 900),
+    // a phone fetching it: straight from R2, for 15 minutes. (slot: the same address for that long — signed at the start of
+    //  the slot — so a browser keeps what it fetched; type / download: what R2 answers it as — E11 Console's files)
+    getUrl: (key, { slot = 0, expires = 900, type = null, download = null } = {}) => {
+      const at = slot ? Math.floor(now() / slot) * slot : now();
+      const q = {};
+      if (type) q['response-content-type'] = type;
+      if (download) q['response-content-disposition'] = `attachment; filename*=UTF-8''${encodeURIComponent(download)}`;
+      if (slot) q['response-cache-control'] = 'private, max-age=' + Math.max(60, Math.floor((expires * 1000 - slot) / 1000));
+      return url('GET', key, q, expires, at);
+    },
+    fetch: (...a) => go(...a),
     // this server reading it (for apps that fetch through the server)
     get: (key, range) => go(url('GET', key), range ? { headers: { Range: range } } : {}),
     async del(key) { const r = await go(url('DELETE', key), { method: 'DELETE' }); return r.ok || r.status === 404; },

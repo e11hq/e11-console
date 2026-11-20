@@ -11,6 +11,7 @@ const byOrder = (a, b) => (a.order || 0) - (b.order || 0);
 
 const ICONS = {
   plus: '<path d="M8 3v10M3 8h10"/>',
+  cloud: '<path d="M4.6 12.5h7a2.9 2.9 0 0 0 .4-5.8A4 4 0 0 0 4.3 7.4a2.6 2.6 0 0 0 .3 5.1z"/>',
   gift: '<rect x="2.5" y="6" width="11" height="3" rx=".6"/><path d="M3.5 9v4.5h9V9M8 6v7.5M8 6S7 3.1 5.3 3.4C4 3.7 4.4 6 8 6zm0 0s1-2.9 2.7-2.6C12 3.7 11.6 6 8 6z"/>',
   home: '<path d="M2.5 7.2 8 2.8l5.5 4.4V13a.5.5 0 0 1-.5.5H9.6V9.8H6.4v3.7H3a.5.5 0 0 1-.5-.5z"/>',
   'check-circle': '<circle cx="8" cy="8" r="5.8"/><path d="m5.6 8.1 1.7 1.7 3.2-3.4"/>',
@@ -1198,9 +1199,10 @@ function maybeShowWhatsNew() {
 function viewUpdates() {
   // Ask for a fresh check every time the page opens (the server itself only checks once an hour)
   setTimeout(() => loadUpdates('check'), 0);
-  if (AppIcon.isOwner()) setTimeout(() => loadVideoHw(false), 0);
+  if (AppIcon.isOwner()) { setTimeout(() => loadVideoHw(false), 0); setTimeout(() => loadR2Card(), 0); }
   return `<div class="upd"><div class="upd-card" id="upd-body"><div class="ph">Checking for updates…</div></div>
     ${AppIcon.isOwner() ? `<div class="upd-card" id="vhw-card"><h3>${icon('play')}Video hardware</h3><p class="upd-note">Checking the NAS…</p></div>` : ''}
+    ${AppIcon.isOwner() ? `<div class="upd-card" id="r2-card"><h3>${icon('cloud')}Cloudflare storage</h3><p class="upd-note">Checking…</p></div>` : ''}
     <div class="upd-card imp-card">
       <h3>${icon('upload')}Move data from the Mac app</h3>
       <p class="upd-note">Choose <b>e11-data.json</b> from the “E11 Console Data” folder on the Mac. Tasks, clients, comments, people, notifications and client assets are added to the server. Copy the folders <b>attachments</b>, <b>Clients</b> and <b>.thumbs</b> into the NAS folder <b>E11Console/live/files</b> as well, so the files open. A copy of the database is made first.</p>
@@ -1220,6 +1222,21 @@ async function loadVideoHw(fresh) {
     <p class="upd-note">${esc(v.detail || '')}${v.checkedAt ? ` · checked ${esc(timeAgo(v.checkedAt))}` : ''}</p>
     ${lc ? `<p class="upd-note"><b>Light copies of videos</b> (720p, for viewing): ${lc.made} made since the last restart${lc.waiting ? ` · ${lc.waiting} waiting${lc.working ? ` (now: ${esc(lc.working)})` : ''}` : ' · none waiting'}${lc.lastSeconds != null ? ` · the last took ${lc.lastSeconds} s${lc.lastWith ? ' with ' + esc(lc.lastWith) : ''}` : ''}.</p>` : ''}
     <button class="btn sm" data-action="vhw-check">Check again</button>`;
+}
+// Owner only: how much Cloudflare R2 holds for E11 Console and E11 Talk, and what it means this month (Haris 2026-11-20 19:41)
+const gbOf = (n) => (n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n >= 1e6 ? Math.round(n / 1e6) + ' MB' : n > 0 ? '<1 MB' : '0');
+function r2Lines(u) {
+  if (!u || !u.on) return { head: 'Not set up yet', sub: '' };
+  return { head: `${gbOf(u.total)} of ${gbOf(u.budget)} · ${u.total <= u.free ? 'free (under ' + gbOf(u.free) + ')' : 'about $' + u.cost.toFixed(2) + ' this month'}`,
+    sub: `E11 Console ${gbOf(u.console)} · E11 Talk ${gbOf(u.talk)}. Recent files are kept there for fast opening; the office keeps everything.` };
+}
+async function loadR2Card() {
+  const el = document.getElementById('r2-card');
+  if (!el) return;
+  let u;
+  try { u = await api('GET', '/api/r2/usage'); } catch (e) { el.querySelector('.upd-note').textContent = 'Couldn’t check: ' + e.message; return; }
+  const l = r2Lines(u);
+  el.innerHTML = `<h3>${icon('cloud')}Cloudflare storage</h3><p style="margin:6px 0 4px;font-weight:650">${esc(l.head)}</p>${l.sub ? `<p class="upd-note">${esc(l.sub)}</p>` : ''}`;
 }
 async function importFromMac() {
   const files = await ServerHost.pickFiles({ multiple: false, accept: '.json,application/json' });
@@ -1561,16 +1578,73 @@ const ServerHost = (() => {
   // ones on the way, and deletes what already reached the server
   const cancelErr = () => Object.assign(new Error('Upload cancelled'), { cancelled: true });
   const newSig = () => ({ cancelled: false, ctrl: typeof AbortController !== 'undefined' ? new AbortController() : null, cancel() { this.cancelled = true; try { if (this.ctrl) this.ctrl.abort(); } catch (e) { /* fine */ } } });
+  // (a file is 5 GB at most — Haris 2026-11-20 19:53)
+  const MAX_UPLOAD = 5 * 1e9;
   async function uploadFile(file, target, onProgress, sig) {
     let made = null;
+    if (file && file.size > MAX_UPLOAD) throw Object.assign(new Error(`“${file.name}” is over 5 GB — files up to 5 GB can be uploaded`), { status: 413 });
     try {
       const fast = await viaOffice(file, target, onProgress, sig, (p) => { made = p; });
       if (fast) return fast;
+      made = null;
+      // (outside the office: straight into Cloudflare R2, the office pulls it in — consoler2.js; the usual way if not)
+      const r2 = await viaR2(file, target, onProgress, sig, (p) => { made = p; });
+      if (r2) return r2;
       made = null;
       return await uploadFile1(file, target, onProgress, sig, (p) => { made = p; });
     } catch (e) {
       if (sig && sig.cancelled) { if (made) api('POST', '/api/host/trashMany', { paths: [made] }).catch(() => {}); throw cancelErr(); }
       throw e;
+    }
+  }
+  // a file straight into R2 (Haris 2026-11-20 19:44): the server gives short-lived addresses (8 MB parts, three side by
+  // side), then is told it's all there and pulls it into the office. null: the usual way instead (no R2 on this server, or
+  // R2 couldn't be reached — the place kept for it is let go)
+  async function viaR2(file, target, onProgress, sig, onMade) {
+    if (!(file instanceof Blob) || !file.size) return null;
+    let s;
+    try { s = await api('POST', '/api/host/r2Start', { ...target, name: file.name, size: file.size }); } catch (e) { if (e.auth || e.status === 413) throw e; return null; }
+    if (!s || !s.ok || !s.path) return null;
+    if (onMade) onMade(s.path);
+    const dims = await mediaDims(file).catch(() => null);
+    const sent = new Map();
+    const tick = () => { if (onProgress) onProgress(Math.min(0.99, [...sent.values()].reduce((a, b) => a + b, 0) / file.size)); };
+    const putOne = (url, blob, i) => new Promise((ok, no) => {
+      const x = new XMLHttpRequest();
+      x.open('PUT', url);
+      x.upload.onprogress = (e) => { sent.set(i, e.loaded); tick(); };
+      x.onload = () => (x.status === 200 ? ok(x.getResponseHeader('ETag') || '') : no(Object.assign(new Error('Upload failed'), { status: x.status })));
+      x.onerror = () => no(Object.assign(new Error('Upload failed'), { network: true }));
+      if (sig && sig.ctrl) sig.ctrl.signal.addEventListener('abort', () => x.abort());
+      x.send(blob);
+    });
+    // (a few tries, not the usual dozen: if R2 can't be reached the usual way takes over sooner)
+    const tries = async (url, blob, i) => {
+      for (let n = 0; ; n++) {
+        if (sig && sig.cancelled) throw cancelErr();
+        try { sent.set(i, 0); return await putOne(url, blob, i); } catch (e) {
+          if ((sig && sig.cancelled) || n >= 4) throw e;
+          if (document.hidden) await whenVisible(); else await new Promise((r) => setTimeout(r, 1000 * 2 ** n));
+        }
+      }
+    };
+    try {
+      let etags;
+      if (s.put) await tries(s.put, file, 0);
+      else {
+        etags = new Array(s.urls.length);
+        const idx = s.urls.map((_, i) => i);
+        await Promise.all(Array.from({ length: Math.min(3, idx.length) }, async () => {
+          while (idx.length) { const i = idx.shift(); etags[i] = await tries(s.urls[i], file.slice(i * s.part, (i + 1) * s.part), i); }
+        }));
+      }
+      const d = await persistently(() => api('POST', '/api/host/r2Done', { path: s.path, ...(etags ? { etags } : {}) }), sig);
+      if (onProgress) onProgress(1);
+      return { id: uid(), name: d.name || s.name || file.name, path: s.path, size: file.size, addedAt: nowISO(), ...(dims || {}) };
+    } catch (e) {
+      if (sig && sig.cancelled) throw e;
+      api('POST', '/api/host/trashMany', { paths: [s.path] }).catch(() => {});
+      return null;
     }
   }
   async function uploadFile1(file, target, onProgress, sig, onMade) {

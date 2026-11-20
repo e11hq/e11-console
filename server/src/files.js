@@ -133,6 +133,8 @@ export function createFiles(root) {
       const data = Buffer.isBuffer(a.data) ? a.data : Buffer.from(String(a.b64 || ''), 'base64');
       const at = a.offset == null || a.offset === '' ? null : Number(a.offset);
       if (at != null && (!Number.isFinite(at) || at < 0)) throw httpError(400, 'Bad offset');
+      // (a file is 5 GB at most — Haris 2026-11-20 19:53)
+      if ((at || 0) + data.length > 5 * 1e9 || (a.path && at == null && (() => { try { return fs.statSync(resolve(a.path)).size; } catch { return 0; } })() + data.length > 5 * 1e9)) throw httpError(413, 'Files up to 5 GB can be uploaded');
       let dest;
       if (!a.path) {
         const dir = uploadDir(a);
