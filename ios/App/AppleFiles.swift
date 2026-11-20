@@ -190,13 +190,20 @@ final class FileTile: UIView {
     sub.text = c["sub"] as? String; sub.font = .systemFont(ofSize: 13)
     picPath = p
     if let p = p, !keep {
+      // (a logo the phone already has comes back at once: put straight on, no fade from the client's colour — it showed the
+      //  colour, then faded into the logo, each time Client Assets opened: Haris 2026-11-21 00:38. One still coming: the fade)
+      var now = true
       FeedLoader.shared.image(p) { [weak self] img in
         guard let self = self, self.picPath == p, let img = img else { return }
-        UIView.transition(with: self.pic, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction]) {
-          LogoLook.put(img, key: p, in: self.pic); self.badge.isHidden = true
+        if now { LogoLook.put(img, key: p, in: self.pic); self.badge.isHidden = true }
+        else {
+          UIView.transition(with: self.pic, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction]) {
+            LogoLook.put(img, key: p, in: self.pic); self.badge.isHidden = true
+          }
         }
         self.logoOn = p
       }
+      now = false
     }
     accessibilityLabel = "\(name.text ?? "Client"), \(sub.text ?? "")"
     setNeedsLayout()
