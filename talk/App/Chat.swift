@@ -2535,6 +2535,9 @@ final class BubbleCell: UITableViewCell {
     if isPhoto, let f = m.file {
       let w: CGFloat = mine ? 236 : 262, ratio = CGFloat((f.h ?? 3) / max(1, f.w ?? 4))
       photoH.constant = min(330, max(120, w * ratio))
+      // (a caption: the words laid out as wide as the photo's bubble — they were laid out for a words-only bubble's width, wider,
+      //  so the time's room didn't wrap and the time sat on the last words: Haris 2026-11-20 18:57)
+      textL.preferredMaxLayoutWidth = w - (mine ? 23 : 24)
       if framed { photoWrap.reach(0, 8, caption ? 0 : 3, mine ? 7 : 8) }
       // (as much room under the role as above the name — Haris 2026-11-13)
       else if headed { photoWrap.reach(-8, 12, caption ? 0 : 7, 12) }

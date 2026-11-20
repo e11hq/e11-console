@@ -71,6 +71,12 @@ final class Net {
   }()
   // (the server kept in the Keychain too: the notification helper tells it the message reached this phone — Notify/)
   init() { cookie = Keychain.get("cookie-" + Server.host); Keychain.set(Server.url, "notify-server") }
+  // this phone's own key, made once and kept in the Keychain (kept through a reinstall): the server tracks each phone
+  // on its own, so the same account on two phones gets everything on each
+  static let deviceKey: String = {
+    if let k = Keychain.get("device-key"), k.count >= 16 { return k }
+    let k = UUID().uuidString; Keychain.set(k, "device-key"); return k
+  }()
   func reload() { stopListening(); cookie = Keychain.get("cookie-" + Server.host); Keychain.set(Server.url, "notify-server") }   // (another server: its own sign-in)
   var signedIn: Bool {
     #if DEBUG
@@ -83,6 +89,7 @@ final class Net {
     var r = URLRequest(url: URL(string: Server.url + path)!)
     r.httpMethod = method
     if let c = cookie { r.setValue(c, forHTTPHeaderField: "Cookie") }
+    r.setValue(Net.deviceKey, forHTTPHeaderField: "X-Talk-Device")   // (this phone on its own — per-device delivery, Haris 2026-11-20 18:56)
     #if DEBUG
     if let e = Server.devEmail { r.setValue(e, forHTTPHeaderField: "X-Dev-Email") }
     #endif
