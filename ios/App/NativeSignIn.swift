@@ -606,7 +606,9 @@ final class SignInScreen: UIView, UITextFieldDelegate, UIGestureRecognizerDelega
     let last = [foot, linkB, secondB, mainB].first { !$0.isHidden } ?? mainB
     let bottom = last.convert(last.bounds, to: scroll).maxY - scroll.contentOffset.y + scroll.frame.minY   // (where it is on the screen now)
     let need = bottom + room - kbTop
-    scroll.contentOffset = CGPoint(x: 0, y: max(top, top + need + (scroll.contentOffset.y - top)))
+    // (down too, not only up: with the icon gone the page can be short, and the last line sat well above the keyboard —
+    //  Haris 2026-11-20 11:32)
+    scroll.contentOffset = CGPoint(x: 0, y: scroll.contentOffset.y + need)
   }
   func textFieldDidEndEditing(_ f: UITextField) { paint() }
   // the code's four boxes: one digit each, on to the next; four pasted (or filled from Messages) go in at once; the
