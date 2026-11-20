@@ -2074,6 +2074,15 @@ final class MeCtl {
         parts.append(.button("Check again", false, true, { [weak self] in self?.loadVideo(true) }))
         card.set(parts, sig: jsonString(v), look: L)
         out.append(card)
+        // (Cloudflare storage — how much R2 holds for E11 Console and E11 Talk, and what it means this month; the owner's
+        //  line, Haris 2026-11-20 19:41)
+        let r = (about["r2"] as? [String: Any]) ?? [:]
+        let r2c = part(h, "r2") { InfoCard() }
+        var rp: [InfoCard.Part] = [.title("icloud", "Cloudflare storage")]
+        if let hd = r["head"] as? String { rp.append(.status(hd, .label)) } else { rp.append(.note("Checking…")) }
+        if let sb = r["sub"] as? String, !sb.isEmpty { rp.append(.note(sb)) }
+        r2c.set(rp, sig: jsonString(r), look: L)
+        out.append(r2c)
         let imp = part(h, "imp") { InfoCard() }
         imp.set([.title("square.and.arrow.down", "Move data from the Mac app"),
                   .note("Choose e11-data.json from the “E11 Console Data” folder on the Mac. Tasks, clients, comments, people, notifications and client assets are added to the server."),
