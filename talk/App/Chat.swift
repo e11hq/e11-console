@@ -182,7 +182,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       case .msg(let key):
         let id = self.mid(key)
         let c = tv.dequeueReusableCell(withIdentifier: "b", for: ip) as! BubbleCell
-        c.contentView.isUserInteractionEnabled = !self.keyUp
+        c.contentView.isUserInteractionEnabled = !self.keyUp && !self.selecting
         c.find = self.findSet.contains(id) ? (self.findQ, id == self.findCur) : nil
         c.album = self.albums[id] ?? []
         c.moreNotes = (self.notes[id]?.count ?? 0) > 1
@@ -196,6 +196,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
           //  measured on Haris's phone 2026-11-13)
           UIView.performWithoutAnimation { c.set(m, group: g, log: Talk.shared.log(self.group), run: self.runs[id] ?? Run()); if c.window != nil { c.contentView.layoutIfNeeded() } }
         }
+        c.showPick(self.selecting, picked: self.picked.contains(id), mine: self.msgs[id]?.by == Talk.shared.me?.id, animated: false)
         c.onReplyTap = { [weak self] rid in self?.jump(to: rid) }
         c.onFileTap = { [weak self, weak c] m in self?.openFrom = (m.kind == "photo" || m.kind == "video") ? c?.photo : nil; self?.open(m) }
         c.onRetry = { [weak self] m in guard let self = self else { return }; Talk.shared.retry(self.group, m) }
@@ -1412,7 +1413,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
 
   // ---------- hold: reactions and the menu ----------
   func tableView(_ tv: UITableView, contextMenuConfigurationForRowAt ip: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
-    guard case .msg(let key)? = data.itemIdentifier(for: ip), let m = msgs[mid(key)], m.kind != "sys" else { return nil }
+    guard !selecting, case .msg(let key)? = data.itemIdentifier(for: ip), let m = msgs[mid(key)], m.kind != "sys" else { return nil }
     // (only a hold on the bubble itself — not on the empty space beside it in its row, Haris 2026-11-12)
     if let c = tv.cellForRow(at: ip) as? BubbleCell, !c.holds(c.contentView.convert(point, from: tv)) { return nil }
     // (the trial of Haris 2026-11-12: a preview of the bubble — iPhone places it where it fits with the menu, shrinking a
@@ -1516,6 +1517,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       }])
     }
     items.append(UIMenu(options: .displayInline, children: [
+      UIAction(title: "Select", image: UIImage(systemName: "checkmark.circle")) { [weak self] _ in self?.startSelect(m.id) },
       UIAction(title: "Delete", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in self?.askDelete(m) }
     ]))
     return UIMenu(children: items)
@@ -1529,6 +1531,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       UIAction(title: "Save \(al.count) to Photos", image: UIImage(systemName: "square.and.arrow.down")) { [weak self] _ in ChatVC.saveAll(al) },
     ]
     return UIMenu(children: [reactRow(m), UIMenu(options: .displayInline, children: acts), UIMenu(options: .displayInline, children: [
+      UIAction(title: "Select", image: UIImage(systemName: "checkmark.circle")) { [weak self] _ in self?.startSelect(m.id) },
       UIAction(title: "Delete", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in self?.askDelete(al) }
     ])])
   }
@@ -1555,11 +1558,86 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
   // Delete: Apple's sheet — for everyone (yours, about 2 days after sending) or for me
   private func askDelete(_ m: Msg) { askDelete([m]) }
+
+  // ---------- Select: several messages picked, then deleted together (WhatsApp's way — Haris 2026-11-20 19:00) ----------
+  // A hold → Select: each row gets its circle, a tap picks or unpicks (nothing else is tapped meanwhile), and the message
+  // bar gives way to Cancel · "N Selected" · the bin. An album's row picks the whole album.
+  private var selecting = false, picked = Set<String>()
+  private let selBar = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
+  private let selCount = UILabel(), selBin = UIButton(type: .system), selCancel = UIButton(type: .system)
+  private lazy var pickTap = UITapGestureRecognizer(target: self, action: #selector(pickTapped(_:)))
+  private func startSelect(_ id: String) {
+    if holding { afterHold = { [weak self] in self?.startSelect(id) }; return }
+    if selBar.superview == nil {
+      selBar.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(selBar)
+      NSLayoutConstraint.activate([selBar.leadingAnchor.constraint(equalTo: view.leadingAnchor), selBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                                   selBar.topAnchor.constraint(equalTo: bar.topAnchor), selBar.bottomAnchor.constraint(equalTo: view.bottomAnchor)])
+      selCancel.setTitle("Cancel", for: .normal); selCancel.titleLabel?.font = .systemFont(ofSize: 17)
+      selCancel.addAction(UIAction { [weak self] _ in self?.endSelect() }, for: .touchUpInside)
+      selCount.font = .systemFont(ofSize: 17, weight: .semibold); selCount.textAlignment = .center
+      selBin.setImage(UIImage(systemName: "trash", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20)), for: .normal); selBin.tintColor = .systemRed
+      selBin.accessibilityLabel = "Delete"
+      selBin.addAction(UIAction { [weak self] _ in self?.deletePicked() }, for: .touchUpInside)
+      for v in [selCancel, selCount, selBin] as [UIView] { v.translatesAutoresizingMaskIntoConstraints = false; selBar.contentView.addSubview(v) }
+      NSLayoutConstraint.activate([
+        selCancel.leadingAnchor.constraint(equalTo: selBar.contentView.leadingAnchor, constant: 16), selCancel.topAnchor.constraint(equalTo: selBar.contentView.topAnchor, constant: 8),
+        selCancel.heightAnchor.constraint(equalToConstant: 40),
+        selCount.centerXAnchor.constraint(equalTo: selBar.contentView.centerXAnchor), selCount.centerYAnchor.constraint(equalTo: selCancel.centerYAnchor),
+        selBin.trailingAnchor.constraint(equalTo: selBar.contentView.trailingAnchor, constant: -16), selBin.centerYAnchor.constraint(equalTo: selCancel.centerYAnchor),
+        selBin.widthAnchor.constraint(equalToConstant: 44), selBin.heightAnchor.constraint(equalToConstant: 44),
+      ])
+      selBar.alpha = 0
+      table.addGestureRecognizer(pickTap)
+    }
+    view.endEditing(true)
+    selecting = true; picked = [id]
+    pickTap.isEnabled = true; swipe.isEnabled = false
+    bar.isUserInteractionEnabled = false
+    showPicks(animated: true)
+    UIView.animate(withDuration: 0.25) { self.selBar.alpha = 1; self.bar.alpha = 0 }
+  }
+  private func endSelect() {
+    guard selecting else { return }
+    selecting = false; picked = []
+    pickTap.isEnabled = false; swipe.isEnabled = true
+    bar.isUserInteractionEnabled = true
+    showPicks(animated: true)
+    UIView.animate(withDuration: 0.25) { self.selBar.alpha = 0; self.bar.alpha = 1 }
+  }
+  // the rows on the screen shown again as picked or not (the rest as they come — the list's own cells)
+  private func showPicks(animated: Bool) {
+    selCount.text = picked.count == 1 ? "1 Selected" : "\(picked.count) Selected"
+    selBin.isEnabled = !picked.isEmpty
+    let me = Talk.shared.me?.id
+    for ip in table.indexPathsForVisibleRows ?? [] {
+      guard case .msg(let key)? = data.itemIdentifier(for: ip), let c = table.cellForRow(at: ip) as? BubbleCell else { continue }
+      let id = mid(key)
+      c.contentView.isUserInteractionEnabled = !keyUp && !selecting
+      c.showPick(selecting, picked: picked.contains(id), mine: msgs[id]?.by == me, animated: animated)
+    }
+  }
+  @objc private func pickTapped(_ g: UITapGestureRecognizer) {
+    guard selecting, let ip = table.indexPathForRow(at: g.location(in: table)), case .msg(let key)? = data.itemIdentifier(for: ip) else { return }
+    let id = mid(key)
+    guard let m = msgs[id], m.kind != "sys" else { return }
+    UISelectionFeedbackGenerator().selectionChanged()
+    if picked.contains(id) { picked.remove(id) } else { picked.insert(id) }
+    showPicks(animated: true)
+  }
+  private func deletePicked() {
+    // (in the chat's order; an album's row: all its photos)
+    let order = Talk.shared.log(group).msgs.map { $0.id }
+    var ms: [Msg] = []
+    for id in order where picked.contains(id) { if let al = albums[id], al.count >= 4 { ms.append(contentsOf: al) } else if let m = msgs[id] { ms.append(m) } }
+    guard !ms.isEmpty else { return }
+    askDelete(ms) { [weak self] in self?.endSelect() }
+  }
   // (one message, or an album's photos all together)
   // (from: another page showing it — Photos, Files and Links — the sheet shown there)
-  func askDelete(_ ms: [Msg], from host: UIViewController? = nil) {
+  func askDelete(_ ms: [Msg], from host: UIViewController? = nil, done: (() -> Void)? = nil) {
     let me = Talk.shared.me?.id, now = Date().timeIntervalSince1970 * 1000
-    let a = UIAlertController(title: ms.count > 1 ? "Delete \(ms.count) photos and videos?" : nil, message: nil, preferredStyle: .actionSheet)
+    let media = ms.allSatisfy { $0.kind == "photo" || $0.kind == "video" }
+    let a = UIAlertController(title: ms.count > 1 ? (media ? "Delete \(ms.count) photos and videos?" : "Delete \(ms.count) messages?") : nil, message: nil, preferredStyle: .actionSheet)
     if ms.allSatisfy({ $0.by == me && !$0.deleted && !$0.pending && now - $0.at < 2 * 86400000 }) {
       a.addAction(UIAlertAction(title: "Delete for Everyone", style: .destructive) { [weak self] _ in
         guard let g = self?.group else { return }
@@ -1567,9 +1645,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
           let was = Talk.shared.local(g, m.id) { $0.deleted = true; $0.text = ""; $0.reply = nil }   // (shows at once; the file goes with the server's answer)
           Net.shared.act(["act": "del", "msg": m.id]) { j in if (j?["ok"] as? Bool) == true { Talk.shared.sync() } else { if let w = was { Talk.shared.putBack(g, w) }; toast(j?["error"] as? String ?? "Couldn’t delete it") } }
         }
+        done?()
       })
     }
-    a.addAction(UIAlertAction(title: "Delete for Me", style: .destructive) { [weak self] _ in guard let self = self else { return }; ms.forEach { Talk.shared.deleteForMe(self.group, $0) } })
+    a.addAction(UIAlertAction(title: "Delete for Me", style: .destructive) { [weak self] _ in guard let self = self else { return }; ms.forEach { Talk.shared.deleteForMe(self.group, $0) }; done?() })
     a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
     (host ?? self).present(a, animated: true)
   }
@@ -2395,6 +2474,30 @@ final class BubbleCell: UITableViewCell {
     let go = { for v in self.moving { v.transform = .identity }; self.replyIcon.alpha = 0; self.fwdB.alpha = 1 }
     popping = false
     if animated { UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.82, initialSpringVelocity: 0, options: [.allowUserInteraction], animations: go) } else { go() }
+  }
+  // ---------- picking several (Select, WhatsApp's way — Haris 2026-11-20 19:00) ----------
+  // a circle at the row's left (ticked when picked), the row tinted; someone else's bubble moves over to make room
+  private let pickDot = UIImageView(), pickTint = UIView()
+  func showPick(_ on: Bool, picked: Bool, mine: Bool, animated: Bool) {
+    if pickDot.superview == nil {
+      pickTint.isUserInteractionEnabled = false; pickDot.isUserInteractionEnabled = false
+      pickTint.backgroundColor = Look.accent.withAlphaComponent(0.14); pickTint.alpha = 0; pickDot.alpha = 0
+      insertSubview(pickTint, at: 0); addSubview(pickDot)
+    }
+    pickDot.image = UIImage(systemName: picked ? "checkmark.circle.fill" : "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22))
+    pickDot.tintColor = picked ? Look.accent : .tertiaryLabel
+    let shift: CGFloat = on && !mine ? 36 : 0
+    let put = {
+      self.pickDot.alpha = on ? 1 : 0; self.pickTint.alpha = on && picked ? 1 : 0
+      // (moved by the content's own bounds — never a transform on it, the rows' rule)
+      self.contentView.bounds.origin.x = -shift
+    }
+    if animated { UIView.animate(withDuration: 0.25, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: put) } else { put() }
+  }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    pickTint.frame = bounds
+    pickDot.bounds = CGRect(x: 0, y: 0, width: 26, height: 26); pickDot.center = CGPoint(x: 25, y: bounds.midY)
   }
   override func prepareForReuse() {
     super.prepareForReuse()
