@@ -336,9 +336,6 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   }
   // the page went elsewhere (signed out, another site): no sidebar until the E11 page sends it again
   func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-    #if APPSTORE
-    SignInTimes.page("page started showing:", webView.url)
-    #endif
     if side.on { side.apply(["on": false]) }
     #if APPSTORE
     if webView.url?.host == URL(string: SERVER)?.host, !(webView.url?.path ?? "").hasPrefix("/cdn-cgi/") { MacSignIn.dismiss() }
@@ -369,9 +366,6 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   }
   // the server may stop answering for a moment (an update): try again shortly instead of a blank window
   func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { retryLater(error) }
-  #if APPSTORE
-  func webView(_ webView: WKWebView, didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!) { SignInTimes.page("redirected to", webView.url) }
-  #endif
   func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { retryLater(error) }
   func retryLater(_ error: Error) {
     let e = error as NSError
@@ -417,13 +411,11 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self, weak sp] in if let sp = sp, self?.splash === sp { self?.endSplash() } }
   }
   func endSplash(fast: Bool = false) {
-    SignInTimes.note("startup screen leaving")
     guard let sp = splash else { return }
     sp.ready = true
     sp.leave(fast: fast) { [weak self] in if self?.splash === sp { self?.splash = nil } }
   }
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-    SignInTimes.page("page finished loading:", webView.url)
     // (a page that doesn't take the startup screen over — not E11's own, or an older one — lets it go)
     if splash != nil { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in if self?.splashHello == false { self?.endSplash() } } }
     // (under our own sign-in page too, as the iPhone app — it's on our "signin." host since 2026-11-11, so the link never showed
@@ -560,7 +552,6 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   // links the window can't show itself (mailto:, e11console:, …) go to the Mac
   func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
     #if APPSTORE
-    if action.targetFrame?.isMainFrame != false { SignInTimes.page("going to", action.request.url) }
     // our sign-in page about to open: the app's own sign-in screen instead (MacSignIn.swift — Haris 2026-11-20)
     if action.targetFrame?.isMainFrame != false, let u = action.request.url, let h = u.host?.lowercased(),
        h.hasPrefix("signin.") || h.hasPrefix("signin-"), MacSignIn.takeOver(u, app: self) { return decisionHandler(.cancel) }
@@ -580,9 +571,6 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     decisionHandler(.allow)
   }
   func webView(_ webView: WKWebView, decidePolicyFor response: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
-    #if APPSTORE
-    if response.isForMainFrame { SignInTimes.page("answer \((response.response as? HTTPURLResponse)?.statusCode ?? 0) from", response.response.url) }
-    #endif
     if response.isForMainFrame, let r = response.response as? HTTPURLResponse, r.url?.host == URL(string: SERVER)?.host,
        (502...504).contains(r.statusCode) || (520...530).contains(r.statusCode) {
       decisionHandler(.cancel)
