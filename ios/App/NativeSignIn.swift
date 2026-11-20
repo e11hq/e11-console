@@ -556,7 +556,14 @@ final class SignInScreen: UIView, UITextFieldDelegate, UIGestureRecognizerDelega
   private static var bioSymbol: String { switch bioType { case .faceID: return "faceid"; case .touchID: return "touchid"; default: return "lock" } }
 
   /// waiting for the server before the first step (the first time on this phone): only a small spinner
-  func setLoading(_ on: Bool) { if on && !hasShown { loading.startAnimating() } else { loading.stopAnimating() } }
+  // (only after 0.3 s — a quick answer shows no spinner at all: Haris 2026-11-20 12:11)
+  func setLoading(_ on: Bool) {
+    guard on else { loading.stopAnimating(); return }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+      guard let self = self, !self.hasShown else { return }
+      self.loading.startAnimating()
+    }
+  }
   func showError(_ t: String?) {
     errL.text = t; errL.isHidden = (t ?? "").isEmpty
     if !errL.isHidden { UINotificationFeedbackGenerator().notificationOccurred(.error) }
