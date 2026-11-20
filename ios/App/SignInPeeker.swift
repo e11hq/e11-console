@@ -16,6 +16,7 @@ final class SignInPeeker: UIView {
   private let footL = CAShapeLayer(), footR = CAShapeLayer()
   private let eyeL = CALayer(), eyeR = CALayer(), pupL = CALayer(), pupR = CALayer()
   private let mouth = CAShapeLayer(), handL = CAShapeLayer(), handR = CAShapeLayer()
+  private let clip: CALayer = { let c = CALayer(); c.backgroundColor = UIColor.black.cgColor; return c }()
   private var link: CADisplayLink?
 
   // where it is — springs, as the canvas
@@ -270,6 +271,10 @@ final class SignInPeeker: UIView {
     let sy = s * (1 + breathe + sq * 0.05 + stretch), sx = s * (1 - breathe * 0.6 - sq * 0.035 - stretch * 0.5)
     let air = mode == .hold || mode == .fling
     CATransaction.begin(); CATransaction.setDisableActions(true)
+    // (its body ends at the keyboard's edge — iPhone's keyboard is see-through, and its body showed behind it; held or
+    //  flung, all of it)
+    if air { if layer.mask != nil { layer.mask = nil } }
+    else { clip.frame = CGRect(x: -200, y: -400, width: bounds.width + 400, height: max(0, (kb.isNull ? bounds.maxY : kb.minY) + 400)); if layer.mask !== clip { layer.mask = clip } }
     fig.position = CGPoint(x: x, y: y)
     fig.transform = CATransform3DScale(CATransform3DMakeRotation(r * .pi / 180, 0, 0, 1), sx * K, sy * K, 1)
     hands.position = fig.position

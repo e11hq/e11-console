@@ -180,7 +180,7 @@ final class SignInFlow {
 }
 
 /// The screen itself — the mock-ups: the app's icon (or your initials), the greeting, the title, one glass card, the buttons
-final class SignInScreen: UIView, UITextFieldDelegate {
+final class SignInScreen: UIView, UITextFieldDelegate, UIGestureRecognizerDelegate {
   enum Mode: Equatable { case form, code(owner: Bool), setPassword, welcome, continueAs }
   var onSignIn: ((String, String) -> Void)?
   var onUseCode: ((String) -> Void)?
@@ -308,6 +308,11 @@ final class SignInScreen: UIView, UITextFieldDelegate {
     addSubview(peeker)
     // the keyboard up: as the canvas — the icon fades away and the page moves up as one, the card and its button above the
     // keyboard with the peeker's room under them; no scrolling while typing (Haris 2026-11-20 10:35: it scrolled a lot)
+    // a tap anywhere away from typing puts the keyboard down, and only that — never the button under the finger (the
+    // apps' rule; Haris 2026-11-20 11:09: "how can i put the keyboard down again?")
+    let away = UITapGestureRecognizer(target: self, action: #selector(tapAway))
+    away.cancelsTouchesInView = true; away.delegate = self
+    addGestureRecognizer(away)
     let nc = NotificationCenter.default
     nc.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] n in self?.keyboardMoved(n) }
     nc.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] n in self?.keyboardMoved(n, gone: true) }
@@ -581,15 +586,25 @@ final class SignInScreen: UIView, UITextFieldDelegate {
       self.fitToKeyboard()
     }
   }
+  @objc private func tapAway() { endEditing(true) }
+  func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive t: UITouch) -> Bool {
+    guard typingUp else { return false }
+    let p = t.location(in: self)
+    for v in [card, codeRow] as [UIView] where !v.isHidden { if v.convert(v.bounds, to: self).contains(p) { return false } }
+    if peeker.point(inside: convert(p, to: peeker), with: nil) { return false }   // (holding the peeker)
+    return true
+  }
   private func fitToKeyboard() {
     icon.isHidden = isPersonNow || typingUp; icon.alpha = typingUp ? 0 : 1
     scroll.isScrollEnabled = !typingUp
     layoutIfNeeded()
     let top = -scroll.adjustedContentInset.top
     guard typingUp else { scroll.contentOffset = CGPoint(x: 0, y: top); return }
-    // the main button's bottom, the peeker's room under it, just above the keyboard
-    let room: CGFloat = UIAccessibility.isReduceMotionEnabled ? 16 : 84
-    let bottom = mainB.convert(mainB.bounds, to: scroll).maxY - scroll.contentOffset.y + scroll.frame.minY   // (where it is on the screen now)
+    // the page's last line just above the keyboard — the peeker sits over its end (Haris 2026-11-20 11:09: there was a lot
+    // of room under the last line, "let it cover it, it's fine")
+    let room: CGFloat = 14
+    let last = [foot, linkB, secondB, mainB].first { !$0.isHidden } ?? mainB
+    let bottom = last.convert(last.bounds, to: scroll).maxY - scroll.contentOffset.y + scroll.frame.minY   // (where it is on the screen now)
     let need = bottom + room - kbTop
     scroll.contentOffset = CGPoint(x: 0, y: max(top, top + need + (scroll.contentOffset.y - top)))
   }
