@@ -315,6 +315,7 @@ final class Talk {
     case "msg":
       let f = (e["file"] as? [String: Any]).flatMap { f -> Msg.FileRef? in
         guard let fid = f["id"] as? String else { return nil }
+        if let k = f["key"] as? String { FileKeys.set(fid, k) }   // (locked in R2: its key — R2Files)
         return Msg.FileRef(id: fid, name: f["name"] as? String ?? "File", size: f["size"] as? Int ?? 0, kind: f["kind"] as? String ?? "file", w: f["w"] as? Double, h: f["h"] as? Double, secs: f["secs"] as? Double, wave: f["wave"] as? String, thumb: f["thumb"] as? String)
       }
       let r = (e["reply"] as? [String: Any]).flatMap { r -> Msg.Reply? in
@@ -409,6 +410,7 @@ final class Talk {
     l.msgs.append(m); logs[g] = l; saveSoon(g)
     NotificationCenter.default.post(name: .talkGroup, object: g); NotificationCenter.default.post(name: .talkChanged, object: nil)
     var linkBody: [String: Any]? = nil
+    var fileKey: String? = nil   // (the file's lock, when it went to R2 — R2Files)
     let go = { (fileId: String?) in
       var b: [String: Any] = ["act": "send", "group": g, "text": text, "cid": cid, "mentions": mentions]
       if let lb = linkBody { b["link"] = lb }
@@ -418,7 +420,7 @@ final class Talk {
       if let p = place { b["location"] = p.json }
       if fwd { b["fwd"] = true }
       if let r = m.reply { b["reply"] = ["id": r.id, "by": r.by, "text": r.text, "kind": r.kind] }
-      if let f = file, let fid = fileId { var fd: [String: Any] = ["id": fid, "kind": f.kind]; fd["w"] = f.w; fd["h"] = f.h; fd["secs"] = f.secs; fd["wave"] = f.wave; fd["thumb"] = thumb; b["file"] = fd }
+      if let f = file, let fid = fileId { var fd: [String: Any] = ["id": fid, "kind": f.kind]; fd["w"] = f.w; fd["h"] = f.h; fd["secs"] = f.secs; fd["wave"] = f.wave; fd["thumb"] = thumb; fd["key"] = fileKey; b["file"] = fd }
       Net.shared.act(b) { [weak self] j in
         guard let self = self else { return }
         // (the send sound once the server has it — not while the clock shows it on its way; every kind, Haris 2026-11-12)
@@ -428,8 +430,9 @@ final class Talk {
     let up = { (data: Data, f: Msg.FileRef) in
       Uploads.set(f.id, 0, total: data.count)
       var going = true   // (a late word of progress after it's up doesn't bring the ring back)
-      Net.shared.upload(data, name: f.name, progress: { p in guard going else { return }; progress?(p); Uploads.set(f.id, p, total: data.count) }) { [weak self] fid in
+      Net.shared.uploadMsg(data, name: f.name, progress: { p in guard going else { return }; progress?(p); Uploads.set(f.id, p, total: data.count) }) { [weak self] fid, key in
         going = false; Uploads.end(f.id)
+        if let fid = fid, let key = key { FileKeys.set(fid, key); fileKey = key }
         guard let fid = fid else { self?.mark(g, cid, failed: true); return }
         try? FileManager.default.copyItem(at: Net.local(f.id), to: Net.local(fid))
         m.file?.id = fid

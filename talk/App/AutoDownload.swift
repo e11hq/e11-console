@@ -95,11 +95,15 @@ final class Downloads: NSObject, URLSessionDownloadDelegate {
     if FileManager.default.fileExists(atPath: Net.local(id).path) { done?(true); return }
     if let d = done { waiters[id, default: []].append(d) }
     guard tasks[id] == nil else { return }
-    let t = session.downloadTask(with: Net.shared.request("/api/talk/file/" + id))
+    let t = session.downloadTask(with: Net.shared.request("/api/talk/file/" + id + "?r2=1"))   // (?r2=1: straight from R2 — R2Files)
     tasks[id] = t; ids[t.taskIdentifier] = id; got[id] = (0, Int64(size))
     t.resume(); post(id)
   }
   func cancel(_ id: String) { tasks[id]?.cancel() }
+  // (off to R2 for the file: without this server's sign-in)
+  func urlSession(_ s: URLSession, task: URLSessionTask, willPerformHTTPRedirection r: HTTPURLResponse, newRequest n: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+    completionHandler(CleanRedirect.clean(n))
+  }
   private func post(_ id: String) { NotificationCenter.default.post(name: .talkFile, object: id) }
   func urlSession(_ s: URLSession, downloadTask t: URLSessionDownloadTask, didWriteData d: Int64, totalBytesWritten w: Int64, totalBytesExpectedToWrite e: Int64) {
     guard let id = ids[t.taskIdentifier] else { return }
@@ -112,6 +116,7 @@ final class Downloads: NSObject, URLSessionDownloadDelegate {
     guard let id = ids[t.taskIdentifier] else { return }
     let code = (t.response as? HTTPURLResponse)?.statusCode ?? 0
     if code == 200 {
+      FileLock.openInPlace(id, at: loc)   // (sent locked: opened with its key)
       let to = Net.local(id); try? FileManager.default.removeItem(at: to); try? FileManager.default.moveItem(at: loc, to: to)
     } else if code == 404 || code == 410 {
       // (the server has let it go: No longer available — remembered, the newest 2000)

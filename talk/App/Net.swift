@@ -66,7 +66,8 @@ final class Net {
     let c = URLSessionConfiguration.default
     c.httpCookieStorage = nil; c.httpShouldSetCookies = false; c.requestCachePolicy = .reloadIgnoringLocalCacheData
     c.timeoutIntervalForRequest = 30
-    return URLSession(configuration: c)
+    // (CleanRedirect: a file sent off to R2 goes without this server's sign-in — R2Files)
+    return URLSession(configuration: c, delegate: CleanRedirect.shared, delegateQueue: nil)
   }()
   // (the server kept in the Keychain too: the notification helper tells it the message reached this phone — Notify/)
   init() { cookie = Keychain.get("cookie-" + Server.host); Keychain.set(Server.url, "notify-server") }
@@ -212,7 +213,8 @@ final class Net {
   // a message's file from the server — in the office over the office network first (Office), else (or if that doesn't
   // work) the usual way. The answer as a download task gives it: the file, and the server's answer.
   private func download(_ id: String, _ then: @escaping (URL?, URLResponse?) -> Void) {
-    let usual = { self.session.downloadTask(with: self.request("/api/talk/file/" + id)) { tmp, resp, _ in then(tmp, resp) }.resume() }
+    // (?r2=1: a file in R2 — sent straight there, R2Files; the rest as before)
+    let usual = { self.session.downloadTask(with: self.request("/api/talk/file/" + id + "?r2=1")) { tmp, resp, _ in then(tmp, resp) }.resume() }
     Office.shared.pass(["kind": "file", "id": id]) { p in
       guard let p = p, let u = URL(string: p.url + "/local/talk/file?t=" + (p.token.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")) else { return usual() }
       Office.shared.session.downloadTask(with: URLRequest(url: u)) { tmp, resp, _ in
@@ -231,6 +233,7 @@ final class Net {
       if (400..<500).contains(code) { DispatchQueue.main.async { Backup.shared.recover(id, uid: uid, done) }; return }
       guard let tmp = tmp, code == 200 else { DispatchQueue.main.async { done(nil) }; return }
       try? FileManager.default.removeItem(at: to)
+      FileLock.openInPlace(id, at: tmp)   // (sent locked: opened with its key — R2Files)
       try? FileManager.default.moveItem(at: tmp, to: to)
       DispatchQueue.main.async { done(FileManager.default.fileExists(atPath: to.path) ? to : nil) }
     }
@@ -244,7 +247,7 @@ final class Net {
     download(id) { tmp, resp in
       let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
       if (400..<500).contains(code) { DispatchQueue.main.async { Backup.shared.recover(id, uid: uid) { _ in done(true) } }; return }
-      if code == 200, let tmp = tmp { try? FileManager.default.removeItem(at: to); try? FileManager.default.moveItem(at: tmp, to: to) }
+      if code == 200, let tmp = tmp { try? FileManager.default.removeItem(at: to); FileLock.openInPlace(id, at: tmp); try? FileManager.default.moveItem(at: tmp, to: to) }
       DispatchQueue.main.async { done(code == 200 || (400..<500).contains(code)) }
     }
   }
