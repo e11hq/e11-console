@@ -60,7 +60,12 @@ final class SignInFlow {
   private var email = UserDefaults.standard.string(forKey: "e11_signin_email") ?? ""
   private var owner = false
   private var ticket = ""
-  private var who: (name: String, color: UIColor?)?
+  private var who: (name: String, color: UIColor?, photo: UIImage?)?
+  // (the person's photo, as the server sent it: data:image/…;base64,…)
+  static func photo(_ s: String?) -> UIImage? {
+    guard let s = s, let i = s.range(of: "base64,") else { return nil }
+    return Data(base64Encoded: String(s[i.upperBound...])).flatMap(UIImage.init(data:))
+  }
 
   init(brand: SignInBrand, api: SignInAPI, frame: CGRect) {
     self.brand = brand; self.api = api
@@ -93,24 +98,26 @@ final class SignInFlow {
       //  said "Welcome back" with no name: Haris 2026-11-20 11:38)
       if let w = UserDefaults.standard.dictionary(forKey: "e11_signin_who"), (w["key"] as? String) == String(k.prefix(12)),
          let n = w["name"] as? String, !n.isEmpty {
-        who = (n, UIColor(signInHex: w["color"] as? String))
+        who = (n, UIColor(signInHex: w["color"] as? String), Self.photo(w["photo"] as? String))
         if let e = w["email"] as? String, !e.isEmpty { email = e }
       }
       var shown = false
       let first = { [weak self] in
         guard let self = self, !shown else { return }
         shown = true
+        self.screen.photo = self.who?.photo
         self.screen.show(m, email: m == .continueAs && self.who == nil ? "" : self.email, name: self.who?.name, color: self.who?.color)
       }
       api.post("who", ["key": k]) { [weak self] j in
         guard let self = self else { return }
         if (j?["ok"] as? Bool) == true, let n = j?["name"] as? String, !n.isEmpty {
-          let same = self.who?.name == n
-          self.who = (n, UIColor(signInHex: j?["color"] as? String))
+          let ph = j?["photo"] as? String
+          let same = self.who?.name == n && (self.who?.photo != nil) == (ph != nil)
+          self.who = (n, UIColor(signInHex: j?["color"] as? String), Self.photo(ph))
           // (the key's own email — the server says it since 2026-11-20; kept for the form's Email too)
           if let e = j?["email"] as? String, !e.isEmpty { self.email = e; UserDefaults.standard.set(e, forKey: "e11_signin_email") }
-          UserDefaults.standard.set(["key": String(k.prefix(12)), "name": n, "color": j?["color"] as? String ?? "", "email": self.email], forKey: "e11_signin_who")
-          if shown, !same { self.screen.setPerson(name: n, color: self.who?.color, email: self.email) }
+          UserDefaults.standard.set(["key": String(k.prefix(12)), "name": n, "color": j?["color"] as? String ?? "", "email": self.email, "photo": ph ?? ""], forKey: "e11_signin_who")
+          if shown, !same { self.screen.photo = self.who?.photo; self.screen.setPerson(name: n, color: self.who?.color, email: self.email) }
         }
         first()
       }
@@ -227,6 +234,9 @@ final class SignInScreen: UIView, UITextFieldDelegate, UIGestureRecognizerDelega
   private let scroll = UIScrollView(), stack = UIStackView()
   private let icon = UIImageView(image: UIImage(named: "SignInIcon"))
   private let avatar = UIView(), avatarL = UILabel(), badge = UIImageView(image: UIImage(named: "SignInIcon"))
+  private let avatarImg = UIImageView()
+  /// the person's profile photo — in the circle in place of the initials (Haris 2026-11-20 14:13)
+  var photo: UIImage?
   private let greet = UILabel(), titleL = UILabel(), sub = UILabel()
   private let card = UIView(), sep = UIView()
   private let f1 = UITextField(), f2 = UITextField()
@@ -261,7 +271,8 @@ final class SignInScreen: UIView, UITextFieldDelegate, UIGestureRecognizerDelega
     avatarL.font = .systemFont(ofSize: 38, weight: .semibold); avatarL.textColor = .white; avatarL.textAlignment = .center
     badge.contentMode = .scaleAspectFill; badge.clipsToBounds = true
     badge.layer.cornerRadius = 11; badge.layer.cornerCurve = .continuous; badge.layer.borderWidth = 3
-    [avatarL, badge].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; avatar.addSubview($0) }
+    avatarImg.contentMode = .scaleAspectFill; avatarImg.clipsToBounds = true; avatarImg.layer.cornerRadius = 52; avatarImg.isHidden = true
+    [avatarImg, avatarL, badge].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; avatar.addSubview($0) }
 
     greet.font = .systemFont(ofSize: 13, weight: .semibold); greet.textColor = .secondaryLabel; greet.textAlignment = .center
     titleL.font = .systemFont(ofSize: 34, weight: .bold); titleL.textAlignment = .center; titleL.numberOfLines = 0
@@ -359,6 +370,8 @@ final class SignInScreen: UIView, UITextFieldDelegate, UIGestureRecognizerDelega
       icon.widthAnchor.constraint(equalToConstant: 96), icon.heightAnchor.constraint(equalToConstant: 96),
       avatar.widthAnchor.constraint(equalToConstant: 104), avatar.heightAnchor.constraint(equalToConstant: 104),
       avatarL.centerXAnchor.constraint(equalTo: avatar.centerXAnchor), avatarL.centerYAnchor.constraint(equalTo: avatar.centerYAnchor),
+      avatarImg.leadingAnchor.constraint(equalTo: avatar.leadingAnchor), avatarImg.trailingAnchor.constraint(equalTo: avatar.trailingAnchor),
+      avatarImg.topAnchor.constraint(equalTo: avatar.topAnchor), avatarImg.bottomAnchor.constraint(equalTo: avatar.bottomAnchor),
       badge.widthAnchor.constraint(equalToConstant: 38), badge.heightAnchor.constraint(equalToConstant: 38),
       badge.trailingAnchor.constraint(equalTo: avatar.trailingAnchor, constant: 4), badge.bottomAnchor.constraint(equalTo: avatar.bottomAnchor, constant: 4),
       greet.widthAnchor.constraint(equalTo: stack.widthAnchor), titleL.widthAnchor.constraint(equalTo: stack.widthAnchor),
@@ -514,6 +527,7 @@ final class SignInScreen: UIView, UITextFieldDelegate, UIGestureRecognizerDelega
       self.mainB.configuration = mc
       self.foot.isHidden = (self.foot.text ?? "").isEmpty
       self.avatarL.text = Self.initials(self.name)
+      self.avatarImg.image = self.photo; self.avatarImg.isHidden = self.photo == nil; self.avatarL.isHidden = self.photo != nil
       self.avatar.backgroundColor = self.color ?? self.brand.glow
       self.paint()
       self.layoutIfNeeded()
