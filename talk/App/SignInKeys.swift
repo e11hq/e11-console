@@ -137,8 +137,24 @@ extension SignInVC {
     var req: [String: String] = [:]
     for it in c.queryItems ?? [] where it.name != "app" { req[it.name] = it.value ?? "" }
     let base = "\(u.scheme ?? "https")://\(u.host ?? "")"
-    // (already showing — a new sign-in request: the screen stays as it is, with the new request)
-    if let f = flow { f.api.base = base; f.api.req = req; f.renewed(); return true }
+    // (already showing — a new sign-in request: the screen stays as it is, with the new request; up already, before the
+    //  request came: its first step now)
+    if let f = flow { f.api.set(base: base, req: req); if f.begun { f.renewed() } else { f.begin() }; return true }
+    let f = make(web: web, base: base, req: req)
+    f.screen.alpha = 0
+    f.begin()
+    UIView.animate(withDuration: Crossfade.time) { f.screen.alpha = 1 }
+    return true
+  }
+  // instant sign-in (Haris 2026-11-20 12:07): with a key on this phone and its name kept from last time, the sign-in screen
+  // at once — "Continue as …" / "Welcome back" — the server asked behind it; otherwise the small spinner as before
+  func instantSignIn(web: WKWebView) {
+    guard flow == nil, !Server.review else { return }
+    let k = SignInKeys.consoleKey ?? SignInKeys.ownKey
+    guard k != nil, SignInFlow.knows(k) else { return }
+    make(web: web, base: "", req: [:]).begin()
+  }
+  @discardableResult private func make(web: WKWebView, base: String, req: [String: String]) -> SignInFlow {
     let f = SignInFlow(brand: SignInKeys.brand, api: SignInAPI(base: base, req: req), frame: view.bounds)
     if let k = SignInKeys.consoleKey {
       UserDefaults.standard.set(true, forKey: "talk_via_console")   // (signed in through E11 Console: it signs Talk out too)
@@ -151,13 +167,10 @@ extension SignInVC {
     let s = f.screen
     s.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     s.frame = view.bounds
-    s.alpha = 0
     cover?.removeFromSuperview(); cover = s
     view.addSubview(s)
     flow = f
-    f.begin()
-    UIView.animate(withDuration: Crossfade.time) { s.alpha = 1 }
-    return true
+    return f
   }
 }
 

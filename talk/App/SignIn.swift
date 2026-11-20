@@ -32,7 +32,7 @@ final class SignInVC: UIViewController, WKNavigationDelegate {
     view.addSubview(reviewB)
     // (on the App Review copy there's no page of ours to show: its own sign-in, at once)
     if Server.review { web.isHidden = true }
-    else { spin.startAnimating(); web.load(URLRequest(url: URL(string: Server.url + "/api/talk/state")!)) }
+    else { spin.startAnimating(); web.load(URLRequest(url: URL(string: Server.url + "/api/talk/state")!)); instantSignIn(web: web) }
   }
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
