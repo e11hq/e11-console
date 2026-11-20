@@ -209,7 +209,10 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     tabBar.isHidden = true
     view.addSubview(tabsMark)
     view.addSubview(reviewLink)
-    showSplash()
+    // (signed out on this phone — or never signed in: straight to the sign-in screen, no startup logo — Haris 2026-11-20 12:07)
+    let q = defaults.data(forKey: "e11_quick").flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+    let knownOut = SELFTEST.isEmpty && defaults.string(forKey: "e11_server") != "review" && (q?["me"] as? String ?? "").isEmpty
+    if knownOut { ConsoleSignIn.prepare(main: self, animated: false) } else { showSplash() }
     quickStart()
     // (Part B step 8: who's signed in, asked by the app itself — Boot.swift; the self-test's sign-in is set as the page
     //  loads: asked once it has)

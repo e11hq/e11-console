@@ -17,7 +17,7 @@ enum ConsoleSignIn {
     let base = "\(u.scheme ?? "https")://\(u.host ?? "")"
     // (already showing — a new sign-in request: the screen stays as it is, with the new request; put up already on signing
     //  out, still empty: its first step now)
-    if let f = flow { f.api.base = base; f.api.req = req; if f.begun { f.renewed() } else { f.begin() }; return true }
+    if let f = flow { f.api.set(base: base, req: req); if f.begun { f.renewed() } else { f.begin() }; return true }
     let f = make(main: main, web: web, base: base, req: req)
     f.screen.alpha = 0
     main.splashGone(fast: true)
@@ -27,9 +27,14 @@ enum ConsoleSignIn {
   }
   // signing out: the sign-in screen up at once, its background only, until the sign-in request comes — there was a
   // black screen for a moment and the sign-in came late (Haris 2026-11-20 11:38)
-  static func prepare(main: Main) {
+  // (the phone knows it's signed out — signed out here, or never signed in: the sign-in screen at once, the server asked
+  //  behind it — Haris 2026-11-20 12:07; "Welcome back" with the name kept from last time, else a small spinner until the
+  //  first step — the first time: no startup logo before signing in)
+  static func prepare(main: Main, animated: Bool = true) {
     guard flow == nil else { return }
     let f = make(main: main, web: main.web, base: "", req: [:])
+    if f.key != nil, SignInFlow.knows(f.key) { f.begin() } else { f.screen.setLoading(true) }
+    guard animated else { return }
     f.screen.alpha = 0
     UIView.animate(withDuration: 0.2) { f.screen.alpha = 1 }
   }

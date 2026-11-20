@@ -25,7 +25,15 @@ final class SignInAPI {
   var base: String
   var req: [String: String]
   init(base: String, req: [String: String]) { self.base = base; self.req = req }
+  // (the screen can be up before the sign-in request has come — Haris 2026-11-20 12:07: instant sign-in; a call made
+  //  before it waits, and goes the moment it's here)
+  private var waiting: [() -> Void] = []
+  func set(base b: String, req r: [String: String]) {
+    base = b; req = r
+    let w = waiting; waiting = []; w.forEach { $0() }
+  }
   func post(_ what: String, _ body: [String: Any], _ done: @escaping ([String: Any]?) -> Void) {
+    guard !base.isEmpty else { waiting.append { [weak self] in self?.post(what, body, done) }; return }
     guard let u = URL(string: base + "/oidc/api/" + what) else { return done(nil) }
     var b = body; b["req"] = req
     var r = URLRequest(url: u, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
@@ -70,6 +78,11 @@ final class SignInFlow {
 
   // the first screen: "Continue as …" (Talk, with Console's key), "Welcome back" (this phone's key), else the form
   private(set) var begun = false
+  /// the name kept from last time for this key — the screen can show "Welcome back, <name>" before the server is asked
+  static func knows(_ key: String?) -> Bool {
+    guard let k = key, let w = UserDefaults.standard.dictionary(forKey: "e11_signin_who") else { return false }
+    return (w["key"] as? String) == String(k.prefix(12)) && !((w["name"] as? String) ?? "").isEmpty
+  }
   func begin() {
     begun = true
     if let k = continueKey ?? key {
@@ -206,6 +219,7 @@ final class SignInScreen: UIView, UITextFieldDelegate, UIGestureRecognizerDelega
   private(set) var isWaiting = false
   private var hasShown = false
   private var isPersonNow = false, typingUp = false, kbTop: CGFloat = .greatestFiniteMagnitude
+  private let loading = UIActivityIndicatorView(style: .medium)
   private let brand: SignInBrand
   private var email = "", name = "", color: UIColor?
 
@@ -330,6 +344,8 @@ final class SignInScreen: UIView, UITextFieldDelegate, UIGestureRecognizerDelega
 
     for v in [icon, avatar, greet, titleL, sub, card, codeRow, errL, mainB, secondB, linkB, foot, waitL] as [UIView] { stack.addArrangedSubview(v) }
     stack.alpha = 0; reviewB.alpha = 0; backB.isHidden = true   // (nothing until the first step is shown)
+    loading.hidesWhenStopped = true; loading.translatesAutoresizingMaskIntoConstraints = false; addSubview(loading)
+    NSLayoutConstraint.activate([loading.centerXAnchor.constraint(equalTo: centerXAnchor), loading.centerYAnchor.constraint(equalTo: centerYAnchor)])
     let side: CGFloat = 22
     NSLayoutConstraint.activate([
       scroll.topAnchor.constraint(equalTo: topAnchor), scroll.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -440,6 +456,7 @@ final class SignInScreen: UIView, UITextFieldDelegate, UIGestureRecognizerDelega
     let isForm = m == .form, isSet = m == .setPassword, isCode: Bool = { if case .code = m { return true }; return false }()
     let isPerson = m == .welcome || m == .continueAs
     let firstTime = !hasShown; hasShown = true
+    loading.stopAnimating()
     isPersonNow = isPerson
     // (a step that opens the keyboard at once: no icon to show for a moment and take away again)
     let willType = isCode || isSet || (isForm && focusPassword && !e.isEmpty)
@@ -538,6 +555,8 @@ final class SignInScreen: UIView, UITextFieldDelegate, UIGestureRecognizerDelega
   private static var bioName: String { switch bioType { case .faceID: return "Face ID"; case .touchID: return "Touch ID"; default: return "Passcode" } }
   private static var bioSymbol: String { switch bioType { case .faceID: return "faceid"; case .touchID: return "touchid"; default: return "lock" } }
 
+  /// waiting for the server before the first step (the first time on this phone): only a small spinner
+  func setLoading(_ on: Bool) { if on && !hasShown { loading.startAnimating() } else { loading.stopAnimating() } }
   func showError(_ t: String?) {
     errL.text = t; errL.isHidden = (t ?? "").isEmpty
     if !errL.isHidden { UINotificationFeedbackGenerator().notificationOccurred(.error) }
