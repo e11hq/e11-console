@@ -194,6 +194,7 @@ final class SignInScreen: UIView, UITextFieldDelegate {
   private(set) var mode: Mode = .form
   private(set) var isWaiting = false
   private var hasShown = false
+  private var isPersonNow = false, typingUp = false, kbTop: CGFloat = .greatestFiniteMagnitude
   private let brand: SignInBrand
   private var email = "", name = "", color: UIColor?
 
@@ -305,7 +306,11 @@ final class SignInScreen: UIView, UITextFieldDelegate {
     // the peeker: over the whole screen, but only its own body takes a touch
     peeker.translatesAutoresizingMaskIntoConstraints = false
     addSubview(peeker)
-    peeker.onRoom = { [weak self] h in self?.scroll.contentInset.bottom = h }
+    // the keyboard up: as the canvas — the icon fades away and the page moves up as one, the card and its button above the
+    // keyboard with the peeker's room under them; no scrolling while typing (Haris 2026-11-20 10:35: it scrolled a lot)
+    let nc = NotificationCenter.default
+    nc.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] n in self?.keyboardMoved(n) }
+    nc.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] n in self?.keyboardMoved(n, gone: true) }
 
     for v in [icon, avatar, greet, titleL, sub, card, codeRow, errL, mainB, secondB, linkB, foot, waitL] as [UIView] { stack.addArrangedSubview(v) }
     stack.alpha = 0; reviewB.alpha = 0; backB.isHidden = true   // (nothing until the first step is shown)
@@ -419,8 +424,9 @@ final class SignInScreen: UIView, UITextFieldDelegate {
     let isForm = m == .form, isSet = m == .setPassword, isCode: Bool = { if case .code = m { return true }; return false }()
     let isPerson = m == .welcome || m == .continueAs
     let firstTime = !hasShown; hasShown = true
+    isPersonNow = isPerson
     let apply = {
-      self.icon.isHidden = isPerson; self.avatar.isHidden = !isPerson
+      self.icon.isHidden = isPerson || self.typingUp; self.icon.alpha = self.typingUp ? 0 : 1; self.avatar.isHidden = !isPerson
       self.greet.isHidden = !(isForm || isPerson); self.greet.text = self.greeting()
       self.card.isHidden = !(isForm || isSet); self.codeRow.isHidden = !isCode
       self.secondB.isHidden = m != .welcome
@@ -487,6 +493,7 @@ final class SignInScreen: UIView, UITextFieldDelegate {
     // (the top of the page, under the status bar's room — .zero put it under the status bar and it sprang down a moment
     //  later: Haris 2026-11-20 10:19)
     scroll.setContentOffset(CGPoint(x: 0, y: -scroll.adjustedContentInset.top), animated: false)
+    if typingUp { fitToKeyboard() }
     if isCode { DispatchQueue.main.async { self.boxes.first?.becomeFirstResponder() } }
     else if isSet { DispatchQueue.main.async { self.f1.becomeFirstResponder() } }
     else if isForm, focusPassword, !e.isEmpty { DispatchQueue.main.async { self.f2.becomeFirstResponder() } }
@@ -556,15 +563,35 @@ final class SignInScreen: UIView, UITextFieldDelegate {
   func textFieldDidBeginEditing(_ f: UITextField) {
     paint()
     peeker.forget(f)
-    // (room under the button for the peeker, so it never sits on it)
-    let room: CGFloat = UIAccessibility.isReduceMotionEnabled ? 0 : 112
-    scroll.contentInset.bottom = room
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-      guard let self = self else { return }
-      var r = self.mainB.convert(self.mainB.bounds, to: self.scroll).insetBy(dx: 0, dy: -16)
-      r.size.height += room
-      self.scroll.scrollRectToVisible(r, animated: true)
+  }
+
+  // the keyboard came, moved or went: the icon away (or back) and the page placed, with the keyboard's own timing
+  private func keyboardMoved(_ n: Notification, gone: Bool = false) {
+    guard window != nil else { return }
+    var up = false
+    if !gone, let end = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue {
+      let k = convert(end, from: nil)
+      up = k.height > 120 && k.minY < bounds.maxY - 50
+      if up { kbTop = k.minY }
     }
+    let dur = (n.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
+    let curve = (n.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt) ?? 7
+    typingUp = up
+    UIView.animate(withDuration: dur, delay: 0, options: [UIView.AnimationOptions(rawValue: curve << 16), .beginFromCurrentState, .allowUserInteraction]) {
+      self.fitToKeyboard()
+    }
+  }
+  private func fitToKeyboard() {
+    icon.isHidden = isPersonNow || typingUp; icon.alpha = typingUp ? 0 : 1
+    scroll.isScrollEnabled = !typingUp
+    layoutIfNeeded()
+    let top = -scroll.adjustedContentInset.top
+    guard typingUp else { scroll.contentOffset = CGPoint(x: 0, y: top); return }
+    // the main button's bottom, the peeker's room under it, just above the keyboard
+    let room: CGFloat = UIAccessibility.isReduceMotionEnabled ? 16 : 84
+    let bottom = mainB.convert(mainB.bounds, to: scroll).maxY - scroll.contentOffset.y + scroll.frame.minY   // (where it is on the screen now)
+    let need = bottom + room - kbTop
+    scroll.contentOffset = CGPoint(x: 0, y: max(top, top + need + (scroll.contentOffset.y - top)))
   }
   func textFieldDidEndEditing(_ f: UITextField) { paint() }
   // the code's four boxes: one digit each, on to the next; four pasted (or filled from Messages) go in at once; the
