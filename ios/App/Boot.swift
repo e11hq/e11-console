@@ -214,6 +214,7 @@ extension Main {
     // (this iPhone only — Haris 2026-11-15: Cloudflare's sign-out signs the person out on every device, so it's never used:
     //  this phone's own sign-in is forgotten instead — Cloudflare's and our sign-in page's, in this phone's cookie store — and
     //  the widget's copy of it; the page then goes to Cloudflare, which sends it on to our own sign-in page, as a fresh start)
+    ConsoleSignIn.prepare(main: self)   // (the sign-in screen up at once — no black screen while the page goes round)
     let store = web.configuration.websiteDataStore.httpCookieStore
     store.getAllCookies { [weak self] cookies in
       guard let self = self else { return }

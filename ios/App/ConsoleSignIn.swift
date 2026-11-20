@@ -15,8 +15,25 @@ enum ConsoleSignIn {
     var req: [String: String] = [:]
     for it in c.queryItems ?? [] { req[it.name] = it.value ?? "" }
     let base = "\(u.scheme ?? "https")://\(u.host ?? "")"
-    // (already showing — a new sign-in request: the screen stays as it is, with the new request)
-    if let f = flow { f.api.base = base; f.api.req = req; f.renewed(); return true }
+    // (already showing — a new sign-in request: the screen stays as it is, with the new request; put up already on signing
+    //  out, still empty: its first step now)
+    if let f = flow { f.api.base = base; f.api.req = req; if f.begun { f.renewed() } else { f.begin() }; return true }
+    let f = make(main: main, web: web, base: base, req: req)
+    f.screen.alpha = 0
+    main.splashGone(fast: true)
+    f.begin()
+    UIView.animate(withDuration: 0.25) { f.screen.alpha = 1 }
+    return true
+  }
+  // signing out: the sign-in screen up at once, its background only, until the sign-in request comes — there was a
+  // black screen for a moment and the sign-in came late (Haris 2026-11-20 11:38)
+  static func prepare(main: Main) {
+    guard flow == nil else { return }
+    let f = make(main: main, web: main.web, base: "", req: [:])
+    f.screen.alpha = 0
+    UIView.animate(withDuration: 0.2) { f.screen.alpha = 1 }
+  }
+  private static func make(main: Main, web: WKWebView, base: String, req: [String: String]) -> SignInFlow {
     let f = SignInFlow(brand: brand, api: SignInAPI(base: base, req: req), frame: main.view.bounds)
     f.key = DeviceKey.key
     f.onRedirect = { [weak web] to in web?.load(URLRequest(url: to)) }
@@ -26,14 +43,10 @@ enum ConsoleSignIn {
     let s = f.screen
     s.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     s.frame = main.view.bounds
-    s.alpha = 0
     main.view.addSubview(s)
     main.reviewLink.isHidden = true
-    main.splashGone(fast: true)
     flow = f
-    f.begin()
-    UIView.animate(withDuration: 0.25) { s.alpha = 1 }
-    return true
+    return f
   }
   // back on our site (the startup screen is over it by now): the sign-in screen goes
   static func dismiss(animated: Bool = true) {
