@@ -71,16 +71,26 @@ final class SignInFlow {
   // the first screen: "Continue as …" (Talk, with Console's key), "Welcome back" (this phone's key), else the form
   func begin() {
     if let k = continueKey ?? key {
-      screen.show(continueKey != nil ? .continueAs : .welcome, email: continueKey != nil ? "" : email, name: nil, color: nil)
+      // (shown once, with who it is already in — or after 1.5 s without them, the name following when it comes: it
+      //  showed "Continue?" first and crossfaded to the name, the two titles over each other — Haris 2026-11-20 10:19)
+      let m: SignInScreen.Mode = continueKey != nil ? .continueAs : .welcome
+      var shown = false
+      let first = { [weak self] in
+        guard let self = self, !shown else { return }
+        shown = true
+        self.screen.show(m, email: m == .continueAs && self.who == nil ? "" : self.email, name: self.who?.name, color: self.who?.color)
+      }
       api.post("who", ["key": k]) { [weak self] j in
         guard let self = self else { return }
         if (j?["ok"] as? Bool) == true, let n = j?["name"] as? String, !n.isEmpty {
           self.who = (n, UIColor(signInHex: j?["color"] as? String))
           // (the key's own email — the server says it since 2026-11-20; kept for the form's Email too)
           if let e = j?["email"] as? String, !e.isEmpty { self.email = e; UserDefaults.standard.set(e, forKey: "e11_signin_email") }
-          self.screen.setPerson(name: n, color: self.who?.color, email: self.email)
+          if shown { self.screen.setPerson(name: n, color: self.who?.color, email: self.email) }
         }
+        first()
       }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { first() }
     } else {
       screen.show(.form, email: email)
     }
@@ -183,6 +193,7 @@ final class SignInScreen: UIView, UITextFieldDelegate {
   var onReview: (() -> Void)?
   private(set) var mode: Mode = .form
   private(set) var isWaiting = false
+  private var hasShown = false
   private let brand: SignInBrand
   private var email = "", name = "", color: UIColor?
 
@@ -297,6 +308,7 @@ final class SignInScreen: UIView, UITextFieldDelegate {
     peeker.onRoom = { [weak self] h in self?.scroll.contentInset.bottom = h }
 
     for v in [icon, avatar, greet, titleL, sub, card, codeRow, errL, mainB, secondB, linkB, foot, waitL] as [UIView] { stack.addArrangedSubview(v) }
+    stack.alpha = 0; reviewB.alpha = 0; backB.isHidden = true   // (nothing until the first step is shown)
     let side: CGFloat = 22
     NSLayoutConstraint.activate([
       scroll.topAnchor.constraint(equalTo: topAnchor), scroll.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -404,7 +416,8 @@ final class SignInScreen: UIView, UITextFieldDelegate {
     setBusy(false)
     let isForm = m == .form, isSet = m == .setPassword, isCode: Bool = { if case .code = m { return true }; return false }()
     let isPerson = m == .welcome || m == .continueAs
-    UIView.transition(with: stack, duration: 0.25, options: [.transitionCrossDissolve, .allowUserInteraction]) {
+    let firstTime = !hasShown; hasShown = true
+    let apply = {
       self.icon.isHidden = isPerson; self.avatar.isHidden = !isPerson
       self.greet.isHidden = !(isForm || isPerson); self.greet.text = self.greeting()
       self.card.isHidden = !(isForm || isSet); self.codeRow.isHidden = !isCode
@@ -462,8 +475,16 @@ final class SignInScreen: UIView, UITextFieldDelegate {
       self.paint()
       self.layoutIfNeeded()
     }
+    if firstTime {
+      UIView.performWithoutAnimation { apply(); self.stack.setCustomSpacing(isPerson ? 70 : 26, after: self.sub); self.layoutIfNeeded() }
+      UIView.animate(withDuration: 0.25) { self.stack.alpha = 1; self.reviewB.alpha = 1 }
+    } else {
+      UIView.transition(with: stack, duration: 0.25, options: [.transitionCrossDissolve, .allowUserInteraction], animations: apply)
+    }
     stack.setCustomSpacing(isPerson ? 70 : 26, after: sub)
-    scroll.setContentOffset(.zero, animated: false)
+    // (the top of the page, under the status bar's room — .zero put it under the status bar and it sprang down a moment
+    //  later: Haris 2026-11-20 10:19)
+    scroll.setContentOffset(CGPoint(x: 0, y: -scroll.adjustedContentInset.top), animated: false)
     if isCode { DispatchQueue.main.async { self.boxes.first?.becomeFirstResponder() } }
     else if isSet { DispatchQueue.main.async { self.f1.becomeFirstResponder() } }
     else if isForm, focusPassword, !e.isEmpty { DispatchQueue.main.async { self.f2.becomeFirstResponder() } }
