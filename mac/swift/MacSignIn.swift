@@ -150,7 +150,16 @@ final class MacSignInFlow {
   var onRedirect: ((URL) -> Void)?, onKeyGone: (() -> Void)?, onRestart: (() -> Void)?, onReview: (() -> Void)?
   private var email = UserDefaults.standard.string(forKey: "e11_signin_email") ?? ""
   private var owner = false, ticket = ""
-  private var who: (name: String, color: NSColor?)?
+  private var who: (name: String, color: NSColor?, photo: NSImage?)?
+  // (the person's photo, as the server sent it: data:image/…;base64,…)
+  static func photo(_ s: String?) -> NSImage? {
+    guard let s = s, let i = s.range(of: "base64,") else { return nil }
+    guard let im = Data(base64Encoded: String(s[i.upperBound...])).flatMap(NSImage.init(data:)), im.size.width > 0, im.size.height > 0 else { return nil }
+    // (its middle square, to fill the circle)
+    let side = min(im.size.width, im.size.height)
+    let from = NSRect(x: (im.size.width - side) / 2, y: (im.size.height - side) / 2, width: side, height: side)
+    return NSImage(size: NSSize(width: side, height: side), flipped: false) { r in im.draw(in: r, from: from, operation: .copy, fraction: 1); return true }
+  }
   private(set) var begun = false
 
   static func knows(_ key: String?) -> Bool {
@@ -177,23 +186,25 @@ final class MacSignInFlow {
     guard let k = key else { return screen.show(.form, email: email) }
     if let w = UserDefaults.standard.dictionary(forKey: "e11_signin_who"), (w["key"] as? String) == String(k.prefix(12)),
        let n = w["name"] as? String, !n.isEmpty {
-      who = (n, NSColor(signInHex: w["color"] as? String))
+      who = (n, NSColor(signInHex: w["color"] as? String), Self.photo(w["photo"] as? String))
       if let e = w["email"] as? String, !e.isEmpty { email = e }
     }
     var shown = false
     let first = { [weak self] in
       guard let self = self, !shown else { return }
       shown = true
+      self.screen.photo = self.who?.photo
       self.screen.show(.welcome, email: self.email, name: self.who?.name, color: self.who?.color)
     }
     api.post("who", ["key": k]) { [weak self] j in
       guard let self = self else { return }
       if (j?["ok"] as? Bool) == true, let n = j?["name"] as? String, !n.isEmpty {
-        let same = self.who?.name == n
-        self.who = (n, NSColor(signInHex: j?["color"] as? String))
+        let ph = j?["photo"] as? String
+        let same = self.who?.name == n && (self.who?.photo != nil) == (ph != nil)
+        self.who = (n, NSColor(signInHex: j?["color"] as? String), Self.photo(ph))
         if let e = j?["email"] as? String, !e.isEmpty { self.email = e; UserDefaults.standard.set(e, forKey: "e11_signin_email") }
-        UserDefaults.standard.set(["key": String(k.prefix(12)), "name": n, "color": j?["color"] as? String ?? "", "email": self.email], forKey: "e11_signin_who")
-        if shown, !same { self.screen.show(.welcome, email: self.email, name: n, color: self.who?.color) }
+        UserDefaults.standard.set(["key": String(k.prefix(12)), "name": n, "color": j?["color"] as? String ?? "", "email": self.email, "photo": ph ?? ""], forKey: "e11_signin_who")
+        if shown, !same { self.screen.photo = self.who?.photo; self.screen.show(.welcome, email: self.email, name: n, color: self.who?.color) }
       }
       first()
     }
@@ -289,7 +300,9 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
 
   private let bg = CAGradientLayer(), glow = CAGradientLayer()
   private let stack = NSStackView()
-  private let avatarCircle = NSView()
+  private let avatarCircle = NSView(), avatarImg = NSImageView()
+  /// the person's profile photo — in the circle in place of the initials (Haris 2026-11-20 14:13)
+  var photo: NSImage?
   private let icon = NSImageView(), avatar = NSView(), avatarL = NSTextField(labelWithString: ""), badge = NSImageView()
   private let greet = NSTextField(labelWithString: ""), titleL = NSTextField(wrappingLabelWithString: ""), sub = NSTextField(wrappingLabelWithString: "")
   private let card = NSView(), sep = NSView()
@@ -316,7 +329,8 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
     avatarL.font = .systemFont(ofSize: 38, weight: .semibold); avatarL.textColor = .white; avatarL.alignment = .center
     badge.image = NSApp.applicationIconImage; badge.imageScaling = .scaleProportionallyUpOrDown
     badge.wantsLayer = true; badge.layer?.cornerRadius = 10; badge.layer?.masksToBounds = true
-    for v in [avatarCircle, avatarL, badge] as [NSView] { v.translatesAutoresizingMaskIntoConstraints = false; avatar.addSubview(v) }
+    avatarImg.imageScaling = .scaleAxesIndependently; avatarImg.wantsLayer = true; avatarImg.layer?.cornerRadius = 52; avatarImg.layer?.masksToBounds = true; avatarImg.isHidden = true
+    for v in [avatarCircle, avatarImg, avatarL, badge] as [NSView] { v.translatesAutoresizingMaskIntoConstraints = false; avatar.addSubview(v) }
 
     greet.font = .systemFont(ofSize: 13, weight: .semibold); greet.textColor = .secondaryLabelColor; greet.alignment = .center
     titleL.font = .systemFont(ofSize: 34, weight: .bold); titleL.alignment = .center; titleL.textColor = .labelColor
@@ -371,6 +385,8 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
       icon.widthAnchor.constraint(equalToConstant: 96), icon.heightAnchor.constraint(equalToConstant: 96),
       avatar.widthAnchor.constraint(equalToConstant: 104), avatar.heightAnchor.constraint(equalToConstant: 104),
       avatarCircle.leadingAnchor.constraint(equalTo: avatar.leadingAnchor), avatarCircle.trailingAnchor.constraint(equalTo: avatar.trailingAnchor),
+      avatarImg.leadingAnchor.constraint(equalTo: avatar.leadingAnchor), avatarImg.trailingAnchor.constraint(equalTo: avatar.trailingAnchor),
+      avatarImg.topAnchor.constraint(equalTo: avatar.topAnchor), avatarImg.bottomAnchor.constraint(equalTo: avatar.bottomAnchor),
       avatarCircle.topAnchor.constraint(equalTo: avatar.topAnchor), avatarCircle.bottomAnchor.constraint(equalTo: avatar.bottomAnchor),
       avatarL.centerXAnchor.constraint(equalTo: avatar.centerXAnchor), avatarL.centerYAnchor.constraint(equalTo: avatar.centerYAnchor),
       badge.widthAnchor.constraint(equalToConstant: 38), badge.heightAnchor.constraint(equalToConstant: 38),
@@ -517,6 +533,7 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
       }
       self.foot.isHidden = self.foot.stringValue.isEmpty
       self.avatarL.stringValue = Self.initials(self.name)
+      self.avatarImg.image = self.photo; self.avatarImg.isHidden = self.photo == nil; self.avatarL.isHidden = self.photo != nil
       self.stack.setCustomSpacing(isPerson ? 70 : 26, after: self.sub)
       self.paint()
       self.layoutSubtreeIfNeeded()
