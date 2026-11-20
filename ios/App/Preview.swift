@@ -661,7 +661,12 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     c.chrome = !barsHidden
     c.onPages = { [weak self, weak c] id in
       guard let self else { return }
-      if let p = self.pages[id] { c?.setPages(p.0, note: p.1) } else { self.event(["ev": "pages", "id": id]) }
+      if let p = self.pages[id] { c?.setPages(p.0, note: p.1) } else {
+        self.event(["ev": "pages", "id": id])
+        // (pages the phone kept come back at once, while this cell is still being made — not yet on screen, so set() didn't
+        //  reach it and an Office file sat on the spinner from its second opening on: Haris 2026-11-21 00:05)
+        if let p = self.pages[id] { c?.setPages(p.0, note: p.1) }
+      }
     }
     c.show(f)
     if let tap = (pager.gestureRecognizers ?? []).first(where: { $0 is UITapGestureRecognizer && ($0 as! UITapGestureRecognizer).numberOfTapsRequired == 1 }) as? UITapGestureRecognizer, let dbl = c.doubleTapGesture { tap.require(toFail: dbl) }
