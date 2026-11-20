@@ -33,6 +33,7 @@ final class SignInPeeker: UIView {
   private var blinkAt: CFTimeInterval = 0, nextBlink: CFTimeInterval = 0
   private var last: CFTimeInterval = 0
   private var lastText: [ObjectIdentifier: String] = [:]
+  private let K: CGFloat = 0.75   // its size: 3/4 of the canvas's (Haris 2026-11-20 10:35: "its too big")
   /// the room it needs above the keyboard: 112 while it's there, 0 once the keyboard's gone
   var onRoom: ((CGFloat) -> Void)?
 
@@ -135,15 +136,15 @@ final class SignInPeeker: UIView {
     kbUp = false; onRoom?(0)
     if mode == .peek { mode = .out; vx += 200 }
   }
-  private func rest() -> (x: CGFloat, y: CGFloat, r: CGFloat) { (bounds.maxX - 64, kb.minY - 9, -6) }
+  private func rest() -> (x: CGFloat, y: CGFloat, r: CGFloat) { (bounds.maxX - 64 * K, kb.minY - 9 * K, -6) }
   private func outSpot() -> (x: CGFloat, y: CGFloat, r: CGFloat) {
     // with the keyboard going down it sinks with it, so its body stays hidden
-    (bounds.maxX + 96, kbUp ? kb.minY - 9 : bounds.maxY + 140, 22)
+    (bounds.maxX + 96 * K, kbUp ? kb.minY - 9 * K : bounds.maxY + 140 * K, 22)
   }
   private func comeIn() {
     guard mode != .hold, mode != .peek else { return }
     if mode == .gone || mode == .fling || (mode == .out && x > bounds.maxX + 60) {
-      let o = (bounds.maxX + 96, kb.minY - 9); x = o.0; y = o.1; r = 22; vx = 0; vy = 0; vr = 0
+      let o = (bounds.maxX + 96 * K, kb.minY - 9 * K); x = o.0; y = o.1; r = 22; vx = 0; vy = 0; vr = 0
     }
     mode = .peek; vx -= 380; vsq += 4
     fig.isHidden = false; hands.isHidden = false
@@ -197,7 +198,7 @@ final class SignInPeeker: UIView {
   // ---- hold and swipe ----
   override func point(inside p: CGPoint, with e: UIEvent?) -> Bool {
     guard mode == .peek || mode == .hold, !fig.isHidden else { return false }
-    let q = CGPoint(x: p.x - x, y: p.y - y).applying(CGAffineTransform(rotationAngle: -r * .pi / 180))
+    var q = CGPoint(x: p.x - x, y: p.y - y).applying(CGAffineTransform(rotationAngle: -r * .pi / 180)); q.x /= K; q.y /= K
     return q.x > -58 && q.x < 58 && q.y > -100 && q.y < -4
   }
   override func touchesBegan(_ t: Set<UITouch>, with e: UIEvent?) {
@@ -270,9 +271,9 @@ final class SignInPeeker: UIView {
     let air = mode == .hold || mode == .fling
     CATransaction.begin(); CATransaction.setDisableActions(true)
     fig.position = CGPoint(x: x, y: y)
-    fig.transform = CATransform3DScale(CATransform3DMakeRotation(r * .pi / 180, 0, 0, 1), sx, sy, 1)
+    fig.transform = CATransform3DScale(CATransform3DMakeRotation(r * .pi / 180, 0, 0, 1), sx * K, sy * K, 1)
     hands.position = fig.position
-    hands.transform = air ? fig.transform : CATransform3DMakeScale(s, s, 1)   // on the keyboard's edge: level
+    hands.transform = air ? fig.transform : CATransform3DMakeScale(s * K, s * K, 1)   // on the keyboard's edge: level
     // the body leans a little with its movement
     let ln = max(-14, min(14, -vx * 0.012)), b = UIBezierPath()
     b.move(to: CGPoint(x: ln, y: -98))

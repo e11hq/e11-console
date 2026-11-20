@@ -378,7 +378,7 @@ final class SignInScreen: UIView, UITextFieldDelegate {
     for f in [f1, f2] {
       f.textColor = .label; f.tintColor = .label
       f.attributedPlaceholder = NSAttributedString(string: f.placeholder ?? "", attributes: [.foregroundColor: UIColor.secondaryLabel])
-      (f.leftView as? UIImageView)?.tintColor = .secondaryLabel
+      (f.leftView?.subviews.first as? UIImageView)?.tintColor = .secondaryLabel
     }
   }
   override func traitCollectionDidChange(_ p: UITraitCollection?) { super.traitCollectionDidChange(p); paint() }
@@ -404,8 +404,10 @@ final class SignInScreen: UIView, UITextFieldDelegate {
   private func field(_ f: UITextField, _ placeholder: String, symbol: String) {
     f.placeholder = placeholder
     let iv = UIImageView(image: UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .regular)))
-    iv.contentMode = .center; iv.frame = CGRect(x: 0, y: 0, width: 32, height: 24)
-    f.leftView = iv; f.leftViewMode = .always
+    // (the icon, then room before the words — they sat right against it: Haris 2026-11-20 10:35)
+    iv.contentMode = .center; iv.frame = CGRect(x: 0, y: 0, width: 26, height: 24)
+    let lv = UIView(frame: CGRect(x: 0, y: 0, width: 38, height: 24)); lv.addSubview(iv)
+    f.leftView = lv; f.leftViewMode = .always
   }
 
   // show a step — crossfaded, as the page's steps faded in
