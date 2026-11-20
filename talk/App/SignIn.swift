@@ -47,12 +47,23 @@ final class SignInVC: UIViewController, WKNavigationDelegate {
     let a = UIAlertController(title: "App Review Sign-in", message: error ?? "The email and password given to App Review.", preferredStyle: .alert)
     a.addTextField { t in t.placeholder = "Email"; t.text = email; t.keyboardType = .emailAddress; t.textContentType = .username; t.autocapitalizationType = .none; t.autocorrectionType = .no }
     a.addTextField { t in t.placeholder = "Password"; t.isSecureTextEntry = true; t.textContentType = .password }
-    a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+    a.addAction(UIAlertAction(title: "Cancel", style: .cancel) { [weak self] _ in self?.leaveReview() })
     a.addAction(UIAlertAction(title: "Sign In", style: .default) { [weak self, weak a] _ in
       let em = a?.textFields?[0].text ?? "", pw = a?.textFields?[1].text ?? ""
       self?.reviewSend(em, pw)
     })
     present(a, animated: true)
+  }
+  // Cancel on the App Review copy: back to E11 Talk's own server and its sign-in — it stayed on a blank page with only
+  // "App Review sign-in" under it (Haris 2026-11-20 10:54: "how can i go back?")
+  private func leaveReview() {
+    guard Server.review, UserDefaults.standard.bool(forKey: "talk_review") else { return }
+    UserDefaults.standard.removeObject(forKey: "talk_review")
+    Server.follow()
+    guard !Server.review else { return }   // (E11 Console itself on the App Review copy: Talk follows it, as before)
+    asked = false
+    web.isHidden = false; spin.startAnimating()
+    web.load(URLRequest(url: URL(string: Server.url + "/api/talk/state")!))
   }
   private func reviewSend(_ email: String, _ password: String) {
     spin.startAnimating()
