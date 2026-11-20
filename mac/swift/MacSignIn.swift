@@ -289,6 +289,7 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
 
   private let bg = CAGradientLayer(), glow = CAGradientLayer()
   private let stack = NSStackView()
+  private let avatarCircle = NSView()
   private let icon = NSImageView(), avatar = NSView(), avatarL = NSTextField(labelWithString: ""), badge = NSImageView()
   private let greet = NSTextField(labelWithString: ""), titleL = NSTextField(wrappingLabelWithString: ""), sub = NSTextField(wrappingLabelWithString: "")
   private let card = NSView(), sep = NSView()
@@ -311,10 +312,11 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
     bg.startPoint = CGPoint(x: 0.5, y: 0); bg.endPoint = CGPoint(x: 0.5, y: 1); bg.locations = [0, 0.55, 1]
 
     icon.image = NSApp.applicationIconImage; icon.imageScaling = .scaleProportionallyUpOrDown
-    avatar.wantsLayer = true; avatar.layer?.cornerRadius = 52; avatar.layer?.borderWidth = 4
+    avatarCircle.wantsLayer = true; avatarCircle.layer?.cornerRadius = 52; avatarCircle.layer?.borderWidth = 4
     avatarL.font = .systemFont(ofSize: 38, weight: .semibold); avatarL.textColor = .white; avatarL.alignment = .center
     badge.image = NSApp.applicationIconImage; badge.imageScaling = .scaleProportionallyUpOrDown
-    for v in [avatarL, badge] as [NSView] { v.translatesAutoresizingMaskIntoConstraints = false; avatar.addSubview(v) }
+    badge.wantsLayer = true; badge.layer?.cornerRadius = 10; badge.layer?.masksToBounds = true
+    for v in [avatarCircle, avatarL, badge] as [NSView] { v.translatesAutoresizingMaskIntoConstraints = false; avatar.addSubview(v) }
 
     greet.font = .systemFont(ofSize: 13, weight: .semibold); greet.textColor = .secondaryLabelColor; greet.alignment = .center
     titleL.font = .systemFont(ofSize: 34, weight: .bold); titleL.alignment = .center; titleL.textColor = .labelColor
@@ -332,6 +334,7 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
     codeRow.orientation = .horizontal; codeRow.spacing = 12
     for i in 0..<4 {
       let b = DigitField()
+      b.cell = VCenterCell(textCell: ""); b.isEditable = true; b.isSelectable = true
       b.font = .systemFont(ofSize: 28, weight: .semibold); b.alignment = .center
       b.isBordered = false; b.drawsBackground = false; b.focusRingType = .none; b.wantsLayer = true
       b.layer?.cornerRadius = 12; b.layer?.borderWidth = 0.5; b.delegate = self; b.tag = 100 + i
@@ -367,9 +370,11 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
       stack.widthAnchor.constraint(equalToConstant: W),
       icon.widthAnchor.constraint(equalToConstant: 96), icon.heightAnchor.constraint(equalToConstant: 96),
       avatar.widthAnchor.constraint(equalToConstant: 104), avatar.heightAnchor.constraint(equalToConstant: 104),
+      avatarCircle.leadingAnchor.constraint(equalTo: avatar.leadingAnchor), avatarCircle.trailingAnchor.constraint(equalTo: avatar.trailingAnchor),
+      avatarCircle.topAnchor.constraint(equalTo: avatar.topAnchor), avatarCircle.bottomAnchor.constraint(equalTo: avatar.bottomAnchor),
       avatarL.centerXAnchor.constraint(equalTo: avatar.centerXAnchor), avatarL.centerYAnchor.constraint(equalTo: avatar.centerYAnchor),
       badge.widthAnchor.constraint(equalToConstant: 38), badge.heightAnchor.constraint(equalToConstant: 38),
-      badge.trailingAnchor.constraint(equalTo: avatar.trailingAnchor, constant: 4), badge.bottomAnchor.constraint(equalTo: avatar.bottomAnchor, constant: 4),
+      badge.trailingAnchor.constraint(equalTo: avatar.trailingAnchor), badge.bottomAnchor.constraint(equalTo: avatar.bottomAnchor),
       greet.widthAnchor.constraint(equalTo: stack.widthAnchor), titleL.widthAnchor.constraint(equalTo: stack.widthAnchor),
       sub.widthAnchor.constraint(equalTo: stack.widthAnchor), errL.widthAnchor.constraint(equalTo: stack.widthAnchor),
       foot.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -28), waitL.widthAnchor.constraint(equalTo: stack.widthAnchor),
@@ -382,7 +387,7 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
       sep.topAnchor.constraint(equalTo: card.topAnchor, constant: 56), sep.heightAnchor.constraint(equalToConstant: 0.5),
       sep.leadingAnchor.constraint(equalTo: card.leadingAnchor), sep.trailingAnchor.constraint(equalTo: card.trailingAnchor),
       reviewB.centerXAnchor.constraint(equalTo: centerXAnchor), reviewB.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -18),
-      backB.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 90), backB.topAnchor.constraint(equalTo: topAnchor, constant: 14),
+      backB.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 90), backB.centerYAnchor.constraint(equalTo: topAnchor, constant: 24),
       loading.centerXAnchor.constraint(equalTo: centerXAnchor), loading.centerYAnchor.constraint(equalTo: centerYAnchor),
     ])
     for f in [emailF, pwF, pw2F] as [NSTextField] {
@@ -412,8 +417,8 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
       card.layer?.backgroundColor = (dark ? NSColor.white.withAlphaComponent(0.08) : NSColor.white).cgColor
       card.layer?.borderColor = (dark ? NSColor.white.withAlphaComponent(0.16) : NSColor.black.withAlphaComponent(0.07)).cgColor
       sep.layer?.backgroundColor = (dark ? NSColor.white.withAlphaComponent(0.16) : NSColor.black.withAlphaComponent(0.08)).cgColor
-      avatar.layer?.borderColor = (dark ? NSColor.white.withAlphaComponent(0.22) : NSColor.black.withAlphaComponent(0.06)).cgColor
-      avatar.layer?.backgroundColor = (color ?? g).cgColor
+      avatarCircle.layer?.borderColor = (dark ? NSColor.white.withAlphaComponent(0.22) : NSColor.black.withAlphaComponent(0.06)).cgColor
+      avatarCircle.layer?.backgroundColor = (color ?? g).cgColor
     }
     mainB.paint(); secondB.paint()
     markBoxes()
@@ -468,7 +473,7 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
     let firstTime = !hasShown; hasShown = true
     loading.stopAnimation(nil)
     let commit = {
-      self.errL.stringValue = ""; self.errL.isHidden = true; self.waitL.isHidden = true
+      self.errL.stringValue = ""; self.errL.isHidden = true; self.waitL.alphaValue = 0
       self.setBusy(false)
       self.icon.isHidden = isPerson; self.avatar.isHidden = !isPerson
       self.greet.isHidden = !(isForm || isPerson); self.greet.stringValue = self.greeting()
@@ -551,9 +556,10 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
     for b in [mainB, secondB, linkB, reviewB, backB] as [NSButton] { b.isEnabled = !on }
     for f in [emailF, pwF, pw2F] + boxes as [NSTextField] { f.isEnabled = !on }
     if on { errL.isHidden = true }
-    if !on { isWaiting = false; waitL.isHidden = true }
+    if !on { isWaiting = false; waitL.alphaValue = 0 }
   }
-  func setWaiting(_ on: Bool) { setBusy(on); isWaiting = on; window?.makeFirstResponder(nil); waitL.isHidden = !on }
+  // ("Signing in…" fades in its own kept room — the page jumped as it came: Haris 2026-11-20 13:49)
+  func setWaiting(_ on: Bool) { setBusy(on); isWaiting = on; window?.makeFirstResponder(nil); NSAnimationContext.runAnimationGroup { c in c.duration = 0.2; waitL.animator().alphaValue = on ? 1 : 0 } }
   func clearCode() { boxes.forEach { $0.stringValue = "" }; window?.makeFirstResponder(boxes[0]) }
 
   @objc private func mainTapped() {
@@ -608,6 +614,22 @@ final class MacSignInScreen: NSView, NSTextFieldDelegate {
   func controlTextDidEndEditing(_ n: Notification) { if n.object is DigitField { DispatchQueue.main.async { self.markBoxes() } } }
 }
 
+// a text cell whose words sit in the middle of its height (the code's digits sat at the top of their boxes)
+final class VCenterCell: NSTextFieldCell {
+  private func mid(_ r: NSRect) -> NSRect {
+    let h = cellSize(forBounds: r).height
+    guard h < r.height else { return r }
+    return NSRect(x: r.minX, y: r.minY + (r.height - h) / 2, width: r.width, height: h)
+  }
+  override func drawingRect(forBounds r: NSRect) -> NSRect { mid(super.drawingRect(forBounds: r)) }
+  override func edit(withFrame r: NSRect, in v: NSView, editor t: NSText, delegate d: Any?, event e: NSEvent?) {
+    super.edit(withFrame: mid(r), in: v, editor: t, delegate: d, event: e)
+  }
+  override func select(withFrame r: NSRect, in v: NSView, editor t: NSText, delegate d: Any?, start s: Int, length l: Int) {
+    super.select(withFrame: mid(r), in: v, editor: t, delegate: d, start: s, length: l)
+  }
+}
+
 // one box of the code: tells the screen when it's being typed in (its outline)
 final class DigitField: NSTextField {
   var onFocus: (() -> Void)?
@@ -636,9 +658,19 @@ final class PillButton: NSButton {
   private func render() {
     let fg: NSColor = filled ? dynColor(.white, .black) : .labelColor
     if busy { attributedTitle = NSAttributedString(string: ""); image = nil; return }
-    attributedTitle = NSAttributedString(string: label, attributes: [.font: NSFont.systemFont(ofSize: 16, weight: filled ? .bold : .semibold), .foregroundColor: fg])
-    if let s = symbol { image = NSImage(systemSymbolName: s, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 17, weight: .medium)); imagePosition = .imageLeading; contentTintColor = fg }
-    else { image = nil }
+    // (the symbol and the words together, in the middle — the symbol sat at the button's left edge: Haris 2026-11-20 13:49)
+    let font = NSFont.systemFont(ofSize: 16, weight: filled ? .bold : .semibold)
+    let t = NSMutableAttributedString()
+    if let s = symbol, let img = NSImage(systemSymbolName: s, accessibilityDescription: nil)?
+        .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 17, weight: .medium).applying(.init(paletteColors: [fg]))) {
+      let a = NSTextAttachment(); a.image = img
+      a.bounds = NSRect(x: 0, y: (font.capHeight - img.size.height) / 2, width: img.size.width, height: img.size.height)
+      t.append(NSAttributedString(attachment: a)); t.append(NSAttributedString(string: "  ", attributes: [.font: font]))
+    }
+    t.append(NSAttributedString(string: label, attributes: [.font: font, .foregroundColor: fg]))
+    let ps = NSMutableParagraphStyle(); ps.alignment = .center
+    t.addAttribute(.paragraphStyle, value: ps, range: NSRange(location: 0, length: t.length))
+    attributedTitle = t; image = nil
     spin.appearance = NSAppearance(named: filled ? (effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .aqua : .darkAqua) : effectiveAppearance.name)
   }
   func paint() {
