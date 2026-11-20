@@ -8,6 +8,7 @@ final class SignInVC: UIViewController, WKNavigationDelegate {
   var onDone: (() -> Void)?
   var passed = Set<String>()   // (our sign-in page let through as it is — Face ID cancelled, or a key that no longer counts)
   var cover: UIView?           // (board 53 over the page)
+  var flow: SignInFlow?        // (the app's own sign-in screen over it all — SignInKeys.takeOver, NativeSignIn.swift)
   private var web: WKWebView!
   // (no header of Talk's own over the page: the page is the whole screen, as in E11 Console — mock-up "Talk — Sign-in, in
   //  Talk's colours", Haris 2026-11-14; it said "Sign in" twice)
@@ -42,7 +43,7 @@ final class SignInVC: UIViewController, WKNavigationDelegate {
   /* App Review sign-in (Haris 2026-11-13 "Both ways"): the reviewer's email and password for the App Review copy, in
      Apple's own alert — the same account as E11 Console's "App Review sign-in". Talk then stays on that copy until
      signing out. (Signed in to Console's App Review copy already: Talk takes that sign-in by itself, no alert.) */
-  private func reviewSignIn(error: String? = nil, email: String = "") {
+  func reviewSignIn(error: String? = nil, email: String = "") {
     let a = UIAlertController(title: "App Review Sign-in", message: error ?? "The email and password given to App Review.", preferredStyle: .alert)
     a.addTextField { t in t.placeholder = "Email"; t.text = email; t.keyboardType = .emailAddress; t.textContentType = .username; t.autocapitalizationType = .none; t.autocorrectionType = .no }
     a.addTextField { t in t.placeholder = "Password"; t.isSecureTextEntry = true; t.textContentType = .password }

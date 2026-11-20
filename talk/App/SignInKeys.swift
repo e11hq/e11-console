@@ -62,6 +62,10 @@ enum SignInKeys {
     keepOwn(nil)
   }
   static func isSigninHost(_ h: String) -> Bool { h.hasPrefix("signin.") || h.hasPrefix("signin-") }
+  // (E11 Talk's sign-in screen: its name, its line, its blue — NativeSignIn.swift)
+  static let brand = SignInBrand(app: "E11 Talk", subtitle: "Chats with the team and our clients",
+                                 glow: UIColor(red: 40 / 255, green: 110 / 255, blue: 240 / 255, alpha: 1),
+                                 emailWord: "email", faceReason: "Sign in to E11 Talk")
 }
 
 /* Board 53: E11 Talk's logo and line; the person E11 Console is signed in as (their picture, name, "Signed in to E11
@@ -116,128 +120,35 @@ final class ContinueView: UIView {
 }
 
 extension SignInVC {
-  /* our sign-in page about to open (Cloudflare sent the app to it): named E11 Talk's; with E11 Console's key on this
-     phone, board 53 over it; with Talk's own (a client contact's), Face ID straight away; else the page as usual */
+  /* our sign-in page about to open (Cloudflare sent the app to it): E11 Talk's own sign-in screen instead (Haris 2026-11-20
+     09:11, mock-up talk-signin-2 — NativeSignIn.swift), the same rules as before: with E11 Console's key on this phone,
+     "Continue as …" — Face ID, then Console's key; with Talk's own (a client contact's), "Welcome back" — Face ID, then that
+     key; else email and password (the admin's code and a new password the first time) */
   func takeOver(_ u: URL, web: WKWebView) -> Bool {
-    guard SignInKeys.isSigninHost(u.host ?? ""), u.path == "/oidc/authorize", var c = URLComponents(url: u, resolvingAgainstBaseURL: false) else { return false }
-    if !(c.queryItems ?? []).contains(where: { $0.name == "app" }) {
-      c.queryItems = (c.queryItems ?? []) + [URLQueryItem(name: "app", value: "talk")]
-      if let to = c.url { web.load(URLRequest(url: to)) }
-      return true
-    }
-    guard !passed.contains(u.absoluteString) else { return false }
+    guard SignInKeys.isSigninHost(u.host ?? ""), u.path == "/oidc/authorize", let c = URLComponents(url: u, resolvingAgainstBaseURL: false) else { return false }
     var req: [String: String] = [:]
     for it in c.queryItems ?? [] where it.name != "app" { req[it.name] = it.value ?? "" }
-    let api = { (what: String) in URL(string: "\(u.scheme ?? "https")://\(u.host ?? "")/oidc/api/\(what)")! }
-    let show = { [weak self] in self?.passed.insert(u.absoluteString); self?.cover?.removeFromSuperview(); self?.cover = nil; web.load(URLRequest(url: u)) }
-    let post = { (what: String, body: [String: Any], done: @escaping ([String: Any]?) -> Void) in
-      var r = URLRequest(url: api(what), cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
-      r.httpMethod = "POST"; r.setValue("application/json", forHTTPHeaderField: "Content-Type")
-      r.httpBody = try? JSONSerialization.data(withJSONObject: body)
-      URLSession.shared.dataTask(with: r) { d, _, _ in
-        let j = d.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-        DispatchQueue.main.async { done(j) }
-      }.resume()
-    }
-    // (Face ID, then the key in place of the password — our page only if that doesn't work)
-    let faceID = { (k: String, own: Bool, idle: (() -> Void)?) in
-      let ctx = LAContext(); ctx.localizedFallbackTitle = "Use Passcode"
-      var err: NSError?
-      guard ctx.canEvaluatePolicy(.deviceOwnerAuthentication, error: &err) else { show(); return }
-      ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Sign in to E11 Talk") { ok, _ in
-        DispatchQueue.main.async {
-          guard ok else { idle?(); if own { show() }; return }   // (cancelled: board 53 stays, Continue tries again; a client: the page)
-          post("device", ["req": req, "key": k]) { j in
-            if (j?["ok"] as? Bool) == true, let to = (j?["redirect"] as? String).flatMap(URL.init(string:)) { web.load(URLRequest(url: to)); return }
-            if own, j != nil { SignInKeys.keepOwn(nil) }   // (Talk's own key no longer counts: gone)
-            show()
-          }
-        }
-      }
-    }
+    let base = "\(u.scheme ?? "https")://\(u.host ?? "")"
+    // (already showing — a new sign-in request: the screen stays as it is, with the new request)
+    if let f = flow { f.api.base = base; f.api.req = req; f.renewed(); return true }
+    let f = SignInFlow(brand: SignInKeys.brand, api: SignInAPI(base: base, req: req), frame: view.bounds)
     if let k = SignInKeys.consoleKey {
       UserDefaults.standard.set(true, forKey: "talk_via_console")   // (signed in through E11 Console: it signs Talk out too)
-      post("who", ["req": req, "key": k]) { [weak self] j in
-        guard let self = self, (j?["ok"] as? Bool) == true, let n = j?["name"] as? String else { show(); return }
-        let v = ContinueView(name: n, color: Look.hex(j?["color"] as? String) ?? Look.accent)
-        v.frame = self.view.bounds; v.autoresizingMask = [.flexibleWidth, .flexibleHeight]; v.alpha = 0
-        v.onContinue = { [weak v] in v?.busy(true); faceID(k, false) { v?.busy(false) } }
-        self.cover?.removeFromSuperview(); self.cover = v
-        self.view.addSubview(v)
-        UIView.animate(withDuration: Crossfade.time) { v.alpha = 1 }
-      }
-      return true
-    }
-    if let k = SignInKeys.ownKey { faceID(k, true, nil); return true }
-    return false
-  }
-}
-
-/* A client contact's sign-in code (board 51, the approved "Sign-in — fully Apple" sheet, as E11 Console's): Apple's sheet
-   with Sign-in Code · Done; the person; the four digits (each box its own view — on the glass sheet a label's own
-   background came out reversed in E11 Console); when it stops working; Copy Message and Share… (Apple's buttons). */
-final class SigninCodeVC: UIViewController {
-  private let s: [String: Any]
-  init(_ signin: [String: Any]) { s = signin; super.init(nibName: nil, bundle: nil) }
-  required init?(coder: NSCoder) { fatalError() }
-  override func viewDidLoad() {
-    super.viewDidLoad()
-    title = "Sign-in Code"
-    view.backgroundColor = .systemGroupedBackground
-    navigationItem.rightBarButtonItem = UIBarButtonItem(systemItem: .done, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
-    let code = s["code"] as? String ?? "", name = s["name"] as? String ?? "", email = s["email"] as? String ?? ""
-    let message = s["message"] as? String ?? "", until = s["until"] as? String ?? "", newUser = (s["newUser"] as? Bool) == true
-    let first = name.split(separator: " ").first.map(String.init) ?? name
-    let circle = UILabel(); circle.text = Look.initials(name); circle.textAlignment = .center; circle.textColor = .white
-    circle.font = .systemFont(ofSize: 15, weight: .semibold); circle.backgroundColor = Look.clientInk; circle.layer.cornerRadius = 22; circle.clipsToBounds = true
-    circle.widthAnchor.constraint(equalToConstant: 44).isActive = true; circle.heightAnchor.constraint(equalToConstant: 44).isActive = true
-    let who = UILabel(); who.text = name; who.font = .preferredFont(forTextStyle: .headline)
-    let sub = UILabel(); sub.text = "\(email) · \(newUser ? "New client contact" : "Forgot password")"; sub.font = .preferredFont(forTextStyle: .subheadline); sub.textColor = .secondaryLabel
-    sub.adjustsFontSizeToFitWidth = true; sub.minimumScaleFactor = 0.8
-    let names = UIStackView(arrangedSubviews: [who, sub]); names.axis = .vertical; names.spacing = 2
-    let person = UIStackView(arrangedSubviews: [circle, names]); person.spacing = 12; person.alignment = .center
-    let digits = UIStackView(arrangedSubviews: code.map { ch -> UIView in
-      let box = UIView(); box.backgroundColor = Look.dyn(0x2C2C2E, 0xF2F2F7); box.layer.cornerRadius = 14; box.layer.cornerCurve = .continuous
-      let l = UILabel(); l.text = String(ch); l.textAlignment = .center; l.font = .monospacedDigitSystemFont(ofSize: 34, weight: .semibold); l.textColor = .label
-      l.translatesAutoresizingMaskIntoConstraints = false; box.addSubview(l)
-      NSLayoutConstraint.activate([l.centerXAnchor.constraint(equalTo: box.centerXAnchor), l.centerYAnchor.constraint(equalTo: box.centerYAnchor),
-                                   box.widthAnchor.constraint(equalToConstant: 60), box.heightAnchor.constraint(equalToConstant: 68)])
-      return box
-    })
-    digits.spacing = 12; digits.isAccessibilityElement = true; digits.accessibilityLabel = "Code " + code.map(String.init).joined(separator: " ")
-    let note = UILabel(); note.numberOfLines = 0; note.textAlignment = .center; note.font = .preferredFont(forTextStyle: .footnote); note.textColor = .secondaryLabel
-    note.text = "Works once, only for \(first), until \(until). A new code cancels this one."
-    var cc = UIButton.Configuration.filled(); cc.title = "Copy Message"; cc.cornerStyle = .capsule; cc.buttonSize = .large
-    let copy = UIButton(configuration: cc)
-    copy.addAction(UIAction { [weak copy] _ in
-      UIPasteboard.general.string = message
-      UINotificationFeedbackGenerator().notificationOccurred(.success)
-      var c = cc; c.title = "Copied"; c.image = UIImage(systemName: "checkmark"); c.imagePadding = 6
-      if let b = copy { UIView.transition(with: b, duration: Crossfade.time, options: .transitionCrossDissolve) { b.configuration = c } }
-    }, for: .primaryActionTriggered)
-    var sc = UIButton.Configuration.gray(); sc.title = "Share…"; sc.cornerStyle = .capsule; sc.buttonSize = .large
-    let share = UIButton(configuration: sc)
-    share.addAction(UIAction { [weak self, weak share] _ in
-      let a = UIActivityViewController(activityItems: [message], applicationActivities: nil)
-      a.popoverPresentationController?.sourceView = share
-      self?.present(a, animated: true)
-    }, for: .primaryActionTriggered)
-    let foot = UILabel(); foot.numberOfLines = 0; foot.textAlignment = .center; foot.font = .preferredFont(forTextStyle: .footnote); foot.textColor = .secondaryLabel
-    foot.text = "Ready to send on WhatsApp. They sign in to E11 Talk only."   // (short, so it fits the half-height sheet — Haris 2026-11-13)
-    let stack = UIStackView(arrangedSubviews: [person, digits, note, copy, share, foot])
-    stack.axis = .vertical; stack.alignment = .center; stack.spacing = 18; stack.setCustomSpacing(10, after: copy)
-    stack.translatesAutoresizingMaskIntoConstraints = false
-    view.addSubview(stack)
-    let g = view.layoutMarginsGuide
-    NSLayoutConstraint.activate([
-      stack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),
-      stack.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 8), stack.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -8),
-      copy.widthAnchor.constraint(equalTo: stack.widthAnchor), share.widthAnchor.constraint(equalTo: stack.widthAnchor),
-    ])
-  }
-  static func present(_ signin: [String: Any], from vc: UIViewController) {
-    let n = UINavigationController(rootViewController: SigninCodeVC(signin))
-    if let sh = n.sheetPresentationController { sh.detents = [.medium(), .large()]; sh.prefersGrabberVisible = true }   // (half height first, as E11 Console's — Haris 2026-11-13)
-    vc.present(n, animated: true)
+      f.continueKey = k
+    } else { f.key = SignInKeys.ownKey }
+    f.onRedirect = { [weak web] to in web?.load(URLRequest(url: to)) }
+    f.onKeyGone = { SignInKeys.keepOwn(nil) }   // (Talk's own key no longer counts: gone)
+    f.onRestart = { [weak web] in if let to = URL(string: Server.url + "/api/talk/state") { web?.load(URLRequest(url: to)) } }
+    f.onReview = { [weak self] in self?.reviewSignIn() }
+    let s = f.screen
+    s.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    s.frame = view.bounds
+    s.alpha = 0
+    cover?.removeFromSuperview(); cover = s
+    view.addSubview(s)
+    flow = f
+    f.begin()
+    UIView.animate(withDuration: Crossfade.time) { s.alpha = 1 }
+    return true
   }
 }
