@@ -69,11 +69,20 @@ final class SignInFlow {
   }
 
   // the first screen: "Continue as …" (Talk, with Console's key), "Welcome back" (this phone's key), else the form
+  private(set) var begun = false
   func begin() {
+    begun = true
     if let k = continueKey ?? key {
       // (shown once, with who it is already in — or after 1.5 s without them, the name following when it comes: it
       //  showed "Continue?" first and crossfaded to the name, the two titles over each other — Haris 2026-11-20 10:19)
       let m: SignInScreen.Mode = continueKey != nil ? .continueAs : .welcome
+      // (the name kept from the last answer for this key: shown at once — on a cold start the answer came late, and it
+      //  said "Welcome back" with no name: Haris 2026-11-20 11:38)
+      if let w = UserDefaults.standard.dictionary(forKey: "e11_signin_who"), (w["key"] as? String) == String(k.prefix(12)),
+         let n = w["name"] as? String, !n.isEmpty {
+        who = (n, UIColor(signInHex: w["color"] as? String))
+        if let e = w["email"] as? String, !e.isEmpty { email = e }
+      }
       var shown = false
       let first = { [weak self] in
         guard let self = self, !shown else { return }
@@ -83,14 +92,16 @@ final class SignInFlow {
       api.post("who", ["key": k]) { [weak self] j in
         guard let self = self else { return }
         if (j?["ok"] as? Bool) == true, let n = j?["name"] as? String, !n.isEmpty {
+          let same = self.who?.name == n
           self.who = (n, UIColor(signInHex: j?["color"] as? String))
           // (the key's own email — the server says it since 2026-11-20; kept for the form's Email too)
           if let e = j?["email"] as? String, !e.isEmpty { self.email = e; UserDefaults.standard.set(e, forKey: "e11_signin_email") }
-          if shown { self.screen.setPerson(name: n, color: self.who?.color, email: self.email) }
+          UserDefaults.standard.set(["key": String(k.prefix(12)), "name": n, "color": j?["color"] as? String ?? "", "email": self.email], forKey: "e11_signin_who")
+          if shown, !same { self.screen.setPerson(name: n, color: self.who?.color, email: self.email) }
         }
         first()
       }
-      DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { first() }
+      if who != nil { first() } else { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { first() } }
     } else {
       screen.show(.form, email: email)
     }
@@ -430,8 +441,10 @@ final class SignInScreen: UIView, UITextFieldDelegate, UIGestureRecognizerDelega
     let isPerson = m == .welcome || m == .continueAs
     let firstTime = !hasShown; hasShown = true
     isPersonNow = isPerson
+    // (a step that opens the keyboard at once: no icon to show for a moment and take away again)
+    let willType = isCode || isSet || (isForm && focusPassword && !e.isEmpty)
     let apply = {
-      self.icon.isHidden = isPerson || self.typingUp; self.icon.alpha = self.typingUp ? 0 : 1; self.avatar.isHidden = !isPerson
+      self.icon.isHidden = isPerson || self.typingUp || willType; self.icon.alpha = (self.typingUp || willType) ? 0 : 1; self.avatar.isHidden = !isPerson
       self.greet.isHidden = !(isForm || isPerson); self.greet.text = self.greeting()
       self.card.isHidden = !(isForm || isSet); self.codeRow.isHidden = !isCode
       self.secondB.isHidden = m != .welcome
@@ -488,17 +501,29 @@ final class SignInScreen: UIView, UITextFieldDelegate, UIGestureRecognizerDelega
       self.paint()
       self.layoutIfNeeded()
     }
+    // the new step put in place, with nothing moving
+    let commit = {
+      UIView.performWithoutAnimation {
+        apply()
+        self.stack.setCustomSpacing(isPerson ? 70 : 26, after: self.sub)
+        self.layoutIfNeeded()
+        // (the top of the page, under the status bar's room — .zero put it under the status bar and it sprang down a
+        //  moment later: Haris 2026-11-20 10:19)
+        self.scroll.setContentOffset(CGPoint(x: 0, y: -self.scroll.adjustedContentInset.top), animated: false)
+        if self.typingUp { self.fitToKeyboard() }
+      }
+    }
     if firstTime {
-      UIView.performWithoutAnimation { apply(); self.stack.setCustomSpacing(isPerson ? 70 : 26, after: self.sub); self.layoutIfNeeded() }
+      commit()
       UIView.animate(withDuration: 0.25) { self.stack.alpha = 1; self.reviewB.alpha = 1 }
     } else {
-      UIView.transition(with: stack, duration: 0.25, options: [.transitionCrossDissolve, .allowUserInteraction], animations: apply)
+      // (the old step fades out, then the new one fades in — a crossfade drew both over each other, the icon over the
+      //  picture and the two titles: Haris 2026-11-20 11:38, "Use Password" / "Not you?")
+      UIView.animate(withDuration: 0.12, delay: 0, options: [.beginFromCurrentState]) { self.stack.alpha = 0 } completion: { _ in
+        commit()
+        UIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { self.stack.alpha = 1 }
+      }
     }
-    stack.setCustomSpacing(isPerson ? 70 : 26, after: sub)
-    // (the top of the page, under the status bar's room — .zero put it under the status bar and it sprang down a moment
-    //  later: Haris 2026-11-20 10:19)
-    scroll.setContentOffset(CGPoint(x: 0, y: -scroll.adjustedContentInset.top), animated: false)
-    if typingUp { fitToKeyboard() }
     if isCode { DispatchQueue.main.async { self.boxes.first?.becomeFirstResponder() } }
     else if isSet { DispatchQueue.main.async { self.f1.becomeFirstResponder() } }
     else if isForm, focusPassword, !e.isEmpty { DispatchQueue.main.async { self.f2.becomeFirstResponder() } }
