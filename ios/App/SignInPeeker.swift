@@ -136,7 +136,7 @@ final class SignInPeeker: UIView {
     kbUp = false; onRoom?(0)
     if mode == .peek { mode = .out; vx += 200 }
   }
-  private func rest() -> (x: CGFloat, y: CGFloat, r: CGFloat) { (bounds.maxX - 64 * K - 28, kb.minY - 9 * K, -6)   // (28 in from the edge: its hands off the keyboard's rounded corner — Haris 11:11) }
+  private func rest() -> (x: CGFloat, y: CGFloat, r: CGFloat) { (bounds.maxX - 64 * K - 28, kb.minY - 9 * K, -6) }   // (28 in from the edge: its hands off the keyboard's rounded corner — Haris 11:11)
   private func outSpot() -> (x: CGFloat, y: CGFloat, r: CGFloat) {
     // with the keyboard going down it sinks with it, so its body stays hidden
     (bounds.maxX + 96 * K, kbUp ? kb.minY - 9 * K : bounds.maxY + 140 * K, 22)
