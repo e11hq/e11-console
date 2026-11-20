@@ -2518,7 +2518,7 @@ const NativeHome = (() => {
     if (ev.ev === 'open' && ev.id && task(ev.id)) openTask(ev.id);
     // swipe left on a card: Copy link / Delete (the app has asked "Delete this task?" first); long press: Attach Files
     else if (ev.ev === 'copy' && ev.id) TaskLink.copy(ev.id);
-    else if (ev.ev === 'delete' && ev.id && task(ev.id)) { if (can('deleteTask')) deleteTaskFlow(ev.id); }
+    else if (ev.ev === 'delete' && ev.id && task(ev.id)) { if (can('deleteTask')) deleteTaskFlow(ev.id, false); }
     else if (ev.ev === 'attach' && ev.id && task(ev.id)) attachFiles('task', null, null, ev.source || null, ev.id);
     // the In review box: My Tasks, waiting for the CD's review — for those who see everyone's (E11 Day), all Account
     // Managers & Admins too; an AM sees their own as usual (Haris, 2026-10-31)

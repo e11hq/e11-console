@@ -4988,8 +4988,10 @@ const MacBar = (() => {
     }).catch(() => {});
     return {};
   }
-  return { on, menu };
+  return { on, menu, v: () => shell };
 })();
+// (the Mac app 14+: every question as Apple's own alert — dialog / choiceDialog below; Haris 2026-11-20 15:05)
+const MacAlert = { on: () => typeof Host !== 'undefined' && Host.isMacApp && typeof MacBar !== 'undefined' && MacBar.v() >= 14 };
 
 /* ================= The Mac app 13+: Apple's SF Symbols for the page's icons (Haris 2026-11-15 13:59) =================
    Page by page — Home first (and the top bar, the window's own): each icon, by its name (data-i), shows as the SF Symbol
@@ -5332,11 +5334,21 @@ function assignGroups(pool) {
     .map(([k, l]) => [l, pool.filter((u) => group(u) === k).sort(byName)]).filter(([, us]) => us.length);
 }
 
-function dialog({ title, body = '', bodyHtml = '', input = null, okText = 'OK', cancelText = 'Cancel', danger = false, colors = null }) {
+function dialog(o) {
+  const { title, body = '', bodyHtml = '', input = null, okText = 'OK', cancelText = 'Cancel', danger = false, colors = null } = o;
   // (iPhone app 33+, over the app's own Me: iPhone's own question — the page under it can't be seen)
   if (!colors && !bodyHtml && typeof NativeMe !== 'undefined' && NativeMe.asking()) {
     return NativeMe.ask({ kind: 'alert', title, body, okText, cancelText, danger, input }).then((r) => (!r || !r.ok ? null : input ? { value: String(r.text || '').trim(), color: null } : true)).catch(() => null);
   }
+  // (the Mac app 14+: a question as Apple's own alert — its buttons as Apple's: the answer first (Return), a delete one red,
+  //  Cancel with Esc; Haris 2026-11-20 15:05 — the page's own when the Mac can't)
+  if (!colors && !bodyHtml && !input && MacAlert.on()) {
+    return NativeMac.call('alert', { title, body, ok: okText, cancel: cancelText || '', danger: !!danger })
+      .then((r) => (r && r.ok ? (r.pressed ? true : null) : dialogPage(o))).catch(() => dialogPage(o));
+  }
+  return dialogPage(o);
+}
+function dialogPage({ title, body = '', bodyHtml = '', input = null, okText = 'OK', cancelText = 'Cancel', danger = false, colors = null }) {
   return new Promise((resolve) => {
     const root = $('#overlay-root');
     let color = colors ? colors.value : null;
@@ -5623,9 +5635,18 @@ function filesOfTasks(list) {
   return paths;
 }
 
-function deleteTaskFlow(id) {
-  const t = task(id);
+async function deleteTaskFlow(id, ask = true) {
+  let t = task(id);
   if (!t) return;
+  // (it asks first, everywhere — Haris 2026-11-20 13:11; the toast with Undo still comes after. ask = false: the iPhone
+  //  app's own sheet has asked already)
+  if (ask) {
+    const subs = db.tasks.filter((x) => x.parentId === t.id).length;
+    const ok = await dialog({ title: `Move “${t.title || 'Untitled task'}” to the Trash?`, body: `It moves to the Trash${subs ? ` with its ${subs} subtask${subs === 1 ? '' : 's'}` : ''}, where it can be brought back.`, okText: 'Move to Trash', danger: true });
+    if (!ok) return;
+    t = task(id);
+    if (!t) return;
+  }
   // (to the Trash, the people on it told: the shared rules, as the server does for the iPhone app)
   const { ids, removed, item: it } = R().deleteTask(t);
   if (ui.taskId && ids.includes(ui.taskId)) ui.taskId = t.parentId || null;
@@ -8263,6 +8284,11 @@ function choiceDialog({ title, body = '', choices }) {
   if (typeof NativeMe !== 'undefined' && NativeMe.asking()) {
     return NativeMe.ask({ kind: 'choice', title, body, choices: choices.map((c) => ({ label: c.label, primary: !!c.primary, danger: !!c.danger, cancel: c.value == null })) })
       .then((r) => { const c = r && r.ok ? choices[Number(r.index)] : null; return c && c.value != null ? c.value : null; }).catch(() => null);
+  }
+  // (the Mac app 14+: Apple's own alert with the answers as its buttons — Haris 2026-11-20 15:05)
+  if (MacAlert.on()) {
+    return NativeMac.call('alert', { title, body, choices: choices.map((c) => ({ label: c.label, primary: !!c.primary, danger: !!c.danger, cancel: c.value == null })) })
+      .then((r) => { const c = r && r.ok && r.index != null ? choices[Number(r.index)] : null; return c && c.value != null ? c.value : null; }).catch(() => null);
   }
   return new Promise((resolve) => {
     const root = $('#overlay-root');
