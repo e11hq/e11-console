@@ -114,6 +114,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     // stay connected while minimised or in the background (no App Nap; the Mac can still sleep)
     activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiatedAllowingIdleSystemSleep], reason: "Keeps E11 Console live and notifications arriving")
     buildMenu()
+    #if APPSTORE
+    MacKey.firstRun = defaults.object(forKey: "NSWindow Frame E11ConsoleClientWindow") == nil   // (never opened on this Mac)
+    #endif
     buildWindow()
     // the menu bar item (MacNative.swift): what's picked in its panel, the page does; Open E11 Console brings the window
     MenuBar.shared.main = window
@@ -227,11 +230,18 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     window.contentView!.addSubview(side.edgeHot, positioned: .above, relativeTo: web)
     window.contentView!.addSubview(side, positioned: .above, relativeTo: side.edgeHot)
     window.contentView!.addSubview(side.topRow, positioned: .above, relativeTo: side)
+    #if APPSTORE
+    // (signed out on this Mac, or its first run: the app's own sign-in screen at once, no startup screen — Haris 2026-11-20)
+    let knownOut = !AT_LOGIN && SELFTEST.isEmpty && defaults.string(forKey: "e11_server") != "review" && MacKey.signedOut
+    if !AT_LOGIN && !knownOut { showSplash() }
+    #else
     if !AT_LOGIN { showSplash() }
+    #endif
     #if APPSTORE
     reviewLink.frame = NSRect(x: 0, y: 14, width: window.contentView!.bounds.width, height: 30)
     reviewLink.autoresizingMask = [.width]
     window.contentView!.addSubview(reviewLink)
+    if knownOut { MacSignIn.prepare(app: self) }
     #endif
     if !SELFTEST.isEmpty, let host = URL(string: SERVER)?.host, let email = env["E11_SELFTEST_EMAIL"],
        let c = HTTPCookie(properties: [.domain: host, .path: "/", .name: "e11_dev_email", .value: email]) {
@@ -327,6 +337,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   // the page went elsewhere (signed out, another site): no sidebar until the E11 page sends it again
   func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
     if side.on { side.apply(["on": false]) }
+    #if APPSTORE
+    if webView.url?.host == URL(string: SERVER)?.host, !(webView.url?.path ?? "").hasPrefix("/cdn-cgi/") { MacSignIn.dismiss() }
+    if MacSignIn.showing { return }
+    #endif
     if !AT_LOGIN && window?.isVisible == true { showSplash() }
   }
 
@@ -407,11 +421,12 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     // (under our own sign-in page too, as the iPhone app — it's on our "signin." host since 2026-11-11, so the link never showed
     //  and App Review couldn't find it: rejected 2026-11-20, guideline 2.1 — Haris 08:55)
     let signHost = (webView.url?.host ?? "").lowercased()
-    reviewLink.isHidden = !(signHost.hasSuffix(".cloudflareaccess.com") || signHost.hasPrefix("signin.") || signHost.hasPrefix("signin-"))
+    reviewLink.isHidden = MacSignIn.showing || !(signHost.hasSuffix(".cloudflareaccess.com") || signHost.hasPrefix("signin.") || signHost.hasPrefix("signin-"))
     // (a page that isn't E11's — a sign-in page: no menu bar item)
     if webView.url?.host != URL(string: SERVER)?.host { MenuBar.shared.hide() }
     if webView.url?.host == URL(string: SERVER)?.host {
       shareSignIn(); sendApnsToken(tries: 0)
+      if defaults.string(forKey: "e11_server") != "review" { MacKey.refresh(webView.configuration.websiteDataStore.httpCookieStore) }   // (this Mac's sign-in key: Touch ID next time)
       if let t = pendingFileLink { pendingFileLink = nil; pageJS("window.__e11FileLink && window.__e11FileLink(\(jsString(t)))") }
     }
   }
@@ -514,6 +529,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   // links the window can't show itself (mailto:, e11console:, …) go to the Mac
   func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
     #if APPSTORE
+    // our sign-in page about to open: the app's own sign-in screen instead (MacSignIn.swift — Haris 2026-11-20)
+    if action.targetFrame?.isMainFrame != false, let u = action.request.url, let h = u.host?.lowercased(),
+       h.hasPrefix("signin.") || h.hasPrefix("signin-"), MacSignIn.takeOver(u, app: self) { return decisionHandler(.cancel) }
     // the review copy's "Sign in to E11 Console" link goes back to the live server
     if defaults.string(forKey: "e11_server") == "review", action.targetFrame?.isMainFrame != false,
        let u = action.request.url, u.host == URL(string: (info["E11ServerURL"] as? String) ?? "https://console.e11hq.com")?.host {

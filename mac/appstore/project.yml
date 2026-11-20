@@ -25,6 +25,7 @@ targets:
       - path: ../swift/Info.swift
       - path: ../swift/TrashWin.swift
       - path: ../swift/MacNative.swift
+      - path: ../swift/MacSignIn.swift
       - path: ../splash
         type: folder
         buildPhase: resources
