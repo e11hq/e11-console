@@ -1284,7 +1284,25 @@ final class MeCtl {
     main.serverTask.request("/api/updates", body: fresh ? ["action": "check"] : nil, timeout: 60) { [weak self] j in
       self?.about["updates"] = j.map(MeCtl.updatesOf) ?? ["error": "Couldn’t check for updates — try again"]; self?.drawAbout()
     }
-    if (model["owner"] as? Bool) == true { loadVideo(false) }
+    if (model["owner"] as? Bool) == true {
+      loadVideo(false)
+      // (Cloudflare storage: asked by the app itself — the page's answer never reached this About, which the app loads on
+      //  its own; it stayed on "Checking…": Haris 2026-11-21 00:25. The same words as the website's r2Lines)
+      main.serverTask.request("/api/r2/usage", body: nil, timeout: 30) { [weak self] j in
+        guard let self = self else { return }
+        self.about["r2"] = MeCtl.r2Lines(j); self.drawAbout()
+      }
+    }
+  }
+  static func r2Lines(_ u: [String: Any]?) -> [String: Any] {
+    guard let u = u else { return ["head": "Couldn’t check", "sub": "Try again in a moment."] }
+    guard (u["on"] as? Bool) == true else { return ["head": "Not set up yet", "sub": ""] }
+    let n = { (k: String) -> Double in (u[k] as? NSNumber)?.doubleValue ?? 0 }
+    let gb = { (b: Double) -> String in b >= 1e9 ? String(format: "%.1f GB", b / 1e9) : b >= 1e6 ? "\(Int((b / 1e6).rounded())) MB" : b > 0 ? "<1 MB" : "0" }
+    let total = n("total"), free = n("free")
+    let price = total <= free ? "free (under \(gb(free)))" : String(format: "about $%.2f this month", n("cost"))
+    return ["head": "\(gb(total)) of \(gb(n("budget"))) · \(price)",
+            "sub": "E11 Console \(gb(n("console"))) · E11 Talk \(gb(n("talk"))). Recent files are kept there for fast opening; the office keeps everything."]
   }
   private func loadVideo(_ fresh: Bool) {
     guard mineNow else { send(["ev": "videoCheck"]); return }
