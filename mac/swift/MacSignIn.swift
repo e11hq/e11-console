@@ -15,6 +15,35 @@ import Security
    Once the server says where to go next, the web view follows it out of sight (Cloudflare's last step) and the screen stays,
    its button turning, with "Signing in…" under it, until the app's own page is back. */
 
+// ---- timing notes for one sign-in (Haris 2026-11-20 13:53: "find out what's slow in the 4.5 seconds") — each step's
+// milliseconds since the button, in the app's own Logs folder: ~/Library/Containers/<the app>/Data/Library/Logs/E11-signin.log
+// (the last 300 lines kept; nothing personal — hosts and paths, never codes or keys). To be taken out once found. ----
+enum SignInTimes {
+  private static var t0: CFTimeInterval = 0
+  static var on: Bool { t0 > 0 && CACurrentMediaTime() - t0 < 60 }
+  static let url: URL = {
+    let d = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0].appendingPathComponent("Logs", isDirectory: true)
+    try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+    return d.appendingPathComponent("E11-signin.log")
+  }()
+  private static let q = DispatchQueue(label: "signintimes")
+  static func start(_ what: String) { t0 = CACurrentMediaTime(); write("---- " + ISO8601DateFormatter().string(from: Date()) + " " + what) }
+  static func note(_ what: String) { guard on else { return }; write(String(format: "%6d ms  ", Int((CACurrentMediaTime() - t0) * 1000)) + what) }
+  static func page(_ what: String, _ u: URL?) {
+    guard on, let u = u else { return }
+    note(what + " " + (u.host ?? "") + u.path)
+  }
+  private static func write(_ line: String) {
+    q.async {
+      var t = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+      t += line + "\n"
+      let lines = t.split(separator: "\n", omittingEmptySubsequences: false)
+      if lines.count > 300 { t = lines.suffix(300).joined(separator: "\n") }
+      try? t.write(to: url, atomically: true, encoding: .utf8)
+    }
+  }
+}
+
 // ---- this Mac's sign-in key (the iPhone's DeviceKey) ----
 enum MacKey {
   private static let service = "ae.e11.console.signin"
@@ -134,6 +163,7 @@ enum MacSignIn {
   // the app's own page is back: the screen goes
   static func dismiss(animated: Bool = true) {
     guard let f = flow else { return }
+    SignInTimes.note("the app's page is back — sign-in screen goes")
     flow = nil
     let s = f.screen
     s.window?.makeFirstResponder(nil)
@@ -208,10 +238,12 @@ final class MacSignInFlow {
     return e.isEmpty ? "That didn’t work — try again." : e
   }
   private func done(_ j: [String: Any]?) {
+    SignInTimes.page("server said: next", (j?["redirect"] as? String).flatMap(URL.init(string:)))
     if let to = (j?["redirect"] as? String).flatMap(URL.init(string:)) { screen.setWaiting(true); onRedirect?(to) }
     else { screen.setBusy(false); screen.showError(failText(j)) }
   }
   private func signIn(_ e: String, _ p: String) {
+    SignInTimes.start("Sign In (email + password)")
     let e = e.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !e.isEmpty else { return screen.showError("Enter your work email.") }
     screen.setBusy(true)
@@ -222,7 +254,8 @@ final class MacSignInFlow {
       UserDefaults.standard.set(self.email, forKey: "e11_signin_email")
       guard (j?["password"] as? Bool) == true else { self.screen.setBusy(false); return self.screen.show(.code(owner: self.owner), email: self.email) }
       guard !p.isEmpty else { self.screen.setBusy(false); return self.screen.showError("Enter your password.") }
-      self.api.post("password", ["email": self.email, "password": p]) { [weak self] j in self?.done(j) }
+      SignInTimes.note("email checked — sending the password")
+      self.api.post("password", ["email": self.email, "password": p]) { [weak self] j in SignInTimes.note("sign-in server answered"); self?.done(j) }
     }
   }
   private func useCode(_ e: String) {
@@ -254,6 +287,7 @@ final class MacSignInFlow {
   }
   // Touch ID (or the Mac's password), then the key in place of the password
   private func touchID() {
+    SignInTimes.start("Sign in with Touch ID")
     guard let k = key else { return screen.show(.form, email: email) }
     let ctx = LAContext()
     var err: NSError?
@@ -263,7 +297,9 @@ final class MacSignInFlow {
       DispatchQueue.main.async { [weak self] in
         guard let self = self else { return }
         guard ok else { return self.screen.setBusy(false) }
+        SignInTimes.note("Touch ID passed — asking the sign-in server")
         self.api.post("device", ["key": k]) { [weak self] j in
+          SignInTimes.note("sign-in server answered")
           guard let self = self else { return }
           if j?["redirect"] is String { return self.done(j) }
           self.screen.setBusy(false)
