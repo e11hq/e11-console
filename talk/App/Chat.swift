@@ -1146,7 +1146,12 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       guard let ex = AVAssetExportSession(asset: asset, presetName: hd ? AVAssetExportPreset1920x1080 : AVAssetExportPreset1280x720) else { ready(url); return }
       let out = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mp4")
       ex.outputURL = out; ex.outputFileType = .mp4; ex.shouldOptimizeForNetworkUse = true
-      ex.exportAsynchronously { DispatchQueue.main.async { ready(ex.status == .completed ? out : url) } }
+      // (1 GB counted on what goes, after it's made smaller — WhatsApp's way, Haris 2026-11-20 17:38: a long 4K video fits at 720p)
+      ex.exportAsynchronously { DispatchQueue.main.async {
+        let made = ex.status == .completed ? out : url
+        if Attach.tooBig(made) { toast("That video is over 1 GB even made smaller — send a shorter part"); ready(nil); return }
+        ready(made)
+      } }
     })
     replying = nil
     toBottom(true)
@@ -1697,7 +1702,8 @@ extension ChatVC: PHPickerViewControllerDelegate, UIImagePickerControllerDelegat
   }
   private func preview(_ all: [SendPreviewVC.Item]) {
     // (files up to 1 GB — Haris 2026-11-16)
-    let items = all.filter { !Attach.tooBig($0.url) }
+    // (a video counted after it's made smaller — sendVideo; Haris 2026-11-20 17:38)
+    let items = all.filter { $0.kind == "video" || !Attach.tooBig($0.url) }
     if items.count < all.count { toast(all.count == 1 ? "Files up to 1 GB can be sent" : "Files over 1 GB were left out") }
     guard !items.isEmpty else { return }
     if let open = sendPreview { open.add(items); return }
