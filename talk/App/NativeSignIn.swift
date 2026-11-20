@@ -198,6 +198,7 @@ final class SignInScreen: UIView, UITextFieldDelegate {
   private let mainB = UIButton(type: .system), secondB = UIButton(type: .system), linkB = UIButton(type: .system)
   private let errL = UILabel(), foot = UILabel(), waitL = UILabel()
   private let reviewB = UIButton(type: .system), backB = UIButton(type: .system)
+  private lazy var peeker = SignInPeeker(talk: brand.app == "E11 Talk")   // the little peeker over the keyboard (SignInPeeker.swift)
 
   init(brand: SignInBrand, frame: CGRect) {
     self.brand = brand
@@ -236,6 +237,7 @@ final class SignInScreen: UIView, UITextFieldDelegate {
       f.font = .systemFont(ofSize: 17); f.delegate = self; f.clearButtonMode = .whileEditing
       f.autocorrectionType = .no; f.spellCheckingType = .no
       f.translatesAutoresizingMaskIntoConstraints = false; card.addSubview(f)
+      f.addAction(UIAction { [weak self, weak f] _ in if let f = f { self?.peeker.typed(in: f) } }, for: .editingChanged)
     }
     sep.translatesAutoresizingMaskIntoConstraints = false; card.addSubview(sep)
 
@@ -289,6 +291,11 @@ final class SignInScreen: UIView, UITextFieldDelegate {
     backB.translatesAutoresizingMaskIntoConstraints = false
     addSubview(backB)
 
+    // the peeker: over the whole screen, but only its own body takes a touch
+    peeker.translatesAutoresizingMaskIntoConstraints = false
+    addSubview(peeker)
+    peeker.onRoom = { [weak self] h in self?.scroll.contentInset.bottom = h }
+
     for v in [icon, avatar, greet, titleL, sub, card, codeRow, errL, mainB, secondB, linkB, foot, waitL] as [UIView] { stack.addArrangedSubview(v) }
     let side: CGFloat = 22
     NSLayoutConstraint.activate([
@@ -323,6 +330,8 @@ final class SignInScreen: UIView, UITextFieldDelegate {
       backB.leadingAnchor.constraint(equalTo: safeAreaLayoutGuide.leadingAnchor, constant: 16),
       backB.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: 8),
       backB.widthAnchor.constraint(equalToConstant: 44), backB.heightAnchor.constraint(equalToConstant: 44),
+      peeker.topAnchor.constraint(equalTo: topAnchor), peeker.bottomAnchor.constraint(equalTo: bottomAnchor),
+      peeker.leadingAnchor.constraint(equalTo: leadingAnchor), peeker.trailingAnchor.constraint(equalTo: trailingAnchor),
     ])
     // (the spaces between, as the mock-ups)
     stack.setCustomSpacing(26, after: icon); stack.setCustomSpacing(26, after: avatar)
@@ -517,14 +526,20 @@ final class SignInScreen: UIView, UITextFieldDelegate {
 
   // ---- typing ----
   func textFieldShouldReturn(_ f: UITextField) -> Bool {
+    peeker.key("\n", numbers: false)
     if f === f1 { f2.becomeFirstResponder() } else if f === f2 { mainTapped() }
     return false
   }
   func textFieldDidBeginEditing(_ f: UITextField) {
     paint()
+    peeker.forget(f)
+    // (room under the button for the peeker, so it never sits on it)
+    let room: CGFloat = UIAccessibility.isReduceMotionEnabled ? 0 : 112
+    scroll.contentInset.bottom = room
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
       guard let self = self else { return }
-      let r = self.mainB.convert(self.mainB.bounds, to: self.scroll).insetBy(dx: 0, dy: -16)
+      var r = self.mainB.convert(self.mainB.bounds, to: self.scroll).insetBy(dx: 0, dy: -16)
+      r.size.height += room
       self.scroll.scrollRectToVisible(r, animated: true)
     }
   }
@@ -534,6 +549,7 @@ final class SignInScreen: UIView, UITextFieldDelegate {
   func textField(_ f: UITextField, shouldChangeCharactersIn range: NSRange, replacementString s: String) -> Bool {
     guard let b = f as? DigitBox, let i = boxes.firstIndex(of: b) else { return true }
     let d = s.filter(\.isNumber)
+    peeker.key(s.isEmpty ? "⌫" : String(d.last ?? "0"), numbers: true)
     if s.isEmpty { b.text = ""; return false }
     guard !d.isEmpty else { return false }
     for (j, ch) in d.prefix(4 - i).enumerated() { boxes[i + j].text = String(ch) }
@@ -543,6 +559,7 @@ final class SignInScreen: UIView, UITextFieldDelegate {
   }
   private func backFrom(_ i: Int) {
     guard i > 0 else { return }
+    peeker.key("⌫", numbers: true)
     boxes[i - 1].text = ""; boxes[i - 1].becomeFirstResponder()
   }
 }
