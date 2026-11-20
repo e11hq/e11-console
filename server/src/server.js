@@ -831,7 +831,19 @@ export function createServer(cfg) {
         const w = talkNow().personByEmail(e), u = w ? null : access.userByEmail(e);
         if (!w && !u) return json(res, 200, { ok: false });
         const p = w || u;
-        return json(res, 200, { ok: true, name: p.name || e, role: p.role || '', color: p.color || null, email: e });
+        // (the person's own profile photo, small, for "Welcome back" / "Continue as" — only ever to the device holding this
+        //  person's key: Haris 2026-11-20 14:15; none when there's no photo, or it can't be read)
+        let photo = null;
+        try {
+          const rel = (w && w.photo) || (u && u.avatar) || (access.userByEmail(e) || {}).avatar;
+          const f = rel ? files.resolve(rel) : null;
+          if (f && fs.existsSync(f) && fs.statSync(f).size < 400 * 1024) {
+            const ext = f.split('.').pop().toLowerCase();
+            const type = { png: 'image/png', webp: 'image/webp', gif: 'image/gif' }[ext] || 'image/jpeg';
+            photo = `data:${type};base64,` + fs.readFileSync(f).toString('base64');
+          }
+        } catch { photo = null; }
+        return json(res, 200, { ok: true, name: p.name || e, role: p.role || '', color: p.color || null, email: e, photo });
       }
     }
     return json(res, 404, { ok: false, error: 'Not found' });
