@@ -43,8 +43,16 @@ enum PreviewLoad {
   static func image(_ s: String?, _ done: @escaping (UIImage?) -> Void) {
     guard let s, !s.isEmpty else { return done(nil) }
     if let i = pics.object(forKey: s as NSString) { return done(i) }
+    // (an SVG drawn once is kept as a picture, as the lists' loader keeps it — opened again, no redraw: Haris 2026-11-21 00:20)
+    if let png = DiskPics.get("pvsvg:" + s), let i = UIImage(data: png) { pics.setObject(i, forKey: s as NSString); return done(i) }
     data(s) { d in
-      if let d = d, UIImage(data: d) == nil, SVGRaster.looksLikeSVG(d, path: s) { SVGRaster.shared.image(d, max: 1400) { done($0) }; return }   // (an SVG, drawn on the phone)
+      if let d = d, UIImage(data: d) == nil, SVGRaster.looksLikeSVG(d, path: s) {   // (an SVG, drawn on the phone)
+        SVGRaster.shared.image(d, max: 1400) { img in
+          if let img { pics.setObject(img, forKey: s as NSString); if let png = img.pngData() { DiskPics.put("pvsvg:" + s, png) } }
+          done(img)
+        }
+        return
+      }
       let i = d.flatMap { UIImage(data: $0) }.map { $0.preparingForDisplay() ?? $0 }
       if let i { pics.setObject(i, forKey: s as NSString) }
       done(i)
