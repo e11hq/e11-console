@@ -404,7 +404,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
     // (a page that doesn't take the startup screen over — not E11's own, or an older one — lets it go)
     if splash != nil { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in if self?.splashHello == false { self?.endSplash() } } }
-    reviewLink.isHidden = !(webView.url?.host ?? "").hasSuffix(".cloudflareaccess.com")
+    // (under our own sign-in page too, as the iPhone app — it's on our "signin." host since 2026-11-11, so the link never showed
+    //  and App Review couldn't find it: rejected 2026-11-20, guideline 2.1 — Haris 08:55)
+    let signHost = (webView.url?.host ?? "").lowercased()
+    reviewLink.isHidden = !(signHost.hasSuffix(".cloudflareaccess.com") || signHost.hasPrefix("signin.") || signHost.hasPrefix("signin-"))
     // (a page that isn't E11's — a sign-in page: no menu bar item)
     if webView.url?.host != URL(string: SERVER)?.host { MenuBar.shared.hide() }
     if webView.url?.host == URL(string: SERVER)?.host {
