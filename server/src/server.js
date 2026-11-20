@@ -714,6 +714,8 @@ export function createServer(cfg) {
       // ---- a linked Mac (E11 Console's Mac app, as its signed-in person): its own messages to pick up ----
       const macId = req.talkMac ? '' : String(req.headers['x-talk-mac'] || '');
       let dev = req.talkMac || u;
+      // (a phone with E11 Talk 200+: its own device — per-device delivery, Haris 2026-11-20 18:56)
+      if (!req.talkMac && !macId && req.headers['x-talk-device']) dev = t.phoneFor(u, req.headers['x-talk-device']) || u;
       if (macId) {
         dev = t.macFor(u, macId);
         if (!dev) return json(res, 410, { ok: false, unlinked: true, error: 'This Mac isn’t linked any more' });
@@ -736,7 +738,7 @@ export function createServer(cfg) {
         const b = await readBody(req, 256 * 1024);
         // (linking and unlinking Macs is the phone's — never from a Mac)
         if (req.talkMac && ['linkMac', 'unlinkMac', 'unlinkAllMacs'].includes(b && b.act)) return json(res, 403, { ok: false, error: 'Only on the phone' });
-        return out(t.act(u, b));
+        return out(t.act(u, b, dev));
       }
       // (test site only, the owner: sample groups and messages — talk.js sample)
       if (p === '/api/talk/sample' && req.method === 'POST') { if (!testCopy || !isOwner(req.realUser || u)) return json(res, 403, { ok: false, error: 'Only the owner, on the test site' }); return out(t.sample(req.realUser || u)); }
