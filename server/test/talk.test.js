@@ -165,7 +165,15 @@ test('files: uploaded in pieces, sent in a message, read by the group only, gone
   for (const w of ['sm', 'u6', 'fr', 'off']) { const r = await fetch(base + '/api/talk/file/' + up.id, { headers: H(w) }); if (r.status === 200) { await r.text(); waiting.push(w); } }
   assert.ok(waiting.length > 0, 'still downloadable after the message was taken');
   await new Promise((r) => setTimeout(r, 50));
-  assert.equal(fs.existsSync(file), false, 'the file is gone from the server once every phone has it');
+  // (kept one more day after the last phone downloaded it — a download that broke on the way can be asked for again;
+  //  Haris 2026-11-20 16:57)
+  assert.equal(fs.existsSync(file), true, 'still there just after every phone has it');
+  const again = await fetch(base + '/api/talk/file/' + up.id, { headers: H(waiting[0]) });
+  assert.equal(again.status, 200, 'a phone whose download broke gets it again'); await again.text();
+  clock += 23 * 3600000; app.talk.sweep();
+  assert.equal(fs.existsSync(file), true, 'still there within the day');
+  clock += 2 * 3600000; app.talk.sweep();
+  assert.equal(fs.existsSync(file), false, 'the file is gone from the server a day after every phone has it');
 });
 
 test('files: pieces side by side — each at its own place, done only once every byte is in', async () => {

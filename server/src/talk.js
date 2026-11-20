@@ -15,6 +15,9 @@ import crypto from 'node:crypto';
 import { isAway } from './away.js';
 
 const KEEP_MS = 30 * 86400000;          // never picked up: gone after 30 days
+// (a file a phone has downloaded: kept one more day — the server's "sent" isn't the phone's "got": Cloudflare takes the
+//  whole file at once, and a phone that stalled or lost the line asked again for a file already let go — Haris 2026-11-20 16:57)
+const GOT_MS = 86400000;
 const IDLE_MS = 90 * 86400000;          // a group with no new messages for 90 days is deleted (Haris 2026-11-05)
 const EDIT_MS = 15 * 60000;             // edit your own message: 15 minutes (as WhatsApp)
 const DEL_ALL_MS = 2 * 86400000;        // delete for everyone: about 2 days
@@ -60,6 +63,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   try { db.exec('ALTER TABLE macs ADD COLUMN key_hash TEXT'); } catch { /* already there */ }
   try { db.exec('ALTER TABLE link_codes ADD COLUMN ticket TEXT'); } catch { /* already there */ }
   try { db.exec('ALTER TABLE link_codes ADD COLUMN key TEXT'); } catch { /* already there */ }
+  try { db.exec('ALTER TABLE needs ADD COLUMN got INTEGER'); } catch { /* already there */ }
   const q = (sql) => db.prepare(sql);
   const Q = {
     group: q('SELECT * FROM groups WHERE id = ? AND gone = 0'),
@@ -76,8 +80,10 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     pref: q('SELECT pinned_at, muted_until FROM prefs WHERE uid = ? AND kind = ? AND id = ?'),
     opt: q('SELECT val FROM opts WHERE uid = ? AND key = ?'),
     addNeed: q('INSERT OR IGNORE INTO needs (file, uid, grp, at) VALUES (?, ?, ?, ?)'),
-    gotNeed: q('DELETE FROM needs WHERE file = ? AND uid = ?'),
-    needed: q('SELECT 1 FROM needs WHERE file = ? LIMIT 1'),
+    gotNeed: q('UPDATE needs SET got = ? WHERE file = ? AND uid = ? AND got IS NULL'),
+    neededAt: q('SELECT 1 FROM needs WHERE file = ? AND (got IS NULL OR got >= ?) LIMIT 1'),
+    oldGot: q('SELECT DISTINCT file FROM needs WHERE got IS NOT NULL AND got < ?'),
+    dropOldGot: q('DELETE FROM needs WHERE got IS NOT NULL AND got < ?'),
     needOf: q('SELECT grp FROM needs WHERE file = ? AND uid = ?'),
     oldNeeds: q('SELECT DISTINCT file FROM needs WHERE at < ?'),
     dropOldNeeds: q('DELETE FROM needs WHERE at < ?'),
@@ -381,10 +387,12 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     const f = data && data.file, k = data && data.link;   // (a link preview's picture and icon go with it too)
     return [...(f && f.id ? [f.id] : []), ...(k && k.img && k.img.id ? [k.img.id] : []), ...(k && k.icon && k.icon.id ? [k.icon.id] : []), ...(Array.isArray(data && data.files) ? data.files : [])];
   }
+  // (someone's phone hasn't downloaded it yet, or did so in the last day)
+  const needed = (id) => Q.neededAt.get(id, now() - GOT_MS);
   function dropFiles(ids) {
     for (const id of ids) {
       if (Q.fileInUse.get(`%"id":"${id}"%`)) continue;   // (still in an event someone hasn't picked up)
-      if (Q.needed.get(id)) continue;   // (someone's phone hasn't downloaded it yet — Auto-download off; at most 30 days)
+      if (needed(id)) continue;   // (someone's phone hasn't downloaded it yet — Auto-download off; at most 30 days)
       // (a group's picture stays while the group uses it — a phone signed out and in again, or a new one, fetches it again:
       //  it was let go once everyone had it, and group pictures went missing — Haris 2026-11-14)
       if (db.prepare('SELECT 1 FROM groups WHERE pic = ? AND gone = 0 LIMIT 1').get(id)) continue;
@@ -406,6 +414,10 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     const unneeded = Q.oldNeeds.all(t - KEEP_MS).map((r) => r.file);
     Q.dropOldNeeds.run(t - KEEP_MS);
     dropFiles(unneeded);
+    // downloaded more than a day ago: let go now
+    const had = Q.oldGot.all(t - GOT_MS).map((r) => r.file);
+    Q.dropOldGot.run(t - GOT_MS);
+    dropFiles(had);
     for (const r of Q.oldSent.all(t - KEEP_MS)) Q.dropSent.run(r.id);
     // uploads never sent in a message (or long gone)
     const stale = Q.oldFiles.all(t - KEEP_MS).map((r) => r.id);
@@ -1057,8 +1069,8 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   const filePath = (f) => path.join(relay, f.id);
   // a phone has the whole file now: it waits for that person no more (Auto-download off — Haris 2026-11-13)
   function fetched(u, id) {
-    Q.gotNeed.run(String(id), u.id);
-    if (!Q.needed.get(String(id))) dropFiles([String(id)]);
+    Q.gotNeed.run(now(), String(id), u.id);
+    if (!needed(String(id))) dropFiles([String(id)]);
   }
 
   // tasks changed in E11 Console: every phone listening hears their ids (nothing kept — the phone asks for the cards it shows)
