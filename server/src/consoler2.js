@@ -18,7 +18,7 @@ import { DatabaseSync } from 'node:sqlite';
 const DAY = 86400000;
 // a file is 5 GB at most (Haris 2026-11-20 19:53) — every upload, the office's and R2's
 export const MAX_FILE = 5 * 1e9;
-export const R2_RULES = { keepDays: 25, bigBytes: 5 * 1e9, bigKeepDays: 7, budget: 143 * 1e9, free: 10 * 1e9, perGbMonth: 0.015 };
+export const R2_RULES = { lazyMax: 1e9, keepDays: 25, bigBytes: 5 * 1e9, bigKeepDays: 7, budget: 143 * 1e9, free: 10 * 1e9, perGbMonth: 0.015 };
 
 export function createConsoleR2({ r2, files, dataDir, dbFile, now = () => Date.now(), talkBytes = () => 0, log = console, rules: given = null, settleMs = 60000 }) {
   const rules = { ...R2_RULES, ...(given || {}) };
@@ -47,30 +47,39 @@ export function createConsoleR2({ r2, files, dataDir, dbFile, now = () => Date.n
   /* ---------- the fast copy for a file, when there is one ---------- */
   // a link to R2 for this office file (or null: the office serves it). The same link for half an hour, so browsers keep
   // what they fetched; it works for an hour at most.
-  function link(rel, { download = false } = {}) {
+  // (download: true — saved under its own name; a string — under that name. copy: false — not copied up from here: someone
+  //  in the office, where the office network is fastest anyway)
+  function link(rel, { download = false, copy = true } = {}) {
     if (!on || !rel || unsafe(rel)) return null;
     const o = Q.get.get(rel);
-    if (!o) { want(rel); return null; }
+    if (!o) { if (copy) want(rel, { asked: true }); return null; }
     if (!o.pulling) {
       const st = statOf(rel);
-      if (!st || st.size !== o.size || Math.abs(st.mtimeMs - o.mtime) > 1) { forget(rel); want(rel); return null; }   // (not the same file any more)
+      if (!st || st.size !== o.size || Math.abs(st.mtimeMs - o.mtime) > 1) { forget(rel); if (copy) want(rel, { asked: true }); return null; }   // (not the same file any more)
     }
     const name = path.basename(rel);
-    return r2.getUrl(o.key, { slot: 30 * 60000, expires: 3600, type: mime(name), download: download ? name : null });
+    return r2.getUrl(o.key, { slot: 30 * 60000, expires: 3600, type: mime(name), download: download ? (typeof download === 'string' ? download : name) : null });
   }
 
   /* ---------- copies going up (one at a time, in the background) ---------- */
   const queue = [], queued = new Set();
   let busy = false;
   // a file asked for from outside, or just uploaded in the office: copied up if it should be there
-  function want(rel) {
+  // asked: someone outside the office opened it — an older file too, copied up then, for everyone after them (its 25 days
+  // from then: Haris 2026-11-20 20:49); a new upload's copy goes first in the line
+  function want(rel, { asked = false } = {}) {
     if (!on || !rel || unsafe(rel) || queued.has(rel) || Q.get.get(rel)) return;
     const st = statOf(rel);
     if (!st || st.size === 0) return;
     const kind = kindOf(rel);
-    if (kind === 'f' && now() - st.mtimeMs > rules.keepDays * DAY) return;   // (an older original: the office serves it)
+    if (kind === 'f' && !asked && now() - st.mtimeMs > rules.keepDays * DAY) return;
+    // (an older big original opened from outside — over 1 GB — stays the office's: copying it up over the office line
+    //  would hold up the new files' copies for an hour; its light copy and previews still go up)
+    if (kind === 'f' && asked && now() - st.mtimeMs > rules.keepDays * DAY && st.size > rules.lazyMax) return;
     if (st.size > rules.budget / 4) return;
-    queued.add(rel); queue.push(rel); kick();
+    queued.add(rel);
+    if (asked) queue.push(rel); else queue.unshift(rel);
+    kick();
   }
   // the office wrote a file (an upload's piece): copied up a minute after its last piece
   const settle = new Map();

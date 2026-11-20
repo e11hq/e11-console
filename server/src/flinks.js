@@ -13,7 +13,7 @@ const IMAGES = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'heic', 'svg'];
 const VIDEOS = ['mp4', 'mov', 'm4v', 'webm'];
 const TOKEN = /^[A-Za-z0-9]{6,16}$/;
 
-export function createFileLinks({ store, files, views, base, teamId, bundleId = 'ae.e11.console.ios', brandSvg = '' }) {
+export function createFileLinks({ store, files, views, base, teamId, bundleId = 'ae.e11.console.ios', brandSvg = '', fast = null }) {
   const load = () => { try { return JSON.parse(store.kv.get(KEY) || '{}'); } catch { return {}; } };
   const save = (m) => store.kv.set(KEY, JSON.stringify(m));
   const newToken = () => { const a = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (const b of crypto.randomBytes(8)) s += a[b % a.length]; return s; };
@@ -338,28 +338,35 @@ document.addEventListener('scroll',fr,true);fr();})();
   // (private links — never in Google or any search: Haris 2026-11-04)
   const ROBOTS = 'noindex, nofollow, noarchive, nosnippet, noimageindex';
   const HEAD = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Robots-Tag': ROBOTS };
-  const CSP = "default-src 'none'; img-src 'self'; media-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'none'";
+  // (pictures and videos may come from Cloudflare R2's address after the file's own — consoler2.js)
+  const CSP = "default-src 'none'; img-src 'self' https://*.r2.cloudflarestorage.com; media-src 'self' https://*.r2.cloudflarestorage.com; connect-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'none'";
   const html = (req, res, ok, body) => { res.writeHead(ok ? 200 : 404, { ...HEAD, 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', 'Content-Security-Policy': CSP }); res.end(req.method === 'HEAD' ? undefined : body); return true; };
   // a file's bytes: the download, its view (pictures, videos — ranges) or its picture
   async function sendAtt(req, res, what, a, rel) {
     const ext = extOf(a.name || rel);
+    // (from Cloudflare R2 when it has a fast copy — anyone opening the link gets it from there; else the office as before.
+    //  Haris 2026-11-20 20:49)
+    const r2 = (p, o) => { const u = fast && fast(p, o || {}); if (!u) return false; res.writeHead(302, { ...HEAD, Location: u, 'Cache-Control': 'private, max-age=600' }); res.end(); return true; };
+    const sized = async (w) => { const s = await files.makeSized(rel, w); return s ? files.rel(s) : rel; };
     if (what === 'file') {
       const name = String(a.name || path.basename(rel)).replace(/[\r\n"]/g, '');
+      if (r2(rel, { download: name })) return true;
       const orig = res.writeHead.bind(res);
       res.writeHead = (st, h) => orig(st, { ...(h || {}), ...HEAD, 'Content-Disposition': `attachment; filename="${name.replace(/[^\x20-\x7e]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(name)}`, 'Cache-Control': 'private, max-age=300' });
       files.serve(req, res, rel); return true;
     }
     if (what === 'view') {
-      if (VIDEOS.includes(ext)) { files.serve(req, res, views ? views.viewPath(rel) : rel); return true; }
+      if (VIDEOS.includes(ext)) { const v = views ? views.viewPath(rel) : rel; if (r2(v)) return true; files.serve(req, res, v); return true; }
       if (ext === 'svg') { files.serve(req, res, rel); return true; }   // (served with its own no-script rules — files.serve)
-      if (IMAGES.includes(ext)) { await files.serveSized(req, res, rel, 1280); return true; }
+      if (IMAGES.includes(ext)) { const s = await sized(1280); if (r2(s)) return true; files.serve(req, res, s); return true; }
       res.writeHead(404, HEAD); res.end(); return true;
     }
     // its picture: a smaller copy of a photo, else the picture made for its thumbnail (PDF page, video frame, Office)
-    if (IMAGES.includes(ext) && ext !== 'svg') { await files.serveSized(req, res, rel, 640); return true; }
+    if (IMAGES.includes(ext) && ext !== 'svg') { const s = await sized(640); if (r2(s)) return true; files.serve(req, res, s); return true; }
     let t = a.thumb && onDisk(a.thumb) ? a.thumb : null;
     if (!t) { try { const x = await files.commands.thumb({ id: a.id, path: rel }); t = x && x.thumb; } catch { t = null; } }
     if (!t) { res.writeHead(404, HEAD); res.end(); return true; }
+    if (r2(t)) return true;
     files.serve(req, res, t); return true;
   }
   // the public part (no sign-in): file links /f/<token>[/file|view|thumb]; folder links /d/<token>, its folders

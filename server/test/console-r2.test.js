@@ -115,4 +115,26 @@ test('25 days: the fast copy goes, the office serves it again; a changed file is
   clock += 26 * 86400000; app.consoleR2.sweep();
   await wait(50);
   const old = await open('am', r.path); assert.equal(old.status, 200, 'after 25 days: from the office'); await old.arrayBuffer();
+  // (opened from outside: copied up again for everyone after — Haris 2026-11-20 20:49)
+  await wait(150);
+  assert.equal((await open('am', r.path)).status, 302, 'an older file opened from outside comes from R2 for the next people');
+});
+
+test('a shared file link: its download and its view come from R2 when R2 has the copy (Haris 2026-11-20 20:49)', async () => {
+  const data = crypto.randomBytes(120 * 1024);
+  const r = await (await fetch(base + '/api/host/writeChunkBin?taskId=t1&name=shared.pdf&offset=0', { method: 'POST', headers: { ...H('am'), 'Content-Type': 'application/octet-stream' }, body: data })).json();
+  await wait(150);
+  const t1 = app.store.get('tasks', 't1');
+  app.store.apply([{ kind: 'tasks', id: 't1', data: { ...t1, attachments: [{ id: 'a1', name: 'shared.pdf', path: r.path, size: data.length }] } }], 'test');
+  const l = await post('am', '/api/flink', { path: r.path });
+  const tok = String(l.url || l.link || '').split('/f/')[1];
+  assert.ok(tok, 'a link was made');
+  // (this test's clock is a month on, so the file counts as older: the first opening copies it up, the next goes to R2)
+  const first = await fetch(base + '/f/' + tok + '/file', { redirect: 'manual' }); await first.arrayBuffer();
+  await wait(150);
+  const dl = await fetch(base + '/f/' + tok + '/file', { redirect: 'manual' });
+  assert.equal(dl.status, 302, 'the download goes to R2');
+  assert.match(decodeURIComponent(dl.headers.get('location')), /attachment; filename\*=UTF-8''shared\.pdf/, 'saved under its name');
+  const got = await fetch(dl.headers.get('location'));
+  assert.deepEqual(Buffer.from(await got.arrayBuffer()), data);
 });

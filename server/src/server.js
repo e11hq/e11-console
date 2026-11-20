@@ -266,7 +266,7 @@ export function createServer(cfg) {
   const filesUrl = cfg.filesUrl || (cfg.dev ? '' : testCopy ? 'https://files-test.e11hq.com' : 'https://files.e11hq.com');
   const filesHost = filesUrl ? new URL(filesUrl).host : '';
   const brandSvg = (() => { try { return fs.readFileSync(path.join(webDir || '', 'brand', 'e11-mark.svg'), 'utf8').replace(/<\?xml[^>]*>/, '').replace(/<title>.*?<\/title>/, '').replace(/fill="#000000"/g, 'fill="currentColor"').replace(/ width="\d+" height="\d+"/, ' role="img" aria-label="E11"'); } catch { return '<b style="font-size:30px">E11</b>'; } })();
-  const fileLinks = createFileLinks({ store, files, views, base: filesUrl, teamId: cfg.appleTeamId || cfg.apnsTeamId || '', brandSvg });
+  const fileLinks = createFileLinks({ store, files, views, base: filesUrl, teamId: cfg.appleTeamId || cfg.apnsTeamId || '', brandSvg, fast: (rel, o) => consoleR2.link(rel, o) });
   function scanVideos() {
     try {
       const add = (a) => { if (a && a.path) views.want(a.path); };
@@ -1858,7 +1858,7 @@ export function createServer(cfg) {
       // (a browser — the website, the Mac app's pages — or an app that asks for it (r2=1); the apps' own native fetches
       //  carry the sign-in by hand, which would follow the redirect to R2, so they keep the office until they strip it)
       const native = /CFNetwork|Darwin\//.test(String(req.headers['user-agent'] || '')) && url.searchParams.get('r2') !== '1';
-      const fast = native ? null : consoleR2.link(show, { download: url.searchParams.get('dl') === '1' });
+      const fast = native ? null : consoleR2.link(show, { download: url.searchParams.get('dl') === '1', copy: !office.info(req).local });
       if (fast) { res.writeHead(302, { Location: fast, 'Cache-Control': 'private, max-age=600' }); return res.end(); }
       await consoleR2.ready(show);
       return files.serve(req, res, show);
