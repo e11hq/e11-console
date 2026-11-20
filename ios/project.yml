@@ -9,7 +9,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.2.4"   # (1.2.3 approved by Apple — found 2026-11-19 when TestFlight refused a new 1.2.3 build; 1.2.4: taps during a back slide or a closing sheet. Before: 1.2.2 approved by Apple — found 2026-11-18 when TestFlight refused a new 1.2.2 build; 1.2.3: the sign-in fixes, office network, Me › Server)
+    MARKETING_VERSION: "1.2.5"   # (1.2.4 = build 1900, in App Store review 2026-11-19 — 1.2.5: the app's own sign-in screen.) (1.2.3 approved by Apple — found 2026-11-19 when TestFlight refused a new 1.2.3 build; 1.2.4: taps during a back slide or a closing sheet. Before: 1.2.2 approved by Apple — found 2026-11-18 when TestFlight refused a new 1.2.2 build; 1.2.3: the sign-in fixes, office network, Me › Server)
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Automatic
 targets:

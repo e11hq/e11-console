@@ -461,7 +461,9 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
         defaults.set("live", forKey: "e11_server"); loadHome(); return decisionHandler(.cancel)
       }
       // (our sign-in page, with this phone's key: Face ID signs it back in instead — the page only if that doesn't work)
-      if action.targetFrame?.isMainFrame != false, isSigninHost(u.host?.lowercased() ?? ""), DeviceKey.takeOver(u, web: webView) { return decisionHandler(.cancel) }
+      // (Haris 2026-11-20: the app's own sign-in screen instead of the page — ConsoleSignIn / NativeSignIn.swift; Face ID with
+      //  this phone's key is on that screen now: "Welcome back")
+      if action.targetFrame?.isMainFrame != false, isSigninHost(u.host?.lowercased() ?? ""), ConsoleSignIn.takeOver(u, web: webView, main: self) { return decisionHandler(.cancel) }
       if action.targetFrame?.isMainFrame == false || allowedHere(u) { return decisionHandler(.allow) }
       UIApplication.shared.open(u)
       return decisionHandler(.cancel)
@@ -491,6 +493,8 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
     webView.scrollView.contentInsetAdjustmentBehavior = ours ? .never : .always
     if ours { tabCover = -1; view.setNeedsLayout() }
     if webView.url?.host == serverHost { bootCommitted() }   // (back from signing in: the startup screen — Boot.swift)
+    // (and the app's own sign-in screen goes, the startup screen already over it — not for Cloudflare's own steps on our site)
+    if webView.url?.host == serverHost, !(webView.url?.path ?? "").hasPrefix("/cdn-cgi/") { ConsoleSignIn.dismiss() }
   }
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
     if Main.isCloudflarePage(webView.url) {

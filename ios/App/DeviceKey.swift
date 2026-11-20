@@ -36,6 +36,8 @@ enum DeviceKey {
       if let j = j, (j["ok"] as? Bool) == true, let k = j["key"] as? String, k != key { keep(k) }
     }
   }
+  // the key no longer counts (the server said so on the sign-in screen): forgotten here
+  static func forget() { keep(nil) }
   // signing out: the key dropped, here and on the server
   static func drop(_ main: Main) {
     guard let k = key else { return }
