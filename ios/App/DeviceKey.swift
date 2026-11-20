@@ -32,17 +32,27 @@ enum DeviceKey {
     guard (main.startInfo["signin"] as? Bool) == true else { return }
     var b: [String: Any] = ["name": UIDevice.current.name]
     if let k = key { b["key"] = k }
+    let old = key
     main.serverTask.request("/api/signin/device", body: b) { j in
-      if let j = j, (j["ok"] as? Bool) == true, let k = j["key"] as? String, k != key { keep(k) }
+      guard let j = j, (j["ok"] as? Bool) == true, let k = j["key"] as? String else { return }
+      // (another account signed in on this phone: the one before's key let go, here and on the server — Haris 2026-11-20)
+      if let o = old, o != k { main.serverTask.request("/api/signin/device", body: ["drop": true, "key": o]) { _ in } }
+      if k != key { keep(k) }
     }
+    signedOut(false)
   }
   // the key no longer counts (the server said so on the sign-in screen): forgotten here
   static func forget() { keep(nil) }
-  // signing out: the key dropped, here and on the server
-  static func drop(_ main: Main) {
-    guard let k = key else { return }
-    main.serverTask.request("/api/signin/device", body: ["drop": true, "key": k]) { _ in }
-    keep(nil)
+  // signing out: the key kept (Haris 2026-11-20 10:49) — the sign-in screen then shows "Welcome back" with Face ID; it goes
+  // only when another account signs in on this phone (refresh), or by itself (a password set again, left the team).
+  // A mark says "signed out", so E11 Talk — which follows the account E11 Console is signed in as — signs out too and
+  // doesn't offer "Continue as …" with it (SignInKeys.consoleKey).
+  static func signedOut(_ on: Bool = true) {
+    let base: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: "signed-out:" + (URL(string: serverURL())?.host ?? "")]
+    SecItemDelete(base as CFDictionary)
+    guard on else { return }
+    var add = base; add[kSecValueData as String] = Data("1".utf8); add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+    SecItemAdd(add as CFDictionary, nil)
   }
 
   // Our sign-in page about to open, with a key on this phone: Face ID first, then the key — the page only if that fails

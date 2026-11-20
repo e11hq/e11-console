@@ -197,7 +197,7 @@ extension Main {
     loadHome()
   }
   func signOutNative() {
-    DeviceKey.drop(self)   // (this phone's key for our sign-in: let go — signing back in needs the password)
+    DeviceKey.signedOut()   // (this phone's key kept, for "Welcome back" + Face ID — marked signed out: Haris 2026-11-20 10:49)
     bootState.state = .signedOut; bootState.me = nil; bootState.owned = false
     putAwayForSwitch()
     AppData.shared.forgetCopies(except: nil)   // (signing out: nothing of theirs left on the phone)
