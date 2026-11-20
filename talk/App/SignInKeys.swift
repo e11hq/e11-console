@@ -152,3 +152,72 @@ extension SignInVC {
     return true
   }
 }
+
+/* A client contact's sign-in code (board 51, the approved "Sign-in — fully Apple" sheet, as E11 Console's): Apple's sheet
+   with Sign-in Code · Done; the person; the four digits (each box its own view — on the glass sheet a label's own
+   background came out reversed in E11 Console); when it stops working; Copy Message and Share… (Apple's buttons). */
+final class SigninCodeVC: UIViewController {
+  private let s: [String: Any]
+  init(_ signin: [String: Any]) { s = signin; super.init(nibName: nil, bundle: nil) }
+  required init?(coder: NSCoder) { fatalError() }
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    title = "Sign-in Code"
+    view.backgroundColor = .systemGroupedBackground
+    navigationItem.rightBarButtonItem = UIBarButtonItem(systemItem: .done, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
+    let code = s["code"] as? String ?? "", name = s["name"] as? String ?? "", email = s["email"] as? String ?? ""
+    let message = s["message"] as? String ?? "", until = s["until"] as? String ?? "", newUser = (s["newUser"] as? Bool) == true
+    let first = name.split(separator: " ").first.map(String.init) ?? name
+    let circle = UILabel(); circle.text = Look.initials(name); circle.textAlignment = .center; circle.textColor = .white
+    circle.font = .systemFont(ofSize: 15, weight: .semibold); circle.backgroundColor = Look.clientInk; circle.layer.cornerRadius = 22; circle.clipsToBounds = true
+    circle.widthAnchor.constraint(equalToConstant: 44).isActive = true; circle.heightAnchor.constraint(equalToConstant: 44).isActive = true
+    let who = UILabel(); who.text = name; who.font = .preferredFont(forTextStyle: .headline)
+    let sub = UILabel(); sub.text = "\(email) · \(newUser ? "New client contact" : "Forgot password")"; sub.font = .preferredFont(forTextStyle: .subheadline); sub.textColor = .secondaryLabel
+    sub.adjustsFontSizeToFitWidth = true; sub.minimumScaleFactor = 0.8
+    let names = UIStackView(arrangedSubviews: [who, sub]); names.axis = .vertical; names.spacing = 2
+    let person = UIStackView(arrangedSubviews: [circle, names]); person.spacing = 12; person.alignment = .center
+    let digits = UIStackView(arrangedSubviews: code.map { ch -> UIView in
+      let box = UIView(); box.backgroundColor = Look.dyn(0x2C2C2E, 0xF2F2F7); box.layer.cornerRadius = 14; box.layer.cornerCurve = .continuous
+      let l = UILabel(); l.text = String(ch); l.textAlignment = .center; l.font = .monospacedDigitSystemFont(ofSize: 34, weight: .semibold); l.textColor = .label
+      l.translatesAutoresizingMaskIntoConstraints = false; box.addSubview(l)
+      NSLayoutConstraint.activate([l.centerXAnchor.constraint(equalTo: box.centerXAnchor), l.centerYAnchor.constraint(equalTo: box.centerYAnchor),
+                                   box.widthAnchor.constraint(equalToConstant: 60), box.heightAnchor.constraint(equalToConstant: 68)])
+      return box
+    })
+    digits.spacing = 12; digits.isAccessibilityElement = true; digits.accessibilityLabel = "Code " + code.map(String.init).joined(separator: " ")
+    let note = UILabel(); note.numberOfLines = 0; note.textAlignment = .center; note.font = .preferredFont(forTextStyle: .footnote); note.textColor = .secondaryLabel
+    note.text = "Works once, only for \(first), until \(until). A new code cancels this one."
+    var cc = UIButton.Configuration.filled(); cc.title = "Copy Message"; cc.cornerStyle = .capsule; cc.buttonSize = .large
+    let copy = UIButton(configuration: cc)
+    copy.addAction(UIAction { [weak copy] _ in
+      UIPasteboard.general.string = message
+      UINotificationFeedbackGenerator().notificationOccurred(.success)
+      var c = cc; c.title = "Copied"; c.image = UIImage(systemName: "checkmark"); c.imagePadding = 6
+      if let b = copy { UIView.transition(with: b, duration: Crossfade.time, options: .transitionCrossDissolve) { b.configuration = c } }
+    }, for: .primaryActionTriggered)
+    var sc = UIButton.Configuration.gray(); sc.title = "Share…"; sc.cornerStyle = .capsule; sc.buttonSize = .large
+    let share = UIButton(configuration: sc)
+    share.addAction(UIAction { [weak self, weak share] _ in
+      let a = UIActivityViewController(activityItems: [message], applicationActivities: nil)
+      a.popoverPresentationController?.sourceView = share
+      self?.present(a, animated: true)
+    }, for: .primaryActionTriggered)
+    let foot = UILabel(); foot.numberOfLines = 0; foot.textAlignment = .center; foot.font = .preferredFont(forTextStyle: .footnote); foot.textColor = .secondaryLabel
+    foot.text = "Ready to send on WhatsApp. They sign in to E11 Talk only."   // (short, so it fits the half-height sheet — Haris 2026-11-13)
+    let stack = UIStackView(arrangedSubviews: [person, digits, note, copy, share, foot])
+    stack.axis = .vertical; stack.alignment = .center; stack.spacing = 18; stack.setCustomSpacing(10, after: copy)
+    stack.translatesAutoresizingMaskIntoConstraints = false
+    view.addSubview(stack)
+    let g = view.layoutMarginsGuide
+    NSLayoutConstraint.activate([
+      stack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),
+      stack.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 8), stack.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -8),
+      copy.widthAnchor.constraint(equalTo: stack.widthAnchor), share.widthAnchor.constraint(equalTo: stack.widthAnchor),
+    ])
+  }
+  static func present(_ signin: [String: Any], from vc: UIViewController) {
+    let n = UINavigationController(rootViewController: SigninCodeVC(signin))
+    if let sh = n.sheetPresentationController { sh.detents = [.medium(), .large()]; sh.prefersGrabberVisible = true }   // (half height first, as E11 Console's — Haris 2026-11-13)
+    vc.present(n, animated: true)
+  }
+}
