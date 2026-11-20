@@ -228,7 +228,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
   }
   func signOutNow() {
     if let t = UserDefaults.standard.string(forKey: "talk_push_token") { Net.shared.post("/api/talk/push", ["token": t, "off": true]) }
-    SignInKeys.dropOwn()   // (a client contact's own key for Face ID let go)
+    // (a client contact's own key kept: "Welcome back" + Face ID next time; it goes when another account signs in —
+    //  Haris 2026-11-20 10:49)
     UserDefaults.standard.removeObject(forKey: "talk_via_console")
     Talk.shared.signOut()
     UserDefaults.standard.removeObject(forKey: "talk_review")   // (off the App Review copy — after its own copy is gone)

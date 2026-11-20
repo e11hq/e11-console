@@ -25,7 +25,11 @@ enum SignInKeys {
   }
   private static var shared: String? { (Bundle.main.object(forInfoDictionaryKey: "SharedKeychainGroup") as? String).flatMap { $0.contains("$(") ? nil : $0 } }
   // E11 Console's key on this phone (its own service and account, in the shared group)
-  static var consoleKey: String? { read(service: "ae.e11.console.signin", account: "signin-key:" + consoleHost, group: shared) }
+  // (none while E11 Console is signed out — it keeps its key for its own "Welcome back", marked signed out: 2026-11-20)
+  static var consoleKey: String? {
+    guard read(service: "ae.e11.console.signin", account: "signed-out:" + consoleHost, group: shared) == nil else { return nil }
+    return read(service: "ae.e11.console.signin", account: "signin-key:" + consoleHost, group: shared)
+  }
   // E11 Talk's own — a client contact's
   static var ownKey: String? { read(service: "ae.e11.talk.signin", account: "signin-key:" + Server.host, group: nil) }
   static func keepOwn(_ k: String?) { write(k, service: "ae.e11.talk.signin", account: "signin-key:" + Server.host) }
@@ -51,8 +55,12 @@ enum SignInKeys {
     guard Talk.shared.isContact else { return }
     var b: [String: Any] = ["name": UIDevice.current.name]
     if let k = ownKey { b["key"] = k }
+    let old = ownKey
     Net.shared.post("/api/talk/device", b) { j in
-      if (j?["ok"] as? Bool) == true, let k = j?["key"] as? String, k != ownKey { keepOwn(k) }
+      guard (j?["ok"] as? Bool) == true, let k = j?["key"] as? String else { return }
+      // (another client contact signed in on this phone: the one before's key let go, here and on the server — 2026-11-20)
+      if let o = old, o != k { Net.shared.post("/api/talk/device", ["drop": true, "key": o]) }
+      if k != ownKey { keepOwn(k) }
     }
   }
   // signing out: Talk's own key let go (E11 Console's stays Console's)
