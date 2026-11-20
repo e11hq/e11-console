@@ -505,6 +505,29 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     return t
   }
   // the widget (widget/E11Widget.swift) asks the server with this app's own sign-in: server + cookies to the shared Keychain
+  // signing out on this Mac (Haris 2026-11-20 13:27: it signed straight back in): this Mac's own sign-in is forgotten —
+  // the server's cookies, Cloudflare's and our sign-in server's, in this Mac's cookie store (never Cloudflare's logout,
+  // which signs the person out on every device) — as the iPhone app does; then the app's own sign-in screen at once.
+  // This Mac's key stays, for "Welcome back" with Touch ID.
+  func signOutHere() {
+    guard defaults.string(forKey: "e11_server") != "review" else { return }
+    MacKey.signedOut = true
+    MacSignIn.prepare(app: self)
+    let store = web.configuration.websiteDataStore.httpCookieStore
+    let host = (URL(string: SERVER)?.host ?? "").lowercased()
+    store.getAllCookies { [weak self] cookies in
+      let mine = cookies.filter { c in
+        let d = (c.domain.hasPrefix(".") ? String(c.domain.dropFirst()) : c.domain).lowercased()
+        return host == d || host.hasSuffix("." + d) || d.hasSuffix("cloudflareaccess.com") || d.hasPrefix("signin.") || d.hasPrefix("signin-")
+      }
+      let all = DispatchGroup()
+      for c in mine { all.enter(); store.delete(c) { all.leave() } }
+      all.notify(queue: .main) { [weak self] in
+        WidgetShare.saveSignIn(server: SERVER, cookies: [])
+        self?.loadHome()
+      }
+    }
+  }
   func shareSignIn() {
     web?.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in WidgetShare.saveSignIn(server: SERVER, cookies: cookies) }
   }
@@ -726,7 +749,11 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     // (MacNative.swift, Haris 2026-11-18: the menu bar item, Spotlight, signing out, files dragged out to Finder)
     case "bar": MenuBar.shared.main = window; MacLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) {}; MenuBar.shared.apply(a); done(["ok": true, "shown": !MenuBar.shared.off])
     case "spotlight": MacLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) { Spot.update(a); done(["ok": true]) }
-    case "signedOut": Spot.clear(); MenuBar.shared.hide(); done(["ok": true])
+    case "signedOut":
+      Spot.clear(); MenuBar.shared.hide(); done(["ok": true])
+      #if APPSTORE
+      signOutHere()
+      #endif
     case "dragOut":
       guard let w = web as? E11WebView, let items = a["items"] as? [[String: Any]], !items.isEmpty else { return done(["ok": false, "error": "Nothing to drag"]) }
       w.outItems = items; w.outAt = Date()
