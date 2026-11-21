@@ -57,7 +57,8 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     func glass(_ b: UIButton, _ sym: String, _ label: String) {
       var c: UIButton.Configuration
       if #available(iOS 26.0, *) { c = .glass() } else { c = .gray(); c.cornerStyle = .capsule; c.baseForegroundColor = .white; c.background.backgroundColor = UIColor(white: 0.16, alpha: 0.8) }
-      c.image = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)); c.contentInsets = .zero
+      // (Apple's own icon size and weight, as Photos — 15 regular; was 17 semibold: Haris 2026-11-21 19:38)
+      c.image = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .regular)); c.contentInsets = .zero
       b.configuration = c; b.accessibilityLabel = label; b.translatesAutoresizingMaskIntoConstraints = false
       NSLayoutConstraint.activate([b.widthAnchor.constraint(equalToConstant: 42), b.heightAnchor.constraint(equalToConstant: 42)])
     }
@@ -106,7 +107,7 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     func tool(_ sym: String, _ label: String, _ red: Bool = false, _ act: @escaping () -> Void) -> UIButton {
       let b = UIButton(type: .system)
       // (the same size as the top's ‹ and ••• — Haris 2026-11-15)
-      b.setImage(UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)), for: .normal)
+      b.setImage(UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .regular)), for: .normal)
       b.tintColor = red ? .systemRed : .white; b.accessibilityLabel = label
       b.addAction(UIAction { _ in act() }, for: .touchUpInside); return b
     }
