@@ -1049,13 +1049,17 @@ enum LinkPrevMaker {
 // again; gone at once when their message comes ----------
 extension Talk {
   private static var typingNow: [String: [String: Double]] = [:]
-  // a "got" (✓✓) that came on the live line itself: shown at once, without waiting for the sync (Haris 2026-11-21 12:08)
+  // a message, or its ✓✓ / read / reaction / edit / delete, that came on the live line itself: shown at once, without
+  // waiting for the sync — which still follows and collects it, kept once (Haris 2026-11-21 12:08 ✓✓; 12:33 "lets go with A")
+  private static let liveTypes: Set<String> = ["msg", "got", "read", "react", "edit", "del"]
   func live(_ e: [String: Any]) {
-    guard me != nil, (e["type"] as? String) == "got" else { return }
+    guard me != nil, let t = e["type"] as? String, Talk.liveTypes.contains(t) else { return }
     var groupChanged = false
     guard let g = apply(e, &groupChanged) else { return }
     flush()
     NotificationCenter.default.post(name: .talkGroup, object: g)
+    if t == "msg" || t == "del" { NotificationCenter.default.post(name: .talkChanged, object: nil); badge() }
+    if t == "msg" { catchUp() }   // (its photo or video starts coming at once)
   }
   func typed(_ g: String, _ by: String) {
     guard by != me?.id else { return }
