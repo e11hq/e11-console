@@ -15,6 +15,7 @@ final class FileTile: UIView {
   private let pic = UIImageView(), badge = UILabel(), name = UILabel(), sub = UILabel(), tick = UIImageView()
   private var lines = 1, picPath: String?, aspect: CGFloat = 1
   private var logoOn: String?   // (the client logo on it now)
+  private var waitSpin: UIActivityIndicatorView?   // (a file still being made ready or uploaded — only Client Assets' own uploads)
   private(set) var isFolder = true, isClient = false
   var key: String { (isClient ? "fc:" : isFolder ? "fd:" : "ff:") + id }   // (its identity in the list)
   static let stripW: CGFloat = 92
@@ -137,8 +138,15 @@ final class FileTile: UIView {
   }
   // a file: its own picture (the server's small one) in its own shape — else its type's badge in its colour
   func file(_ f: [String: Any], lines: Int, sizeText: String) {
-    let s = "f|\(f["id"] ?? "")|\(f["name"] ?? "")|\(sizeText)|\(CommentCell.picURL(f) ?? "")|\(lines)"
+    let waiting = (f["pending"] as? Bool) == true
+    let s = "f|\(f["id"] ?? "")|\(f["name"] ?? "")|\(sizeText)|\(CommentCell.picURL(f) ?? "")|\(lines)|\(waiting)"
     guard s != sig else { return }
+    // (Client Assets' upload, picked a moment ago: a spinner on its picture until the real file takes its place — Haris
+    //  2026-11-21; nothing else sets "pending" on a tile)
+    if waiting {
+      let sp = waitSpin ?? { let v = UIActivityIndicatorView(style: .medium); v.hidesWhenStopped = true; v.isUserInteractionEnabled = false; pic.addSubview(v); waitSpin = v; return v }()
+      sp.startAnimating()
+    } else { waitSpin?.stopAnimating() }
     sig = s; info = f; isFolder = false; isClient = false; self.lines = lines; id = f["id"] as? String ?? ""; logoOn = nil
     let nm = f["name"] as? String ?? "File"
     let ext = (nm as NSString).pathExtension.uppercased()
@@ -267,6 +275,7 @@ final class FileTile: UIView {
       pic.frame = CGRect(x: (W - w) / 2, y: (box - h), width: w, height: h)
     }
     badge.frame = pic.bounds
+    waitSpin?.center = CGPoint(x: pic.bounds.midX, y: pic.bounds.midY)
     // (the name as tall as its words, up to its lines — the line under it right below, as the client page's row; the tile
     //  keeps its room for two lines, so its height never changes: Haris 2026-11-10 16:48, a one-line name sat in the
     //  middle of a two-line box and left a gap above "1 file")

@@ -777,9 +777,29 @@ extension Main {
   // by iPhone itself (Transfers: it goes on with the app in the background or the phone locked, Haris 2026-11-10)
   func downloadFile(_ f: [String: Any], from vc: UIViewController, started: ((URLSessionDownloadTask) -> Void)? = nil, _ toast: @escaping (String) -> Void) {
     guard let path = f["url"] as? String, let url = URL(string: serverURL() + path.replacingOccurrences(of: "?view=1", with: "")) else { return toast("This file isn’t available") }
+    let name = (f["name"] as? String ?? "File").replacingOccurrences(of: "/", with: "-")
+    // (Share: iPhone's sheet, and once it's done where it went — "Saved to Photos" / "Saved to Files"; Haris 2026-11-21)
+    let shareOut = { [weak self, weak vc] (dest: URL) in
+      guard let self = self else { return }
+      let item: Any = CommentCell.isPic(name) ? (UIImage(contentsOfFile: dest.path).map { $0 as Any } ?? dest) : dest
+      let share = ShareOut.sheet([item], say: toast)
+      // (shown once it's done — if the screen it came from has gone, over what's on top now)
+      let host = vc.flatMap { $0.view.window != nil ? $0 : nil } ?? self.topMost()
+      share.popoverPresentationController?.sourceView = host.view
+      host.present(share, animated: true)
+    }
+    // the preview already has the whole file (a photo, a PDF, any file but a video — a video's preview is its light copy):
+    // shared from it at once, nothing fetched again (Haris 2026-11-21)
+    if !CommentCell.isVideo(name), let src = Main.previewItem(f)["src"] as? String, !src.isEmpty {
+      if let d = (PreviewLoad.cache.object(forKey: src as NSString) as Data?) ?? DiskPics.get("pv:" + src), !d.isEmpty {
+        let out = FileManager.default.temporaryDirectory.appendingPathComponent("share-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        let file = out.appendingPathComponent(name)
+        if (try? d.write(to: file)) != nil { return shareOut(file) }
+      }
+    }
     PreviewLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) {
       var r = URLRequest(url: url); r.allHTTPHeaderFields = PreviewLoad.headers(url)
-      let name = (f["name"] as? String ?? "File").replacingOccurrences(of: "/", with: "-")
       // (its progress on the downloads' bar with Cancel, as the uploads' — not a toast that came and went at each 10%:
       //  Haris 2026-11-10)
       var id = -1
@@ -791,12 +811,8 @@ extension Main {
         let cancelled = self.dl[id]?.cancelled == true
         self.dl[id] = nil; self.paintHUD()
         guard let dest = dest else { return toast(cancelled ? "Download cancelled" : "Couldn’t download — try again") }
-        let item: Any = CommentCell.isPic(name) ? (UIImage(contentsOfFile: dest.path).map { $0 as Any } ?? dest) : dest
-        let share = UIActivityViewController(activityItems: [item], applicationActivities: nil)
-        // (shown once it's done — if the screen it came from has gone, over what's on top now)
-        let host = vc.flatMap { $0.view.window != nil ? $0 : nil } ?? self.topMost()
-        share.popoverPresentationController?.sourceView = host.view
-        host.present(share, animated: true)
+        _ = vc
+        shareOut(dest)
       }
       id = task.taskIdentifier
       self.dl[id] = Dl(task: task, name: name, from: url.absoluteString)

@@ -158,6 +158,13 @@ final class AssetsCtl {
   private(set) var leaving = false
   private var waitingPush = Set<ObjectIdentifier>()
   private var upBusy = false
+  // (Client Assets' Upload: a tile for each picked file in the folder at once, a spinner on it, until the real ones come —
+  //  E11 Talk's way, Haris 2026-11-21; by folder id)
+  private var upTiles: [String: [[String: Any]]] = [:]
+  private func showUpTiles(_ folder: String, _ list: [[String: Any]]) {
+    if list.isEmpty { upTiles[folder] = nil } else { upTiles[folder] = list }
+    for s in stack where s.folder == folder { blocks(s.h) }
+  }
 
   var top: HomeView? { stack.last.map { $0.h } }
   // the one the top buttons belong to: going back, already the one under it (it was nil then — for a moment the buttons
@@ -694,10 +701,17 @@ final class AssetsCtl {
         t.menu = picking != nil ? nil : { [weak self, weak h] in h.flatMap { self?.fileMenu($0, x, client: cid) } }
         tiles.append(t)
       }
+      // (uploads on their way: their tiles first, each with its spinner)
+      for x in upTiles[fid] ?? [] {
+        let t = kept(h, "ff:" + (x["id"] as? String ?? "")) { FileTile() }
+        t.file(x, lines: 2, sizeText: "Uploading…")
+        t.selecting = false; t.picked = false; t.onTap = nil; t.menu = nil
+        tiles.insert(t, at: 0)
+      }
       out += tiles
       // (only when the folder holds nothing at all: a folder of folders isn't empty — the client's Files holds only folders,
       //  and "No Files" showed under them: Haris 2026-11-11)
-      if files.isEmpty && (subs.isEmpty || m.isEmpty) {
+      if files.isEmpty && (upTiles[fid] ?? []).isEmpty && (subs.isEmpty || m.isEmpty) {
         // (Apple's empty state: "No Files", and the folder's own note — or Upload — under it)
         let n = empty(h, "empty")
         if m.isEmpty { n.setLoading() }
@@ -977,24 +991,34 @@ final class AssetsCtl {
     guard !upBusy, let f = models[client].flatMap({ folderInfo($0, folder) }), let dir = f["dir"] as? String else { if upBusy { toast(h, "Still uploading — one moment") }; return }
     // (the + sheet — your recent photos, Camera · Files: canvas "Attach panel — Talk & Console", W5, Haris 2026-11-16)
     do {
-      Picker.shared.pick(from: main.topMost(), single: false, source: "sheet", title: f["name"] as? String ?? "Upload") { [weak self, weak h] r in
+      Picker.shared.pick(from: main.topMost(), single: false, source: "sheet", title: f["name"] as? String ?? "Upload", onPicked: { [weak self] n in
+        self?.showUpTiles(folder, (0..<n).map { _ in ["id": "prep-" + UUID().uuidString, "name": "Preparing…", "pending": true] })
+      }) { [weak self, weak h] r in
         guard let self = self else { return }
         let picked = ((r["files"] as? [[String: Any]]) ?? []).compactMap { x -> (URL, String)? in
           guard let tok = x["token"] as? String, let u = Picker.shared.url(tok) else { return nil }
           return (u, x["name"] as? String ?? "File")
         }
-        guard !picked.isEmpty else { return }
+        guard !picked.isEmpty else { self.showUpTiles(folder, []); return }
+        // (each with its own name and the phone's own picture of it, while it goes up)
+        self.showUpTiles(folder, picked.map { u, n in
+          let id = "up-" + UUID().uuidString
+          var c: [String: Any] = ["id": id, "name": n, "pending": true]
+          if let t = CommentCell.localThumb(u, n) { FeedLoader.shared.setLocal("local:" + id, t); c["thumbUrl"] = "local:" + id }
+          return c
+        })
         self.upBusy = true
         var sent: [[String: Any]] = []
         let total = picked.count
         let cancels = UploadCenter.shared.cancels
         func next(_ i: Int) {
           // (Cancel on the uploads' bar: nothing more goes up and nothing is filed)
-          if UploadCenter.shared.cancels != cancels { self.upBusy = false; h?.assetsToast("Upload cancelled"); return }
+          if UploadCenter.shared.cancels != cancels { self.upBusy = false; self.showUpTiles(folder, []); h?.assetsToast("Upload cancelled"); return }
           guard i < total else {
             self.upBusy = false
-            guard !sent.isEmpty else { h?.assetsToast("Couldn’t upload — try again"); return }
-            self.ask(["ev": "uploaded", "client": client, "folder": folder, "files": sent]) { [weak h] r in
+            guard !sent.isEmpty else { self.showUpTiles(folder, []); h?.assetsToast("Couldn’t upload — try again"); return }
+            self.ask(["ev": "uploaded", "client": client, "folder": folder, "files": sent]) { [weak self, weak h] r in
+              self?.showUpTiles(folder, [])
               if (r["ok"] as? Bool) == true { UINotificationFeedbackGenerator().notificationOccurred(.success); Main.playUploaded(); h?.assetsToast("Added \(sent.count) file\(sent.count == 1 ? "" : "s") to \(f["name"] as? String ?? "the folder")" + (sent.count < total ? " — \(total - sent.count) didn’t upload" : "")) }
               else { h?.assetsToast(r["error"] as? String ?? "That didn’t work — try again") }
             }

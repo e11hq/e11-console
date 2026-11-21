@@ -60,9 +60,9 @@ final class Transfers: NSObject, URLSessionDataDelegate, URLSessionDownloadDeleg
       let fp = String(u.path.dropFirst("/__file/".count))
       Office.pass(["kind": "file", "path": fp], cookie: r.value(forHTTPHeaderField: "Cookie") ?? "") { [weak self] p in
         guard let self = self, self.downs[t.taskIdentifier] === d, t.state == .suspended else { return }
-        guard let p = p, var q = URLComponents(string: p.url + "/local/file") else { return t.resume() }
+        guard let p = p, var q = URLComponents(string: p.url + "/local/file") else { return self.viaR2(t, r, d) }
         q.queryItems = [URLQueryItem(name: "t", value: p.token)]
-        guard let lu = q.url else { return t.resume() }
+        guard let lu = q.url else { return self.viaR2(t, r, d) }
         var lr = URLRequest(url: lu); lr.timeoutInterval = 20
         let lt = self.session.downloadTask(with: lr)
         self.downs[lt.taskIdentifier] = d; self.usual[lt.taskIdentifier] = t; self.office[t.taskIdentifier] = lt
@@ -70,6 +70,31 @@ final class Transfers: NSObject, URLSessionDataDelegate, URLSessionDownloadDeleg
       }
     } else { t.resume() }
     return t
+  }
+
+  // away from the office: straight from Cloudflare R2, as the pictures (Haris 2026-11-21: downloads were slow — they all
+  // came through the office). The server is asked for R2's short-lived address first (r2=1, the redirect not followed:
+  // the sign-in never goes along to R2), then iPhone fetches it from R2 with nothing of ours; no R2 copy, or R2 doesn't
+  // answer — the usual way, as before.
+  private var fromR2 = Set<Int>()
+  private lazy var asker: URLSession = URLSession(configuration: .ephemeral, delegate: NoFollow(), delegateQueue: nil)
+  private final class NoFollow: NSObject, URLSessionTaskDelegate {
+    func urlSession(_ s: URLSession, task: URLSessionTask, willPerformHTTPRedirection r: HTTPURLResponse, newRequest n: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) { completionHandler(nil) }
+  }
+  private func viaR2(_ t: URLSessionDownloadTask, _ r: URLRequest, _ d: Down) {
+    guard let u = r.url else { return t.resume() }
+    var h = r; h.url = R2Files.ask(u); h.httpMethod = "HEAD"; h.timeoutInterval = 15; h.httpShouldHandleCookies = false
+    asker.dataTask(with: h) { _, resp, _ in
+      DispatchQueue.main.async { [weak self] in
+        guard let self = self, self.downs[t.taskIdentifier] === d, t.state == .suspended else { return }
+        guard let hr = resp as? HTTPURLResponse, hr.statusCode / 100 == 3, let loc = hr.value(forHTTPHeaderField: "Location"),
+              let lu = URL(string: loc, relativeTo: h.url)?.absoluteURL, lu.host != URL(string: serverURL())?.host else { return t.resume() }
+        var lr = URLRequest(url: lu); lr.httpShouldHandleCookies = false
+        let rt = self.session.downloadTask(with: lr)
+        self.downs[rt.taskIdentifier] = d; self.usual[rt.taskIdentifier] = t; self.office[t.taskIdentifier] = rt; self.fromR2.insert(rt.taskIdentifier)
+        rt.resume()
+      }
+    }.resume()
   }
 
   // ---- what iPhone tells us ----
@@ -100,8 +125,9 @@ final class Transfers: NSObject, URLSessionDataDelegate, URLSessionDownloadDeleg
     if let t = usual.removeValue(forKey: id) {
       office[t.taskIdentifier] = nil
       guard let d = downs.removeValue(forKey: id) else { return }   // (cancelled with the usual one)
+      let r2 = fromR2.remove(id) != nil
       if e == nil, let f = d.file { downs[t.taskIdentifier] = nil; t.cancel(); d.done(f) }
-      else { Office.failed(); d.progress(0, -1); t.resume() }
+      else { if !r2 { Office.failed() }; d.progress(0, -1); t.resume() }
       return
     }
     if let lt = office.removeValue(forKey: id) { usual[lt.taskIdentifier] = nil; downs[lt.taskIdentifier] = nil; lt.cancel() }
@@ -112,4 +138,19 @@ final class Transfers: NSObject, URLSessionDataDelegate, URLSessionDownloadDeleg
     if let d = downs.removeValue(forKey: id) { d.done(e == nil ? d.file : nil) }
   }
   func urlSessionDidFinishEvents(forBackgroundURLSession s: URLSession) { let w = wake; wake = nil; w?() }
+}
+
+// iPhone's Save / Share sheet for a file going out — and, once it's done, where it went: "Saved to Photos" or "Saved to
+// Files", only for those two (a PDF is never offered Photos by iPhone, so it never says Photos — Haris 2026-11-21)
+enum ShareOut {
+  static func sheet(_ items: [Any], say: @escaping (String) -> Void, after: (() -> Void)? = nil) -> UIActivityViewController {
+    let a = UIActivityViewController(activityItems: items, applicationActivities: nil)
+    a.completionWithItemsHandler = { type, done, _, _ in
+      after?()
+      guard done, let t = type else { return }
+      if t == .saveToCameraRoll { say("Saved to Photos") }
+      else if t.rawValue.localizedCaseInsensitiveContains("SaveToFiles") { say("Saved to Files") }
+    }
+    return a
+  }
 }

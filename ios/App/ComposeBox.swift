@@ -247,6 +247,11 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
   private var upDone: [String: String] = [:], upFailed = Set<String>()
   // (each tile's upload, and the tiles taken off with ✕ — their upload stopped, nothing said or played when it ends)
   private var upJobs: [String: UUID] = [:], dropped = Set<String>()
+  // (picked photos and videos: a tile each at once, a spinner on it, while they're made ready — E11 Talk's way, Haris
+  //  2026-11-21; the real tiles take their places. Not part of the comment: sending meanwhile sends without them.)
+  private var prepTiles: [String] = []
+  private func preparing(_ n: Int) { prepTiles = (0..<n).map { _ in "prep-" + UUID().uuidString }; paintTiles() }
+  private func prepared() { guard !prepTiles.isEmpty else { return }; prepTiles = []; paintTiles() }
   private var outbox: [(pendingId: String, body: [String: Any], files: [(uid: String, name: String, size: Int64)])] = []
   var onPendingFiles: ((String, String?, String, [[String: Any]]) -> Void)?   // a comment sent while its files upload: (id, thread, words, its cards)
   var onPendingShared: ((String, String?, [String: Any]) -> Void)?   // a contact or a place sent: (id, thread, its card — "contact" / "location")
@@ -558,10 +563,13 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       switch c {
       case nil: break
       case .photos(let a)?:
-        Picker.shared.pickAssets(a, small: true) { [weak self] r in
+        Picker.shared.pickAssets(a, small: true, onPicked: { [weak self] n in self?.preparing(n) }) { [weak self] r in
+          // (Smaller or Original — asked once they're picked, Haris 2026-11-21)
+          let small = r["small"] as? Bool ?? true
+          self?.prepared()
           for f in (r["files"] as? [[String: Any]]) ?? [] {
             guard let self = self, let tok = f["token"] as? String, let url = Picker.shared.url(tok) else { continue }
-            self.addFile(url, name: f["name"] as? String ?? "File", voice: nil, small: true)
+            self.addFile(url, name: f["name"] as? String ?? "File", voice: nil, small: small)
           }
         }
       case .allPhotos?: self.attach("photos", refocus: false)
@@ -596,7 +604,10 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     var top = vc; while let p = top.presentedViewController { top = p }
     // (a comment's photos and videos made small, as E11 Talk's; "as files" untouched — Haris 2026-11-16)
     let small = source == "photos" || source == "camera"
-    Picker.shared.pick(from: top, single: false, source: source, small: small) { [weak self] r in
+    Picker.shared.pick(from: top, single: false, source: source, small: small, onPicked: { [weak self] n in self?.preparing(n) }) { [weak self] r in
+      // (Smaller or Original — asked once photos or videos are picked, Haris 2026-11-21; files picked as files: as they are)
+      let small = r["small"] as? Bool ?? false
+      self?.prepared()
       for f in (r["files"] as? [[String: Any]]) ?? [] {
         guard let self = self, let tok = f["token"] as? String, let url = Picker.shared.url(tok) else { continue }
         self.addFile(url, name: f["name"] as? String ?? "File", voice: nil, small: small)
@@ -733,10 +744,17 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       let t = makeTile(f)
       tileMade[f.uid] = (t, sig); views.append(t)
     }
+    for id in prepTiles {
+      if let k = keep.removeValue(forKey: id) { tileMade[id] = k; views.append(k.view); continue }
+      let t = UIView(); t.backgroundColor = .tertiarySystemFill; t.layer.cornerRadius = 12; t.translatesAutoresizingMaskIntoConstraints = false
+      t.widthAnchor.constraint(equalToConstant: 64).isActive = true; t.heightAnchor.constraint(equalToConstant: 64).isActive = true
+      let sp = UIActivityIndicatorView(style: .medium); sp.frame = CGRect(x: 0, y: 0, width: 64, height: 64); sp.startAnimating(); t.addSubview(sp)
+      tileMade[id] = (t, "prep"); views.append(t)
+    }
     keep.values.forEach { $0.view.removeFromSuperview() }
     for v in tiles.arrangedSubviews where !views.contains(where: { $0 === v }) { v.removeFromSuperview() }
     for (i, v) in views.enumerated() where i >= tiles.arrangedSubviews.count || tiles.arrangedSubviews[i] !== v { tiles.insertArrangedSubview(v, at: i) }
-    let want: CGFloat = files.isEmpty ? 0 : 68   // (the 64 tiles, a little room under)
+    let want: CGFloat = files.isEmpty && prepTiles.isEmpty ? 0 : 68   // (the 64 tiles, a little room under)
     if tilesH.constant != want { tilesH.constant = want; superview?.layoutIfNeeded() }
     paintSend()
   }

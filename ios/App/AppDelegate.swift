@@ -174,6 +174,8 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   override func viewDidLoad() {
     super.viewDidLoad()
     _ = netWatch   // (the phone's connection, for the Me tab's dot)
+    // (a file's preview came or went: the downloads' and uploads' bars go onto it, or back — Haris 2026-11-21)
+    NotificationCenter.default.addObserver(forName: PreviewVC.cameOrWent, object: nil, queue: .main) { [weak self] _ in self?.placeHUDs() }
     // (the app opened afresh — closed before: My Tasks starts fresh, no filters, All — Haris 2026-11-08; going to another
     //  app and back keeps them)
     for k in defaults.dictionaryRepresentation().keys where k.hasPrefix("e11_mytasks_") { defaults.removeObject(forKey: k) }
@@ -401,12 +403,17 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   }
   // the downloads' and uploads' bars live over every tab, on Apple's tab bar's own screen — not on the app's old screen,
   // which is kept out of sight inside Me's or Home's (Haris 2026-11-10: neither bar showed on Client Assets)
-  private var hudHost: UIView { AppleTabs.shared?.view ?? view }
+  // (a file's preview open: the bars over it, just above its foot — they were behind it, Haris 2026-11-21)
+  private var hudPreview: PreviewVC? { (topMost() as? PreviewVC).flatMap { $0.view.window != nil && !$0.isBeingDismissed ? $0 : nil } }
+  private var hudHost: UIView { hudPreview?.view ?? AppleTabs.shared?.view ?? view }
   func placeHUDs() {
     guard AppleTabs.shared != nil else { view.setNeedsLayout(); return }
     let host = hudHost, b = host.bounds
+    // (moved to where they should be now: onto a preview that opened, back under it once it's gone)
+    for x in [hud, upHud].compactMap({ $0 }) where x.superview !== host { x.removeFromSuperview(); host.addSubview(x) }
     var bottom = host.safeAreaInsets.bottom
-    if let t = AppleTabs.shared, !t.barHiddenNow, t.tabBar.window != nil { bottom = max(bottom, b.height - t.tabBar.frame.minY) }
+    if let p = hudPreview { bottom = max(bottom, p.footHeight) }
+    else if let t = AppleTabs.shared, !t.barHiddenNow, t.tabBar.window != nil { bottom = max(bottom, b.height - t.tabBar.frame.minY) }
     hud?.place(in: b, above: bottom)
     upHud?.place(in: b, above: bottom + (hud == nil ? 0 : 82))
     if let x = hud { host.bringSubviewToFront(x) }
@@ -597,7 +604,7 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
         self.paintHUD()
         guard let file = file else { if was?.cancelled == false { self.appToast("Download failed — try again") }; return }
         // (a HEIC photo handed out as a JPEG, so any computer opens it — E11 Talk's way, Haris 2026-11-21 16:37)
-        let sheet = UIActivityViewController(activityItems: [Picker.jpegIfHeic(file)], applicationActivities: nil)
+        let sheet = ShareOut.sheet([Picker.jpegIfHeic(file)], say: { [weak self] t in self?.appToast(t) })
         sheet.popoverPresentationController?.sourceView = self.view
         self.topMost().present(sheet, animated: true)
       }
@@ -2757,14 +2764,18 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
   // (a comment's photos and videos made small before they go, as E11 Talk's — Haris 2026-11-16: photos 2048 across, videos
   //  720p (Haris 2026-11-16 13:40: "720p for console instead of 1080p"); only for photos and videos picked as they are — "as files" (Choose Files, the originals, a scan) go untouched)
   private var small = false
+  // ("Smaller or Original?" asked once photos or videos are picked — Haris 2026-11-21, B: every upload from the iPhone app,
+  //  Smaller first; never for files picked as files, nor your profile photo). boxVideos: the comment box makes a video
+  //  smaller behind its tile itself; everywhere else the picker makes it smaller here, with "Preparing…" on the bar.
+  private var askSize = true, boxVideos = false, shrinkVideos = false, chose: Bool?
 
   // (the keyboard isn't put down here: iPhone hides it while a picker covers the screen and brings it back for the
   //  comment box afterwards)
   // onPicked: told how many the moment they're picked, before they're made ready — the task page shows their cards then
   // (Haris 2026-11-21 17:58: "the cards appear straight away when you pick", E11 Talk's way)
-  func pick(from vc: UIViewController, single: Bool, source: String? = nil, title: String? = nil, small: Bool = false, onPicked: ((Int) -> Void)? = nil, _ done: @escaping ([String: Any]) -> Void) {
+  func pick(from vc: UIViewController, single: Bool, source: String? = nil, title: String? = nil, small: Bool = false, askSize: Bool = true, onPicked: ((Int) -> Void)? = nil, _ done: @escaping ([String: Any]) -> Void) {
     finish([])   // (a sheet still open from before answers "nothing")
-    self.done = done; self.small = small; self.onPicked = onPicked
+    self.done = done; self.small = false; self.boxVideos = small; self.askSize = askSize; self.shrinkVideos = false; self.chose = nil; self.onPicked = onPicked
     let photos = {
       var c = PHPickerConfiguration()
       c.selectionLimit = single ? 1 : 0
@@ -2830,7 +2841,7 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
     let f = FilesSheet()
     f.onPick = { [weak self, weak vc] k in
       guard let self = self, let vc = vc else { return }
-      self.small = false   // (as files: the originals, untouched)
+      self.small = false; self.askSize = false   // (as files: the originals, untouched, never asked)
       switch k {
       case "files": files()
       case "originals": OriginalsPicker.present(from: vc) { [weak self] got in self?.finish(got.compactMap { self?.keep($0.url, name: $0.name) }) }
@@ -2842,6 +2853,9 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
   }
   // photos ticked in the + sheet's row: as Photos gives them today (Compatible), in the order ticked
   private func keepAssets(_ a: [PHAsset]) {
+    askSmaller { [weak self] go in guard go, let self = self else { self?.finish([]); return }; self.keepAssetsNow(a) }
+  }
+  private func keepAssetsNow(_ a: [PHAsset]) {
     // (a comment's video: the phone's own, at once — the comment box makes its 720p copy behind its tile)
     startPrep(a.count)
     AttachExport.compatible(a, videoAsIs: true) { [weak self] got in
@@ -2850,7 +2864,40 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
     }
   }
   // (a picked or ticked photo sent from another screen — the comment box's own + sheet)
-  func pickAssets(_ a: [PHAsset], small: Bool = false, _ done: @escaping ([String: Any]) -> Void) { finish([]); self.done = done; self.small = small; keepAssets(a) }
+  func pickAssets(_ a: [PHAsset], small: Bool = false, onPicked: ((Int) -> Void)? = nil, _ done: @escaping ([String: Any]) -> Void) {
+    finish([]); self.done = done; self.small = false; self.boxVideos = small; self.askSize = true; self.shrinkVideos = false; self.chose = nil; self.onPicked = onPicked; keepAssets(a)
+  }
+  // the question, over whatever is on top once the picker has gone: Smaller (faster) — the default, first — or Original
+  // (full quality); Cancel adds nothing. go: false when cancelled.
+  private func askSmaller(_ go: @escaping (Bool) -> Void) {
+    guard askSize else { return go(true) }
+    func top() -> UIViewController? {
+      guard var t = UIApplication.shared.connectedScenes.compactMap({ ($0 as? UIWindowScene)?.windows.first { $0.isKeyWindow } }).first?.rootViewController else { return nil }
+      while let p = t.presentedViewController, !p.isBeingDismissed { t = p }
+      return t
+    }
+    func show(_ n: Int) {
+      DispatchQueue.main.asyncAfter(deadline: .now() + (n == 0 ? 0 : 0.1)) { [weak self] in
+        guard let self = self else { return }
+        guard let t = top() else { return go(true) }
+        // (still closing — the picker or the + sheet: asked once it's gone, ~3 s at most)
+        if n < 30, t.isBeingPresented || t.presentedViewController?.isBeingDismissed == true || t is PHPickerViewController || t is UIImagePickerController || t is AttachSheet { return show(n + 1) }
+        let a = UIAlertController(title: "Send photos and videos as", message: nil, preferredStyle: .actionSheet)
+        let pick = { (small: Bool) in
+          self.small = small; self.chose = small; self.shrinkVideos = small && !self.boxVideos
+          go(true)
+        }
+        a.addAction(UIAlertAction(title: "Smaller (faster)", style: .default) { _ in pick(true) })
+        a.addAction(UIAlertAction(title: "Original (full quality)", style: .default) { _ in pick(false) })
+        a.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in go(false) })
+        if let pop = a.popoverPresentationController {   // (iPad: from the bottom middle)
+          pop.sourceView = t.view; pop.sourceRect = CGRect(x: t.view.bounds.midX, y: t.view.bounds.maxY - 40, width: 1, height: 1); pop.permittedArrowDirections = []
+        }
+        t.present(a, animated: true)
+      }
+    }
+    show(0)
+  }
   private func keep(_ src: URL, name: String) -> [String: Any]? {
     let tok = UUID().uuidString
     let dest = dir.appendingPathComponent(tok + "-" + name.replacingOccurrences(of: "/", with: "-"))
@@ -2870,6 +2917,7 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
     guard let d = done else { if let p = prepJob { UploadCenter.shared.end(p); prepJob = nil }; return }
     if small { small = false; return shrink(all) { [weak self] out in self?.finish(out) } }
     done = nil
+    let chose = self.chose; self.chose = nil; shrinkVideos = false
     if let p = prepJob {
       let stopped = UploadCenter.shared.jobs[p]?.cancelled == true
       UploadCenter.shared.end(p); prepJob = nil
@@ -2890,13 +2938,18 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
       }
     }
     FocusAfterPicker.allow()   // (the page puts the cursor back in the comment box, keyboard and all)
-    DispatchQueue.main.async { d(["ok": true, "files": out]) }
+    var r: [String: Any] = ["ok": true, "files": out]
+    if let c = chose { r["small"] = c }   // (what was chosen: the comment box makes its videos smaller only on Smaller)
+    DispatchQueue.main.async { d(r) }
   }
 
   // Photo Library
   func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
     picker.dismiss(animated: true)
     if results.isEmpty { return finish([]) }
+    askSmaller { [weak self] go in guard go, let self = self else { self?.finish([]); return }; self.loadPicked(results) }
+  }
+  private func loadPicked(_ results: [PHPickerResult]) {
     startPrep(results.count)
     var out = [[String: Any]?](repeating: nil, count: results.count)
     let group = DispatchGroup()
@@ -2919,6 +2972,9 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
   // Camera
   func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
     picker.dismiss(animated: true)
+    askSmaller { [weak self] go in guard go, let self = self else { self?.finish([]); return }; self.keepShot(info) }
+  }
+  private func keepShot(_ info: [UIImagePickerController.InfoKey: Any]) {
     let stamp = { () -> String in let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"; return f.string(from: Date()) }()
     if let url = info[.mediaURL] as? URL { return finish([keep(url, name: "Video \(stamp).\(url.pathExtension.isEmpty ? "mov" : url.pathExtension)")].compactMap { $0 }) }
     // (saved upright: the camera's picture is stored sideways with a "turn me" note, and Quick Look sized its opening from the
@@ -2932,7 +2988,7 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
   func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { picker.dismiss(animated: true); finish([]) }
   // Files
   func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-    small = false
+    small = false; shrinkVideos = false; chose = nil
     finish(urls.compactMap { u in let ok = u.startAccessingSecurityScopedResource(); defer { if ok { u.stopAccessingSecurityScopedResource() } }; return keep(u, name: u.lastPathComponent) })
   }
   func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { finish([]) }
@@ -2942,6 +2998,7 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
   private func shrink(_ all: [[String: Any]], _ done: @escaping ([[String: Any]]) -> Void) {
     var out = all
     let g = DispatchGroup()
+    let videosToo = shrinkVideos
     for (i, f) in all.enumerated() {
       guard let tok = f["token"] as? String, let src = url(tok) else { continue }
       let ext = src.pathExtension.lowercased(), base = ((f["name"] as? String ?? "File") as NSString).deletingPathExtension
@@ -2950,6 +3007,16 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
         self.lock.lock(); self.files[tok] = made; self.lock.unlock()
         try? FileManager.default.removeItem(at: src)
         out[i]["name"] = name; out[i]["size"] = size
+      }
+      // (a video, away from the comment box — task files, Client Assets, Finance: made smaller here, as a comment's — E11
+      //  Talk's HEVC 720p; "Preparing…" on the bar meanwhile; Haris 2026-11-21)
+      if videosToo, CommentCell.isVideo(src.lastPathComponent) {
+        g.enter()
+        Picker.video720(src, name: f["name"] as? String ?? "Video") { made, name in
+          if made != src { swap(made, name) }
+          g.leave()
+        }
+        continue
       }
       if ["jpg", "jpeg", "heic", "heif", "png", "webp", "tif", "tiff"].contains(ext) {
         g.enter()

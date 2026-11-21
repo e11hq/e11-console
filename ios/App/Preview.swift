@@ -94,6 +94,8 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
   private var want = false, atEnd = false, held = false
   var onPlaying: (() -> Void)?
   var chrome = true { didSet { button(animated: true) } }
+  // (the preview's own buttons, asked each time: ⏸ shows only while they show — never out of step with them, Haris 2026-11-21)
+  var barsShown: (() -> Bool)?
   private var isVideo: Bool { (file["kind"] as? String) == "video" }
   var onPages: ((String) -> Void)?
   private var mode = ""   // image / pages / card / text
@@ -122,10 +124,10 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
     cardNote.font = .systemFont(ofSize: 15); cardNote.textColor = UIColor(white: 1, alpha: 0.62); cardNote.numberOfLines = 0; cardNote.textAlignment = .center
     [cardPic, cardType, cardNote].forEach { cardStack.addArrangedSubview($0) }
     contentView.addSubview(cardStack)
-    SymSwap.set(play, UIImage(systemName: "play.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 30, weight: .bold)), animated: false); play.accessibilityLabel = "Play"
+    SymSwap.set(play, UIImage(systemName: "play.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold)), animated: false); play.accessibilityLabel = "Play"
     play.tintColor = .white
     play.backgroundColor = UIColor.black.withAlphaComponent(0.45)
-    play.layer.cornerRadius = 38
+    play.layer.cornerRadius = 35   // (Talk's size: 70, its symbol 24 semibold — Haris 2026-11-21)
     play.addAction(UIAction { [weak self] _ in
       guard let self else { return }
       guard self.isVideo else { self.onPlay?(self.file); return }
@@ -189,11 +191,11 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
     guard isVideo else { return }
     let playing = player?.timeControlStatus == .playing
     let name = playing ? "pause.fill" : "play.fill"
-    let alpha: CGFloat = playing ? (chrome ? 1 : 0) : (held || atEnd ? 1 : 0)
+    let alpha: CGFloat = playing ? ((barsShown?() ?? chrome) ? 1 : 0) : (held || atEnd ? 1 : 0)
     guard play.alpha != alpha || play.accessibilityIdentifier != name else { return }
     // (▶ ↔ ⏸ with the shared swap, SymSwap; the button fading as it comes or goes — Haris 2026-11-17)
     if play.accessibilityIdentifier != name {
-      SymSwap.set(play, UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 30, weight: .bold)), animated: animated && play.alpha > 0 && alpha > 0)
+      SymSwap.set(play, UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold)), animated: animated && play.alpha > 0 && alpha > 0)
       play.accessibilityIdentifier = name; play.accessibilityLabel = playing ? "Pause" : "Play"
     }
     if animated { UIView.animate(withDuration: 0.2, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState]) { self.play.alpha = alpha } } else { play.alpha = alpha }
@@ -319,7 +321,7 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
     super.layoutSubviews()
     let b = contentView.bounds
     spinner.center = CGPoint(x: b.midX, y: b.midY)
-    play.frame = CGRect(x: b.midX - 38, y: b.midY - 38, width: 76, height: 76)
+    play.frame = CGRect(x: b.midX - 35, y: b.midY - 35, width: 70, height: 70)
     textView.frame = b
     cardStack.frame = CGRect(x: 30, y: b.midY - 180, width: b.width - 60, height: 360)
     guard zoomer.zoomScale == 1 else { return }
@@ -390,6 +392,8 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     return k == "image" || (k == "video" && !((files[at]["cover"] as? String) ?? "").isEmpty)
   }
   private let toast = UILabel()
+  // (how far up the foot reaches: the downloads' bar sits just above it — Haris 2026-11-21)
+  var footHeight: CGFloat { view.bounds.height - bottomBar.frame.minY }
   private var barsHidden = false
   private var closed = false
   // (the self-test's reading — ios/walktest.py --apple: how it opened and, once closed, how it went)
@@ -449,7 +453,8 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     stripRow.translatesAutoresizingMaskIntoConstraints = false; strip.addSubview(stripRow)
     strip.isHidden = files.count < 2
     // (the same size as the top's ‹ and ••• — Haris 2026-11-15)
-    glass(copyB, "link", "Copy Link"); glass(dlB, "arrow.down.to.line", "Download")
+    // (Copy Link as two pages — option C; Share as Talk's — Haris 2026-11-21)
+    glass(copyB, "doc.on.doc", "Copy Link"); glass(dlB, "square.and.arrow.up", "Share")
     copyB.addAction(UIAction { [weak self] _ in self?.send("copy") }, for: .touchUpInside)   // (its words when the link is on the clipboard)
     dlB.addAction(UIAction { [weak self] _ in self?.send("dl") }, for: .touchUpInside)
     let tools = UIStackView(arrangedSubviews: [copyB, dlB]); tools.axis = .horizontal; tools.distribution = .equalSpacing; tools.alignment = .center
@@ -580,7 +585,9 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     for c in pager.visibleCells { guard let pc = c as? PreviewCell, let ip = pager.indexPath(for: pc) else { continue }; if ip.item == at && appeared { pc.start() } else { pc.stop() } }
   }
   private var appeared = false
-  override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); appeared = true; playCurrent() }
+  override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); appeared = true; playCurrent(); NotificationCenter.default.post(name: PreviewVC.cameOrWent, object: nil) }
+  override func viewDidDisappear(_ a: Bool) { super.viewDidDisappear(a); NotificationCenter.default.post(name: PreviewVC.cameOrWent, object: nil) }
+  static let cameOrWent = Notification.Name("PreviewVC.cameOrWent")
   override func viewWillDisappear(_ a: Bool) { super.viewWillDisappear(a); for c in pager.visibleCells { (c as? PreviewCell)?.stop() } }
   private func refreshBars() {
     guard at < files.count else { return }
@@ -667,6 +674,7 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     c.onPlay = { [weak self] f in self?.playMedia(f) }
     c.onPlaying = { [weak self] in if self?.barsHidden == false { self?.toggleBars() } }
     c.chrome = !barsHidden
+    c.barsShown = { [weak self] in self.map { !$0.barsHidden && !$0.closed } ?? false }
     c.onPages = { [weak self, weak c] id in
       guard let self else { return }
       if let p = self.pages[id] { c?.setPages(p.0, note: p.1) } else {
@@ -707,7 +715,7 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
   /* ---------- tap, pull down ---------- */
   @objc private func toggleBars() {
     barsHidden.toggle()
-    for c in pager.visibleCells { (c as? PreviewCell)?.chrome = !barsHidden }
+    for c in pager.subviews.compactMap({ $0 as? PreviewCell }) { c.chrome = !barsHidden }
     UIView.animate(withDuration: 0.2) {
       self.topBar.alpha = self.barsHidden ? 0 : 1
       self.bottomBar.alpha = self.barsHidden ? 0 : 1

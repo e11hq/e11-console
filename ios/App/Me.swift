@@ -1009,7 +1009,8 @@ final class MeCtl {
   // the trash folder)
   private func pfPhoto(_ src: String) {
     guard mineNow, let me = me else { send(["ev": "pfPhoto", "source": src]); return }
-    Picker.shared.pick(from: main.topMost(), single: true, source: src) { [weak self] r in
+    // (your photo: always small — the server makes it so; never asked Smaller or Original, Haris 2026-11-21)
+    Picker.shared.pick(from: main.topMost(), single: true, source: src, askSize: false) { [weak self] r in
       guard let self = self, let x = ((r["files"] as? [[String: Any]]) ?? []).first, let tok = x["token"] as? String, let url = Picker.shared.url(tok) else { return }
       self.pfBusy = true; self.redraw()
       let fail = { [weak self] in guard let self = self else { return }; self.pfBusy = false; self.redraw(); self.top?.toast(["t": "Couldn’t use that photo"]) }
@@ -2637,8 +2638,7 @@ final class MeCtl {
           guard let d = d, !d.isEmpty else { self.top?.toast(["t": "Couldn’t get the PDF — try again"]); return }
           let f = FileManager.default.temporaryDirectory.appendingPathComponent(name)
           try? d.write(to: f, options: .atomic)
-          let a = UIActivityViewController(activityItems: [f], applicationActivities: nil)
-          a.completionWithItemsHandler = { _, _, _, _ in try? FileManager.default.removeItem(at: f) }
+          let a = ShareOut.sheet([f], say: { [weak self] t in self?.top?.toast(["t": t]) }, after: { try? FileManager.default.removeItem(at: f) })
           if let pop = a.popoverPresentationController { pop.sourceView = self.main.view; pop.sourceRect = CGRect(x: self.main.view.bounds.midX, y: self.main.view.bounds.midY, width: 1, height: 1) }
           self.main.topMost().present(a, animated: true)
         }
