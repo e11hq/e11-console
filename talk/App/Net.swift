@@ -86,7 +86,8 @@ final class Net {
   }
 
   func request(_ path: String, method: String = "GET", json: [String: Any]? = nil, body: Data? = nil, type: String? = nil) -> URLRequest {
-    var r = URLRequest(url: URL(string: Server.url + path)!)
+    // (Talk on Cloudflare: the hub's calls to the hub once it has Talk — Relay, TALK-CF-A)
+    var r = URLRequest(url: URL(string: (Relay.handles(path) ? Relay.base : Server.url) + path)!)
     r.httpMethod = method
     if let c = cookie { r.setValue(c, forHTTPHeaderField: "Cookie") }
     r.setValue(Net.deviceKey, forHTTPHeaderField: "X-Talk-Device")   // (this phone on its own — per-device delivery, Haris 2026-11-20 18:56)
@@ -100,9 +101,17 @@ final class Net {
   }
   // a JSON answer on the main thread (nil: no answer — offline, or signed out: onSignedOut is told)
   func call(_ path: String, method: String = "GET", json: [String: Any]? = nil, body: Data? = nil, done: @escaping ([String: Any]?) -> Void) {
-    session.dataTask(with: request(path, method: method, json: json, body: body)) { [weak self] d, resp, _ in
+    let viaHub = Relay.handles(path)
+    if Relay.live && !Relay.on { Relay.check() }   // (the office has Talk: asked every 2 minutes whether the hub has it again)
+    session.dataTask(with: request(path, method: method, json: json, body: body)) { [weak self] d, resp, err in
       let http = resp as? HTTPURLResponse
       let j = d.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
+      // (the hub says the office has Talk now, refuses, or can't be reached: the same call to the office — nothing lost)
+      if viaHub, Relay.refused(http, j, err) {
+        Relay.off("\(http?.statusCode ?? 0)")
+        DispatchQueue.main.async { self?.call(path, method: method, json: json, body: body, done: done) }
+        return
+      }
       // (Cloudflare's sign-in page instead of the answer, or "please sign in": signed out)
       let signedOut = http.map { $0.statusCode == 401 || ($0.statusCode == 403 && j == nil) || (($0.value(forHTTPHeaderField: "Content-Type") ?? "").contains("text/html")) } ?? false
       DispatchQueue.main.async {
@@ -293,9 +302,24 @@ final class Net {
   private var streamSession: URLSession?
   private var streamDelegate: StreamDelegate?
   var onNews: (() -> Void)?
+  private var line: RelayLine?
   func listen() {
     stopListening()
     guard signedIn else { return }
+    Relay.check()
+    // (Talk on Cloudflare: the live line to the hub — the same news, the same handling; not reachable → the office's)
+    if Relay.live && Relay.on {
+      let l = RelayLine(text: { [weak self] t in StreamDelegate.handle(t) { DispatchQueue.main.async { self?.onNews?() } } }, ended: { [weak self] opened in
+        DispatchQueue.main.async {
+          guard let self = self, self.line != nil else { return }
+          self.line = nil
+          if !opened { Relay.off("line"); return }   // (off() opens the office's line)
+          DispatchQueue.main.asyncAfter(deadline: .now() + 3) { if self.line == nil, UIApplication.shared.applicationState == .active { self.listen() } }
+        }
+      })
+      line = l; l.open()
+      return
+    }
     let d = StreamDelegate { [weak self] in DispatchQueue.main.async { self?.onNews?() } } ended: { [weak self] in
       DispatchQueue.main.asyncAfter(deadline: .now() + 3) { if self?.stream != nil, UIApplication.shared.applicationState == .active { self?.listen() } }
     }
@@ -308,14 +332,17 @@ final class Net {
     streamDelegate = d; streamSession = s; stream = t
     t.resume()
   }
-  func stopListening() { stream?.cancel(); stream = nil; streamSession?.invalidateAndCancel(); streamSession = nil; streamDelegate = nil }
+  func stopListening() { let l = line; line = nil; l?.close(); stream?.cancel(); stream = nil; streamSession?.invalidateAndCancel(); streamSession = nil; streamDelegate = nil }
 }
 
 private final class StreamDelegate: NSObject, URLSessionDataDelegate {
   let news: () -> Void, ended: () -> Void
   init(_ news: @escaping () -> Void, ended: @escaping () -> Void) { self.news = news; self.ended = ended }
   func urlSession(_ s: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-    let text = String(decoding: data, as: UTF8.self)
+    StreamDelegate.handle(String(decoding: data, as: UTF8.self), news)
+  }
+  // (the office's live line and the hub's give the same news, the same way)
+  static func handle(_ text: String, _ news: () -> Void) {
     if text.contains("event: talk") { news() }
     // (someone typing: passed straight on by the server, nothing kept — step 5)
     // (tasks changed in E11 Console: the chat that's open asks for its cards again)
