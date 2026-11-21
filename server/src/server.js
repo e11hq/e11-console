@@ -777,7 +777,7 @@ export function createServer(cfg) {
         return out({ ok: true, ...office.ticket(dev, { k: 'talkup', ...who }) });
       }
       // a message's file straight to R2 (newer phones): where to put it, then "it's all there"
-      if (p === '/api/talk/r2/start' && req.method === 'POST') { const b = await readBody(req, 16 * 1024); return out(await t.r2Start(u, b.name, b.size)); }
+      if (p === '/api/talk/r2/start' && req.method === 'POST') { const b = await readBody(req, 16 * 1024); return out(await t.r2Start(u, b.name, b.size, b.keep === true)); }
       if (p === '/api/talk/r2/done' && req.method === 'POST') { const b = await readBody(req, 64 * 1024); return out(await t.r2Done(u, b.id, b.etags)); }
       if (p.startsWith('/api/talk/file/') && (req.method === 'GET' || req.method === 'HEAD')) {
         const f = t.fileFor(dev, p.slice('/api/talk/file/'.length));

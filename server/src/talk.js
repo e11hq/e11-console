@@ -71,6 +71,9 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   try { db.exec('ALTER TABLE files ADD COLUMN store TEXT'); } catch { /* already there */ }
   try { db.exec('ALTER TABLE files ADD COLUMN r2up TEXT'); } catch { /* already there */ }
   try { db.exec('ALTER TABLE files ADD COLUMN fkey TEXT'); } catch { /* already there */ }
+  // (where in R2, when not msg/<id>: a group's picture under grp/, out of the bucket's 31-day rule — it stays while the group
+  //  uses it; Haris 2026-11-21 10:51)
+  try { db.exec('ALTER TABLE files ADD COLUMN r2k TEXT'); } catch { /* already there */ }
   const q = (sql) => db.prepare(sql);
   const Q = {
     group: q('SELECT * FROM groups WHERE id = ? AND gone = 0'),
@@ -188,11 +191,14 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   function groupView(g, uid) {
     const ms = Q.members.all(g.id);
     const pref = Q.pref.get(uid, 'group', g.id) || {};
-    return { id: g.id, client: g.client, name: g.name, creator: g.creator, creatorAdmin: !g.creator_off, second: g.second || null, admins: adminsOf(g), pic: g.pic || null,
+    return { id: g.id, client: g.client, name: g.name, creator: g.creator, creatorAdmin: !g.creator_off, second: g.second || null, admins: adminsOf(g), pic: g.pic || null, ...picKeyOf(g),
       createdAt: g.created_at, lastAt: g.last_at, members: ms.map((m) => m.uid), pinnedAt: pref.pinned_at || null, mutedUntil: pref.muted_until || null,
       withClient: ms.some((m) => isContactId(m.uid)), pin: pinOf(g), about: g.about || null };
   }
   const pinOf = (g) => { try { return g.pin ? JSON.parse(g.pin) : null; } catch { return null; } };
+  // (a group's picture locked in R2: its key, for the group's phones — R2 only ever has it locked)
+  const picKeyOf = (g) => { const f = g.pic ? Q.getFile.get(g.pic) : null; return f && f.store === 'r2' && f.fkey ? { picKey: f.fkey } : {}; };
+  const goodKey = (k) => typeof k === 'string' && /^[A-Za-z0-9+/]{43}=$/.test(k);
   // everything the app needs to draw its lists (the messages themselves come by sync)
   function state(u) {
     const groups = Q.groupsOf.all(u.id).filter((g) => clientById(g.client)).map((g) => groupView(g, u.id))
@@ -842,7 +848,9 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
           sys(Q.group.get(g.id), u.id, `${nameOf(u.id)} renamed the group to “${name}”`);
         } else {
           const pic = b.file ? String(b.file) : null;
-          if (pic && !Q.getFile.get(pic)) return bad('That picture didn’t upload');
+          const pf = pic ? Q.getFile.get(pic) : null;
+          if (pic && !pf) return bad('That picture didn’t upload');
+          if (pf && pf.store === 'r2' && goodKey(b.key) && pf.by === u.id) db.prepare('UPDATE files SET fkey = ? WHERE id = ?').run(b.key, pf.id);
           Q.setGroup.run(g.name, g.second, g.extra, pic, g.creator, g.last_at, g.id);
           sys(Q.group.get(g.id), u.id, `${nameOf(u.id)} changed the group’s picture`);
         }
@@ -957,7 +965,13 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         // video, and its picture and site icon as files that phone uploaded (Haris 2026-11-12, option B)
         let link = own && own.link ? own.link : null;
         if (!link && !file && b.link && typeof b.link === 'object' && /^https?:\/\//i.test(String(b.link.url || ''))) {
-          const own = (x) => { const f = x && typeof x === 'object' ? Q.getFile.get(String(x.id || '')) : null; return f && f.by === u.id && f.done ? { id: f.id } : null; };
+          // (in R2, locked on the phone: its key with it, for the group's phones — and kept here for apps that fetch through us)
+          const own = (x) => {
+            const f = x && typeof x === 'object' ? Q.getFile.get(String(x.id || '')) : null;
+            if (!f || f.by !== u.id || !f.done) return null;
+            if (f.store === 'r2' && goodKey(x.key)) { if (f.fkey !== x.key) db.prepare('UPDATE files SET fkey = ? WHERE id = ?').run(x.key, f.id); return { id: f.id, key: x.key }; }
+            return { id: f.id };
+          };
           link = { url: clip(b.link.url, 2000), title: clip(b.link.title || '', 300) || null, site: clip(b.link.site || '', 120) || null,
             video: b.link.video === true, img: own(b.link.img), icon: own(b.link.icon) };
         }
@@ -1124,18 +1138,20 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   }
   const filePath = (f) => path.join(relay, f.id);
   // ---------- a message's file through Cloudflare R2: straight from the phone and back (Haris 2026-11-20 17:52) ----------
-  const r2Key = (f) => 'msg/' + f.id;   // (msg/: the bucket's 31-day safety rule)
+  const r2Key = (f) => f.r2k || 'msg/' + f.id;   // (msg/: the bucket's 31-day safety rule; a group's picture: grp/)
   const R2_MAX = 1024 * 1024 * 1024 + 4096;   // (1 GB, the apps' limit, and the lock's few bytes)
-  async function r2Start(u, name, size) {
+  // (keep: a group's picture — kept in R2 under grp/ while the group uses it, not under msg/'s 31-day rule)
+  async function r2Start(u, name, size, keep = false) {
     if (!r2 || !r2.on) return bad('Not here', 404);
     size = Number(size);
     if (!Number.isInteger(size) || size <= 0) return bad('Bad size');
     if (size > R2_MAX) return bad('That file is too big (1 GB at most)');
     const id = rid('f');
     Q.newFile.run(id, u.id, clip(name || 'File', 200).replace(/[\\/]/g, '-'), now());
-    db.prepare("UPDATE files SET store = 'r2', size = ? WHERE id = ?").run(size, id);
+    const r2k = keep ? 'grp/' + id : null;
+    db.prepare("UPDATE files SET store = 'r2', size = ?, r2k = ? WHERE id = ?").run(size, r2k, id);
     try {
-      const s = await r2.start(r2Key({ id }), size);
+      const s = await r2.start(r2Key({ id, r2k }), size);
       if (s.upload) db.prepare('UPDATE files SET r2up = ? WHERE id = ?').run(s.upload, id);
       return { ok: true, id, ...(s.put ? { put: s.put } : { part: s.part, urls: s.urls }) };
     } catch (e) { Q.dropFile.run(id); return bad(e.message, 502); }

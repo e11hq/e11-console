@@ -123,3 +123,35 @@ test('gone from R2 on the same rules: a day after every phone has it', async () 
 test('too big, or no R2 keys: refused (the phone then sends the usual way)', async () => {
   assert.equal((await post('am', '/api/talk/r2/start', { name: 'x', size: 2 * 1024 * 1024 * 1024 })).ok, false);
 });
+
+test('a group’s picture in R2 under grp/ (out of the 31-day rule), locked: its key with the group; older apps get it unlocked (Haris 2026-11-21)', async () => {
+  const key = crypto.randomBytes(32), pic = crypto.randomBytes(40 * 1024), sealed = lock(pic, key);
+  const s = await post('am', '/api/talk/r2/start', { name: 'group.jpg', size: sealed.length, keep: true });
+  assert.ok(s.ok && s.put);
+  assert.equal((await fetch(s.put, { method: 'PUT', body: sealed })).status, 200);
+  assert.ok((await post('am', '/api/talk/r2/done', { id: s.id })).ok);
+  assert.ok([...objects.keys()].some((k) => k.endsWith('/grp/' + s.id)), 'kept under grp/');
+  const r = await post('am', '/api/talk/act', { act: 'setPic', group: G, file: s.id, key: key.toString('base64') });
+  assert.ok(r.ok && r.group.pic === s.id && r.group.picKey === key.toString('base64'), 'the group carries its key');
+  const st = await (await fetch(base + '/api/talk/state', { headers: H('des') })).json();
+  const g = (st.groups || []).find((x) => x.id === G);
+  assert.equal(g && g.picKey, key.toString('base64'), 'the other member gets the key');
+  const old = await fetch(base + '/api/talk/file/' + s.id, { headers: H('des') });
+  assert.deepEqual(Buffer.from(await old.arrayBuffer()), pic, 'an older app: unlocked through the server');
+  const pr = await fetch(base + '/api/talk/file/' + s.id + '?r2=1', { headers: H('des'), redirect: 'manual' });
+  assert.equal(pr.status, 302, 'a newer phone: straight to R2');
+});
+
+test('a link’s preview picture in R2, locked: its key goes with the link (Haris 2026-11-21)', async () => {
+  const key = crypto.randomBytes(32), img = crypto.randomBytes(20 * 1024), sealed = lock(img, key);
+  const s = await post('am', '/api/talk/r2/start', { name: 'preview.jpg', size: sealed.length });
+  await fetch(s.put, { method: 'PUT', body: sealed });
+  assert.ok((await post('am', '/api/talk/r2/done', { id: s.id })).ok);
+  const m = await post('am', '/api/talk/act', { act: 'send', group: G, text: 'https://example.com/a', link: { url: 'https://example.com/a', title: 'A', img: { id: s.id, key: key.toString('base64') } } });
+  assert.ok(m.ok);
+  const ev = (await sync('des')).events.find((e) => e.id === m.id);
+  assert.equal(ev.link.img.id, s.id);
+  assert.equal(ev.link.img.key, key.toString('base64'), 'the key with the picture');
+  const old = await fetch(base + '/api/talk/file/' + s.id, { headers: H('des') });
+  assert.deepEqual(Buffer.from(await old.arrayBuffer()), img, 'an older app: unlocked through the server');
+});
