@@ -30,7 +30,14 @@ enum Uploader {
   // handed to iPhone and waited for, left the line idle between pieces). Cancel (the bar at the bottom): the pieces on their
   // way stop and it says it didn't go (done(nil)), as a failed upload. Each piece sent by iPhone itself (Transfers — it goes
   // on with the app in the background or the phone locked: Haris 2026-11-10)
-  static let piece: Int64 = 8 * 1024 * 1024, together = 3
+  static let piece: Int64 = 8 * 1024 * 1024
+  // (three side by side while the app is open; once it's left, every piece still to go handed to iPhone at once, so the
+  //  whole file goes on with the app closed — E11 Talk's way, Haris 2026-11-21 15:50 "same settings as talk")
+  static var together: Int { UIApplication.shared.applicationState == .background ? 1000 : 3 }
+  static var fillers: [UUID: () -> Void] = [:]
+  private static let leaving: NSObjectProtocol = NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
+    Uploader.fillers.values.forEach { $0() }
+  }
   static func send(_ url: URL, name: String, task: String, dest: String? = nil, bar: Bool = true, cookies: @escaping (@escaping (String) -> Void) -> Void, progress: @escaping (Double) -> Void, done: @escaping (String?) -> Void) {
     let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
     let job = UploadCenter.shared.begin(name, size, bar: bar)
@@ -107,15 +114,17 @@ enum Uploader {
         } }
       }
       // (as many on their way as there's room for; all in — its path)
+      let fill = UUID()
       func pump() {
-        guard !over, !quit else { return }
+        guard !over, !quit else { Uploader.fillers[fill] = nil; return }
         if UploadCenter.shared.cancelled(job) { return finish(nil) }
         while going < together && next < size { let off = next; next += piece; go(off, then: pump) }
         if going == 0 && next >= size { finish(path) }
       }
       // (the first piece alone: it makes the file the others are written into)
       next = piece
-      go(0, then: pump)
+      _ = Uploader.leaving
+      go(0, then: { Uploader.fillers[fill] = { pump() }; pump() })   // (the rest only once the file is made)
     }
     // R2's way (server 1.9.114+): where to put it (the server keeps its place in the office), its 8 MB parts three side by
     // side straight to R2 — each by iPhone itself (Transfers), no sign-in with them — then "it's all there". Anything that
@@ -163,8 +172,9 @@ enum Uploader {
           }
           if let t = t { UploadCenter.shared.running[job, default: []].append(t) } else { going -= 1; giveUp() }
         }
+        let fill = UUID()
         func pump() {
-          guard !over, !quit else { return }
+          guard !over, !quit else { Uploader.fillers[fill] = nil; return }
           if UploadCenter.shared.cancelled(job) { quit = true; R2Files.post("/api/host/trashMany", ["paths": [path]], cookie: c) { _, _ in }; return finish(nil) }
           while going < together && next < urls.count { let i = next; next += 1; going += 1; put(i) }
           if going == 0 && next >= urls.count {
@@ -179,6 +189,7 @@ enum Uploader {
             } }
           }
         }
+        _ = Uploader.leaving; Uploader.fillers[fill] = { pump() }
         pump()
       }
     }
