@@ -26,8 +26,12 @@ enum VideoShrink {
                                          0x61706368: "ProRes 422 HQ", 0x61703468: "ProRes 4444", 0x61703478: "ProRes 4444 XQ",
                                          0x6170726E: "ProRes RAW", 0x61707268: "ProRes RAW HQ"]
     guard let n = names[CMFormatDescriptionGetMediaSubType(d)] else { return nil }
-    let tf = CMFormatDescriptionGetExtension(d, extensionKey: kCMFormatDescriptionExtension_TransferFunction) as? String
-    return tf == "AppleLog" ? n + " · Log" : n
+    // (Log: the colour tag, wherever iPhone put it — its transfer function, or anywhere in the track's description; an iPhone
+    //  17 Pro Log clip wasn't found by the tag alone, Haris 2026-11-21 14:36)
+    let tf = CMFormatDescriptionGetExtension(d, extensionKey: kCMFormatDescriptionExtension_TransferFunction) as? String ?? ""
+    let all = (CMFormatDescriptionGetExtensions(d) as NSDictionary?)?.description ?? ""
+    let log = tf.localizedCaseInsensitiveContains("log") || all.contains("AppleLog") || all.contains("Apple Log")
+    return log ? n + " · Log" : n
   }
   // (why the last one couldn't be made smaller — said when a video goes as its original instead)
   static var lastError: String?
