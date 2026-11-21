@@ -343,7 +343,7 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     Net.shared.file(f.id) { [weak self] url in DispatchQueue.main.async {
       guard let self = self, let url = url else { return }
       let named = ShareCopy.named(f, from: url)
-      self.present(UIActivityViewController(activityItems: [named], applicationActivities: nil), animated: true)
+      self.present(ShareOut.sheet([named]), animated: true)
     } }
   }
   private func save() {

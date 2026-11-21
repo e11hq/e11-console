@@ -268,7 +268,7 @@ final class MediaVC: UIViewController, UICollectionViewDelegate, QLPreviewContro
     }
   }
   private func presentShare(_ xs: [Any], _ v: UIView?) {
-    let a = UIActivityViewController(activityItems: xs, applicationActivities: nil)
+    let a = ShareOut.sheet(xs)
     a.popoverPresentationController?.sourceView = v ?? view
     present(a, animated: true)
   }

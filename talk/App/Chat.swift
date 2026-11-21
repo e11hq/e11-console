@@ -1610,7 +1610,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
           Net.shared.file(f.id) { url in
             guard let url = url else { toast("That file isn’t on the server any more"); return }
             let named = ShareCopy.named(f, from: url)
-            self?.present(UIActivityViewController(activityItems: [named], applicationActivities: nil), animated: true)
+            self?.present(ShareOut.sheet([named]), animated: true)
           }
         })
       }

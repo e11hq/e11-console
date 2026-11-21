@@ -351,6 +351,20 @@ final class DownloadRing: UIView {
 
 /* a file handed out of Talk (Save / Share): under its own name; a HEIC photo as a JPEG, so any computer opens it (Windows
    can't always) — Haris 2026-11-21 12:27 */
+// iPhone's Save / Share sheet — and, once it's done, where it went: "Saved to Photos" or "Saved to Files", only for those two
+// (a PDF is never offered Photos by iPhone, so it never says Photos — Haris 2026-11-21)
+enum ShareOut {
+  static func sheet(_ items: [Any]) -> UIActivityViewController {
+    let a = UIActivityViewController(activityItems: items, applicationActivities: nil)
+    a.completionWithItemsHandler = { type, done, _, _ in
+      guard done, let t = type else { return }
+      if t == .saveToCameraRoll { toast("Saved to Photos") }
+      else if t.rawValue.localizedCaseInsensitiveContains("SaveToFiles") { toast("Saved to Files") }
+    }
+    return a
+  }
+}
+
 enum ShareCopy {
   static func named(_ f: Msg.FileRef, from url: URL) -> URL {
     let tmp = FileManager.default.temporaryDirectory
