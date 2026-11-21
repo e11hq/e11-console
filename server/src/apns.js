@@ -127,6 +127,9 @@ export function createApns({ store, keyFile = '', keyId = '', teamId = '', topic
     //  message ones too: its helper tells the sender's ✓✓ — Haris 2026-11-19 21:42)
     return { aps: { alert: { title: String(msg.title || (kvPrefix === 'apns' ? 'E11 Console' : 'E11 Talk')), body: String(msg.body || '') }, sound: 'default', 'thread-id': String(msg.taskId || msg.tag || msg.kind || 'e11'),
       ...(Number.isInteger(msg.badge) ? { badge: msg.badge } : {}), ...(pid || (msg.kind === 'talk' && msg.msgId) ? { 'mutable-content': 1 } : {}),
+      // (E11 Talk's messages also wake the app quietly, so its photos and videos start downloading with Talk closed —
+      //  Haris 2026-11-21 15:34 "Yes, include it")
+      ...(msg.kind === 'talk' && msg.msgId ? { 'content-available': 1 } : {}),
       ...(msg.category ? { category: String(msg.category) } : {}) }, e11: data };   // (E11 Talk's and E11 Console's: reply from the banner)
   }
   async function push1(s, msg, pid, ttl, tries) {
