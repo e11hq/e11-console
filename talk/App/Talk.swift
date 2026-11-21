@@ -472,7 +472,12 @@ final class Talk {
       Net.shared.act(b) { [weak self] j in
         guard let self = self else { return }
         // (the send sound once the server has it — not while the clock shows it on its way; every kind, Haris 2026-11-12)
-        if (j?["ok"] as? Bool) == true { DispatchQueue.main.async { ChatSound.send() }; self.sync() } else { self.mark(g, cid, failed: true) }
+        // (…and its tick at the same moment: the server's answer has its id — the clock no longer waits for the next sync,
+        //  Haris 2026-11-22 01:30 "the send sound comes first, then the clock changes to a tick, we can see the delay")
+        if (j?["ok"] as? Bool) == true {
+          DispatchQueue.main.async { self.sentNow(g, cid, id: j?["id"] as? String, seq: (j?["seq"] as? NSNumber)?.intValue, at: (j?["at"] as? NSNumber)?.doubleValue); ChatSound.send() }
+          self.sync()
+        } else { self.mark(g, cid, failed: true) }
       }
     }
     // (it didn't go: if Talk was left meanwhile, again when Talk is back — else the red !, a tap: Send again / Delete)
@@ -569,6 +574,19 @@ final class Talk {
       }
       if case .given(let r) = link, r.prev.url == u.absoluteString { handle(r.prev, r.img, r.icon) } else { LinkPrevMaker.make(u, done: handle) }
     } else { go(nil) }
+  }
+  // one of mine the server has: its id, place and time from the server's answer, the clock turned into the tick — the
+  // message itself, when it comes back by the live line or sync, is matched by that id and takes its place
+  private func sentNow(_ g: String, _ cid: String, id: String?, seq: Int?, at: Double?) {
+    guard let id = id else { return }
+    var l = log(g)
+    guard let i = l.msgs.firstIndex(where: { $0.cid == cid && $0.pending }) else { return }
+    if l.msgs.contains(where: { $0.id == id && !$0.pending }) { return }   // (already here by the live line)
+    l.msgs[i].id = id; l.msgs[i].pending = false; l.msgs[i].failed = false
+    if let s = seq { l.msgs[i].seq = s }
+    if let a = at { l.msgs[i].at = a }
+    logs[g] = l; saveSoon(g)
+    NotificationCenter.default.post(name: .talkGroup, object: g)
   }
   private func mark(_ g: String, _ cid: String, failed: Bool) {
     var l = log(g)
