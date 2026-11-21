@@ -8,7 +8,7 @@ import UserNotifications
 final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
   func application(_ app: UIApplication, didFinishLaunchingWithOptions o: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
     UNUserNotificationCenter.current().delegate = self
-    BgUploads.shared.start()
+    BgUploads.shared.start(); Downloads.shared.start()
     // (reply straight from the banner, or mark it read — stage 2)
     let reply = UNTextInputNotificationAction(identifier: "reply", title: "Reply", options: [], textInputButtonTitle: "Send", textInputPlaceholder: "Message")
     let read = UNNotificationAction(identifier: "read", title: "Mark as read", options: [])
@@ -17,6 +17,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
   }
   // (uploads iPhone went on with while Talk was closed: Talk woken to take the next step — BgUploads)
   func application(_ app: UIApplication, handleEventsForBackgroundURLSession id: String, completionHandler: @escaping () -> Void) {
+    if id == Downloads.sessionId { Downloads.shared.woken(completionHandler); return }
     BgUploads.shared.woken(completionHandler); BgUploads.shared.start()
   }
   func application(_ app: UIApplication, configurationForConnecting s: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
@@ -35,8 +36,15 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
   // a quiet wake-up (no banner): Ask the group — this phone looks whether it has a file someone asked for and sends it
   //  (Haris 2026-11-20 21:36; iPhone decides how soon it wakes the app, and not at all if Talk was swiped away)
   func application(_ app: UIApplication, didReceiveRemoteNotification info: [AnyHashable: Any], fetchCompletionHandler done: @escaping (UIBackgroundFetchResult) -> Void) {
-    guard ((info["e11"] as? [String: Any])?["ask"]) != nil else { done(.noData); return }
-    AskGroup.check { done(.newData) }
+    let e = info["e11"] as? [String: Any]
+    if e?["ask"] != nil { AskGroup.check { done(.newData) }; return }
+    // (a message while Talk is in the background: its photos and videos start downloading now, on iPhone's background
+    //  downloads, Wi-Fi rules as always — Haris 2026-11-21 15:34)
+    if e?["msgId"] != nil, app.applicationState != .active, Net.shared.signedIn {
+      Talk.shared.sync { Talk.shared.catchUp(); DispatchQueue.main.asyncAfter(deadline: .now() + 3) { done(.newData) } }
+      return
+    }
+    done(.noData)
   }
   // a notification while E11 Talk is open: shown, unless its group is open on the screen
   func userNotificationCenter(_ c: UNUserNotificationCenter, willPresent n: UNNotification, withCompletionHandler done: @escaping (UNNotificationPresentationOptions) -> Void) {

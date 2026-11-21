@@ -121,10 +121,27 @@ final class Downloads: NSObject, URLSessionDownloadDelegate {
   private(set) var got: [String: (Int64, Int64)] = [:]
   private var waiters: [String: [(Bool) -> Void]] = [:]
   private var lastPost: [String: CFTimeInterval] = [:]
+  // (iPhone's own background downloads: a download goes on with Talk closed or the phone locked, and Talk is woken to put it
+  //  in place — Haris 2026-11-21 15:34; each task carries its file's id, so one finished after Talk was closed is still known)
   private lazy var session: URLSession = {
-    let c = URLSessionConfiguration.default; c.timeoutIntervalForRequest = 60
+    let c = URLSessionConfiguration.background(withIdentifier: Downloads.sessionId)
+    c.isDiscretionary = false; c.sessionSendsLaunchEvents = true; c.timeoutIntervalForRequest = 60
     return URLSession(configuration: c, delegate: self, delegateQueue: .main)
   }()
+  static let sessionId = "ae.e11.talk.downloads"
+  private var wake: (() -> Void)?
+  func woken(_ f: @escaping () -> Void) { wake = f; _ = session }
+  func start() {
+    // (at launch: what iPhone was downloading for us, known again — its ring shows where it is)
+    session.getAllTasks { ts in DispatchQueue.main.async {
+      for t in ts { if let id = t.taskDescription, let d = t as? URLSessionDownloadTask, self.tasks[id] == nil { self.tasks[id] = d; self.ids[d.taskIdentifier] = id; self.got[id] = (d.countOfBytesReceived, d.countOfBytesExpectedToReceive) } }
+    } }
+  }
+  func urlSessionDidFinishEvents(forBackgroundURLSession s: URLSession) {
+    let f = wake; wake = nil
+    DispatchQueue.main.async { f?() }
+  }
+  private func idOf(_ t: URLSessionTask) -> String? { ids[t.taskIdentifier] ?? t.taskDescription }
   private var goneIds: [String] = UserDefaults.standard.stringArray(forKey: "talk_gone_files") ?? []
   private lazy var goneSet = Set(goneIds)
   func isGone(_ id: String) -> Bool { goneSet.contains(id) }
@@ -139,6 +156,7 @@ final class Downloads: NSObject, URLSessionDownloadDelegate {
     if let d = done { waiters[id, default: []].append(d) }
     guard tasks[id] == nil else { return }
     let t = session.downloadTask(with: Net.shared.request("/api/talk/file/" + id + "?r2=1&pieces=1"))   // (?r2=1: straight from R2 — R2Files; pieces=1: this phone unlocks a big file in pieces)
+    t.taskDescription = id
     tasks[id] = t; ids[t.taskIdentifier] = id; got[id] = (0, Int64(size))
     t.resume(); post(id)
   }
@@ -149,14 +167,14 @@ final class Downloads: NSObject, URLSessionDownloadDelegate {
   }
   private func post(_ id: String) { NotificationCenter.default.post(name: .talkFile, object: id) }
   func urlSession(_ s: URLSession, downloadTask t: URLSessionDownloadTask, didWriteData d: Int64, totalBytesWritten w: Int64, totalBytesExpectedToWrite e: Int64) {
-    guard let id = ids[t.taskIdentifier] else { return }
+    guard let id = idOf(t) else { return }
     got[id] = (w, e > 0 ? e : got[id]?.1 ?? 0)
     // (the ring a few times a second — not on every piece)
     let now = CACurrentMediaTime()
     if now - (lastPost[id] ?? 0) > 0.1 { lastPost[id] = now; post(id) }
   }
   func urlSession(_ s: URLSession, downloadTask t: URLSessionDownloadTask, didFinishDownloadingTo loc: URL) {
-    guard let id = ids[t.taskIdentifier] else { return }
+    guard let id = idOf(t) else { return }
     let code = (t.response as? HTTPURLResponse)?.statusCode ?? 0
     if code == 200 {
       FileLock.openInPlace(id, at: loc)   // (sent locked: opened with its key)
@@ -168,12 +186,12 @@ final class Downloads: NSObject, URLSessionDownloadDelegate {
     }
   }
   func urlSession(_ s: URLSession, task t: URLSessionTask, didCompleteWithError e: Error?) {
-    guard let id = ids.removeValue(forKey: t.taskIdentifier) else { return }
+    guard let id = ids.removeValue(forKey: t.taskIdentifier) ?? t.taskDescription else { return }
     tasks[id] = nil; got[id] = nil; lastPost[id] = nil
     let ok = FileManager.default.fileExists(atPath: Net.local(id).path)
     let w = waiters.removeValue(forKey: id) ?? []
     post(id); w.forEach { $0(ok) }
-    if !ok, (e as? URLError)?.code != .cancelled, !isGone(id) { toast("Couldn’t download it — try again") }
+    if !ok, (e as? URLError)?.code != .cancelled, !isGone(id), UIApplication.shared.applicationState == .active { toast("Couldn’t download it — try again") }
   }
 }
 
