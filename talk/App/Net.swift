@@ -221,7 +221,7 @@ final class Net {
   // work) the usual way. The answer as a download task gives it: the file, and the server's answer.
   private func download(_ id: String, _ then: @escaping (URL?, URLResponse?) -> Void) {
     // (?r2=1: a file in R2 — sent straight there, R2Files; the rest as before)
-    let usual = { self.session.downloadTask(with: self.request("/api/talk/file/" + id + "?r2=1")) { tmp, resp, _ in then(tmp, resp) }.resume() }
+    let usual = { self.session.downloadTask(with: self.request("/api/talk/file/" + id + "?r2=1&pieces=1")) { tmp, resp, _ in then(tmp, resp) }.resume() }
     Office.shared.pass(["kind": "file", "id": id]) { p in
       guard let p = p, let u = URL(string: p.url + "/local/talk/file?t=" + (p.token.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")) else { return usual() }
       Office.shared.session.downloadTask(with: URLRequest(url: u)) { tmp, resp, _ in

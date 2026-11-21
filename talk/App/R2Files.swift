@@ -19,8 +19,44 @@ enum FileLock {
   }
   // a downloaded file unlocked where it lies (one sent locked, its key known); anything else left as it is
   static func openInPlace(_ id: String, at url: URL) {
-    guard let k = FileKeys.get(id), let d = try? Data(contentsOf: url, options: .mappedIfSafe), let p = open(d, key: k) else { return }
+    guard let k = FileKeys.get(id) else { return }
+    if k.hasPrefix("p:") { openPieces(at: url, key: String(k.dropFirst(2))); return }
+    guard let d = try? Data(contentsOf: url, options: .mappedIfSafe), let p = open(d, key: k) else { return }
     try? p.write(to: url, options: .atomic)
+  }
+
+  /* A big file locked in pieces (Haris 2026-11-21 11:00): every 8 MB of the locked file is one piece — 12 bytes of nonce, the
+     piece, 16 bytes of tag — each locked on its own with "e11p:<n>:<1 if last else 0>" added, so pieces can't be moved,
+     dropped or cut short. Locked and unlocked one piece at a time: a 1 GB video never sits whole in the phone's memory. */
+  static let piece = 8 * 1024 * 1024
+  static let piecePlain = piece - 28
+  static func pieces(_ plain: Int) -> Int { max(1, (plain + piecePlain - 1) / piecePlain) }
+  static func sealPiece(_ d: Data, key: SymmetricKey, index: Int, last: Bool) -> Data? {
+    let aad = Data("e11p:\(index):\(last ? 1 : 0)".utf8)
+    return (try? AES.GCM.seal(d, using: key, authenticating: aad))?.combined
+  }
+  // unlocked into a new file beside it, piece by piece, then put in its place (left as it is if a piece doesn't open)
+  static func openPieces(at url: URL, key: String) {
+    guard let kd = Data(base64Encoded: key), kd.count == 32, let h = try? FileHandle(forReadingFrom: url) else { return }
+    defer { try? h.close() }
+    let k = SymmetricKey(data: kd)
+    let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
+    let n = (size + piece - 1) / piece
+    guard n > 0 else { return }
+    let out = url.deletingLastPathComponent().appendingPathComponent(url.lastPathComponent + ".open")
+    FileManager.default.createFile(atPath: out.path, contents: nil)
+    guard let w = try? FileHandle(forWritingTo: out) else { return }
+    var ok = true
+    for i in 0..<n {
+      let opened: Data? = autoreleasepool {
+        guard let c = try? h.read(upToCount: piece), c.count > 28, let box = try? AES.GCM.SealedBox(combined: c) else { return nil }
+        return try? AES.GCM.open(box, using: k, authenticating: Data("e11p:\(i):\(i == n - 1 ? 1 : 0)".utf8))
+      }
+      guard let p = opened else { ok = false; break }
+      do { try w.write(contentsOf: p) } catch { ok = false; break }
+    }
+    try? w.close()
+    if ok { _ = try? FileManager.default.replaceItemAt(url, withItemAt: out) } else { try? FileManager.default.removeItem(at: out) }
   }
 }
 
@@ -57,8 +93,9 @@ extension Net {
      they go. done: the file's id and its key — or, if the server has no R2, the usual way (no key). */
   // (keep: a group's picture — kept in R2 while the group uses it, not under messages' 31-day rule)
   func uploadMsg(_ data: Data, name: String, keep: Bool = false, progress: @escaping (Double) -> Void, done: @escaping (String?, String?) -> Void) {
-    // (over 200 MB: the usual way for now — locking and unlocking hold the whole file in memory twice)
-    guard data.count <= 200 * 1024 * 1024, let sealed = FileLock.seal(data) else { return upload(data, name: name, progress: progress) { done($0, nil) } }
+    // (over 200 MB: locked in pieces, one at a time as they go up — its key given back as "p:<key>"; Haris 2026-11-21 11:00)
+    if data.count > 200 * 1024 * 1024 { return uploadPieces(data, name: name, progress: progress, done: done) }
+    guard let sealed = FileLock.seal(data) else { return upload(data, name: name, progress: progress) { done($0, nil) } }
     post("/api/talk/r2/start", ["name": name, "size": sealed.data.count, "keep": keep]) { [weak self] j in
       guard let self = self else { return done(nil, nil) }
       guard let j = j, (j["ok"] as? Bool) == true, let id = j["id"] as? String else {
@@ -86,6 +123,47 @@ extension Net {
         while going < 3 && next < urls.count {
           let i = next; next += 1; going += 1
           let piece = body.subdata(in: (i * part)..<min(body.count, (i + 1) * part))
+          self.putR2(urls[i], piece) { p in
+            sent[i] = Int(p); progress(min(0.99, Double(sent.reduce(0, +)) / total))
+          } done: { e in
+            going -= 1
+            guard let e = e else { over = true; return done(nil, nil) }
+            etags[i] = e; pump()
+          }
+        }
+      }
+      pump()
+    }
+  }
+  // a big file in pieces: each 8 MB part of R2's upload is one piece, locked just before it goes (three at a time)
+  private func uploadPieces(_ data: Data, name: String, progress: @escaping (Double) -> Void, done: @escaping (String?, String?) -> Void) {
+    let key = SymmetricKey(size: .bits256), keyText = key.withUnsafeBytes { Data($0) }.base64EncodedString()
+    let n = FileLock.pieces(data.count), sealedSize = data.count + 28 * n
+    post("/api/talk/r2/start", ["name": name, "size": sealedSize]) { [weak self] j in
+      guard let self = self else { return done(nil, nil) }
+      guard let j = j, (j["ok"] as? Bool) == true, let id = j["id"] as? String,
+            let urls = (j["urls"] as? [String])?.compactMap(URL.init(string:)), (j["part"] as? Int) == FileLock.piece, urls.count == n else {
+        // (no R2 on this server, or not in the pieces we lock: the usual way)
+        return self.upload(data, name: name, progress: progress) { done($0, nil) }
+      }
+      let total = Double(max(1, sealedSize))
+      var etags = [String?](repeating: nil, count: n), sent = [Int](repeating: 0, count: n)
+      var next = 0, going = 0, over = false
+      func pump() {
+        guard !over else { return }
+        if next >= n && going == 0 {
+          over = true
+          guard !etags.contains(where: { $0 == nil }) else { return done(nil, nil) }
+          self.post("/api/talk/r2/done", ["id": id, "etags": etags.map { $0! }]) { d in
+            guard (d?["ok"] as? Bool) == true else { return done(nil, nil) }
+            progress(1); done(id, "p:" + keyText)
+          }
+          return
+        }
+        while going < 3 && next < n {
+          let i = next; next += 1; going += 1
+          let lo = i * FileLock.piecePlain, hi = min(data.count, lo + FileLock.piecePlain)
+          guard let piece = autoreleasepool(invoking: { FileLock.sealPiece(data.subdata(in: lo..<hi), key: key, index: i, last: i == n - 1) }) else { over = true; return done(nil, nil) }
           self.putR2(urls[i], piece) { p in
             sent[i] = Int(p); progress(min(0.99, Double(sent.reduce(0, +)) / total))
           } done: { e in

@@ -316,7 +316,7 @@ final class Talk {
     case "msg":
       let f = (e["file"] as? [String: Any]).flatMap { f -> Msg.FileRef? in
         guard let fid = f["id"] as? String else { return nil }
-        if let k = f["key"] as? String { FileKeys.set(fid, k) }   // (locked in R2: its key — R2Files)
+        if let k = f["key"] as? String { FileKeys.set(fid, (f["lock"] as? String) == "p" ? "p:" + k : k) }   // (locked in R2: its key — R2Files; in pieces: "p:")
         return Msg.FileRef(id: fid, name: f["name"] as? String ?? "File", size: f["size"] as? Int ?? 0, kind: f["kind"] as? String ?? "file", w: f["w"] as? Double, h: f["h"] as? Double, secs: f["secs"] as? Double, wave: f["wave"] as? String, thumb: f["thumb"] as? String)
       }
       let r = (e["reply"] as? [String: Any]).flatMap { r -> Msg.Reply? in
@@ -423,7 +423,10 @@ final class Talk {
       if let p = place { b["location"] = p.json }
       if fwd { b["fwd"] = true }
       if let r = m.reply { b["reply"] = ["id": r.id, "by": r.by, "text": r.text, "kind": r.kind] }
-      if let f = file, let fid = fileId { var fd: [String: Any] = ["id": fid, "kind": f.kind]; fd["w"] = f.w; fd["h"] = f.h; fd["secs"] = f.secs; fd["wave"] = f.wave; fd["thumb"] = thumb; fd["key"] = fileKey; b["file"] = fd }
+      if let f = file, let fid = fileId { var fd: [String: Any] = ["id": fid, "kind": f.kind]; fd["w"] = f.w; fd["h"] = f.h; fd["secs"] = f.secs; fd["wave"] = f.wave; fd["thumb"] = thumb
+        // (locked in pieces — "p:" before its key on the phone: the server's word for it is lock "p")
+        if let k = fileKey { if k.hasPrefix("p:") { fd["key"] = String(k.dropFirst(2)); fd["lock"] = "p" } else { fd["key"] = k } }
+        b["file"] = fd }
       Net.shared.act(b) { [weak self] j in
         guard let self = self else { return }
         // (the send sound once the server has it — not while the clock shows it on its way; every kind, Haris 2026-11-12)
@@ -445,7 +448,8 @@ final class Talk {
     if let prep = prepare, let f = file {
       Uploads.set(f.id, 0, total: max(1, f.size))
       prep { [weak self] made in
-        guard let made = made, let d = try? Data(contentsOf: made) else { Uploads.end(f.id); self?.mark(g, cid, failed: true); return }
+        // (mapped, not read whole: a big video's pieces are read from the disk as they go up — Haris 2026-11-21)
+        guard let made = made, let d = try? Data(contentsOf: made, options: .alwaysMapped) else { Uploads.end(f.id); self?.mark(g, cid, failed: true); return }
         // (what goes up is what the phone keeps for it)
         if made != Net.local(f.id) { try? FileManager.default.removeItem(at: Net.local(f.id)); try? FileManager.default.copyItem(at: made, to: Net.local(f.id)) }
         up(d, f)

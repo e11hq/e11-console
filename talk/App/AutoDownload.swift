@@ -95,7 +95,7 @@ final class Downloads: NSObject, URLSessionDownloadDelegate {
     if FileManager.default.fileExists(atPath: Net.local(id).path) { done?(true); return }
     if let d = done { waiters[id, default: []].append(d) }
     guard tasks[id] == nil else { return }
-    let t = session.downloadTask(with: Net.shared.request("/api/talk/file/" + id + "?r2=1"))   // (?r2=1: straight from R2 — R2Files)
+    let t = session.downloadTask(with: Net.shared.request("/api/talk/file/" + id + "?r2=1&pieces=1"))   // (?r2=1: straight from R2 — R2Files; pieces=1: this phone unlocks a big file in pieces)
     tasks[id] = t; ids[t.taskIdentifier] = id; got[id] = (0, Int64(size))
     t.resume(); post(id)
   }
