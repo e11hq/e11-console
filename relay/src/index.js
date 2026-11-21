@@ -6,12 +6,14 @@ import { fingerprint } from './sign.js';
 export { TalkHub } from './hub.js';
 
 const DAY = 86400_000, KEEP = 30 * DAY;
+// (the hub made in Cloudflare's Middle East — near the team; the place is fixed when it's first made, Haris 2026-11-22)
+const hubOf = (env) => env.HUB.get(env.HUB.idFromName(env.HUB_NAME || 'live'), { locationHint: 'me' });
 const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 
 export default {
   async fetch(req, env, ctx) {
     const url = new URL(req.url), p = url.pathname;
-    const hub = env.HUB.get(env.HUB.idFromName(env.HUB_NAME || 'live'));
+    const hub = hubOf(env);
     if (p === '/hub/key' || p.startsWith('/office/')) return hub.fetch(req);
     if (!(p === '/line' || p.startsWith('/api/talk/'))) return json({ ok: false, error: 'Not here' }, 404);
     const email = await whoIs(req, env, ctx);
@@ -24,7 +26,7 @@ export default {
 // who this phone is: the office says (its own sign-in check, unchanged); remembered for 30 days by fingerprint only
 async function whoIs(req, env, ctx) {
   const fp = await fingerprint(req.headers);
-  const kv = env.HUB.get(env.HUB.idFromName(env.HUB_NAME || 'live'));
+  const kv = hubOf(env);
   const known = await kv.fetch(new Request('https://hub/who-cache?fp=' + encodeURIComponent(fp))).then((r) => r.json()).catch(() => null);
   const fresh = known && known.email && Date.now() - known.at < DAY;
   if (fresh) return known.email;
