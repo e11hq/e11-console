@@ -455,6 +455,13 @@ const AppIcon = (() => {
   const hasGlass = async () => { if (glass === null) { try { glass = !!(await NativeMac.call('appInfo')).glass; } catch (e) { glass = false; } } return glass; };
   // the owner's own picture (not one of the ready-made seasonal ones)
   function ownPic(x) { return !!(x && !x.auto && x.custom && !x.preset); }
+  // the picture put on the Dock — remembered only when the app could save it onto itself: the Mac App Store app can't
+  // (Apple's rule), so after it's quit and opened again it has its own icon back and gets the picture again (Haris
+  // 2026-11-22: the occasion icon was gone after reopening the app)
+  async function put(b64, key) {
+    const r = await NativeMac.call('setIcon', { b64 });
+    lsSet(r && r.saved ? key : null);
+  }
   async function everyday() {
     if (lsGet() === 'glass') return true;
     await NativeMac.call('setIcon', { reset: true }); lsSet('glass'); return true;
@@ -474,14 +481,12 @@ const AppIcon = (() => {
         if (lsGet() !== 'auto-' + sid) {
           const r = await fetch(`icons/seasonal/${sid}.png`, { cache: 'no-store', credentials: 'same-origin' });
           if (!r.ok) return;
-          await NativeMac.call('setIcon', { b64: await toB64(await r.blob()) });
-          lsSet('auto-' + sid);
+          await put(await toB64(await r.blob()), 'auto-' + sid);
         }
       } else if (info.custom) {
         const r = await fetch('/api/app-icon?v=' + encodeURIComponent(info.v), { cache: 'no-store', credentials: 'same-origin' });
         if (!r.ok) return;
-        await NativeMac.call('setIcon', { b64: await toB64(await r.blob()) });
-        lsSet(v);
+        await put(await toB64(await r.blob()), v);
       } else if (await hasGlass()) {
         await everyday();
       } else if (info.def) {
@@ -489,8 +494,7 @@ const AppIcon = (() => {
         if (lsGet() !== 'def-' + info.def) {
           const r = await fetch('/api/app-icon?v=' + encodeURIComponent(v), { cache: 'no-store', credentials: 'same-origin' });
           if (!r.ok) return;
-          await NativeMac.call('setIcon', { b64: await toB64(await r.blob()) });
-          lsSet('def-' + info.def);
+          await put(await toB64(await r.blob()), 'def-' + info.def);
         }
       } else if (lsGet()) {
         await NativeMac.call('setIcon', { reset: true });
@@ -512,7 +516,7 @@ const AppIcon = (() => {
       if (!sid && await hasGlass()) await everyday();
       else if (lsGet() !== key) {
         const r = await fetch(sid ? `icons/seasonal/${sid}.png` : '/api/app-icon?v=' + encodeURIComponent(info.v), { cache: 'no-store', credentials: 'same-origin' });
-        if (r.ok) { await NativeMac.call('setIcon', { b64: await toB64(await r.blob()) }); lsSet(key); }
+        if (r.ok) await put(await toB64(await r.blob()), key);
       }
       applied = info.v;
     } catch (e) { /* try again next hour */ }
