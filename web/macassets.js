@@ -190,7 +190,19 @@ const MacAssets = (() => {
     morph(cur, nb);
     return true;
   }
-  function draw(c) { if (!patch(c)) c.innerHTML = view(); if (natWins.size) natRefresh(); }
+  function draw(c) { if (!patch(c)) c.innerHTML = view(); hold(c); if (natWins.size) natRefresh(); }
+  // (pictures kept once seen, as the Inbox keeps them: each held in memory, so a folder opened again shows its pictures at
+  //  once — Safari / the Mac app's WebKit let one go and drew it again, grey first: Haris 2026-11-21 09:47; the newest 300)
+  const held = new Map();
+  function hold(root) {
+    root.querySelectorAll('.mca img').forEach((im) => {
+      const u = im.getAttribute('src');
+      if (!u) return;
+      if (held.has(u)) { const x = held.get(u); held.delete(u); held.set(u, x); return; }
+      const keep = new Image(); keep.decoding = 'async'; keep.src = u; held.set(u, keep);
+      if (held.size > 300) held.delete(held.keys().next().value);
+    });
+  }
 
   // ---------- C7: New Folder in place ----------
   function startNew(c, parent) {
