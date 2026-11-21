@@ -609,9 +609,8 @@ const NativeSide = (() => {
   function logo(src) {
     if (logos.has(src)) return logos.get(src);
     logos.set(src, null);
-    const im = new Image();
-    im.onload = () => { try { const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d'), w = im.naturalWidth, h = im.naturalHeight, k = Math.min(w, h); g.drawImage(im, (w - k) / 2, (h - k) / 2, k, k, 0, 0, 64, 64); logos.set(src, cv.toDataURL('image/png')); later(); } catch (e) { /* none */ } };
-    im.src = src;
+    // (a readable copy: from R2 a picture can't be drawn out otherwise — readableImage)
+    readableImage(src).then((im) => { if (!im) return; try { const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d'), w = im.naturalWidth, h = im.naturalHeight, k = Math.min(w, h); g.drawImage(im, (w - k) / 2, (h - k) / 2, k, k, 0, 0, 64, 64); logos.set(src, cv.toDataURL('image/png')); later(); } catch (e) { /* none */ } });
     return null;
   }
   function model() {
@@ -5283,11 +5282,9 @@ const NativeSheet = (() => {
   function loadPic(src) {
     if (picCache.has(src)) return picCache.get(src);
     const p = new Promise((done) => {
-      const im = new Image();
-      const t = setTimeout(() => done(null), 2000);
-      im.onload = () => { clearTimeout(t); try { const cv = document.createElement('canvas'); cv.width = cv.height = 72; const g = cv.getContext('2d'), w = im.naturalWidth, h = im.naturalHeight, k = Math.min(w, h); g.drawImage(im, (w - k) / 2, (h - k) / 2, k, k, 0, 0, 72, 72); done(cv.toDataURL('image/jpeg', 0.85)); } catch (e) { done(null); } };
-      im.onerror = () => { clearTimeout(t); done(null); };
-      im.src = src;
+      const t = setTimeout(() => done(null), 4000);
+      // (a readable copy — a photo from R2 can't be drawn out otherwise: readableImage)
+      readableImage(src).then((im) => { clearTimeout(t); if (!im) return done(null); try { const cv = document.createElement('canvas'); cv.width = cv.height = 72; const g = cv.getContext('2d'), w = im.naturalWidth, h = im.naturalHeight, k = Math.min(w, h); g.drawImage(im, (w - k) / 2, (h - k) / 2, k, k, 0, 0, 72, 72); done(cv.toDataURL('image/jpeg', 0.85)); } catch (e) { done(null); } });
     });
     picCache.set(src, p);
     p.then((v) => { if (!v) picCache.delete(src); });
@@ -5303,11 +5300,9 @@ const NativeSheet = (() => {
   // a file's small square picture for a native sheet (app 15+): loaded once, drawn 152px
   function thumb(src) {
     return new Promise((done) => {
-      const im = new Image();
-      const t = setTimeout(() => done(null), 4000);
-      im.onload = () => { clearTimeout(t); try { const cv = document.createElement('canvas'); cv.width = cv.height = 152; const g = cv.getContext('2d'), w = im.naturalWidth, h = im.naturalHeight, k = Math.min(w, h); g.drawImage(im, (w - k) / 2, (h - k) / 2, k, k, 0, 0, 152, 152); done(cv.toDataURL('image/jpeg', 0.8)); } catch (e) { done(null); } };
-      im.onerror = () => { clearTimeout(t); done(null); };
-      im.src = src;
+      const t = setTimeout(() => done(null), 6000);
+      // (a readable copy — a picture from R2 can't be drawn out otherwise: readableImage)
+      readableImage(src).then((im) => { clearTimeout(t); if (!im) return done(null); try { const cv = document.createElement('canvas'); cv.width = cv.height = 152; const g = cv.getContext('2d'), w = im.naturalWidth, h = im.naturalHeight, k = Math.min(w, h); g.drawImage(im, (w - k) / 2, (h - k) / 2, k, k, 0, 0, 152, 152); done(cv.toDataURL('image/jpeg', 0.8)); } catch (e) { done(null); } });
     });
   }
   // any CSS colour as [r, g, b]
@@ -7546,9 +7541,16 @@ const LogoLook = (() => {
   }
   function apply(img) {
     const span = img.closest('.cl-logo'); if (!span || span.classList.contains('mono')) return;
-    let c = memo.get(img.src);
-    if (!c) { try { c = tone(img); } catch (e) { c = '#fff'; } memo.set(img.src, c); }
-    span.style.setProperty('--lg-bg', c);
+    const src = img.src;
+    let c = memo.get(src);
+    if (c) { span.style.setProperty('--lg-bg', c); return; }
+    try { c = tone(img); memo.set(src, c); span.style.setProperty('--lg-bg', c); return; } catch (e) { /* from R2: read a readable copy */ }
+    readableImage(src).then((im) => {
+      let t = '#fff';
+      if (im) { try { t = tone(im); } catch (e) { /* white, as before */ } }
+      memo.set(src, t);
+      document.querySelectorAll('.cl-logo img').forEach((x) => { if (x.src === src) { const s = x.closest('.cl-logo'); if (s && !s.classList.contains('mono')) s.style.setProperty('--lg-bg', t); } });
+    });
   }
   const known = (src) => memo.get(new URL(src, location.href).href) || '';
   // (every logo as it loads — or already loaded, from the browser's copy)
@@ -9622,6 +9624,28 @@ function migrateClientLogos() {
 }
 function loadImage(blob) {
   return new Promise((res, rej) => { const url = URL.createObjectURL(blob); const im = new Image(); im.onload = () => res(im); im.onerror = () => { URL.revokeObjectURL(url); rej(new Error('That file isn’t an image this app can read')); }; im.src = url; });
+}
+// A picture of ours whose pixels a page may read (a logo's colour, a round photo, a picture drawn into a PDF or handed to
+// the Mac / iPhone). Since 1.9.114 our files come from Cloudflare R2 — another address — and a browser won't let a page
+// read a picture from another address unless that address allows it (R2 does, for our sites: CORS). So it's fetched as a
+// readable copy (credentials only to our own server, never to R2; not from the browser's earlier, unreadable copy), and
+// handed back as a picture from this page's own memory. null when it can't be had — each caller falls back as before.
+// (Haris 2026-11-20 23:45, option B: "for the long run")
+var readableMemo;
+function readableImage(src) {
+  const plain = (u) => new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = u; });
+  if (!src) return Promise.resolve(null);
+  if (/^(data|blob):/.test(src)) return plain(src);
+  const key = new URL(src, location.href).href;
+  readableMemo = readableMemo || new Map();
+  if (readableMemo.has(key)) return readableMemo.get(key);
+  const p = fetch(key, { credentials: 'same-origin', cache: 'no-store' })
+    .then((r) => (r.ok ? r.blob() : null))
+    .then((b) => (b ? plain(URL.createObjectURL(b)) : null))
+    .catch(() => null);
+  readableMemo.set(key, p);
+  p.then((v) => { if (!v) readableMemo.delete(key); });
+  return p;
 }
 // The glass edge macOS 26 draws on updated apps, painted into the picture: a bright rim (strongest top-left and
 // bottom-right), a soft inner glow along the edge, a sheen across the top and a little depth along the bottom.

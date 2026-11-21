@@ -274,7 +274,8 @@ const Claims = (() => {
   }
 
   /* ---------- PDF: the sheet drawn on A4 canvases, then joined with the receipts on the server ---------- */
-  const loadImg = (src) => new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src; });
+  // (our files through readableImage — from R2 a picture drawn into the PDF would stop it being made: Haris 2026-11-21)
+  const loadImg = (src) => (/^\/__file\//.test(src) ? readableImage(src) : new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src; }));
   async function sheetPages(c) {
     const W = 1240, H = 1754, P = 104, S = W / 794;   // A4 at 150 dpi; S = scale from the 794px design
     const F = '"E11 Dirham", -apple-system, "SF Pro Text", "Segoe UI", Inter, Helvetica, Arial, sans-serif';

@@ -60,7 +60,8 @@ const Fin = (() => {
      the names the report lists. A reimbursement from an expense claim gets its claim PDF (sheet + receipts). */
   const rep = { open: false, year: 0, sel: [], files: true, busy: false };
   const MS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const loadImg = (src) => new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src; });
+  // (our files through readableImage — from R2 a picture drawn into the PDF would stop it being made: Haris 2026-11-21)
+  const loadImg = (src) => (/^\/__file\//.test(src) ? readableImage(src) : new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src; }));
   const slug = (s) => String(s || '').normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/[\s_]+/g, '-').replace(/-+/g, '-').slice(0, 32).replace(/-$/, '') || 'file';
   const extOf = (p) => { const e = String(p || '').split('/').pop().split('.'); return e.length > 1 ? e.pop().toLowerCase() : 'pdf'; };
   const money = (n) => (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

@@ -171,9 +171,10 @@ const Phone = (() => {
       return c.toDataURL('image/png');
     };
     if (!u.avatar) { photo.url = initialsPic(); return photo.url; }
-    const img = new Image();
-    img.onload = () => {
+    // (a readable copy — the photo from R2 can't be drawn into the round picture otherwise: readableImage, Haris 2026-11-21)
+    readableImage(fileUrl({ path: u.avatar })).then((img) => {
       if (photo.key !== key) return;
+      if (!img) { photo.url = initialsPic(); const bar = document.getElementById('ph-tabs'); if (bar) nativeTabs(bar); return; }
       g.save(); round();
       const k = Math.max(S / img.width, S / img.height), w = img.width * k, h = img.height * k;
       g.drawImage(img, (S - w) / 2, (S - h) / 2, w, h); g.restore();
@@ -183,9 +184,7 @@ const Phone = (() => {
         photo.url = c.toDataURL('image/png');
       } catch (e) { g.clearRect(0, 0, S, S); photo.url = initialsPic(); }
       const bar = document.getElementById('ph-tabs'); if (bar) nativeTabs(bar);
-    };
-    img.onerror = () => { if (photo.key === key) { photo.url = initialsPic(); const bar = document.getElementById('ph-tabs'); if (bar) nativeTabs(bar); } };
-    img.src = fileUrl({ path: u.avatar });
+    });
     return '';
   }
   // (then the app's own Home is told at once whether it's on: it stays up while the page draws the other tab, and goes
