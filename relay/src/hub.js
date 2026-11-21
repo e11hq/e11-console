@@ -10,6 +10,7 @@ import { HubCore } from './core.js';
 import { newKey, signHeaders, verify } from './sign.js';
 import { bindingR2 } from './r2.js';
 import { makeApns } from './apns.js';
+import { usage } from './usage.js';
 
 const TALK_TABLES = ['groups', 'members', 'prefs', 'events', 'waiting', 'sent', 'files', 'contacts', 'macs', 'link_codes', 'phone_seen',
   'phones', 'bare_seen', 'needs', 'opts', 'unread', 'file_kept', 'file_had', 'asks'];
@@ -254,6 +255,8 @@ export class TalkHub extends DurableObject {
         const r = await this.apple.sendTo(String(b.uid || ''), { title: 'E11 Talk', body: 'A test from Cloudflare — notifications work without the office', kind: 'test', tag: 'test' });
         return json({ ok: true, ...r });
       }
+      // the owner's About line in Talk (through the office): how much of Cloudflare's free day is used — Cloudflare's own figures
+      case '/office/usage': return json(await usage({ token: this.env.CF_ANALYTICS_TOKEN, account: this.env.ACCOUNT_ID }));
       default: return json({ ok: false, error: 'Not here' }, 404);
     }
   }

@@ -693,6 +693,12 @@ export function createServer(cfg) {
       const b = await readBody(req, 4096).catch(() => ({}));
       return json(res, 200, await r.switchTo(String(b.to || '')));
     }
+    // the owner, in Talk's About: how much of Cloudflare's free day Talk has used (Haris 2026-11-22 02:14) — Talk's own sign-in
+    if (p === '/api/talk/relay/usage' && req.method === 'GET') {
+      const tu = await talkWho(req, res); if (!tu) return;
+      if (!isOwner(tu)) return json(res, 403, { ok: false, error: 'Only the owner' });
+      return json(res, 200, await r.usage());
+    }
     // (the phone's own sign-in, checked as for any Talk request — through the hub, which only learns the email)
     if (p === '/api/talk/relay/who' && req.method === 'GET') { const tu = await talkWho(req, res); if (!tu) return; return json(res, 200, { ok: true, email: tu.email || null }); }
     if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'POST' });

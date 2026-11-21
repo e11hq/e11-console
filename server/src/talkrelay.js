@@ -228,11 +228,17 @@ export function createTalkRelay({ dbFile, relayUrl = '', store, access, apns = n
     if (b.wake) { if (apns.wake) await apns.wake(String(b.uid), b.p).catch(() => {}); } else await apns.sendTo(String(b.uid), b.p).catch(() => {});
     return { ok: true, sent: true };
   }
+  // (the owner's About line in Talk: Cloudflare's free day, used — asked at most every 5 minutes)
+  let used = null, usedAt = 0;
+  async function usage() {
+    if (used && used.ok && Date.now() - usedAt < 5 * 60_000) return used;
+    try { used = await toHub('/office/usage', {}); usedAt = Date.now(); return used || { ok: false, error: 'No hub' }; } catch (e) { return { ok: false, error: e.message }; }
+  }
   async function pushTest(uid) { try { return await toHub('/office/pushtest', { uid }); } catch (e) { return { ok: false, error: e.message }; } }
   function unread(b) { if (unreadTell && Array.isArray(b && b.uids)) unreadTell(b.uids.map(String)); return { ok: true }; }
 
   return { db: talkDb, publicKey: () => meta('pub'), mode: () => mode, fromHub, copy, resync, load, switchTo, takeOver, handBack, pass, listen,
-    dir, sendDir, dirSoon, tell, push, pushTest, unread, sign, linked: () => meta('linked') === '1', lastN: () => Number(meta('lastN') || 0),
+    dir, sendDir, dirSoon, tell, push, pushTest, usage, unread, sign, linked: () => meta('linked') === '1', lastN: () => Number(meta('lastN') || 0),
     status: () => ({ mode, linked: meta('linked') === '1', lastN: Number(meta('lastN') || 0), modeAt: Number(meta('modeAt') || 0) || null, takeoverWhy: mode === 'takeover' ? meta('takeoverWhy') : null }),
     close: () => { clearTimeout(dirTimer); clearInterval(backTimer); raw.close(); } };
 }

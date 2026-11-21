@@ -26,6 +26,7 @@ OFFICE = "https://talk.e11hq.com"
 OFFICE_LINK = "https://talklink.e11hq.com"
 HUB_NAME = "live"
 PUBLIC = "https://talkline.e11hq.com"
+ACCOUNT_ID = "b3aa5be224723a4af7f1efc3af99a5ed"
 
 # Talk's own R2 bucket (the same one the office uses) — through this binding, no R2 keys
 [[r2_buckets]]
