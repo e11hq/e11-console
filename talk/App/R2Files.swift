@@ -55,10 +55,11 @@ final class CleanRedirect: NSObject, URLSessionTaskDelegate {
 extension Net {
   /* a message's file: locked, then to R2 — under 8 MB in one go, else in 8 MB parts three side by side; the ring fills as
      they go. done: the file's id and its key — or, if the server has no R2, the usual way (no key). */
-  func uploadMsg(_ data: Data, name: String, progress: @escaping (Double) -> Void, done: @escaping (String?, String?) -> Void) {
+  // (keep: a group's picture — kept in R2 while the group uses it, not under messages' 31-day rule)
+  func uploadMsg(_ data: Data, name: String, keep: Bool = false, progress: @escaping (Double) -> Void, done: @escaping (String?, String?) -> Void) {
     // (over 200 MB: the usual way for now — locking and unlocking hold the whole file in memory twice)
     guard data.count <= 200 * 1024 * 1024, let sealed = FileLock.seal(data) else { return upload(data, name: name, progress: progress) { done($0, nil) } }
-    post("/api/talk/r2/start", ["name": name, "size": sealed.data.count]) { [weak self] j in
+    post("/api/talk/r2/start", ["name": name, "size": sealed.data.count, "keep": keep]) { [weak self] j in
       guard let self = self else { return done(nil, nil) }
       guard let j = j, (j["ok"] as? Bool) == true, let id = j["id"] as? String else {
         // (no R2 on this server, or it couldn't start: the usual way)

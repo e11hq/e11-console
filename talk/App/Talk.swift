@@ -206,6 +206,7 @@ final class Talk {
     var gs: [String: Group] = [:]
     for g in (j["groups"] as? [[String: Any]]) ?? [] {
       guard let id = g["id"] as? String else { continue }
+      if let p = g["pic"] as? String, let k = g["picKey"] as? String { FileKeys.set(p, k) }   // (its picture locked in R2 — R2Files)
       gs[id] = Group(id: id, client: g["client"] as? String ?? "", name: g["name"] as? String ?? "", creator: g["creator"] as? String ?? "",
                      creatorAdmin: (g["creatorAdmin"] as? Bool) ?? true, second: g["second"] as? String, admins: g["admins"] as? [String] ?? [],
                      pic: g["pic"] as? String, createdAt: (g["createdAt"] as? Double) ?? 0, lastAt: (g["lastAt"] as? Double) ?? 0,
@@ -333,6 +334,8 @@ final class Talk {
       Talk.shared.stoppedTyping(g, by, quiet: true)
       DispatchQueue.main.async { NotificationCenter.default.post(name: .talkTyping, object: g) }
       if let k = e["link"] as? [String: Any], let u = k["url"] as? String {
+        // (its picture and icon locked in R2: their keys — R2Files)
+        for x in [k["img"], k["icon"]] { if let x = x as? [String: Any], let fid = x["id"] as? String, let key = x["key"] as? String { FileKeys.set(fid, key) } }
         m.link = Msg.LinkPrev(url: u, title: k["title"] as? String, site: k["site"] as? String, video: (k["video"] as? Bool) == true,
                               img: (k["img"] as? [String: Any])?["id"] as? String, icon: (k["icon"] as? [String: Any])?["id"] as? String, e11: k["e11"] as? String,
                               pic: (k["pic"] as? String).flatMap { $0.hasPrefix("https://") ? $0 : nil })
@@ -462,9 +465,12 @@ final class Talk {
           if let d = icon { let id = "li-" + cid; try? d.write(to: Net.local(id)); shown.icon = id }
           self.local(g, m.id) { $0.link = shown }
         }
+        // (straight to R2, locked, as the message's own files — its key goes with the link; Haris 2026-11-21)
+        var keys: [String: String] = [:]
         let up = { (d: Data?, name: String, local: String, done: @escaping (String?) -> Void) in
           guard let d = d else { done(nil); return }
-          Net.shared.upload(d, name: name, progress: { _ in }) { fid in
+          Net.shared.uploadMsg(d, name: name, progress: { _ in }) { fid, key in
+            if let fid = fid, let key = key { FileKeys.set(fid, key); keys[fid] = key }
             // (the picture already shown under its phone name kept under its new one too — nothing blinks as it changes)
             if let fid = fid {
               try? d.write(to: Net.local(fid)); BubbleCell.alias(local, fid)
@@ -478,7 +484,8 @@ final class Talk {
             prev.img = imgId; prev.icon = iconId
             var lb: [String: Any] = ["url": prev.url, "video": prev.video]
             lb["title"] = prev.title; lb["site"] = prev.site
-            if let i = imgId { lb["img"] = ["id": i] }; if let i = iconId { lb["icon"] = ["id": i] }
+            let ref = { (i: String) -> [String: Any] in var r: [String: Any] = ["id": i]; if let k = keys[i] { r["key"] = k }; return r }
+            if let i = imgId { lb["img"] = ref(i) }; if let i = iconId { lb["icon"] = ref(i) }
             linkBody = lb
             self.local(g, m.id) { $0.link = prev }
             go(nil)

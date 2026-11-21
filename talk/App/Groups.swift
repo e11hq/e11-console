@@ -219,10 +219,13 @@ final class NewGroupVC: UITableViewController, UITextFieldDelegate, UISearchBarD
       UINotificationFeedbackGenerator().notificationOccurred(.success)
       // (a picture chosen here goes on the group now it's made)
       if let i = self.chosen, let d = i.jpegData(compressionQuality: 0.85) {
-        Net.shared.upload(d, name: "group.jpg", progress: { _ in }) { fid in
+        // (straight to R2, locked, kept there while the group uses it — Haris 2026-11-21)
+        Net.shared.uploadMsg(d, name: "group.jpg", keep: true, progress: { _ in }) { fid, key in
           guard let fid = fid else { toast("The picture didn’t upload — change it in Group Info"); return }
           try? d.write(to: Net.local(fid))
-          Net.shared.act(["act": "setPic", "group": g, "file": fid]) { _ in Talk.shared.refresh(); Talk.shared.sync() }
+          if let key = key { FileKeys.set(fid, key) }
+          var a: [String: Any] = ["act": "setPic", "group": g, "file": fid]; if let key = key { a["key"] = key }
+          Net.shared.act(a) { _ in Talk.shared.refresh(); Talk.shared.sync() }
         }
       }
       let host = self.presentingViewController
@@ -1111,10 +1114,12 @@ final class EditGroupVC: UITableViewController, PHPickerViewControllerDelegate, 
     guard let d = sq.jpegData(compressionQuality: 0.85) else { return }
     pic.show(sq); spin.startAnimating()
     busy(true)
-    Net.shared.upload(d, name: "group.jpg", progress: { _ in }) { [weak self] fid in
+    // (straight to R2, locked, kept there while the group uses it — Haris 2026-11-21)
+    Net.shared.uploadMsg(d, name: "group.jpg", keep: true, progress: { _ in }) { [weak self] fid, key in
       guard let fid = fid else { self?.spin.stopAnimating(); self?.busy(false); if let g = self?.g { self?.pic.set(group: g) }; toast("The picture didn’t upload — try again"); return }
       try? d.write(to: Net.local(fid))
-      self?.setPic(fid, sq)
+      if let key = key { FileKeys.set(fid, key) }
+      self?.setPic(fid, sq, key: key)
     }
   }
   // (while a new picture goes up and is set: Done and ✕ dimmed, and the sheet can't be pulled down — Apple's own way,
@@ -1123,10 +1128,12 @@ final class EditGroupVC: UITableViewController, PHPickerViewControllerDelegate, 
     navigationItem.rightBarButtonItem?.isEnabled = !on; navigationItem.leftBarButtonItem?.isEnabled = !on
     (navigationController ?? self).isModalInPresentation = on
   }
-  private func setPic(_ fid: String?, _ shown: UIImage?) {
+  private func setPic(_ fid: String?, _ shown: UIImage?, key: String? = nil) {
     if shown == nil { spin.startAnimating() }
     busy(true)
-    Net.shared.act(["act": "setPic", "group": group, "file": fid.map { $0 as Any } ?? NSNull()]) { [weak self] j in
+    var a: [String: Any] = ["act": "setPic", "group": group, "file": fid.map { $0 as Any } ?? NSNull()]
+    if let key = key { a["key"] = key }
+    Net.shared.act(a) { [weak self] j in
       if (j?["ok"] as? Bool) == true { Talk.shared.refresh(); Talk.shared.sync() } else { toast(j?["error"] as? String ?? "Couldn’t do that — try again") }
       self?.spin.stopAnimating(); self?.busy(false); if let g = self?.g { self?.pic.set(group: g) }
       if let self = self { (self.tableView.tableHeaderView?.subviews.compactMap { $0 as? UIButton }.first)?.menu = UIMenu(children: self.picMenu()) }
