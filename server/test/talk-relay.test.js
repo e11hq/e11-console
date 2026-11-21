@@ -106,6 +106,12 @@ test('what the hub is told: E11 Console’s people and clients, as Talk needs th
   assert.ok(d.clients.some((c) => c.id === 'c1' && c.logo));
 });
 
+test('the hub asks for E11 Console’s people and clients itself', async () => {
+  const r = await (await post('/api/talk/relay/dir', {})).json();
+  assert.equal(r.ok, true); assert.ok(r.dir.users.some((u) => u.id === 'u-adm'));
+  assert.equal((await fetch(base + '/api/talk/relay/dir', { method: 'POST', body: '{}' })).status, 403);
+});
+
 test('notifications and Console’s count, asked by the hub', async () => {
   assert.equal((await (await post('/api/talk/relay/push', { uid: 'u-des', p: { title: 'x', body: 'y' } })).json()).ok, true);
   assert.equal((await (await post('/api/talk/relay/unread', { uids: ['u-des'] })).json()).ok, true);

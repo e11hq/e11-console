@@ -687,6 +687,8 @@ export function createServer(cfg) {
     if (p === '/api/talk/relay/copy') { const x = r.copy(b.batches); return json(res, x.status || 200, x); }
     if (p === '/api/talk/relay/push') return json(res, 200, await r.push(b));
     if (p === '/api/talk/relay/unread') return json(res, 200, r.unread(b));
+    // (the hub asking for E11 Console's people and clients itself — after it starts, or when it has none)
+    if (p === '/api/talk/relay/dir') return json(res, 200, { ok: true, dir: r.dir() });
     return json(res, 404, { ok: false, error: 'Not here' });
   }
   // E11 Talk over the office network (office.js passes 'talkup' / 'talkfile'): a piece of a file being sent, or a message's

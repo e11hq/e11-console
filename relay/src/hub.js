@@ -47,6 +47,7 @@ export class TalkHub extends DurableObject {
     if (p === '/hub/key') return json({ ok: true, key: this.core.meta('pub') });
     // (how it's doing — no names, no messages: when the office last sent E11 Console's people, how far the copy is, what waits)
     if (p === '/hub/status') {
+      if (!this.core.meta('dirAt')) await this.askDir();
       const d = this.core.dir.snapshot || {};
       return json({ ok: true, dirAt: Number(this.core.meta('dirAt') || 0) || null, people: (d.users || []).length, clients: (d.projects || []).length,
         copyN: this.core.n, waiting: this.ctx.storage.sql.exec('SELECT COUNT(*) AS c FROM hub_outbox').toArray()[0].c, officeKey: !!this.core.meta('officeKey') });
@@ -60,6 +61,7 @@ export class TalkHub extends DurableObject {
       return json(r || {});
     }
     const email = req.headers.get('x-hub-email');
+    if (!this.core.meta('dirAt')) await this.askDir();
     if (!email) return json({ ok: false, error: 'Who?' }, 401);
     const w = this.core.who(email, req.headers.get('x-talk-device'));
     if (!w) return json({ ok: false, error: 'No E11 Talk account for ' + email }, 403);
@@ -146,9 +148,23 @@ export class TalkHub extends DurableObject {
       return r.ok;
     } catch { return false; }
   }
+  // E11 Console's people and clients: asked of the office when the hub has none, or they're over a day old (the office also
+  // sends them whenever they change)
+  async askDir() {
+    const at = Number(this.core.meta('dirAt') || 0);
+    if (at && Date.now() - at < 86400_000) return;
+    const text = '{}', path = '/api/talk/relay/dir';
+    try {
+      const h = await signHeaders(this.core.meta('key'), 'POST', path, text);
+      const r = await fetch(this.office + path, { method: 'POST', body: text, headers: { 'content-type': 'application/json', ...h } });
+      const j = r.ok ? await r.json() : null;
+      if (j && j.ok && j.dir) { this.core.setDir(j.dir); this.core.meta('dir', JSON.stringify(j.dir)); }
+    } catch { /* next time */ }
+  }
   async alarm() {
     const last = Number(this.core.meta('sweptAt') || 0);
     if (Date.now() - last >= HOUR - 60_000) { this.core.sweep(); this.core.meta('sweptAt', Date.now()); }
+    await this.askDir();
     await this.flush();
     const left = this.ctx.storage.sql.exec('SELECT COUNT(*) AS c FROM hub_outbox').toArray()[0].c;
     await this.ctx.storage.setAlarm(Date.now() + (left ? RETRY : HOUR));
