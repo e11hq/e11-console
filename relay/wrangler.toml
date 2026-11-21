@@ -5,6 +5,8 @@ main = "src/index.js"
 compatibility_date = "2025-06-01"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = false
+# its own address on e11hq.com (Haris 2026-11-22 00:17) — made by Cloudflare on the first publish
+routes = [{ pattern = "talkline.e11hq.com", custom_domain = true }]
 
 # E11 Talk's own code (server/src/talk.js) runs here unchanged: its database and files are the hub's
 [alias]
@@ -22,6 +24,7 @@ new_sqlite_classes = ["TalkHub"]
 [vars]
 OFFICE = "https://talk.e11hq.com"
 HUB_NAME = "live"
+PUBLIC = "https://talkline.e11hq.com"
 
 # Talk's own R2 bucket (the same one the office uses) — through this binding, no R2 keys
 [[r2_buckets]]
