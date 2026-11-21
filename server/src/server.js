@@ -100,7 +100,9 @@ export function createServer(cfg) {
   let talk = null;
   // (E11 Talk's message files in Cloudflare R2 when its keys are set — r2.js; Haris 2026-11-20 17:52)
   const talkR2 = createR2({ account: cfg.r2Account, keyId: cfg.r2KeyId, secret: cfg.r2Secret, bucket: cfg.r2Bucket, endpoint: cfg.r2Endpoint || '', now: cfg.now || (() => Date.now()), fetchImpl: cfg.r2Fetch || null });
-  const talkNow = () => talk || (talk = createTalk({ dataDir, store, access, apns: talkApns, dbFile: cfg.talkDbFile, now: cfg.now || (() => Date.now()), links: () => fileLinks, signinCode: talkSigninCode, icons: () => appStart.icons(store.get('meta', 'main') || {}, (cfg.now || Date.now)(), appIcon.info()), onUnread: talkUnreadTell, keepFor: review ? REVIEW_USER_ID : null, r2: talkR2 }));
+  const talkNow = () => talk || (talk = createTalk({ db: talkRelayNow()?.db || null, dataDir, store, access, apns: talkApns, dbFile: cfg.talkDbFile, now: cfg.now || (() => Date.now()), links: () => fileLinks, signinCode: talkSigninCode, icons: () => appStart.icons(store.get('meta', 'main') || {}, (cfg.now || Date.now)(), appIcon.info()), onUnread: talkUnreadTell, keepFor: review ? REVIEW_USER_ID : null,
+    // (while the hub has Talk, it lets files go from R2 — the office's own clean-up only reads)
+    r2: new Proxy(talkR2, { get: (o, k) => (k === 'del' ? (key) => (talkRelay && ['hub', 'switching'].includes(talkRelay.mode()) ? Promise.resolve(true) : o.del(key)) : o[k]) }) }));
   // E11 Talk on Cloudflare (talkrelay.js — TALK-CF-A, Haris 2026-11-21/22): the office's copy and stand-in for Talk's hub
   // (relay/, talkline.e11hq.com). Live only (not the test site, not App Review); dormant until the hub has the office's Talk.
   let talkRelay = null;
@@ -109,7 +111,7 @@ export function createServer(cfg) {
     if (talkRelay) return talkRelay;
     const file = cfg.talkDbFile || path.join(dataDir, 'db', 'talk.sqlite');
     if (file === ':memory:') return null;
-    talkNow();   // (Talk's database made first)
+    fs.mkdirSync(path.dirname(file), { recursive: true });
     talkRelay = createTalkRelay({ dbFile: file, relayUrl: talkRelayUrl(), store, access, apns: talkApns, unreadTell: talkUnreadTell, fetchImpl: cfg.talkRelayFetch || null, now: cfg.now || (() => Date.now()) });
     return talkRelay;
   };
@@ -342,6 +344,8 @@ export function createServer(cfg) {
     req.on('error', reject);
   });
   const readBody = (req, limit = BODY_LIMIT) => new Promise((resolve, reject) => {
+    // (already read — E11 Talk's hub refused it and the office answers it instead, talkrelay.js)
+    if (req.relayBody) { try { return resolve(req.relayBody.length ? JSON.parse(req.relayBody.toString('utf8')) : {}); } catch { return reject(httpError(400, 'Bad JSON')); } }
     let size = 0; const parts = [];
     req.on('data', (c) => { size += c.length; if (size > limit) { reject(httpError(413, 'Too large')); req.destroy(); } else parts.push(c); });
     req.on('end', () => { try { resolve(parts.length ? JSON.parse(Buffer.concat(parts).toString('utf8')) : {}); } catch { reject(httpError(400, 'Bad JSON')); } });
@@ -676,6 +680,17 @@ export function createServer(cfg) {
     const r = talkRelayNow();
     if (!r) return json(res, 404, { ok: false, error: 'Not here' });
     if (p === '/api/talk/relay/key' && req.method === 'GET') return json(res, 200, { ok: true, key: r.publicKey() });
+    // (who has Talk now — the hub asks before taking a phone's request; the app asks when the hub refuses)
+    if (p === '/api/talk/relay/mode' && req.method === 'GET') return json(res, 200, { ok: true, mode: r.mode() });
+    // the owner: how it's doing, and the switch-over (to the hub) or back (to the office) — E11 Console's own sign-in
+    if (p === '/api/talk/relay/status' || p === '/api/talk/relay/switch') {
+      const w = await who(req, res); if (!w) return;
+      if (!isOwner(req.realUser || w)) return json(res, 403, { ok: false, error: 'Only the owner' });
+      if (p === '/api/talk/relay/status') return json(res, 200, { ok: true, ...r.status() });
+      if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'POST' });
+      const b = await readBody(req, 4096).catch(() => ({}));
+      return json(res, 200, await r.switchTo(String(b.to || '')));
+    }
     // (the phone's own sign-in, checked as for any Talk request — through the hub, which only learns the email)
     if (p === '/api/talk/relay/who' && req.method === 'GET') { const tu = await talkWho(req, res); if (!tu) return; return json(res, 200, { ok: true, email: tu.email || null }); }
     if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'POST' });
@@ -785,6 +800,8 @@ export function createServer(cfg) {
   }
   async function talkRoute(req, res, p, url, u) {
     const t = talkNow();
+    // (E11 Talk on Cloudflare, after the switch-over: an older app asking the office is passed to the hub — TALK-CF-A)
+    if (talkRelay && !req.talkMac && talkRelay.mode() !== 'office' && await talkRelay.pass(req, res, p, url)) return;
     // (how long the server itself took — who's asking, then the answer — for the app's speed report: Server-Timing,
     //  Haris 2026-11-14; the rest of what the phone waits for is the network to the NAS)
     const out = (r) => {
@@ -830,8 +847,10 @@ export function createServer(cfg) {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
         res.write('retry: 3000\n\n');
         const stop = t.listen(dev.id, res);
+        // (after the switch-over the hub's news arrives as the office's copy — this line is told as it comes)
+        const stop2 = talkRelay ? talkRelay.listen(dev.id, res) : null;
         const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch { /* closed */ } }, 25000);
-        req.on('close', () => { clearInterval(ping); stop(); });
+        req.on('close', () => { clearInterval(ping); stop(); if (stop2) stop2(); });
         return;
       }
       // a file piece (raw bytes, up to 8 MB): ?id= (none for the first) &name= &offset= &last=1 (&at=: written at its own place)

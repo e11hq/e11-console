@@ -63,6 +63,8 @@ export class TalkHub extends DurableObject {
     const email = req.headers.get('x-hub-email');
     if (!this.core.meta('dirAt')) await this.askDir();
     if (!email) return json({ ok: false, error: 'Who?' }, 401);
+    // (one place has Talk at a time: before the switch-over, or while the office has taken over, the office — phones go there)
+    if (await this.officeHas()) return json({ ok: false, office: true, error: 'E11 Talk is with the office right now' }, 409);
     const w = this.core.who(email, req.headers.get('x-talk-device'));
     if (!w) return json({ ok: false, error: 'No E11 Talk account for ' + email }, 403);
     if (p === '/line') {
@@ -102,6 +104,21 @@ export class TalkHub extends DurableObject {
     }
   }
 
+  // ---------- who has Talk (the office says; asked at most once a minute; the office can't be reached → the hub) ----------
+  async officeHas() {
+    const t = Date.now();
+    if (this.modeAt && t - this.modeAt < 60_000) return this.officeMode !== 'hub';
+    this.modeAt = t;
+    try {
+      const r = await fetch(this.office + '/api/talk/relay/mode', { signal: AbortSignal.timeout(2000) });
+      const j = r.ok ? await r.json() : null;
+      if (j && j.mode) this.officeMode = j.mode;
+    } catch { this.officeMode = this.officeMode || 'hub'; }
+    if (!this.officeMode) this.officeMode = 'hub';
+    if (this.officeMode !== 'hub') this.modeAt = t - 50_000;   // (asked again in 10 seconds while the office has it)
+    return this.officeMode !== 'hub';
+  }
+
   // ---------- the live line ----------
   hear(ws) {
     const a = ws.deserializeAttachment(); if (!a || !a.dev) return;
@@ -109,6 +126,7 @@ export class TalkHub extends DurableObject {
   }
   async webSocketMessage(ws, msg) {
     let m; try { m = JSON.parse(typeof msg === 'string' ? msg : new TextDecoder().decode(msg)); } catch { return; }
+    if (await this.officeHas()) { ws.send(JSON.stringify({ id: m.id, r: { ok: false, office: true, error: 'E11 Talk is with the office right now' } })); return; }
     const a = ws.deserializeAttachment() || {};
     const w = this.core.who(a.email, a.device);
     if (!w) { ws.close(4003, 'Signed out'); return; }
@@ -163,7 +181,8 @@ export class TalkHub extends DurableObject {
   }
   async alarm() {
     const last = Number(this.core.meta('sweptAt') || 0);
-    if (Date.now() - last >= HOUR - 60_000) { this.core.sweep(); this.core.meta('sweptAt', Date.now()); }
+    // (only while the hub has Talk)
+    if (Date.now() - last >= HOUR - 60_000 && !(await this.officeHas())) { this.core.sweep(); this.core.meta('sweptAt', Date.now()); }
     await this.askDir();
     await this.flush();
     const left = this.ctx.storage.sql.exec('SELECT COUNT(*) AS c FROM hub_outbox').toArray()[0].c;
@@ -211,6 +230,9 @@ export class TalkHub extends DurableObject {
       }
     });
     this.core.n = Number(b.n || 0); this.core.meta('copyN', this.core.n);
+    // (the office's whole Talk now: what waited for it from before is already in it, or was never the office's)
+    sql.exec('DELETE FROM hub_outbox'); this.queue = [];
+    this.officeMode = 'hub'; this.modeAt = Date.now();
     return { ok: true, n: this.core.n };
   }
 }

@@ -14,6 +14,7 @@ const hub = crypto.generateKeyPairSync('ed25519');
 const hubPub = hub.publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('base64');
 const seen = [];   // what the office sent the hub
 let dumpTables = null;
+let hubAnswer = null;   // how the hub answers an older app's request passed to it
 const fakeFetch = async (url, o = {}) => {
   const p = new URL(url).pathname;
   seen.push({ p, body: o.body ? JSON.parse(o.body) : null, headers: o.headers || {} });
@@ -21,6 +22,7 @@ const fakeFetch = async (url, o = {}) => {
   if (p === '/hub/key') return ok({ ok: true, key: hubPub });
   if (p === '/office/load') return ok({ ok: true, n: 0 });
   if (p === '/office/dump') return ok({ ok: true, n: 7, tables: dumpTables });
+  if (p.startsWith('/api/talk/')) return hubAnswer ? hubAnswer(p, o) : ok({ ok: true, fromHub: true });
   return ok({ ok: true });
 };
 const signed = (p, body, at = clock) => {
@@ -70,8 +72,8 @@ test('the copy is refused until the hub has the office’s Talk; moving it sends
   await (await fetch(base + '/api/talk/state', { headers: H('adm') })).json();
   const g = await (await fetch(base + '/api/talk/act', { method: 'POST', headers: H('adm'), body: JSON.stringify({ act: 'newGroup', client: 'p1', name: 'Before', members: ['u-des'] }) })).json();
   assert.ok(g.ok);
-  const res = await app.talkRelay().load();
-  assert.equal(res.ok, true);
+  const res = await app.talkRelay().switchTo('hub');
+  assert.equal(res.ok, true); assert.equal(res.mode, 'hub');
   const sent = seen.find((x) => x.p === '/office/load');
   assert.ok(sent.body.tables.groups.some((x) => x.name === 'Before'));
   assert.ok(sent.headers['x-e11-sig'], 'signed by the office');
@@ -115,4 +117,46 @@ test('the hub asks for E11 Console’s people and clients itself', async () => {
 test('notifications and Console’s count, asked by the hub', async () => {
   assert.equal((await (await post('/api/talk/relay/push', { uid: 'u-des', p: { title: 'x', body: 'y' } })).json()).ok, true);
   assert.equal((await (await post('/api/talk/relay/unread', { uids: ['u-des'] })).json()).ok, true);
+});
+
+test('after the switch-over: an older app asking the office is passed to the hub; the office’s own Talk only reads', async () => {
+  assert.equal(app.talkRelay().mode(), 'hub');
+  const st = await (await fetch(base + '/api/talk/state', { headers: H('des') })).json();
+  assert.equal(st.fromHub, true);
+  const before = seen.filter((x) => x.p === '/api/talk/act').length;
+  const r = await (await fetch(base + '/api/talk/act', { method: 'POST', headers: H('des'), body: JSON.stringify({ act: 'mute', group: 'g-x', until: 1 }) })).json();
+  assert.equal(r.fromHub, true);
+  const sent = seen.filter((x) => x.p === '/api/talk/act');
+  assert.equal(sent.length, before + 1);
+  assert.equal(sent[sent.length - 1].body.act, 'mute', 'the body went with it');
+  assert.equal((await (await fetch(base + '/api/talk/relay/mode')).json()).mode, 'hub');
+});
+
+test('the hub refuses (a free limit): the office takes over and answers itself; then hands its whole Talk back', async () => {
+  hubAnswer = async () => new Response('error code: 1027', { status: 429 });
+  const st = await (await fetch(base + '/api/talk/state', { headers: H('adm') })).json();
+  assert.equal(st.ok, true); assert.ok(!st.fromHub, 'answered by the office');
+  assert.equal(app.talkRelay().mode(), 'takeover');
+  // (the office writes again while it has Talk)
+  const g = await (await fetch(base + '/api/talk/act', { method: 'POST', headers: H('adm'), body: JSON.stringify({ act: 'newGroup', client: 'p1', name: 'During', members: [] }) })).json();
+  assert.ok(g.ok, JSON.stringify(g));
+  assert.equal((await post('/api/talk/relay/copy', { batches: [{ n: 8, stmts: [] }] })).status, 409, 'the hub’s copy waits while the office has Talk');
+  hubAnswer = null;
+  const loads = seen.filter((x) => x.p === '/office/load').length;
+  assert.equal(await app.talkRelay().handBack(), true);
+  assert.equal(app.talkRelay().mode(), 'hub');
+  const last = seen.filter((x) => x.p === '/office/load');
+  assert.equal(last.length, loads + 1);
+  assert.ok(last[last.length - 1].body.tables.groups.some((x) => x.name === 'During'), 'what the office did goes back with it');
+});
+
+test('the switch-over is the owner’s only', async () => {
+  assert.equal((await fetch(base + '/api/talk/relay/switch', { method: 'POST', headers: H('des'), body: JSON.stringify({ to: 'office' }) })).status, 403);
+  const s = await (await fetch(base + '/api/talk/relay/status', { headers: H('adm') })).json();
+  assert.equal(s.mode, 'hub');
+  dumpTables = { groups: [] };
+  const back = await (await fetch(base + '/api/talk/relay/switch', { method: 'POST', headers: H('adm'), body: JSON.stringify({ to: 'office' }) })).json();
+  assert.equal(back.mode, 'office');
+  const st = await (await fetch(base + '/api/talk/state', { headers: H('adm') })).json();
+  assert.ok(!st.fromHub, 'the office again');
 });

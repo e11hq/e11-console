@@ -16,7 +16,7 @@ test('the office’s copy, through its own code, equals the hub', async () => {
   new HubCore({ sql: fakeSql(file), dir: DIR });   // (the office's Talk database, made by Talk's own code)
   const ok = async () => new Response('{"ok":true}', { status: 200, headers: { 'content-type': 'application/json' } });
   const office = createTalkRelay({ dbFile: file, relayUrl: 'https://hub.test', store: { list: () => [], get: () => null }, access: {}, fetchImpl: ok });
-  await office.load();   // (the switch-over: the hub takes the office's Talk — both empty here)
+  await office.switchTo('hub');   // (the switch-over: the hub takes the office's Talk — both empty here)
   const batches = [];
   const h = new HubCore({ sql: fakeSql(), dir: DIR, copy: (b) => batches.push(b) });
   const a = h.who('haris@e11.test', 'phone-key-aaaaaaaaaaaa'), b = h.who('lana@e11.test', 'phone-key-bbbbbbbbbbbb');

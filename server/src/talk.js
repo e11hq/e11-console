@@ -29,12 +29,13 @@ const PHONE_MS = 30 * 86400000;         // a linked Mac goes when its phone hasn
 const rid = (p) => p + '-' + crypto.randomBytes(8).toString('hex');
 const clip = (s, n) => String(s == null ? '' : s).slice(0, n);
 
-export function createTalk({ dataDir, store, access, apns = null, now = () => Date.now(), dbFile, links = () => null, signinCode = null, onUnread = null, keepFor = null, icons = null, r2 = null }) {
+// (db: the database to use, made by the caller — E11 Talk on Cloudflare's copy and stand-in, talkrelay.js; none: its own file)
+export function createTalk({ dataDir, store, access, apns = null, now = () => Date.now(), dbFile, links = () => null, signinCode = null, onUnread = null, keepFor = null, icons = null, r2 = null, db: givenDb = null }) {
   const file = dbFile || path.join(dataDir, 'db', 'talk.sqlite');
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
   const relay = path.join(dataDir, 'talk-relay');
   fs.mkdirSync(relay, { recursive: true });
-  const db = new DatabaseSync(file);
+  const db = givenDb || new DatabaseSync(file);
   db.exec(`
     PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;
     CREATE TABLE IF NOT EXISTS groups (id TEXT PRIMARY KEY, client TEXT NOT NULL, name TEXT NOT NULL, creator TEXT NOT NULL,
