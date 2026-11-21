@@ -55,22 +55,20 @@ export class TalkHub extends DurableObject {
     if (p === '/hub/key') return json({ ok: true, key: this.core.meta('pub') });
     // (how it's doing — no names, no messages: when the office last sent E11 Console's people, how far the copy is, what waits)
     if (p === '/hub/status') {
+      // (where Cloudflare runs the hub — its airport code, e.g. DXB; found once)
+      if (!this.colo) { try { const t = await (await fetch('https://www.cloudflare.com/cdn-cgi/trace')).text(); this.colo = (/colo=(\w+)/.exec(t) || [])[1] || '?'; } catch { this.colo = '?'; } }
       if (!this.core.meta('dirAt')) await this.askDir();
       const d = this.core.dir.snapshot || {};
-      return json({ ok: true, dirAt: Number(this.core.meta('dirAt') || 0) || null, people: (d.users || []).length, clients: (d.projects || []).length,
+      return json({ ok: true, colo: this.colo, dirAt: Number(this.core.meta('dirAt') || 0) || null, people: (d.users || []).length, clients: (d.projects || []).length,
         phones: Object.values((d.push) || {}).reduce((a, x) => a + (x || []).length, 0), apple: this.apple.on, copyN: this.core.n, waiting: this.ctx.storage.sql.exec('SELECT COUNT(*) AS c FROM hub_outbox').toArray()[0].c, officeKey: !!this.core.meta('officeKey'), ...(this.dirErr ? { dirErr: this.dirErr } : {}) });
     }
     if (p.startsWith('/office/')) return this.fromOffice(req, p);
-    // (the front door's memory of who each sign-in is — a fingerprint and an email; only the Worker reaches this)
-    if (p === '/who-cache') {
-      const sql = this.ctx.storage.sql;
-      if (req.method === 'POST') { const b = await req.json(); sql.exec('INSERT OR REPLACE INTO hub_who (fp, email, at) VALUES (?, ?, ?)', b.fp, b.email, Date.now()); return json({ ok: true }); }
-      const r = sql.exec('SELECT email, at FROM hub_who WHERE fp = ?', url.searchParams.get('fp') || '').toArray()[0];
-      return json(r || {});
-    }
-    const email = req.headers.get('x-hub-email');
     if (!this.core.meta('dirAt')) await this.askDir();
-    if (!email) return json({ ok: false, error: 'Who?' }, 401);
+    // (the office said this sign-in isn't anyone's: sign in again · the office couldn't be asked and this phone isn't
+    //  remembered: 503 — the app tries the office itself; never signed out because the office was down)
+    const email = await this.whoIs(req);
+    if (email === null) return json({ ok: false, error: 'Sign in again' }, 401);
+    if (!email) return json({ ok: false, error: 'Can’t check your sign-in right now' }, 503);
     // (one place has Talk at a time: before the switch-over, or while the office has taken over, the office — phones go there)
     if (await this.officeHas()) return json({ ok: false, office: true, error: 'E11 Talk is with the office right now' }, 409);
     const w = this.core.who(email, req.headers.get('x-talk-device'));
@@ -112,20 +110,48 @@ export class TalkHub extends DurableObject {
     }
   }
 
-  // ---------- who has Talk (the office says; asked at most once a minute; the office can't be reached → the hub) ----------
-  async officeHas() {
-    const t = Date.now();
-    if (this.modeAt && t - this.modeAt < 60_000) return this.officeMode !== 'hub';
-    this.modeAt = t;
-    try {
-      const r = await fetch(this.office + '/api/talk/relay/mode', { signal: AbortSignal.timeout(2000) });
-      const j = r.ok ? await r.json() : null;
-      if (j && j.mode) this.officeMode = j.mode;
-    } catch { this.officeMode = this.officeMode || 'hub'; }
-    if (!this.officeMode) this.officeMode = 'hub';
-    if (this.officeMode !== 'hub') this.modeAt = t - 50_000;   // (asked again in 10 seconds while the office has it)
-    return this.officeMode !== 'hub';
+  // ---------- who this phone is (the office says, by the phone's own sign-in; remembered by fingerprint) ----------
+  // remembered and under a day old: at once · older (up to 30 days): at once, checked with the office behind the answer ·
+  // never seen: the office asked now (the only time a phone waits for it)
+  async whoIs(req) {
+    const fp = req.headers.get('x-hub-fp') || '';
+    const sql = this.ctx.storage.sql, DAY = 86400_000;
+    const row = fp ? sql.exec('SELECT email, at FROM hub_who WHERE fp = ?', fp).toArray()[0] : null;
+    if (row && Date.now() - row.at < DAY) return row.email;
+    const ask = this.askWho(req).then((email) => { if (email) sql.exec('INSERT OR REPLACE INTO hub_who (fp, email, at) VALUES (?, ?, ?)', fp, email, Date.now()); return email; });
+    if (row && Date.now() - row.at < 30 * DAY) { this.ctx.waitUntil(ask.catch(() => null)); return row.email; }
+    return ask.catch(() => undefined);
   }
+  async askWho(req) {
+    const h = {};
+    for (const k of ['cookie', 'authorization', 'cf-access-jwt-assertion', 'x-talk-key', 'x-talk-device']) { const v = req.headers.get(k); if (v) h[k] = v; }
+    const r = await fetch(String(this.env.OFFICE).replace(/\/$/, '') + '/api/talk/relay/who', { headers: h, signal: AbortSignal.timeout(8000) });
+    const html = (r.headers.get('content-type') || '').includes('text/html');   // (Cloudflare's sign-in page: not signed in)
+    if (r.status === 401 || r.status === 403 || html) return null;
+    if (!r.ok) throw new Error('The office said ' + r.status);
+    const j = await r.json().catch(() => null);
+    return j && j.ok && j.email ? String(j.email) : null;
+  }
+
+  // ---------- who has Talk (the office says) — never waited for: the last answer (kept) is used, and asked again behind it
+  // once a minute (10 s while the office has it); the office also tells the hub at once when it changes (/office/mode) ----------
+  async officeHas() {
+    if (this.officeMode === undefined) this.officeMode = this.core.meta('officeMode');
+    const t = Date.now(), every = this.officeMode && this.officeMode !== 'hub' ? 10_000 : 60_000;
+    if ((!this.modeAt || t - this.modeAt > every) && !this.modeAsking) {
+      this.modeAt = t;
+      this.modeAsking = (async () => {
+        try {
+          const r = await fetch(this.office + '/api/talk/relay/mode', { signal: AbortSignal.timeout(3000) });
+          const j = r.ok ? await r.json() : null;
+          if (j && j.mode) this.setOfficeMode(j.mode);
+        } catch { /* the office can't be reached: the hub */ }
+      })().finally(() => { this.modeAsking = null; });
+      if (this.officeMode == null) await this.modeAsking; else this.ctx.waitUntil(this.modeAsking);
+    }
+    return this.officeMode != null && this.officeMode !== 'hub';
+  }
+  setOfficeMode(m) { if (m === this.officeMode) return; this.officeMode = m; this.core.meta('officeMode', m); }
 
   // ---------- the live line ----------
   hear(ws) {
@@ -220,6 +246,8 @@ export class TalkHub extends DurableObject {
       // the office's whole Talk, once (moving it here) — or the office asking for this hub's whole Talk (a gap in its copy)
       case '/office/load': return json(this.load(b));
       case '/office/dump': return json(this.dump());
+      // (the office's word that who has Talk changed — at once, not at the next minute's asking)
+      case '/office/mode': this.setOfficeMode(String(b.mode || '')); this.modeAt = Date.now(); return json({ ok: true });
       // the owner's test (through the office): Cloudflare sends one notification itself to that person's phones — Apple's answer
       case '/office/pushtest': {
         if (!this.apple.on) return json({ ok: false, error: 'Apple’s key isn’t in Cloudflare yet' });
@@ -247,7 +275,7 @@ export class TalkHub extends DurableObject {
     this.core.n = Number(b.n || 0); this.core.meta('copyN', this.core.n);
     // (the office's whole Talk now: what waited for it from before is already in it, or was never the office's)
     sql.exec('DELETE FROM hub_outbox'); this.queue = [];
-    this.officeMode = 'hub'; this.modeAt = Date.now();
+    this.setOfficeMode('hub'); this.modeAt = Date.now();
     return { ok: true, n: this.core.n };
   }
 }

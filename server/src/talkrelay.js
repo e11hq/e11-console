@@ -32,7 +32,8 @@ export function createTalkRelay({ dbFile, relayUrl = '', store, access, apns = n
     raw.prepare('INSERT INTO relay_meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').run(k, v == null ? null : String(v));
   };
   let mode = meta('mode') || 'office';
-  const setMode = (m) => { mode = m; meta('mode', m); meta('modeAt', now()); };
+  // (the hub told at once — it would otherwise notice within a minute)
+  const setMode = (m) => { mode = m; meta('mode', m); meta('modeAt', now()); if (base) toHub('/office/mode', { mode: m }).catch(() => null); };
   if (!meta('priv')) {
     const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
     meta('priv', privateKey.export({ type: 'pkcs8', format: 'pem' }));

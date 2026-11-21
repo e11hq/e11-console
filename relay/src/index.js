@@ -6,7 +6,6 @@ import { fingerprint } from './sign.js';
 import { serveR2 } from './r2.js';
 export { TalkHub } from './hub.js';
 
-const DAY = 86400_000, KEEP = 30 * DAY;
 // (the hub made in Cloudflare's Middle East — near the team; the place is fixed when it's first made, Haris 2026-11-22)
 const hubOf = (env) => env.HUB.get(env.HUB.idFromName(env.HUB_NAME || 'live'), { locationHint: 'me' });
 const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
@@ -19,38 +18,8 @@ export default {
     // (a file's own address — the token says what's allowed; no hub needed)
     if (p.startsWith('/r2/')) return serveR2(req, env, p);
     if (!(p === '/line' || p.startsWith('/api/talk/'))) return json({ ok: false, error: 'Not here' }, 404);
-    const email = await whoIs(req, env, ctx);
-    // (the office said this sign-in isn't anyone's: sign in again · the office couldn't be asked and this phone isn't
-    //  remembered: 503 — the app tries the office itself; never signed out because the office was down)
-    if (email === null) return json({ ok: false, error: 'Sign in again' }, 401);
-    if (!email) return json({ ok: false, error: 'Can’t check your sign-in right now' }, 503);
-    const h = new Headers(req.headers); h.set('x-hub-email', email);
+    // (who this phone is: the hub works it out itself — one trip to the hub, not two; the sign-in's fingerprint only)
+    const h = new Headers(req.headers); h.delete('x-hub-email'); h.set('x-hub-fp', await fingerprint(req.headers));
     return hub.fetch(new Request(req, { headers: h }));
   },
 };
-
-// who this phone is: the office says (its own sign-in check, unchanged); remembered for 30 days by fingerprint only
-async function whoIs(req, env, ctx) {
-  const fp = await fingerprint(req.headers);
-  const kv = hubOf(env);
-  const known = await kv.fetch(new Request('https://hub/who-cache?fp=' + encodeURIComponent(fp))).then((r) => r.json()).catch(() => null);
-  const fresh = known && known.email && Date.now() - known.at < DAY;
-  if (fresh) return known.email;
-  const ask = askOffice(req, env).then(async (email) => {
-    if (email) await kv.fetch(new Request('https://hub/who-cache', { method: 'POST', body: JSON.stringify({ fp, email }) }));
-    return email;
-  });
-  // (remembered but a day old: let in now, checked with the office meanwhile; the office down — still let in for 30 days)
-  if (known && known.email && Date.now() - known.at < KEEP) { ctx.waitUntil(ask.catch(() => null)); return known.email; }
-  return ask.catch(() => undefined);
-}
-async function askOffice(req, env) {
-  const h = {};
-  for (const k of ['cookie', 'authorization', 'cf-access-jwt-assertion', 'x-talk-key', 'x-talk-device']) { const v = req.headers.get(k); if (v) h[k] = v; }
-  const r = await fetch(String(env.OFFICE).replace(/\/$/, '') + '/api/talk/relay/who', { headers: h, signal: AbortSignal.timeout(8000) });
-  const html = (r.headers.get('content-type') || '').includes('text/html');   // (Cloudflare's sign-in page: not signed in)
-  if (r.status === 401 || r.status === 403 || html) return null;
-  if (!r.ok) throw new Error('The office said ' + r.status);
-  const j = await r.json().catch(() => null);
-  return j && j.ok && j.email ? String(j.email) : null;
-}
