@@ -1016,6 +1016,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
   private func redrawShown() {
     guard view.window != nil, UIApplication.shared.applicationState == .active else { return }
+    if !holding {
+      clearVeils()
+      for v in table.subviews { if let c = v as? BubbleCell { c.held.alpha = 1; c.besides(1) } }
+    }
     reload(animated: false)
     var snap = data.snapshot()
     let shown = (table.indexPathsForVisibleRows ?? []).compactMap { data.itemIdentifier(for: $0) }
@@ -1792,11 +1796,16 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     return table.cellForRow(at: ip) as? BubbleCell
   }
   func tableView(_ tv: UITableView, willDisplayContextMenu c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
-    if let cell = heldCell(c) { cell.held.alpha = 0; animator?.addAnimations { cell.besides(0) } ?? cell.besides(0) }
+    // (the held row itself kept — the one hidden here is the one shown again at the end, even if the list has changed
+    //  meanwhile; looked up again by its place, a Delete from the menu left the bubble hidden on a row reused later)
+    heldRows.forEach { $0.held.alpha = 1; $0.besides(1) }; heldRows = []
+    if let cell = heldCell(c) { heldRows = [cell]; cell.held.alpha = 0; animator?.addAnimations { cell.besides(0) } ?? cell.besides(0) }
     holding = true
+    // (one veil at a time: a second hold before the first had ended left the first one over the chat for good)
+    clearVeils()
     guard let host = navigationController?.view else { return }
     let veil = UIVisualEffectView(effect: nil); veil.frame = host.bounds; veil.isUserInteractionEnabled = false
-    veil.autoresizingMask = [.flexibleWidth, .flexibleHeight]; host.addSubview(veil); holdVeil = veil
+    veil.autoresizingMask = [.flexibleWidth, .flexibleHeight]; veil.tag = 7711; host.addSubview(veil); holdVeil = veil
     // (a lighter blur — Apple's own, held a third of the way, Haris 2026-11-12: "reduce the blur")
     let a = UIViewPropertyAnimator(duration: 1, curve: .linear) { veil.effect = UIBlurEffect(style: .systemUltraThinMaterial) }
     a.pausesOnCompletion = true; holdBlur = a
@@ -1804,10 +1813,14 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     UIView.animate(withDuration: 0.25) { veil.alpha = 1 }
   }
   private var headSig = 0
-  private var holdVeil: UIVisualEffectView?, holdBlur: UIViewPropertyAnimator?
+  private var holdVeil: UIVisualEffectView?, holdBlur: UIViewPropertyAnimator?, heldRows: [BubbleCell] = []
+  private func clearVeils() {
+    holdBlur?.stopAnimation(true); holdBlur = nil; holdVeil = nil
+    for v in navigationController?.view.subviews ?? [] where v is UIVisualEffectView && v.tag == 7711 { v.removeFromSuperview() }
+  }
   private var holding = false, afterHold: (() -> Void)?
   func tableView(_ tv: UITableView, willEndContextMenuInteraction c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
-    let cell = heldCell(c)
+    let cell = heldRows.first ?? heldCell(c); heldRows = []
     let finish = { [weak self] in
       guard let self = self else { return }; self.holding = false; let f = self.afterHold; self.afterHold = nil; f?(); self.fitBottom()
       cell?.held.alpha = 1; self.heldShot = nil   // (back in its place the moment the picture has landed on it)
@@ -2636,6 +2649,9 @@ final class BubbleCell: UITableViewCell {
     for v in moving { v.transform = .identity }
     replyIcon.alpha = 0
     contentView.alpha = 1
+    // (a row reused after a hold that ended on another row — or on one deleted from its menu — came back with its bubble
+    //  still hidden: only the forward button showed, Haris's recording 2026-11-21 15:04)
+    held.alpha = 1; besides(1)
   }
   override func traitCollectionDidChange(_ p: UITraitCollection?) {
     super.traitCollectionDidChange(p)
