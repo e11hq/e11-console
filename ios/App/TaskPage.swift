@@ -118,7 +118,6 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     updatePager()
   }
   let mentionBox = PickList()   // (the @ / # list over the description — Apple's rows, as the comment box's: Haris 2026-11-10)
-  var onSubmitFiles: ((String) -> Void)?
   var onOpenFiles: (([[String: Any]], Int) -> Void)?
   var onAttachFiles: (() -> Void)?
   var onAttachFrom: ((String) -> Void)?

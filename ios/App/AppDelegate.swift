@@ -3028,7 +3028,7 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
     }
   }
 
-  // (30: the app uploads a chosen file itself — SubmitSheet.swift)
+  // (30: the app uploads a chosen file itself)
   func url(_ tok: String) -> URL? { lock.lock(); defer { lock.unlock() }; return files[tok] }
   // A piece of a chosen file, for the page to upload (the file is let go after its last piece)
   func read(_ a: [String: Any]) -> [String: Any] {

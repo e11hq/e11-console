@@ -318,17 +318,6 @@ extension Main {
         }
       }
     }
-    p.onSubmitFiles = { [weak self, weak p] cd in
-      guard let self = self, let p = p else { return }
-      self.onSheetHost { [weak self] host in guard let self = self else { return }
-        let vc = SubmitSheetVC(task: p.taskId, cd: cd) { [weak self, weak p] files in
-          guard let self = self, let p = p else { return }
-          self.taskAct(p, ["act": "submitReview", "id": p.taskId, "files": files])
-        }
-        vc.cookies = self.serverHome.cookies
-        host.present(vc, animated: true)
-      }
-    }
     p.onOpen = { [weak self] id in self?.openTaskPage(id, tab: "details", focus: "") }
     p.onTab = { [weak self, weak p] t in guard let self = self, let p = p else { return }; if t == "comments" { self.taskShowComments(p, focus: "") } else { self.taskHideComments() } }
     p.onEvent = { [weak self] ev in
