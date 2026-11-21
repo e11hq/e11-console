@@ -62,3 +62,18 @@ test('a video picked up by the scan, and the copy removed with its file', async 
   assert.equal(r.deleted, 1);
   assert.equal(app.views.ready(REL), false, 'its light copy is gone too');
 });
+
+test('a small HEVC video still gets its H.264 copy (some browsers can\'t play HEVC); a small H.264 one is shown as it is (Haris 2026-11-21 16:16)', async () => {
+  const { isHevc, createViewCopies } = await import('../src/viewcopy.js');
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'e11-hevc-'));
+  const hevc = path.join(d, 'a.mp4'), avc = path.join(d, 'b.mp4');
+  fs.writeFileSync(hevc, Buffer.concat([Buffer.alloc(100), Buffer.from('ftypisommoovtrakstsd....hvc1....'), Buffer.alloc(100)]));
+  fs.writeFileSync(avc, Buffer.concat([Buffer.alloc(100), Buffer.from('ftypisommoovtrakstsd....avc1....'), Buffer.alloc(100)]));
+  assert.equal(isHevc(hevc, fs.statSync(hevc).size), true);
+  assert.equal(isHevc(avc, fs.statSync(avc).size), false);
+  const ran = [];
+  const v = createViewCopies({ files: { resolve: (r) => path.join(d, r) }, dri: path.join(d, 'none'), run: async (cmd, args) => { ran.push(args); return { ok: false, out: '' }; }, log: { log() {}, error() {}, warn() {} } });
+  assert.equal(v.want('a.mp4'), true, 'the small HEVC one is queued');
+  assert.equal(v.want('b.mp4'), false, 'the small H.264 one is not');
+  fs.rmSync(d, { recursive: true, force: true });
+});

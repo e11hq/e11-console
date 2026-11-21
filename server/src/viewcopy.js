@@ -15,6 +15,19 @@ const defaultRun = (cmd, args, timeout) => new Promise((resolve) => execFile(cmd
 // 720p: the long side at most 1280, the short side at most 720 (portrait videos stay portrait), even sizes
 const SCALE = "scale='if(gt(iw,ih),min(1280,iw),-2)':'if(gt(iw,ih),-2,min(1280,ih))'";
 
+// an MP4 / MOV with an HEVC picture: its sample description says hvc1 or hev1 — looked for in the file's head and tail (the
+// index sits at one end)
+export function isHevc(file, size) {
+  try {
+    const fd = fs.openSync(file, 'r');
+    try {
+      const n = Math.min(size, 512 * 1024), head = Buffer.alloc(n), tail = Buffer.alloc(n);
+      fs.readSync(fd, head, 0, n, 0); fs.readSync(fd, tail, 0, n, Math.max(0, size - n));
+      return [head, tail].some((b) => b.includes('hvc1') || b.includes('hev1'));
+    } finally { fs.closeSync(fd); }
+  } catch { return false; }
+}
+
 export function createViewCopies({ files, dri = '/dev/dri', minSize = 8 * 1000 * 1000, run = defaultRun, log = console, now = () => Date.now() }) {
   const REL_DIR = '.thumbs/_view';
   const key = (rel) => crypto.createHash('sha1').update(String(rel)).digest('hex').slice(0, 24);
@@ -36,7 +49,9 @@ export function createViewCopies({ files, dri = '/dev/dri', minSize = 8 * 1000 *
     const f = failed.get(key(rel));
     if (f && now() - f < 24 * 3600_000) return false;
     const size = sizeOf(rel);
-    if (size < minSize) return false;
+    // (a small one as it is — but not an HEVC one: some browsers (Chrome on Windows) can't play it, so it gets its H.264
+    //  copy whatever its size; the iPhone app sends videos in HEVC — Haris 2026-11-21 16:16)
+    if (size < minSize && !isHevc(files.resolve(rel), size)) return false;
     queue.push(rel);
     kick();
     return true;
