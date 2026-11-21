@@ -9,7 +9,8 @@ import { makeDir } from './dir.js';
 export class HubCore {
   // sql: ctx.storage.sql (or a stand-in in tests) · copy(batch): the office's copy · now: the clock
   // r2: files through R2 (r2.js) — null: none here
-  constructor({ sql, dir = null, copy = () => {}, now = () => Date.now(), r2 = null }) {
+  // apns: phone notifications (Talk's own calls: enabled / sendTo / wake) · onUnread: E11 Console's Talk count, for the office
+  constructor({ sql, dir = null, copy = () => {}, now = () => Date.now(), r2 = null, apns = null, onUnread = null }) {
     this.sql = sql; this.copy = copy; this.now = now;
     this.dir = makeDir(dir);
     globalThis.__hubSql = sql; globalThis.__hubLog = null;   // (Talk's own tables made: the office has them already)
@@ -20,7 +21,7 @@ export class HubCore {
     globalThis.setInterval = (fn) => { sweep = fn; return { unref() {} }; };
     globalThis.setTimeout = (fn, ms) => (ms === 60_000 ? { unref() {} } : ST(fn, ms));
     try {
-      this.talk = createTalk({ dataDir: '/hub', dbFile: ':memory:', store: this.dir.store, access: this.dir.access, now, r2 });
+      this.talk = createTalk({ dataDir: '/hub', dbFile: ':memory:', store: this.dir.store, access: this.dir.access, now, r2, apns, onUnread });
     } finally { globalThis.setInterval = SI; globalThis.setTimeout = ST; }
     this.sweepFn = sweep;
     this.n = Number(this.meta('copyN') || 0);

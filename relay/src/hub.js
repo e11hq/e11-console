@@ -26,7 +26,10 @@ export class TalkHub extends DurableObject {
       sql.exec('CREATE TABLE IF NOT EXISTS hub_who (fp TEXT PRIMARY KEY, email TEXT NOT NULL, at INTEGER NOT NULL)');
       // (files: Talk's R2 bucket through this Worker's own binding — no R2 keys)
       const r2 = bindingR2({ bucket: env.TALK_FILES, secret: env.R2_LINK_SECRET, base: String(env.PUBLIC || '').replace(/\/$/, '') });
-      this.core = new HubCore({ sql, copy: (b) => this.toOffice(b), r2: r2.on ? r2 : null });
+      // (notifications: sent by the office for now — the phones' notification tokens are there; once Apple's key is in
+      //  Cloudflare, sent from here, office or not. E11 Console's Talk count: the office works it out from its copy)
+      const apns = { enabled: () => !!this.office, sendTo: (uid, p) => this.later('/api/talk/relay/push', { uid, p }), wake: (uid, p) => this.later('/api/talk/relay/push', { uid, p, wake: true }) };
+      this.core = new HubCore({ sql, copy: (b) => this.toOffice(b), r2: r2.on ? r2 : null, apns, onUnread: (uids) => { this.later('/api/talk/relay/unread', { uids }); } });
       const d = this.core.meta('dir'); if (d) try { this.core.dir.set(JSON.parse(d)); } catch { /* the office sends it again */ }
       if (!this.core.meta('key')) { const k = await newKey(); this.core.meta('key', k.priv); this.core.meta('pub', k.pub); }
       // (lines kept open while the hub slept: listening again)
@@ -124,6 +127,8 @@ export class TalkHub extends DurableObject {
     const due = Date.now() + RETRY, cur = await this.ctx.storage.getAlarm();
     if (!cur || cur > due) await this.ctx.storage.setAlarm(due);
   }
+  // something for the office that needn't wait or be kept (a notification, Console's count): sent once, behind the answer
+  later(path, body) { const p = this.post(path, body).catch(() => false); try { this.ctx.waitUntil(p); } catch { /* fine */ } return p; }
   async post(path, body) {
     if (!this.office) return false;
     const text = JSON.stringify(body);

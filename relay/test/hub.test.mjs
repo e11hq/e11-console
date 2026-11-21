@@ -69,3 +69,13 @@ test('reads write nothing to the copy', () => {
   const before = batches.length; h.state(a); h.state(a);
   assert.equal(batches.length, before);
 });
+
+test('a message’s notification and Console’s count go to whoever sends them', () => {
+  const sent = [], counts = [];
+  const h = new HubCore({ sql: fakeSql(), dir: DIR, now, apns: { enabled: () => true, sendTo: async (uid, p) => { sent.push([uid, p]); } }, onUnread: (u) => counts.push(u) });
+  const a = h.who('haris@e11.test', 'phone-key-aaaaaaaaaaaa'), b = h.who('lana@e11.test', 'phone-key-bbbbbbbbbbbb');
+  const gid = h.act(a, { act: 'newGroup', client: 'p1', name: 'Ping', members: ['u2'] }).group.id;
+  h.act(a, { act: 'send', group: gid, text: 'Are you there?' });
+  assert.ok(sent.some(([uid, p]) => uid === 'u2' && /Are you there/.test(p.body)), JSON.stringify(sent));
+  assert.ok(counts.some((u) => u.includes('u2')));
+});
