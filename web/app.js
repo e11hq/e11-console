@@ -5253,6 +5253,9 @@ const NativeSheet = (() => {
         return { photo: cv.toDataURL('image/png') };
       } catch (e) { /* fall back to initials */ }
     }
+    // (a photo from Cloudflare R2 can't be drawn out of the page's picture: its readable copy, once made — the first time
+    //  initials, from then on the photo; Haris 2026-11-21 10:51)
+    if (live && live.src) { const done = picDone.get(live.src); if (done) return { photo: done }; loadPic(live.src); }
     return { initials: av.textContent.trim(), color: rgb(av.style.background || av.style.backgroundColor) || [120, 120, 140] };
   }
   function rows(items) {
@@ -5311,7 +5314,7 @@ const NativeSheet = (() => {
     return sections.filter((x) => x.rows.length);
   }
   // people's round pictures for a sheet (app 14+): each photo loaded once and drawn small; else initials on their colour
-  const picCache = new Map();
+  const picCache = new Map(), picDone = new Map();
   function loadPic(src) {
     if (picCache.has(src)) return picCache.get(src);
     const p = new Promise((done) => {
@@ -5320,7 +5323,7 @@ const NativeSheet = (() => {
       readableImage(src).then((im) => { clearTimeout(t); if (!im) return done(null); try { const cv = document.createElement('canvas'); cv.width = cv.height = 72; const g = cv.getContext('2d'), w = im.naturalWidth, h = im.naturalHeight, k = Math.min(w, h); g.drawImage(im, (w - k) / 2, (h - k) / 2, k, k, 0, 0, 72, 72); done(cv.toDataURL('image/jpeg', 0.85)); } catch (e) { done(null); } });
     });
     picCache.set(src, p);
-    p.then((v) => { if (!v) picCache.delete(src); });
+    p.then((v) => { if (!v) picCache.delete(src); else picDone.set(src, v); });
     return p;
   }
   async function personFor(uid) {
