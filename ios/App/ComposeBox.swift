@@ -1152,17 +1152,20 @@ final class VoiceBubble: UIView, AVAudioPlayerDelegate {
     NSLayoutConstraint.activate([icon.centerXAnchor.constraint(equalTo: play.centerXAnchor), icon.centerYAnchor.constraint(equalTo: play.centerYAnchor)])
     play.backgroundColor = .systemBlue; play.layer.cornerRadius = 17
     play.addAction(UIAction { [weak self] _ in self?.toggle() }, for: .touchUpInside)
-    wave.spacing = 2; wave.alignment = .center
-    for i in 0..<28 {
+    // (the wave across all the room there is, the time at the right end — it left a gap after the time; Haris 2026-11-21 21:27)
+    wave.spacing = 2; wave.alignment = .center; wave.distribution = .equalSpacing
+    wave.setContentHuggingPriority(.defaultLow, for: .horizontal)
+    for i in 0..<32 {
       let h = 5 + CGFloat(abs(sin(Double(i) * 1.7) * cos(Double(i) * 0.45))) * 18
       let b = UIView(); b.backgroundColor = .secondaryLabel; b.layer.cornerRadius = 1.5
       b.translatesAutoresizingMaskIntoConstraints = false; b.widthAnchor.constraint(equalToConstant: 3).isActive = true; b.heightAnchor.constraint(equalToConstant: h).isActive = true
       wave.addArrangedSubview(b); bars.append(b)
     }
     time.font = .monospacedDigitSystemFont(ofSize: 12.5, weight: .medium); time.textColor = .secondaryLabel; time.text = VoiceBubble.fmt(dur)
+    time.textAlignment = .right; time.setContentHuggingPriority(.required, for: .horizontal); time.setContentCompressionResistancePriority(.required, for: .horizontal)
     let h = UIStackView(arrangedSubviews: [play, wave, time]); h.spacing = 8; h.alignment = .center
     h.translatesAutoresizingMaskIntoConstraints = false; addSubview(h)
-    NSLayoutConstraint.activate([play.widthAnchor.constraint(equalToConstant: 34), play.heightAnchor.constraint(equalToConstant: 34), h.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6), h.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12), h.centerYAnchor.constraint(equalTo: centerYAnchor)])
+    NSLayoutConstraint.activate([play.widthAnchor.constraint(equalToConstant: 34), play.heightAnchor.constraint(equalToConstant: 34), h.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6), h.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16), h.centerYAnchor.constraint(equalTo: centerYAnchor)])
   }
   required init?(coder: NSCoder) { fatalError() }
   // (iPhone's own symbol animations, iOS 17 and later; before that, the symbol simply changes)
