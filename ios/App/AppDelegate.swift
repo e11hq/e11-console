@@ -2931,15 +2931,21 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
                 let props = CGImageSourceCopyPropertiesAtIndex(s, 0, nil) as? [CFString: Any],
                 let w = props[kCGImagePropertyPixelWidth] as? Int, let h = props[kCGImagePropertyPixelHeight] as? Int else { return }
           let big = max(w, h) > 2048
-          // (already small and already a JPEG: as it is)
-          if !big && (ext == "jpg" || ext == "jpeg") { return }
+          // (already small and already a JPEG or HEIC: as it is)
+          if !big && ["jpg", "jpeg", "heic", "heif"].contains(ext) { return }
           guard let cg = CGImageSourceCreateThumbnailAtIndex(s, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
                                                                    kCGImageSourceThumbnailMaxPixelSize: min(2048, max(w, h))] as CFDictionary) else { return }
-          let made = self.dir.appendingPathComponent(UUID().uuidString + "-" + base.replacingOccurrences(of: "/", with: "-") + ".jpg")
-          guard let d = CGImageDestinationCreateWithURL(made as CFURL, UTType.jpeg.identifier as CFString, 1, nil) else { return }
-          CGImageDestinationAddImage(d, cg, [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary)
-          guard CGImageDestinationFinalize(d) else { return }
-          DispatchQueue.main.async { swap(made, base + ".jpg") }
+          // (HEIC, as E11 Talk's: about half a JPEG's size at the same sharpness — the server makes its JPEG copy for the
+          //  browsers; Haris 2026-11-21 15:50. JPEG where HEIC can't be made.)
+          let stem = UUID().uuidString + "-" + base.replacingOccurrences(of: "/", with: "-")
+          for (type, e, q) in [(UTType.heic, "heic", 0.7), (UTType.jpeg, "jpg", 0.8)] as [(UTType, String, Double)] {
+            let made = self.dir.appendingPathComponent(stem + "." + e)
+            guard let d = CGImageDestinationCreateWithURL(made as CFURL, type.identifier as CFString, 1, nil) else { continue }
+            CGImageDestinationAddImage(d, cg, [kCGImageDestinationLossyCompressionQuality: q] as CFDictionary)
+            guard CGImageDestinationFinalize(d) else { try? FileManager.default.removeItem(at: made); continue }
+            DispatchQueue.main.async { swap(made, base + "." + e) }
+            return
+          }
         }
       }
     }
@@ -2949,6 +2955,16 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
   // a comment's video at 720p as an MP4 (as E11 Talk's — Haris 2026-11-16 13:40), made once: one already 720p or smaller and
   // H.264 stays as it is; one that can't be made goes as it was
   static func video720(_ src: URL, name: String, _ done: @escaping (URL, String) -> Void) {
+    // (HEVC first, E11 Talk's way — sharper at the same size, normal colours for Log, stereo sound: Haris 2026-11-21 15:50;
+    //  Apple's H.264 preset as before if it can't)
+    let hevc = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mp4")
+    VideoShrink.run(AVURLAsset(url: src), hd: false, to: hevc) { ok in DispatchQueue.main.async {
+      if ok { return done(hevc, (name as NSString).deletingPathExtension + ".mp4") }
+      try? FileManager.default.removeItem(at: hevc)
+      video720Preset(src, name: name, done)
+    } }
+  }
+  private static func video720Preset(_ src: URL, name: String, _ done: @escaping (URL, String) -> Void) {
     let asset = AVURLAsset(url: src)
     let t = asset.tracks(withMediaType: .video).first
     let side = t.map { t -> CGFloat in let z = t.naturalSize.applying(t.preferredTransform); return min(abs(z.width), abs(z.height)) } ?? 0
