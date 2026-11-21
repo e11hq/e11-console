@@ -79,3 +79,20 @@ test('a message’s notification and Console’s count go to whoever sends them'
   assert.ok(sent.some(([uid, p]) => uid === 'u2' && /Are you there/.test(p.body)), JSON.stringify(sent));
   assert.ok(counts.some((u) => u.includes('u2')));
 });
+
+test('a task shared from the office: lent for one call, its card made here, then let go', () => {
+  const { h } = hub();
+  const a = h.who('haris@e11.test', 'phone-key-aaaaaaaaaaaa');
+  const gid = h.act(a, { act: 'newGroup', client: 'p1', name: 'Tasks', members: ['u2'] }).group.id;
+  const refused = h.act(a, { act: 'send', group: gid, task: { id: 't9' } });
+  assert.equal(refused.ok, false, 'no task here unless the office lends it');
+  h.dir.lend([{ id: 't9', title: 'Edit the reel', projectId: 'p1', sectionId: 's2', done: false, assignees: ['u2'] }],
+    [{ id: 'p1', name: 'Client One', sections: [{ id: 's2', name: 'In progress', color: '#fa0' }] }]);
+  const m = h.act(a, { act: 'send', group: gid, task: { id: 't9' } });
+  h.dir.lend();
+  assert.equal(m.ok, true, JSON.stringify(m));
+  const s = h.sync(a, 0), ev = s.events.find((e) => e.type === 'msg' && e.task);
+  assert.equal(ev.task.title, 'Edit the reel'); assert.equal(ev.task.status, 'In progress'); assert.equal(ev.task.client, 'Client One');
+  assert.equal(h.dir.store.get('tasks', 't9'), null, 'let go after the call');
+  assert.equal(h.dir.store.get('projects', 'p1').sections, undefined);
+});

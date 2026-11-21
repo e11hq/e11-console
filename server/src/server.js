@@ -712,6 +712,24 @@ export function createServer(cfg) {
     if (p === '/api/talk/relay/unread') return json(res, 200, r.unread(b));
     // (the hub asking for E11 Console's people and clients itself — after it starts, or when it has none)
     if (p === '/api/talk/relay/dir') return json(res, 200, { ok: true, dir: r.dir() });
+    // E11 Console's tasks for # in Talk on Cloudflare — they stay here (Haris 2026-11-22 02:58 "keep it only local"): the
+    // search and a chat's cards from Talk's own code, for that person; sharing one: just that task (what its card needs) and
+    // its client's sections, only if that person sees it
+    if (p === '/api/talk/relay/tasks') {
+      const u = access.userByEmail(String(b.email || ''));
+      if (!u || u.active === false) return json(res, 404, { ok: false, error: 'No one' });
+      if (b.act === 'get') {
+        const ids = (Array.isArray(b.ids) ? b.ids : []).slice(0, 20).map(String);
+        const ts = ids.map((id) => store.get('tasks', id)).filter((t) => t && !t.trashed && !t.parentId && access.canSee(u, 'tasks', t));
+        const tasks = ts.map((t) => ({ id: t.id, title: t.title || '', projectId: t.projectId || null, sectionId: t.sectionId || null, done: !!t.done, due: t.due || null, assignees: t.assignees || [] }));
+        const projects = [...new Set(ts.map((t) => String(t.projectId || '')))].map((id) => store.get('projects', id)).filter(Boolean)
+          .map((x) => ({ id: x.id, name: x.name, color: x.color || null, clientId: x.clientId || null, ...(x.inactive ? { inactive: true } : {}), sections: (x.sections || []).map((s) => ({ id: s.id, name: s.name, color: s.color || null })) }));
+        return json(res, 200, { ok: true, tasks, projects });
+      }
+      const t = talkNow(); if (!t) return json(res, 404, { ok: false, error: 'Not here' });
+      const x = await t.act(u, { act: b.act === 'taskCards' ? 'taskCards' : 'tasks', group: String(b.group || ''), q: b.q, ids: b.ids });
+      return json(res, x && x.status || 200, x);
+    }
     return json(res, 404, { ok: false, error: 'Not here' });
   }
   // E11 Talk over the office network (office.js passes 'talkup' / 'talkfile'): a piece of a file being sent, or a message's

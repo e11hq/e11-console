@@ -97,7 +97,7 @@ export class TalkHub extends DurableObject {
   async call(w, name, b) {
     switch (name) {
       case 'state': return this.core.state(w);
-      case 'act': return this.core.act(w, b);
+      case 'act': return this.act(w, b);
       case 'sync': return this.core.sync(w, b.after, b.limit);
       case 'ack': return this.core.ack(w, b.upto);
       case 'got': return this.core.got(w, b.groupId, b.msgId);
@@ -109,6 +109,35 @@ export class TalkHub extends DurableObject {
       case 'history/share': return this.core.shareHistory(w, b);
       default: return null;   // (Macs, sign-in… the office's for now)
     }
+  }
+
+  // E11 Console's tasks stay in the office (Haris 2026-11-22 02:58 "keep it only local"): # — finding tasks, and a chat's task
+  // cards — asked of the office for this person; sharing one (picked, or its link in the words): the office lends that task
+  // for this one call
+  async act(w, b) {
+    b = b || {};
+    if (b.act === 'tasks' || b.act === 'taskCards') {
+      const r = await this.officeTasks(w, b);
+      return r || (b.act === 'tasks' ? { ok: false, error: 'Tasks can’t be reached right now', status: 503 } : { ok: true, cards: [] });
+    }
+    const ids = [];
+    if (b.task && typeof b.task === 'object' && b.task.id) ids.push(String(b.task.id));
+    for (const m of String(b.text || '').matchAll(/https?:\/\/files(?:-test)?\.e11hq\.com\/t\/([A-Za-z0-9_%.-]{1,120})/gi)) ids.push(decodeURIComponent(m[1]));
+    if (!ids.length) return this.core.act(w, b);
+    const r = await this.officeTasks(w, { act: 'get', ids: ids.slice(0, 20), group: b.group });
+    if (!r && b.task) return { ok: false, error: 'Tasks can’t be reached right now', status: 503 };
+    this.core.dir.lend((r && r.tasks) || [], (r && r.projects) || []);
+    try { return await this.core.act(w, b); } finally { this.core.dir.lend(); }
+  }
+  async officeTasks(w, b) {
+    if (!this.office) return null;
+    const path = '/api/talk/relay/tasks', text = JSON.stringify({ email: w.u.email, act: b.act, group: b.group, q: b.q, ids: b.ids });
+    try {
+      const h = await signHeaders(this.core.meta('key'), 'POST', path, text);
+      const r = await fetch(this.office + path, { method: 'POST', body: text, headers: { 'content-type': 'application/json', ...h }, signal: AbortSignal.timeout(8000) });
+      if (!r.ok) { try { return await r.json(); } catch { return null; } }
+      return await r.json();
+    } catch { return null; }
   }
 
   // ---------- who this phone is (the office says, by the phone's own sign-in; remembered by fingerprint) ----------

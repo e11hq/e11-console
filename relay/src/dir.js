@@ -8,14 +8,24 @@ export function makeDir(snap) {
     idx.email = new Map((d.users || []).filter((u) => u.email).map((u) => [String(u.email).toLowerCase(), u])); };
   index();
   const flag = (u, k) => !!(u && d.flags && d.flags[u.id] && d.flags[u.id][k]);
+  // E11 Console's tasks never live here (Haris 2026-11-22 02:58 "keep it only local"): for one call that shares a task, the
+  // office lends that task (only what its card needs) and its client's sections — checked by the office for that person —
+  // and they're let go as soon as the call is done
+  let lent = { tasks: new Map(), projects: new Map() };
   const store = {
-    get(kind, id) { if (kind === 'meta') return id === 'main' ? d.meta || {} : null; return (idx[kind] && idx[kind].get(String(id))) || null; },
+    get(kind, id) {
+      if (kind === 'meta') return id === 'main' ? d.meta || {} : null;
+      if (lent[kind] && lent[kind].has(String(id))) return lent[kind].get(String(id));
+      return (idx[kind] && idx[kind].get(String(id))) || null;
+    },
     list(kind) { return kind === 'users' ? d.users || [] : kind === 'projects' ? d.projects || [] : kind === 'clients' ? d.clients || [] : []; },
   };
   const access = {
     isFreelancer: (u) => flag(u, 'free'), isSuper: (u) => flag(u, 'super'), isOffice: (u) => flag(u, 'office'),
-    canSee: (u, kind, x) => kind === 'projects' && !!u && !!x && ((d.see && d.see[u.id]) || []).includes(String(x.id)),
+    canSee: (u, kind, x) => kind === 'tasks' ? !!x && lent.tasks.get(String(x.id)) === x
+      : kind === 'projects' && !!u && !!x && ((d.see && d.see[u.id]) || []).includes(String(x.id)),
     userByEmail: (e) => idx.email.get(String(e || '').toLowerCase()) || null,
   };
-  return { store, access, set(s) { d = s; index(); }, get snapshot() { return d; } };
+  const lend = (tasks = [], projects = []) => { lent = { tasks: new Map(tasks.map((t) => [String(t.id), t])), projects: new Map(projects.map((p) => [String(p.id), p])) }; };
+  return { store, access, lend, set(s) { d = s; index(); }, get snapshot() { return d; } };
 }
