@@ -162,8 +162,13 @@ final class AssetsCtl {
   //  E11 Talk's way, Haris 2026-11-21; by folder id)
   private var upTiles: [String: [[String: Any]]] = [:]
   private func showUpTiles(_ folder: String, _ list: [[String: Any]]) {
+    let first = (upTiles[folder] ?? []).isEmpty && !list.isEmpty
     if list.isEmpty { upTiles[folder] = nil } else { upTiles[folder] = list }
-    for s in stack where s.folder == folder { blocks(s.h) }
+    for s in stack where s.folder == folder {
+      blocks(s.h)
+      // (they come last, where the folder puts new files — scrolled to them when the list is long)
+      if first { let h = s.h; DispatchQueue.main.async { h.scrollToEnd() } }
+    }
   }
 
   var top: HomeView? { stack.last.map { $0.h } }
@@ -701,12 +706,12 @@ final class AssetsCtl {
         t.menu = picking != nil ? nil : { [weak self, weak h] in h.flatMap { self?.fileMenu($0, x, client: cid) } }
         tiles.append(t)
       }
-      // (uploads on their way: their tiles first, each with its spinner)
+      // (uploads on their way: last, where they'll stay once they're in — each with its spinner; Haris 2026-11-21 19:23)
       for x in upTiles[fid] ?? [] {
         let t = kept(h, "ff:" + (x["id"] as? String ?? "")) { FileTile() }
         t.file(x, lines: 2, sizeText: "Uploading…")
         t.selecting = false; t.picked = false; t.onTap = nil; t.menu = nil
-        tiles.insert(t, at: 0)
+        tiles.append(t)
       }
       out += tiles
       // (only when the folder holds nothing at all: a folder of folders isn't empty — the client's Files holds only folders,

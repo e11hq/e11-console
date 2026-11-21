@@ -2882,7 +2882,8 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
         guard let t = top() else { return go(true) }
         // (still closing — the picker or the + sheet: asked once it's gone, ~3 s at most)
         if n < 30, t.isBeingPresented || t.presentedViewController?.isBeingDismissed == true || t is PHPickerViewController || t is UIImagePickerController || t is AttachSheet { return show(n + 1) }
-        let a = UIAlertController(title: "Send photos and videos as", message: nil, preferredStyle: .actionSheet)
+        // (in the middle of the screen — Haris 2026-11-21 19:23)
+        let a = UIAlertController(title: "Send photos and videos as", message: nil, preferredStyle: .alert)
         let pick = { (small: Bool) in
           self.small = small; self.chose = small; self.shrinkVideos = small && !self.boxVideos
           go(true)
@@ -2890,9 +2891,6 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
         a.addAction(UIAlertAction(title: "Smaller (faster)", style: .default) { _ in pick(true) })
         a.addAction(UIAlertAction(title: "Original (full quality)", style: .default) { _ in pick(false) })
         a.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in go(false) })
-        if let pop = a.popoverPresentationController {   // (iPad: from the bottom middle)
-          pop.sourceView = t.view; pop.sourceRect = CGRect(x: t.view.bounds.midX, y: t.view.bounds.maxY - 40, width: 1, height: 1); pop.permittedArrowDirections = []
-        }
         t.present(a, animated: true)
       }
     }

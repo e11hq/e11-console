@@ -606,10 +606,21 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     }
     event(["ev": "at", "id": f["id"] as? String ?? ""])
   }
+  // (E11 Talk's note: its look, its timing, centred just above the foot — the old one sat off-centre, Haris 2026-11-21 19:23)
+  private var shownNote: UILabel?
   func flash(_ s: String) {
-    toast.text = "   " + s + "   "
-    UIView.animate(withDuration: 0.2) { self.toast.alpha = 1 }
-    UIView.animate(withDuration: 0.3, delay: 2, options: []) { self.toast.alpha = 0 }
+    shownNote?.removeFromSuperview()
+    let l = PaddedLabel(); l.insets = UIEdgeInsets(top: 0, left: 16, bottom: 0, right: 16)
+    l.text = s; l.font = .systemFont(ofSize: 15, weight: .medium); l.textColor = .label; l.numberOfLines = 2; l.textAlignment = .center
+    l.backgroundColor = .secondarySystemGroupedBackground; l.layer.cornerRadius = 14; l.layer.masksToBounds = true
+    l.overrideUserInterfaceStyle = .dark   // (the viewer is black in light and dark alike)
+    let W = view.bounds.width
+    let w = min(W - 48, l.sizeThatFits(CGSize(width: W - 48, height: 80)).width)
+    let h = l.sizeThatFits(CGSize(width: w, height: 80)).height + 20
+    l.frame = CGRect(x: (W - w) / 2, y: bottomBar.frame.minY - 12 - h, width: w, height: h)
+    l.alpha = 0; view.addSubview(l); shownNote = l
+    UIView.animate(withDuration: 0.18) { l.alpha = 1 }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) { UIView.animate(withDuration: 0.2, animations: { l.alpha = 0 }) { _ in l.removeFromSuperview() } }
   }
 
   /* ---------- from the page ---------- */
@@ -653,7 +664,7 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
       view.insertSubview(fly, aboveSubview: pager); pager.alpha = 0; src.alpha = 0
       let to = src.convert(src.bounds, to: nil), radius = src.layer.cornerRadius
       UIView.animate(withDuration: 0.32, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0) {
-        fly.frame = to; fly.layer.cornerRadius = radius; self.view.backgroundColor = .clear; self.topBar.alpha = 0; self.bottomBar.alpha = 0; self.toast.alpha = 0
+        fly.frame = to; fly.layer.cornerRadius = radius; self.view.backgroundColor = .clear; self.topBar.alpha = 0; self.bottomBar.alpha = 0; self.toast.alpha = 0; self.shownNote?.alpha = 0
       } completion: { _ in
         src.alpha = 1
         if let p = self.presentingViewController { p.dismiss(animated: false) } else { self.dismiss(animated: false) }

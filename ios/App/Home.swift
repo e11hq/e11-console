@@ -395,6 +395,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   }
   // (a row's picture came after it was drawn: the list set again — only that row changes, by its signature)
   func listAgain() { if listOn { applyList(animated: false) } }
+  // (to the end of the page — Client Assets' Upload: the new files' tiles are last, as the folder lists them; Haris 2026-11-21)
+  func scrollToEnd() {
+    layoutIfNeeded()
+    let s = sv, end = s.contentSize.height - s.bounds.height + s.adjustedContentInset.bottom
+    guard end > -s.adjustedContentInset.top else { return }
+    s.setContentOffset(CGPoint(x: s.contentOffset.x, y: end), animated: true)
+  }
   // a group: rows (Apple's inset group) or not, and its heading (Apple's header)
   struct ListSec {
     enum Tiles { case none, strip, grid, clients }
