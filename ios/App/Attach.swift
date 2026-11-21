@@ -331,7 +331,8 @@ enum AttachExport {
   //  screen recording took most of a minute before anything showed. videoAsIs: the phone's own file, copied out in a moment —
   //  E11 Talk then makes its own 720p / 1080p copy, as it always has; else an H.264 one only re-wrapped as an MP4, in a
   //  moment, and only an HEVC one made into H.264)
-  static func compatible(_ assets: [PHAsset], videoAsIs: Bool = false, done: @escaping ([AttachFile]) -> Void) {
+  // (progress: each one's download from iCloud, by its place — 0…1; only called while iPhone fetches it, Haris 2026-11-21)
+  static func compatible(_ assets: [PHAsset], videoAsIs: Bool = false, progress: ((Int, Double) -> Void)? = nil, done: @escaping ([AttachFile]) -> Void) {
     var out = [AttachFile?](repeating: nil, count: assets.count)
     let g = DispatchGroup()
     for (i, a) in assets.enumerated() {
@@ -339,6 +340,7 @@ enum AttachExport {
       let base = ((PHAssetResource.assetResources(for: a).first?.originalFilename ?? (a.mediaType == .video ? "Video" : "Photo")) as NSString).deletingPathExtension
       if a.mediaType == .video {
         let o = PHVideoRequestOptions(); o.isNetworkAccessAllowed = true; o.version = .current; o.deliveryMode = .highQualityFormat
+        if let pr = progress { o.progressHandler = { p, _, _, _ in pr(i, p) } }
         PHImageManager.default().requestAVAsset(forVideo: a, options: o) { av, _, _ in
           let got = { (u: URL?) in DispatchQueue.main.async { if let u = u { out[i] = AttachFile(url: u, kind: "video", name: base + "." + u.pathExtension) }; g.leave() } }
           guard let av = av else { got(nil); return }
@@ -358,6 +360,7 @@ enum AttachExport {
         }
       } else {
         let o = PHImageRequestOptions(); o.isNetworkAccessAllowed = true; o.version = .current; o.deliveryMode = .highQualityFormat
+        if let pr = progress { o.progressHandler = { p, _, _, _ in pr(i, p) } }
         PHImageManager.default().requestImageDataAndOrientation(for: a, options: o) { d, uti, _, _ in
           guard let d = d else { DispatchQueue.main.async { g.leave() }; return }
           let type = uti.flatMap { UTType($0) }

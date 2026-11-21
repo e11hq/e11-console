@@ -2768,14 +2768,18 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
   //  Smaller first; never for files picked as files, nor your profile photo). boxVideos: the comment box makes a video
   //  smaller behind its tile itself; everywhere else the picker makes it smaller here, with "Preparing…" on the bar.
   private var askSize = true, boxVideos = false, shrinkVideos = false, chose: Bool?
+  // (each picked one's download from iCloud, by its place, 0…1 — for its tile's ring; on the main thread, Haris 2026-11-21)
+  var onItemProgress: ((Int, Double) -> Void)?
+  private var watching: [NSKeyValueObservation] = []
+  final class Last { var v = -1.0 }
 
   // (the keyboard isn't put down here: iPhone hides it while a picker covers the screen and brings it back for the
   //  comment box afterwards)
   // onPicked: told how many the moment they're picked, before they're made ready — the task page shows their cards then
   // (Haris 2026-11-21 17:58: "the cards appear straight away when you pick", E11 Talk's way)
-  func pick(from vc: UIViewController, single: Bool, source: String? = nil, title: String? = nil, small: Bool = false, askSize: Bool = true, onPicked: ((Int) -> Void)? = nil, _ done: @escaping ([String: Any]) -> Void) {
+  func pick(from vc: UIViewController, single: Bool, source: String? = nil, title: String? = nil, small: Bool = false, askSize: Bool = true, onPicked: ((Int) -> Void)? = nil, onItemProgress: ((Int, Double) -> Void)? = nil, _ done: @escaping ([String: Any]) -> Void) {
     finish([])   // (a sheet still open from before answers "nothing")
-    self.done = done; self.small = false; self.boxVideos = small; self.askSize = askSize; self.shrinkVideos = false; self.chose = nil; self.onPicked = onPicked
+    self.done = done; self.small = false; self.boxVideos = small; self.askSize = askSize; self.shrinkVideos = false; self.chose = nil; self.onPicked = onPicked; self.onItemProgress = onItemProgress
     let photos = {
       var c = PHPickerConfiguration()
       c.selectionLimit = single ? 1 : 0
@@ -2858,14 +2862,15 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
   private func keepAssetsNow(_ a: [PHAsset]) {
     // (a comment's video: the phone's own, at once — the comment box makes its 720p copy behind its tile)
     startPrep(a.count)
-    AttachExport.compatible(a, videoAsIs: true) { [weak self] got in
+    let tell = onItemProgress
+    AttachExport.compatible(a, videoAsIs: true, progress: { i, p in DispatchQueue.main.async { tell?(i, p) } }) { [weak self] got in
       guard let self = self else { return }
       self.finish(got.compactMap { f in let r = self.keep(f.url, name: f.name); try? FileManager.default.removeItem(at: f.url); return r })
     }
   }
   // (a picked or ticked photo sent from another screen — the comment box's own + sheet)
-  func pickAssets(_ a: [PHAsset], small: Bool = false, onPicked: ((Int) -> Void)? = nil, _ done: @escaping ([String: Any]) -> Void) {
-    finish([]); self.done = done; self.small = false; self.boxVideos = small; self.askSize = true; self.shrinkVideos = false; self.chose = nil; self.onPicked = onPicked; keepAssets(a)
+  func pickAssets(_ a: [PHAsset], small: Bool = false, onPicked: ((Int) -> Void)? = nil, onItemProgress: ((Int, Double) -> Void)? = nil, _ done: @escaping ([String: Any]) -> Void) {
+    finish([]); self.done = done; self.small = false; self.boxVideos = small; self.askSize = true; self.shrinkVideos = false; self.chose = nil; self.onPicked = onPicked; self.onItemProgress = onItemProgress; keepAssets(a)
   }
   // the question, over whatever is on top once the picker has gone: Smaller (faster) — the default, first — or Original
   // (full quality); Cancel adds nothing. go: false when cancelled.
@@ -2914,7 +2919,7 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
   private func finish(_ all: [[String: Any]]) {
     guard let d = done else { if let p = prepJob { UploadCenter.shared.end(p); prepJob = nil }; return }
     if small { small = false; return shrink(all) { [weak self] out in self?.finish(out) } }
-    done = nil
+    done = nil; onItemProgress = nil
     let chose = self.chose; self.chose = nil; shrinkVideos = false
     if let p = prepJob {
       let stopped = UploadCenter.shared.jobs[p]?.cancelled == true
@@ -2956,7 +2961,8 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
       let isVideo = p.hasItemConformingToTypeIdentifier(UTType.movie.identifier)
       let type = isVideo ? UTType.movie.identifier : (p.registeredTypeIdentifiers.first { UTType($0)?.conforms(to: .image) == true } ?? UTType.image.identifier)
       group.enter()
-      p.loadFileRepresentation(forTypeIdentifier: type) { url, _ in
+      let tell = onItemProgress
+      let pr = p.loadFileRepresentation(forTypeIdentifier: type) { url, _ in
         if let url = url {
           let ext = url.pathExtension.isEmpty ? (isVideo ? "mov" : "jpg") : url.pathExtension
           let base = (p.suggestedName ?? (isVideo ? "Video" : "Photo"))
@@ -2964,8 +2970,17 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
         }
         group.leave()
       }
+      // (coming from iCloud: how far, for its tile's ring — a photo already on the phone is there at once)
+      if let tell = tell {
+        let last = Picker.Last()
+        watching.append(pr.observe(\.fractionCompleted) { q, _ in
+          let f = q.fractionCompleted
+          guard f - last.v >= 0.02 || f >= 1 else { return }; last.v = f
+          DispatchQueue.main.async { tell(i, f) }
+        })
+      }
     }
-    group.notify(queue: .main) { self.finish(out.compactMap { $0 }) }
+    group.notify(queue: .main) { self.watching = []; self.finish(out.compactMap { $0 }) }
   }
   // Camera
   func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {

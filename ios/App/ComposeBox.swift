@@ -252,6 +252,16 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
   private var prepTiles: [String] = []
   private func preparing(_ n: Int) { prepTiles = (0..<n).map { _ in "prep-" + UUID().uuidString }; paintTiles() }
   private func prepared() { guard !prepTiles.isEmpty else { return }; prepTiles = []; paintTiles() }
+  // (one still coming from iCloud: its tile's spinner becomes Talk's ring, filling as it comes — Haris 2026-11-21 22:26)
+  private func fromCloud(_ i: Int, _ p: Double) {
+    guard i < prepTiles.count else { return }
+    let id = prepTiles[i]
+    if p < 1, let t = tileMade[id]?.view, t.viewWithTag(7712) == nil {
+      t.subviews.compactMap { $0 as? UIActivityIndicatorView }.forEach { $0.stopAnimating(); $0.isHidden = true }
+      let r = UploadRing(id: id); r.tag = 7712; r.frame = CGRect(x: 17, y: 17, width: 30, height: 30); t.addSubview(r)
+    }
+    UploadRing.post(id, p)
+  }
   private var outbox: [(pendingId: String, body: [String: Any], files: [(uid: String, name: String, size: Int64)])] = []
   var onPendingFiles: ((String, String?, String, [[String: Any]]) -> Void)?   // a comment sent while its files upload: (id, thread, words, its cards)
   var onPendingShared: ((String, String?, [String: Any]) -> Void)?   // a contact or a place sent: (id, thread, its card — "contact" / "location")
@@ -563,7 +573,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       switch c {
       case nil: break
       case .photos(let a)?:
-        Picker.shared.pickAssets(a, small: true, onPicked: { [weak self] n in self?.preparing(n) }) { [weak self] r in
+        Picker.shared.pickAssets(a, small: true, onPicked: { [weak self] n in self?.preparing(n) }, onItemProgress: { [weak self] i, p in self?.fromCloud(i, p) }) { [weak self] r in
           // (Smaller or Original — asked once they're picked, Haris 2026-11-21)
           let small = r["small"] as? Bool ?? true
           self?.prepared()
@@ -604,7 +614,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     var top = vc; while let p = top.presentedViewController { top = p }
     // (a comment's photos and videos made small, as E11 Talk's; "as files" untouched — Haris 2026-11-16)
     let small = source == "photos" || source == "camera"
-    Picker.shared.pick(from: top, single: false, source: source, small: small, onPicked: { [weak self] n in self?.preparing(n) }) { [weak self] r in
+    Picker.shared.pick(from: top, single: false, source: source, small: small, onPicked: { [weak self] n in self?.preparing(n) }, onItemProgress: { [weak self] i, p in self?.fromCloud(i, p) }) { [weak self] r in
       // (Smaller or Original — asked once photos or videos are picked, Haris 2026-11-21; files picked as files: as they are)
       let small = r["small"] as? Bool ?? false
       self?.prepared()
