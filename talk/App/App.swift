@@ -27,6 +27,12 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
     Net.shared.post("/api/talk/push", ["token": token, "env": env])
     UserDefaults.standard.set(token, forKey: "talk_push_token")
   }
+  // a quiet wake-up (no banner): Ask the group — this phone looks whether it has a file someone asked for and sends it
+  //  (Haris 2026-11-20 21:36; iPhone decides how soon it wakes the app, and not at all if Talk was swiped away)
+  func application(_ app: UIApplication, didReceiveRemoteNotification info: [AnyHashable: Any], fetchCompletionHandler done: @escaping (UIBackgroundFetchResult) -> Void) {
+    guard ((info["e11"] as? [String: Any])?["ask"]) != nil else { done(.noData); return }
+    AskGroup.check { done(.newData) }
+  }
   // a notification while E11 Talk is open: shown, unless its group is open on the screen
   func userNotificationCenter(_ c: UNUserNotificationCenter, willPresent n: UNNotification, withCompletionHandler done: @escaping (UNNotificationPresentationOptions) -> Void) {
     Talk.shared.sync()
@@ -258,6 +264,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
     Talk.shared.refresh { Talk.shared.prune(); SignInKeys.refreshOwn() }; Talk.shared.sync()
     // (Auto-download: the network watched; what waited for Wi-Fi comes if it's here now)
     Auto.startOnce(); Talk.shared.catchUp()
+    AskGroup.check()   // (files the group asked for, that this phone has — AskGroup)
   }
   func sceneDidEnterBackground(_ s: UIScene) { Net.shared.stopListening(); Talk.shared.flush(); Talk.shared.badge(); Backup.shared.backUpIfDue() }
 }

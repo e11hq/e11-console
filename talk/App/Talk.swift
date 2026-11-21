@@ -347,6 +347,12 @@ final class Talk {
         if let old = l.msgs[i].file?.id, let new = m.file?.id, old != new { try? FileManager.default.copyItem(at: Net.local(old), to: Net.local(new)) }
         l.msgs[i] = keep
       } else { l.msgs.append(m) }
+    case "back":
+      // (a file asked back from the group is on the server again — AskGroup)
+      if let fid = e["file"] as? String {
+        let size = l.msgs.first(where: { $0.file?.id == fid })?.file?.size ?? 0
+        DispatchQueue.main.async { AskGroup.cameBack(fid, key: e["key"] as? String, lock: e["lock"] as? String, size: size) }
+      }
     case "edit": if let i = l.msgs.firstIndex(where: { $0.id == id }) { l.msgs[i].text = e["text"] as? String ?? l.msgs[i].text; l.msgs[i].edited = true }
     case "del":
       if let i = l.msgs.firstIndex(where: { $0.id == id }) {

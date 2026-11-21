@@ -92,20 +92,27 @@ extension Net {
   /* a message's file: locked, then to R2 — under 8 MB in one go, else in 8 MB parts three side by side; the ring fills as
      they go. done: the file's id and its key — or, if the server has no R2, the usual way (no key). */
   // (keep: a group's picture — kept in R2 while the group uses it, not under messages' 31-day rule)
-  func uploadMsg(_ data: Data, name: String, keep: Bool = false, progress: @escaping (Double) -> Void, done: @escaping (String?, String?) -> Void) {
+  // (back: a file asked for by the group, sent again under its own id — Ask the group, Haris 2026-11-20 21:36; nothing else
+  //  happens if it's back already or another phone is sending it)
+  func uploadMsg(_ data: Data, name: String, keep: Bool = false, back: String? = nil, progress: @escaping (Double) -> Void, done: @escaping (String?, String?) -> Void) {
     // (over 200 MB: locked in pieces, one at a time as they go up — its key given back as "p:<key>"; Haris 2026-11-21 11:00)
-    if data.count > 200 * 1024 * 1024 { return uploadPieces(data, name: name, progress: progress, done: done) }
-    guard let sealed = FileLock.seal(data) else { return upload(data, name: name, progress: progress) { done($0, nil) } }
-    post("/api/talk/r2/start", ["name": name, "size": sealed.data.count, "keep": keep]) { [weak self] j in
+    if data.count > 200 * 1024 * 1024 { return uploadPieces(data, name: name, back: back, progress: progress, done: done) }
+    guard let sealed = FileLock.seal(data) else { return back != nil ? done(nil, nil) : upload(data, name: name, progress: progress) { done($0, nil) } }
+    let start: (String, [String: Any]) = back.map { ("/api/talk/resend/start", ["file": $0, "size": sealed.data.count] as [String: Any]) } ?? ("/api/talk/r2/start", ["name": name, "size": sealed.data.count, "keep": keep] as [String: Any])
+    post(start.0, start.1) { [weak self] j in
       guard let self = self else { return done(nil, nil) }
+      if back != nil, (j?["here"] as? Bool) == true || (j?["taken"] as? Bool) == true { return done(back, nil) }
       guard let j = j, (j["ok"] as? Bool) == true, let id = j["id"] as? String else {
+        if back != nil { return done(nil, nil) }
         // (no R2 on this server, or it couldn't start: the usual way)
         return self.upload(data, name: name, progress: progress) { done($0, nil) }
       }
       let body = sealed.data, total = Double(max(1, body.count))
       let finish = { (etags: [String]?) in
         guard let etags = etags else { return done(nil, nil) }
-        self.post("/api/talk/r2/done", ["id": id, "etags": etags]) { d in
+        var b: [String: Any] = ["id": id, "etags": etags]
+        if back != nil { b["back"] = true; b["key"] = sealed.key }
+        self.post("/api/talk/r2/done", b) { d in
           guard (d?["ok"] as? Bool) == true else { return done(nil, nil) }
           progress(1); done(id, sealed.key)
         }
@@ -136,14 +143,17 @@ extension Net {
     }
   }
   // a big file in pieces: each 8 MB part of R2's upload is one piece, locked just before it goes (three at a time)
-  private func uploadPieces(_ data: Data, name: String, progress: @escaping (Double) -> Void, done: @escaping (String?, String?) -> Void) {
+  private func uploadPieces(_ data: Data, name: String, back: String? = nil, progress: @escaping (Double) -> Void, done: @escaping (String?, String?) -> Void) {
     let key = SymmetricKey(size: .bits256), keyText = key.withUnsafeBytes { Data($0) }.base64EncodedString()
     let n = FileLock.pieces(data.count), sealedSize = data.count + 28 * n
-    post("/api/talk/r2/start", ["name": name, "size": sealedSize]) { [weak self] j in
+    let start: (String, [String: Any]) = back.map { ("/api/talk/resend/start", ["file": $0, "size": sealedSize] as [String: Any]) } ?? ("/api/talk/r2/start", ["name": name, "size": sealedSize] as [String: Any])
+    post(start.0, start.1) { [weak self] j in
       guard let self = self else { return done(nil, nil) }
+      if back != nil, (j?["here"] as? Bool) == true || (j?["taken"] as? Bool) == true { return done(back, nil) }
       guard let j = j, (j["ok"] as? Bool) == true, let id = j["id"] as? String,
             let urls = (j["urls"] as? [String])?.compactMap(URL.init(string:)), (j["part"] as? Int) == FileLock.piece, urls.count == n else {
         // (no R2 on this server, or not in the pieces we lock: the usual way)
+        if back != nil { return done(nil, nil) }
         return self.upload(data, name: name, progress: progress) { done($0, nil) }
       }
       let total = Double(max(1, sealedSize))
@@ -154,7 +164,9 @@ extension Net {
         if next >= n && going == 0 {
           over = true
           guard !etags.contains(where: { $0 == nil }) else { return done(nil, nil) }
-          self.post("/api/talk/r2/done", ["id": id, "etags": etags.map { $0! }]) { d in
+          var b: [String: Any] = ["id": id, "etags": etags.map { $0! }]
+          if back != nil { b["back"] = true; b["key"] = keyText; b["lock"] = "p" }
+          self.post("/api/talk/r2/done", b) { d in
             guard (d?["ok"] as? Bool) == true else { return done(nil, nil) }
             progress(1); done(id, "p:" + keyText)
           }

@@ -42,6 +42,7 @@ enum Auto {
   // no longer on the server for this phone
   static func gone(_ m: Msg) -> Bool {
     guard let f = m.file, !here(f) else { return false }
+    if AskGroup.isBack(f.id) { return false }   // (asked back from the group: here again — AskGroup)
     return Downloads.shared.isGone(f.id) || Date().timeIntervalSince1970 * 1000 - m.at > keep
   }
   enum State: Equatable { case here, auto, wait, loading(Int64, Int64), gone }
@@ -90,6 +91,11 @@ final class Downloads: NSObject, URLSessionDownloadDelegate {
   private var goneIds: [String] = UserDefaults.standard.stringArray(forKey: "talk_gone_files") ?? []
   private lazy var goneSet = Set(goneIds)
   func isGone(_ id: String) -> Bool { goneSet.contains(id) }
+  // (back on the server — Ask the group: no longer gone)
+  func unGone(_ id: String) {
+    guard goneSet.contains(id) else { return }
+    goneIds.removeAll { $0 == id }; goneSet.remove(id); UserDefaults.standard.set(goneIds, forKey: "talk_gone_files")
+  }
   func running(_ id: String) -> Bool { tasks[id] != nil }
   func start(_ id: String, size: Int, done: ((Bool) -> Void)? = nil) {
     if FileManager.default.fileExists(atPath: Net.local(id).path) { done?(true); return }

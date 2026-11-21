@@ -1198,7 +1198,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     guard let f = m.file else { return }
     // (Auto-download: no longer on the server — said; downloading — a tap on the ring stops it; a file not here — a tap
     //  downloads it (opened with the next tap, as WhatsApp); a photo or video not here — downloaded first, then opened)
-    if Auto.gone(m) { toast("No longer available"); return }
+    // (no longer on the server: asked back from the group's phones within 90 days — AskGroup, Haris 2026-11-20 21:36)
+    if Auto.gone(m) { AskGroup.offer(m, group: group, from: self); return }
     if Downloads.shared.running(f.id) { Downloads.shared.cancel(f.id); return }
     if !Auto.here(f) && m.kind != "voice" {
       if m.kind == "photo" || m.kind == "video" { Downloads.shared.start(f.id, size: f.size) { [weak self] ok in if ok { self?.open(m) } } }
@@ -3005,7 +3006,10 @@ final class BubbleCell: UITableViewCell {
       // (on the phone, or downloading by itself: no badge — none made)
       if dlBadgeV == nil && (st == .here || st == .auto) { playDisc.isHidden = m.kind != "video"; return showCard(m, f, st, animated) }
       let put = {
-        self.dlBadge.why = Date().timeIntervalSince1970 * 1000 - m.at > Auto.keep ? "It wasn’t downloaded within 30 days" : "It’s no longer on the server"
+        // (Ask the group: asked — waiting; within 90 days — a tap asks; after — gone for good)
+        self.dlBadge.why = m.file.map { AskGroup.isAsking($0.id) } == true ? "Asking the group…"
+          : AskGroup.can(m) ? "Tap to ask the group for it"
+          : Date().timeIntervalSince1970 * 1000 - m.at > Auto.keep ? "It wasn’t downloaded within 30 days" : "It’s no longer on the server"
         self.dlBadge.set(st, size: f.size)
         self.playDisc.isHidden = m.kind != "video" || !(st == .here || st == .auto)
       }
@@ -3024,7 +3028,8 @@ final class BubbleCell: UITableViewCell {
           self.cardDown.isHidden = true; self.cardRing.isHidden = false; self.cardRing.set(Double(w) / Double(max(e, 1)))
           self.cardSize.text = Auto.size(w) + " of " + Auto.size(max(e, 1))
         case .gone:
-          self.cardDown.isHidden = true; self.cardRing.isHidden = true; self.cardSize.text = "No longer available"
+          self.cardDown.isHidden = true; self.cardRing.isHidden = true
+          self.cardSize.text = AskGroup.isAsking(f.id) ? "Asking the group…" : AskGroup.can(m) ? "No longer available · Tap to ask the group" : "No longer available"
         default:
           self.cardDown.isHidden = st == .here; self.cardRing.isHidden = true
           self.cardSize.text = Auto.size(Int64(f.size)) + " · " + (ext.isEmpty ? "file" : ext)

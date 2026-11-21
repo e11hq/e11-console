@@ -103,6 +103,8 @@ targets:
               - UISceneConfigurationName: Default
                 UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
         ITSAppUsesNonExemptEncryption: false
+        # (Ask the group — Haris 2026-11-20 21:36: a quiet notification wakes the app to send a file the group asked for)
+        UIBackgroundModes: [remote-notification]
         # (the screen's full 120 frames a second on ProMotion for our own animations too — crossfades, the bubble lift, the
         #  reaction pill; without it iPhone holds an app's own animations to 60: the speed report, Haris 2026-11-14)
         CADisableMinimumFrameDurationOnPhone: true
