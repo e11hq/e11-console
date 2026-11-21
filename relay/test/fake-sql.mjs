@@ -1,7 +1,7 @@
 // A Durable Object's ctx.storage.sql, over node's own SQLite — exec(query, ...bindings) → a cursor.
 import { DatabaseSync } from 'node:sqlite';
-export function fakeSql() {
-  const db = new DatabaseSync(':memory:');
+export function fakeSql(file = ':memory:') {
+  const db = new DatabaseSync(file);
   return {
     db,
     exec(q, ...b) {

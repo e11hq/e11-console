@@ -18,7 +18,9 @@ const json = (o, status = 200) => new Response(JSON.stringify(o), { status, head
 export class TalkHub extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
-    this.env = env; this.office = String(env.OFFICE || '').replace(/\/$/, '');
+    this.env = env;
+    // (the office's own public name for what the hub sends it, signed — talklink, let through by Cloudflare like a linked Mac)
+    this.office = String(env.OFFICE_LINK || env.OFFICE || '').replace(/\/$/, '');
     this.queue = []; this.flushing = null;
     ctx.blockConcurrencyWhile(async () => {
       const sql = ctx.storage.sql;

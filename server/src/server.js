@@ -53,6 +53,7 @@ import { createReview, resetDue, REVIEW_USER_ID } from './review.js';
 import { demoData, DEMO_REVIEWER } from './demo.js';
 import { createR2 } from './r2.js';
 import { createConsoleR2 } from './consoler2.js';
+import { createTalkRelay } from './talkrelay.js';
 import { Readable } from 'node:stream';
 
 const BODY_LIMIT = 12 * 1024 * 1024; // 2 MB upload pieces arrive as ~2.7 MB of base64
@@ -100,6 +101,18 @@ export function createServer(cfg) {
   // (E11 Talk's message files in Cloudflare R2 when its keys are set — r2.js; Haris 2026-11-20 17:52)
   const talkR2 = createR2({ account: cfg.r2Account, keyId: cfg.r2KeyId, secret: cfg.r2Secret, bucket: cfg.r2Bucket, endpoint: cfg.r2Endpoint || '', now: cfg.now || (() => Date.now()), fetchImpl: cfg.r2Fetch || null });
   const talkNow = () => talk || (talk = createTalk({ dataDir, store, access, apns: talkApns, dbFile: cfg.talkDbFile, now: cfg.now || (() => Date.now()), links: () => fileLinks, signinCode: talkSigninCode, icons: () => appStart.icons(store.get('meta', 'main') || {}, (cfg.now || Date.now)(), appIcon.info()), onUnread: talkUnreadTell, keepFor: review ? REVIEW_USER_ID : null, r2: talkR2 }));
+  // E11 Talk on Cloudflare (talkrelay.js — TALK-CF-A, Haris 2026-11-21/22): the office's copy and stand-in for Talk's hub
+  // (relay/, talkline.e11hq.com). Live only (not the test site, not App Review); dormant until the hub has the office's Talk.
+  let talkRelay = null;
+  const talkRelayUrl = () => (cfg.talkRelayUrl !== undefined ? cfg.talkRelayUrl : (!review && !cfg.dev && !/-test\./.test(version) ? 'https://talkline.e11hq.com' : ''));
+  const talkRelayNow = () => {
+    if (talkRelay) return talkRelay;
+    const file = cfg.talkDbFile || path.join(dataDir, 'db', 'talk.sqlite');
+    if (file === ':memory:') return null;
+    talkNow();   // (Talk's database made first)
+    talkRelay = createTalkRelay({ dbFile: file, relayUrl: talkRelayUrl(), store, access, apns: talkApns, unreadTell: talkUnreadTell, fetchImpl: cfg.talkRelayFetch || null, now: cfg.now || (() => Date.now()) });
+    return talkRelay;
+  };
   // (E11 Talk's unread count on E11 Console's Talk button: to that person's open apps, as it changes)
   function talkUnreadTell(uids) { if (!talk) return; const set = new Set(uids.map(String)); for (const s of streams) if (set.has(s.userId)) { try { send(s, 'talkUnread', { n: talk.unreadFor(s.userId) }); } catch { /* fine */ } } }
   function talkContact(e) { try { return talkNow().contactByEmail(e); } catch { return null; } }
@@ -514,12 +527,16 @@ export function createServer(cfg) {
     }
   }
   if (cfg.warmReviews !== false) setTimeout(() => warmReviews(store.list('tasks')), 30_000).unref?.();
+  // (Talk's hub on Cloudflare: E11 Console's people and clients sent once after starting — live only; nothing if it isn't there)
+  if (!cfg.dev && cfg.talkRelayStart !== false) setTimeout(() => { try { if (talkRelayUrl()) talkRelayNow()?.sendDir(); } catch (e) { console.error('talk relay:', e.message); } }, 20_000).unref?.();
   function broadcast(rev, results, fromClient, byUser) {
     const changed = results.filter((r) => !r.refused && !r.unchanged);
     if (!changed.length) return;
     quietSoon(changed);
     // (E11 Talk's open chats hear which tasks changed, so their task cards keep up — Haris 2026-11-12; only if Talk has started)
-    if (talk) { const ids = changed.filter((r) => r.kind === 'tasks').map((r) => String(r.id)); if (ids.length) talk.tasksChanged(ids); }
+    if (talk) { const ids = changed.filter((r) => r.kind === 'tasks').map((r) => String(r.id)); if (ids.length) { talk.tasksChanged(ids); if (talkRelay) talkRelay.tell('tasks', { ids: ids.slice(0, 100) }); } }
+    // (…and Talk's hub on Cloudflare: E11 Console's people and clients as Talk needs them, a moment later — TALK-CF-A)
+    if (talkRelay && changed.some((r) => r.kind === 'users' || r.kind === 'projects' || r.kind === 'clients' || r.kind === 'meta')) { talkRelay.dirSoon(); if (changed.some((r) => r.kind === 'clients')) talkRelay.tell('links'); }
     // (…and their people, clients and Client Assets: who's who, which groups, link cards — Haris 2026-11-16)
     if (talk && changed.some((r) => r.kind === 'users' || r.kind === 'projects' || r.kind === 'clients')) { try { talk.peopleChanged(); if (changed.some((r) => r.kind === 'clients')) talk.linksChanged(); } catch { /* fine */ } }
     if (cfg.warmReviews !== false) warmReviews(changed.filter((r) => r.kind === 'tasks' && !r.del).map((r) => store.get('tasks', String(r.id))));
@@ -654,6 +671,23 @@ export function createServer(cfg) {
     if (k) return k;
     json(res, 403, { ok: false, error: 'No E11 Talk account for ' + id.email });
     return null;
+  }
+  async function talkRelayRoute(req, res, p) {
+    const r = talkRelayNow();
+    if (!r) return json(res, 404, { ok: false, error: 'Not here' });
+    if (p === '/api/talk/relay/key' && req.method === 'GET') return json(res, 200, { ok: true, key: r.publicKey() });
+    // (the phone's own sign-in, checked as for any Talk request — through the hub, which only learns the email)
+    if (p === '/api/talk/relay/who' && req.method === 'GET') { const tu = await talkWho(req, res); if (!tu) return; return json(res, 200, { ok: true, email: tu.email || null }); }
+    if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'POST' });
+    const chunks = []; let n = 0;
+    for await (const c of req) { n += c.length; if (n > 64 * 1024 * 1024) return json(res, 413, { ok: false, error: 'Too big' }); chunks.push(c); }
+    const body = Buffer.concat(chunks).toString('utf8');
+    if (!(await r.fromHub('POST', p, body, req.headers))) return json(res, 403, { ok: false, error: 'Not signed by the hub' });
+    let b; try { b = body ? JSON.parse(body) : {}; } catch { return json(res, 400, { ok: false, error: 'Bad' }); }
+    if (p === '/api/talk/relay/copy') { const x = r.copy(b.batches); return json(res, x.status || 200, x); }
+    if (p === '/api/talk/relay/push') return json(res, 200, await r.push(b));
+    if (p === '/api/talk/relay/unread') return json(res, 200, r.unread(b));
+    return json(res, 404, { ok: false, error: 'Not here' });
   }
   // E11 Talk over the office network (office.js passes 'talkup' / 'talkfile'): a piece of a file being sent, or a message's
   // file fetched — as /api/talk/upload and /api/talk/file/…, for the person the pass is for (Haris 2026-11-17 20:13)
@@ -1086,6 +1120,8 @@ export function createServer(cfg) {
     // Cloudflare) answers only these: a code, its status, and the key's requests — nothing else of the server.
     if (p === '/api/talk/linked/code' && req.method === 'POST') { const b = await readBody(req, 4096).catch(() => ({})); const r = talkNow().macCode(b.name); return json(res, r.status || (r.ok === false ? 400 : 200), r); }
     if (p === '/api/talk/linked/status' && req.method === 'GET') return json(res, 200, talkNow().macStatus(url.searchParams.get('code'), url.searchParams.get('ticket')));
+    // E11 Talk's hub on Cloudflare (TALK-CF-A): the office's key, who a phone's sign-in is, and what the hub sends (signed)
+    if (p.startsWith('/api/talk/relay/')) return talkRelayRoute(req, res, p);
     if (p.startsWith('/api/talk/') && (req.headers['x-talk-key'] || talkMacHost(req))) {
       const t = talkNow(), m = t.macByKey(req.headers['x-talk-key']);
       const mu = m ? t.userById(m.uid) : null;
@@ -2066,7 +2102,8 @@ export function createServer(cfg) {
     office, apns,
     digest, holidays, occRemind, birthdays, scheduled, daily, views, scanVideos, pruneNotifications,
     loadDemo,
-    close: () => new Promise((ok) => { clearInterval(demoTimer); digest.stop(); holidays.stop(); occRemind.stop(); birthdays.stop(); scheduled.stop(); daily.stop(); apns.close(); talkApns.close(); if (talk) talk.close(); scanTimers.forEach((x) => { clearTimeout(x); clearInterval(x); }); office.close(); consoleR2.close(); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
+    talkRelay: () => talkRelayNow(),
+    close: () => new Promise((ok) => { clearInterval(demoTimer); digest.stop(); holidays.stop(); occRemind.stop(); birthdays.stop(); scheduled.stop(); daily.stop(); apns.close(); talkApns.close(); if (talkRelay) talkRelay.close(); if (talk) talk.close(); scanTimers.forEach((x) => { clearTimeout(x); clearInterval(x); }); office.close(); consoleR2.close(); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
     broadcastVersion: (v) => { for (const s of streams) send(s, 'version', { version: v }); },
   };
 }

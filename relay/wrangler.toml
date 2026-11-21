@@ -23,6 +23,7 @@ new_sqlite_classes = ["TalkHub"]
 
 [vars]
 OFFICE = "https://talk.e11hq.com"
+OFFICE_LINK = "https://talklink.e11hq.com"
 HUB_NAME = "live"
 PUBLIC = "https://talkline.e11hq.com"
 
