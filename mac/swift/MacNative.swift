@@ -550,23 +550,35 @@ enum FileDrag {
     pr.kind = .file; pr.fileOperationKind = .downloading; pr.fileURL = url
     pr.publish()
     defer { pr.unpublish() }
-    var r = URLRequest(url: src)
-    r.allHTTPHeaderFields = HTTPCookie.requestHeaderFields(with: MacLoad.mine(src))
-    let wait = DispatchSemaphore(value: 0)
-    var ok = false
-    let task = URLSession.shared.downloadTask(with: r) { tmp, resp, err in
-      defer { wait.signal() }
-      DragLog.note("download: status=\((resp as? HTTPURLResponse)?.statusCode ?? -1) error=\(err?.localizedDescription ?? "-")")
-      guard err == nil, let tmp = tmp, ((resp as? HTTPURLResponse)?.statusCode ?? 0) / 100 == 2 else { return }
-      do { _ = try FileManager.default.replaceItemAt(url, withItemAt: tmp); ok = true } catch {
-        try? FileManager.default.removeItem(at: url)
-        ok = (try? FileManager.default.moveItem(at: tmp, to: url)) != nil
+    // (from Cloudflare R2 when it has a fast copy: asked with r2=1, the sign-in never going along to R2 — R2Redirect; if R2
+    //  doesn't answer well, the office is asked as before — Haris 2026-11-20 23:13, the Mac round)
+    func fetch(_ from: URL, viaR2: Bool) -> Bool {
+      var r = URLRequest(url: from)
+      r.allHTTPHeaderFields = HTTPCookie.requestHeaderFields(with: MacLoad.mine(src))
+      let wait = DispatchSemaphore(value: 0)
+      var ok = false
+      let task = URLSession.shared.downloadTask(with: r) { tmp, resp, err in
+        defer { wait.signal() }
+        DragLog.note("download\(viaR2 ? " (R2 asked)" : ""): status=\((resp as? HTTPURLResponse)?.statusCode ?? -1) host=\((resp as? HTTPURLResponse)?.url?.host ?? "-") error=\(err?.localizedDescription ?? "-")")
+        guard err == nil, let tmp = tmp, ((resp as? HTTPURLResponse)?.statusCode ?? 0) / 100 == 2 else { return }
+        do { _ = try FileManager.default.replaceItemAt(url, withItemAt: tmp); ok = true } catch {
+          try? FileManager.default.removeItem(at: url)
+          ok = (try? FileManager.default.moveItem(at: tmp, to: url)) != nil
+        }
       }
+      if viaR2, #available(macOS 12.0, *) { task.delegate = R2Redirect.shared }
+      let watch = task.progress.observe(\.completedUnitCount) { p, _ in pr.completedUnitCount = p.completedUnitCount }
+      task.resume()
+      wait.wait()
+      watch.invalidate()
+      return ok
     }
-    let watch = task.progress.observe(\.completedUnitCount) { p, _ in pr.completedUnitCount = p.completedUnitCount }
-    task.resume()
-    wait.wait()
-    watch.invalidate()
+    // (a task's own redirect handling is macOS 12+: older Macs keep the office)
+    var fast = src
+    if #available(macOS 12.0, *) { fast = R2Redirect.ask(src) }
+    var ok = false
+    if fast != src { ok = fetch(fast, viaR2: true); if !ok { pr.completedUnitCount = 0; _ = FileManager.default.createFile(atPath: url.path, contents: nil) } }
+    if !ok { ok = fetch(src, viaR2: false) }
     if !ok { try? FileManager.default.removeItem(at: url); return false }
     var u = url, rv = URLResourceValues()
     rv.quarantineProperties = [kLSQuarantineTypeKey as String: kLSQuarantineTypeWebDownload as String, kLSQuarantineAgentNameKey as String: APP_NAME]
@@ -887,3 +899,24 @@ private final class OwnDrag: NSObject, NSDraggingInfo {
 
 // (web/logo-wordmark.png's E11. part, white on clear: the menu bar item's picture)
 let WORDMARK_B64 = "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"
+
+/* Our files through Cloudflare R2 when dragged out to Finder (server 1.9.114+, consoler2.js — Haris 2026-11-20 23:13). The
+   server sends a file asked for with r2=1 to R2's own short-lived address while R2 has a fast copy (else answers from the
+   office, as before). The sign-in cookie, set on the request by hand, never goes along to R2: the redirect to another
+   address is made as a fresh request with only that address. */
+final class R2Redirect: NSObject, URLSessionTaskDelegate {
+  static let shared = R2Redirect()
+  func urlSession(_ s: URLSession, task: URLSessionTask, willPerformHTTPRedirection r: HTTPURLResponse, newRequest n: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+    guard let u = n.url, u.host != task.originalRequest?.url?.host else { return completionHandler(n) }
+    var c = URLRequest(url: u); c.httpMethod = n.httpMethod ?? "GET"; c.timeoutInterval = n.timeoutInterval
+    completionHandler(c)
+  }
+  // one of the server's files (/__file/…) asked for with r2=1; anything else as it is
+  static func ask(_ url: URL) -> URL {
+    guard url.path.hasPrefix("/__file/"), var c = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+    var q = c.queryItems ?? []
+    if !q.contains(where: { $0.name == "r2" }) { q.append(URLQueryItem(name: "r2", value: "1")) }
+    c.queryItems = q
+    return c.url ?? url
+  }
+}
