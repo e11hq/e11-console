@@ -244,13 +244,16 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
 
   // ---------- events: addressed, kept until picked up ----------
   const listeners = new Map();   // uid -> Set of live streams
+  const LIVE = new Set(['msg', 'got', 'read', 'react', 'edit', 'del']);
   function emit(g, type, data, by, to = memberIds(g)) {
     const at = now();
     const r = Q.addEvent.run(g.id, type, JSON.stringify(data), at, by || null);
     const seq = Number(r.lastInsertRowid);
-    // (a "got" — the ✓✓ — rides on the live line itself, so the sender's open phone shows it at once without asking
-    //  again; it still waits for its phone like any event — Haris 2026-11-21 12:08: "whatsapp shows the delivered quickly")
-    const ev = type === 'got' ? { seq, group: g.id, type, at, by: by || null, ...data } : null;
+    // (a message, and its ✓✓, read, reaction, edit or delete, rides on the live line itself — the open phone shows it at
+    //  once without asking again; it still waits for its phone like any event, and the sync after still collects it —
+    //  Haris 2026-11-21 12:08 "whatsapp shows the delivered quickly", 12:33 "lets go with A")
+    let ev = LIVE.has(type) ? { seq, group: g.id, type, at, by: by || null, ...data } : null;
+    if (ev && JSON.stringify(ev).length > 32 * 1024) ev = null;   // (a big one: only the nudge, as before)
     for (const uid of devicesFor(to, by)) waitFor(seq, uid, ev);
     if (type === 'msg' && data && data.kind !== 'sys' && onUnread) { try { onUnread(to.filter((x) => x !== by && !isMacId(x))); } catch { /* fine */ } }
     return seq;
