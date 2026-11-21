@@ -1163,9 +1163,9 @@ final class VoiceBubble: UIView, AVAudioPlayerDelegate {
     }
     time.font = .monospacedDigitSystemFont(ofSize: 12.5, weight: .medium); time.textColor = .secondaryLabel; time.text = VoiceBubble.fmt(dur)
     time.textAlignment = .right; time.setContentHuggingPriority(.required, for: .horizontal); time.setContentCompressionResistancePriority(.required, for: .horizontal)
-    let h = UIStackView(arrangedSubviews: [play, wave, time]); h.spacing = 10; h.alignment = .center
+    let h = UIStackView(arrangedSubviews: [play, wave, time]); h.spacing = 8; h.alignment = .center
     h.translatesAutoresizingMaskIntoConstraints = false; addSubview(h)
-    NSLayoutConstraint.activate([play.widthAnchor.constraint(equalToConstant: 34), play.heightAnchor.constraint(equalToConstant: 34), h.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6), h.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16), h.centerYAnchor.constraint(equalTo: centerYAnchor)])
+    NSLayoutConstraint.activate([play.widthAnchor.constraint(equalToConstant: 34), play.heightAnchor.constraint(equalToConstant: 34), h.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6), h.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12), h.centerYAnchor.constraint(equalTo: centerYAnchor)])
   }
   required init?(coder: NSCoder) { fatalError() }
   // (iPhone's own symbol animations, iOS 17 and later; before that, the symbol simply changes)
