@@ -674,7 +674,10 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     if let t = thumb { FeedLoader.shared.setLocal("local:" + uid, t) }   // (its card in the comments, if sent before it's up)
     paintTiles()
     if small && CommentCell.isVideo(name) {
-      Picker.video720(url, name: name) { [weak self] made, madeName in
+      // (while it's made smaller its ring fills a first time, lighter — "preparing"; then white as it goes up: E11 Talk's
+      //  "Preparing · %", Haris 2026-11-21 16:37)
+      var shown = -1
+      Picker.video720(url, name: name, progress: { p in let pct = Int(p * 50); if pct != shown { shown = pct; UploadRing.post(uid, p, prep: true) } }) { [weak self] made, madeName in
         guard let self = self, let i = self.files.firstIndex(where: { $0.uid == uid }) else { return }
         self.files[i].name = madeName
         self.files[i].size = ((try? FileManager.default.attributesOfItem(atPath: made.path))?[.size] as? NSNumber)?.int64Value ?? size

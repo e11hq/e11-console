@@ -1673,8 +1673,13 @@ final class UploadRing: UIView {
   private var token: NSObjectProtocol?
   static let note = Notification.Name("e11.upload")
   static var last: [String: Double] = [:]
-  static func post(_ id: String, _ p: Double) {
-    DispatchQueue.main.async { last[id] = p; NotificationCenter.default.post(name: note, object: nil, userInfo: ["id": id, "p": p]) }
+  static var prepping = Set<String>()
+  // (prep: a video still being made smaller — the ring fills lighter; the upload's own fill is white)
+  static func post(_ id: String, _ p: Double, prep: Bool = false) {
+    DispatchQueue.main.async {
+      last[id] = p; if prep { prepping.insert(id) } else { prepping.remove(id) }
+      NotificationCenter.default.post(name: note, object: nil, userInfo: ["id": id, "p": p, "prep": prep])
+    }
   }
   init(id: String) {
     super.init(frame: .zero)
@@ -1683,8 +1688,11 @@ final class UploadRing: UIView {
     for l in [track, bar] { l.fillColor = UIColor.clear.cgColor; l.lineWidth = 2.5; l.lineCap = .round; layer.addSublayer(l) }
     track.strokeColor = UIColor.white.withAlphaComponent(0.3).cgColor; bar.strokeColor = UIColor.white.cgColor
     bar.strokeEnd = CGFloat(UploadRing.last[id] ?? 0)
+    bar.strokeColor = UIColor.white.withAlphaComponent(UploadRing.prepping.contains(id) ? 0.55 : 1).cgColor
     token = NotificationCenter.default.addObserver(forName: UploadRing.note, object: nil, queue: .main) { [weak self] n in
       guard (n.userInfo?["id"] as? String) == id, let p = n.userInfo?["p"] as? Double else { return }
+      let prep = (n.userInfo?["prep"] as? Bool) == true
+      self?.bar.strokeColor = UIColor.white.withAlphaComponent(prep ? 0.55 : 1).cgColor
       self?.bar.strokeEnd = CGFloat(max(0.03, min(1, p)))   // (the layer's own short animation: it fills smoothly)
     }
   }

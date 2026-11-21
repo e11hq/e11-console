@@ -588,7 +588,8 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
         let was = self.dl.removeValue(forKey: me)
         self.paintHUD()
         guard let file = file else { if was?.cancelled == false { self.appToast("Download failed — try again") }; return }
-        let sheet = UIActivityViewController(activityItems: [file], applicationActivities: nil)
+        // (a HEIC photo handed out as a JPEG, so any computer opens it — E11 Talk's way, Haris 2026-11-21 16:37)
+        let sheet = UIActivityViewController(activityItems: [Picker.jpegIfHeic(file)], applicationActivities: nil)
         sheet.popoverPresentationController?.sourceView = self.view
         self.topMost().present(sheet, animated: true)
       }
@@ -2954,15 +2955,36 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
 
   // a comment's video at 720p as an MP4 (as E11 Talk's — Haris 2026-11-16 13:40), made once: one already 720p or smaller and
   // H.264 stays as it is; one that can't be made goes as it was
-  static func video720(_ src: URL, name: String, _ done: @escaping (URL, String) -> Void) {
+  static func video720(_ src: URL, name: String, progress: ((Double) -> Void)? = nil, _ done: @escaping (URL, String) -> Void) {
     // (HEVC first, E11 Talk's way — sharper at the same size, normal colours for Log, stereo sound: Haris 2026-11-21 15:50;
     //  Apple's H.264 preset as before if it can't)
+    _ = Picker.watch
+    let left = Picker.leftCount
     let hevc = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mp4")
-    VideoShrink.run(AVURLAsset(url: src), hd: false, to: hevc) { ok in DispatchQueue.main.async {
+    VideoShrink.run(AVURLAsset(url: src), hd: false, to: hevc, progress: progress) { ok in DispatchQueue.main.async {
       if ok { return done(hevc, (name as NSString).deletingPathExtension + ".mp4") }
       try? FileManager.default.removeItem(at: hevc)
+      // (the app was left while it was made smaller — iPhone stops the video maker in the background: made again once the
+      //  app is back, never the full original instead; E11 Talk's way, Haris 2026-11-21 16:37)
+      if Picker.leftCount != left { return Picker.whenBack { video720(src, name: name, progress: progress, done) } }
       video720Preset(src, name: name, done)
     } }
+  }
+  // (the app left: counted; what waits for its return, run then)
+  static var leftCount = 0
+  private static var waiting: [() -> Void] = []
+  static func whenBack(_ f: @escaping () -> Void) { if UIApplication.shared.applicationState == .active { f() } else { waiting.append(f) } }
+  static let watch: [NSObjectProtocol] = [
+    NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in Picker.leftCount += 1 },
+    NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in let w = Picker.waiting; Picker.waiting = []; w.forEach { $0() } },
+  ]
+  // a HEIC photo as a JPEG beside it (its own name); anything else as it is
+  static func jpegIfHeic(_ f: URL) -> URL {
+    guard ["heic", "heif"].contains(f.pathExtension.lowercased()), let s = CGImageSourceCreateWithURL(f as CFURL, nil),
+          let cg = CGImageSourceCreateImageAtIndex(s, 0, nil), let d = UIImage(cgImage: cg).jpegData(compressionQuality: 0.9) else { return f }
+    let out = f.deletingPathExtension().appendingPathExtension("jpg")
+    try? FileManager.default.removeItem(at: out)
+    return (try? d.write(to: out)) != nil ? out : f
   }
   private static func video720Preset(_ src: URL, name: String, _ done: @escaping (URL, String) -> Void) {
     let asset = AVURLAsset(url: src)
