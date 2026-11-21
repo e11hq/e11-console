@@ -982,6 +982,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     } else {
       data.apply(snap, animatingDifferences: animated && old.numberOfItems > 0)
     }
+    if !selecting { DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.clearStrayPicks() } }
   }
   private func toBottom(_ animated: Bool) {
     let s = data.snapshot()
@@ -1165,19 +1166,21 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.intValue ?? 0
     let tmpId = "local-" + UUID().uuidString
     if hd { Talk.sentHD.insert(tmpId) }   // (for Send again)
-    // (ProRes RAW — a camera's raw footage — goes as the original, on purpose, with a word saying so: Haris 2026-11-21 13:18)
-    let raw = VideoShrink.isRaw(asset)
-    let fname = raw ? name : (name as NSString).deletingPathExtension + ".mp4"
-    var ref = Msg.FileRef(id: tmpId, name: fname, size: size, kind: "video", w: w, h: h, secs: secs.isFinite ? secs : nil)
-    if raw { ref.orig = "ProRes RAW" }
+    // (every ProRes made smaller like any video, with its label — "From ProRes 422 HQ · Log"; one Talk can't read (ProRes
+    //  RAW on a phone without its decoder) goes as the original: "Original · ProRes RAW" — Haris 2026-11-21 14:00–14:04:
+    //  "if they want to send original they can send it as a file")
+    let pro = VideoShrink.proRes(asset)
+    var ref = Msg.FileRef(id: tmpId, name: (name as NSString).deletingPathExtension + ".mp4", size: size, kind: "video", w: w, h: h, secs: secs.isFinite ? secs : nil)
+    ref.orig = pro.map { "From " + $0 }
     Talk.shared.send(group, text: caption, reply: replying, file: ref,
                      localFile: url, album: album, prepare: { ready in
-      if raw {
-        if Attach.tooBig(url) { toast("That video is over 1 GB — send a shorter part"); ready(nil); return }
-        ready(url); return
-      }
       // (Talk left while it was made smaller: nothing sent — it starts again when Talk is back; never the original instead)
       let left = BgWatch.left
+      // (sent as it is after all: its label says so, and why it couldn't be made smaller)
+      let asItIs = {
+        if let p = pro { Talk.origSaid[tmpId] = "Original · " + p }
+        toast("Sent at full size — it couldn’t be made smaller" + (VideoShrink.lastError.map { ": " + $0 } ?? ""))
+      }
       // (HEVC first — sharper at the same size, Haris 2026-11-21 12:08; Apple's H.264 preset as before if it can't)
       let hevc = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mp4")
       VideoShrink.run(asset, hd: hd, to: hevc, stop: tmpId, progress: { Uploads.prep(tmpId, $0) }) { ok in DispatchQueue.main.async {
@@ -1188,16 +1191,20 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         }
         try? FileManager.default.removeItem(at: hevc)
         if BgWatch.left != left { ready(nil); return }
-        guard let ex = AVAssetExportSession(asset: asset, presetName: hd ? AVAssetExportPreset1920x1080 : AVAssetExportPreset1280x720) else { ready(url); return }
+        guard let ex = AVAssetExportSession(asset: asset, presetName: hd ? AVAssetExportPreset1920x1080 : AVAssetExportPreset1280x720) else {
+          if Attach.tooBig(url) { toast("That video is over 1 GB — send a shorter part"); ready(nil); return }
+          asItIs(); ready(url); return
+        }
         let out = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mp4")
         ex.outputURL = out; ex.outputFileType = .mp4; ex.shouldOptimizeForNetworkUse = true
         // (1 GB counted on what goes, after it's made smaller — WhatsApp's way, Haris 2026-11-20 17:38: a long 4K video fits at 720p)
         ex.exportAsynchronously { DispatchQueue.main.async {
           if Uploads.isStopped(tmpId) { ready(nil); return }
           if ex.status != .completed && BgWatch.left != left { ready(nil); return }
-          if ex.status != .completed { toast("Sent as the original — it couldn’t be made smaller") }
+          if ex.status != .completed, VideoShrink.lastError == nil { VideoShrink.lastError = ex.error.map { ($0 as NSError).localizedDescription } }
           let made = ex.status == .completed ? out : url
           if Attach.tooBig(made) { toast("That video is over 1 GB even made smaller — send a shorter part"); ready(nil); return }
+          if ex.status != .completed { asItIs() }
           ready(made)
         } }
       } }
@@ -1681,6 +1688,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     bar.isUserInteractionEnabled = true
     showPicks(animated: true)
     UIView.animate(withDuration: 0.25) { self.selBar.alpha = 0; self.bar.alpha = 1 }
+    // (once the list has settled: every row it holds — not only those it calls visible — without a pick)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.clearStrayPicks() }
+  }
+  private func clearStrayPicks() {
+    guard !selecting else { return }
+    for v in table.subviews { (v as? BubbleCell)?.clearPick() }
+    for c in table.visibleCells { (c as? BubbleCell)?.clearPick() }
   }
   // the rows on the screen shown again as picked or not (the rest as they come — the list's own cells)
   private func showPicks(animated: Bool) {
@@ -2595,6 +2609,13 @@ final class BubbleCell: UITableViewCell {
     }
     if animated { UIView.animate(withDuration: 0.25, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: put) } else { put() }
   }
+  // (selecting over: a pick left on a row the list was still moving — a delete for everyone's rows changing as the
+  //  selection ended — taken off; Haris 2026-11-21 14:00: the check marks stayed until the chat was opened again)
+  func clearPick() {
+    guard pickDot.superview != nil, pickDot.alpha > 0 || pickTint.alpha > 0 || contentView.bounds.origin.x != 0 else { return }
+    pickDot.layer.removeAllAnimations(); pickTint.layer.removeAllAnimations()
+    pickDot.alpha = 0; pickTint.alpha = 0; contentView.bounds.origin.x = 0
+  }
   override func layoutSubviews() {
     super.layoutSubviews()
     pickTint.frame = bounds
@@ -2749,7 +2770,7 @@ final class BubbleCell: UITableViewCell {
       if let s = f.secs { vlen.text = String(format: "%d:%02d", Int(s) / 60, Int(s) % 60) }
       // (sent as the original on purpose: said on the bubble, on both phones — Haris 2026-11-21 13:33)
       // (a line of its own above the length, so it never runs into the time on the right)
-      if let o = f.orig { vlen.text = "Original · " + o + "\n" + (vlen.text ?? "") }
+      if let o = f.orig { vlen.text = (o.hasPrefix("Original") || o.hasPrefix("From") ? o : "Original · " + o) + "\n" + (vlen.text ?? "") }
       // (the same photo drawn again keeps its picture — it blanked for a moment on every redraw, all photos flashing)
       let known = isVideo ? BubbleCell.frames.object(forKey: f.id as NSString) : BubbleCell.pictures.object(forKey: f.id as NSString)
       if album.count >= 4 {

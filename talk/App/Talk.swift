@@ -462,7 +462,7 @@ final class Talk {
       if let p = place { b["location"] = p.json }
       if fwd { b["fwd"] = true }
       if let r = m.reply { b["reply"] = ["id": r.id, "by": r.by, "text": r.text, "kind": r.kind] }
-      if let f = file, let fid = fileId { var fd: [String: Any] = ["id": fid, "kind": f.kind]; fd["w"] = f.w; fd["h"] = f.h; fd["secs"] = f.secs; fd["wave"] = f.wave; fd["thumb"] = thumb; fd["orig"] = f.orig
+      if let f = file, let fid = fileId { var fd: [String: Any] = ["id": fid, "kind": f.kind]; fd["w"] = f.w; fd["h"] = f.h; fd["secs"] = f.secs; fd["wave"] = f.wave; fd["thumb"] = thumb; fd["orig"] = Talk.origSaid[f.id] ?? f.orig
         // (locked in pieces — "p:" before its key on the phone: the server's word for it is lock "p")
         if let k = fileKey { if k.hasPrefix("p:") { fd["key"] = String(k.dropFirst(2)); fd["lock"] = "p" } else { fd["key"] = k } }
         b["file"] = fd }
@@ -573,6 +573,8 @@ final class Talk {
   }
   // (sent in HD from this phone — kept for Send again; this time Talk is open)
   static var sentHD = Set<String>()
+  // (a ProRes that went at full size after all: its label, "Original · …", instead of "From …")
+  static var origSaid: [String: String] = [:]
   // ✕ on one of yours going up: stopped — the red !, then Send again or Delete (Haris 2026-11-21 13:18)
   func stopped(_ g: String, _ m: Msg) { if let c = m.cid { mark(g, c, failed: true) } }
   func retry(_ g: String, _ m: Msg) {

@@ -17,7 +17,22 @@ enum VideoShrink {
     let c = CMFormatDescriptionGetMediaSubType(d as! CMFormatDescription)
     return c == 0x6170726E || c == 0x61707268   // 'aprn', 'aprh'
   }
+  // which ProRes it is, for its bubble's label (Haris 2026-11-21 14:00: "Add labels to every prores type") — the kind, and
+  // "Log" when filmed in Apple Log; nil for any other video
+  static func proRes(_ asset: AVAsset) -> String? {
+    guard let t = asset.tracks(withMediaType: .video).first, let d0 = t.formatDescriptions.first else { return nil }
+    let d = d0 as! CMFormatDescription
+    let names: [FourCharCode: String] = [0x6170636F: "ProRes 422 Proxy", 0x61706373: "ProRes 422 LT", 0x6170636E: "ProRes 422",
+                                         0x61706368: "ProRes 422 HQ", 0x61703468: "ProRes 4444", 0x61703478: "ProRes 4444 XQ",
+                                         0x6170726E: "ProRes RAW", 0x61707268: "ProRes RAW HQ"]
+    guard let n = names[CMFormatDescriptionGetMediaSubType(d)] else { return nil }
+    let tf = CMFormatDescriptionGetExtension(d, extensionKey: kCMFormatDescriptionExtension_TransferFunction) as? String
+    return tf == "AppleLog" ? n + " · Log" : n
+  }
+  // (why the last one couldn't be made smaller — said when a video goes as its original instead)
+  static var lastError: String?
   static func run(_ asset: AVAsset, hd: Bool, to out: URL, stop: String? = nil, progress: ((Double) -> Void)? = nil, done: @escaping (Bool) -> Void) {
+    lastError = nil
     guard let vt = asset.tracks(withMediaType: .video).first,
           let reader = try? AVAssetReader(asset: asset),
           let writer = try? AVAssetWriter(outputURL: out, fileType: .mp4) else { done(false); return }
@@ -38,14 +53,21 @@ enum VideoShrink {
       AVVideoScalingModeKey: AVVideoScalingModeResizeAspectFill,
       AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: rate, AVVideoExpectedSourceFrameRateKey: fps,
                                         AVVideoMaxKeyFrameIntervalDurationKey: 2,
-                                        AVVideoProfileLevelKey: kVTProfileLevel_HEVC_Main_AutoLevel as String]])
+                                        AVVideoProfileLevelKey: kVTProfileLevel_HEVC_Main_AutoLevel as String],
+      // (standard colour, as every phone shows it — a ProRes Log or HDR video turned into it, not tagged with its own)
+      AVVideoColorPropertiesKey: [AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2, AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
+                                  AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2]])
     vIn.transform = vt.preferredTransform; vIn.expectsMediaDataInRealTime = false
     guard writer.canAdd(vIn) else { done(false); return }
     writer.add(vIn)
 
     var aOut: AVAssetReaderTrackOutput?, aIn: AVAssetWriterInput?
     if let at = asset.tracks(withMediaType: .audio).first {
-      let o = AVAssetReaderTrackOutput(track: at, outputSettings: [AVFormatIDKey: kAudioFormatLinearPCM])
+      // (read as plain stereo — an iPhone 17's camera records spatial audio, 4 channels and more, which the stereo AAC
+      //  couldn't take: every camera ProRes clip failed and went at its full size, Haris 2026-11-21 14:05)
+      let o = AVAssetReaderTrackOutput(track: at, outputSettings: [AVFormatIDKey: kAudioFormatLinearPCM, AVNumberOfChannelsKey: 2, AVSampleRateKey: 44100,
+                                                                   AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false,
+                                                                   AVLinearPCMIsNonInterleaved: false])
       let i = AVAssetWriterInput(mediaType: .audio, outputSettings: [AVFormatIDKey: kAudioFormatMPEG4AAC, AVNumberOfChannelsKey: 2,
                                                                       AVSampleRateKey: 44100, AVEncoderBitRateKey: 128_000])
       i.expectsMediaDataInRealTime = false
@@ -73,8 +95,11 @@ enum VideoShrink {
     pump(vIn, vOut, q, video: true)
     if let o = aOut, let i = aIn { pump(i, o, qa, video: false) }
     g.notify(queue: .global(qos: .userInitiated)) {
-      if Uploads.isStopped(stop) || reader.status == .failed || writer.status == .failed { reader.cancelReading(); writer.cancelWriting(); done(false); return }
-      writer.finishWriting { done(writer.status == .completed) }
+      if Uploads.isStopped(stop) || reader.status == .failed || writer.status == .failed {
+        lastError = (writer.error ?? reader.error).map { ($0 as NSError).localizedDescription + " (\(($0 as NSError).code))" }
+        reader.cancelReading(); writer.cancelWriting(); done(false); return
+      }
+      writer.finishWriting { if writer.status != .completed { lastError = writer.error.map { ($0 as NSError).localizedDescription + " (\(($0 as NSError).code))" } }; done(writer.status == .completed) }
     }
   }
 }
