@@ -445,7 +445,9 @@ const ProfileAsk = (() => {
 /* ================= Mac app Dock icon (chosen by the owner on the server) ================= */
 const AppIcon = (() => {
   let info = null, applied = null, busy = null, owner = false;
-  const KEY = 'e11-appicon-custom';
+  // (a new name, 2026-11-22: what the Mac App Store app remembered before — "done", though it couldn't save it — is let go,
+  //  so its occasion icon is put back the next time it opens)
+  const KEY = 'e11-appicon-2';
   const lsGet = () => { try { return localStorage.getItem(KEY); } catch (e) { return null; } };
   const lsSet = (v) => { try { if (v) localStorage.setItem(KEY, v); else localStorage.removeItem(KEY); } catch (e) { /* storage off */ } };
   const toB64 = (blob) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(blob); });
