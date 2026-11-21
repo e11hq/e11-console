@@ -248,7 +248,10 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     const at = now();
     const r = Q.addEvent.run(g.id, type, JSON.stringify(data), at, by || null);
     const seq = Number(r.lastInsertRowid);
-    for (const uid of devicesFor(to, by)) waitFor(seq, uid);
+    // (a "got" — the ✓✓ — rides on the live line itself, so the sender's open phone shows it at once without asking
+    //  again; it still waits for its phone like any event — Haris 2026-11-21 12:08: "whatsapp shows the delivered quickly")
+    const ev = type === 'got' ? { seq, group: g.id, type, at, by: by || null, ...data } : null;
+    for (const uid of devicesFor(to, by)) waitFor(seq, uid, ev);
     if (type === 'msg' && data && data.kind !== 'sys' && onUnread) { try { onUnread(to.filter((x) => x !== by && !isMacId(x))); } catch { /* fine */ } }
     return seq;
   }
@@ -309,9 +312,9 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     }
     return out;
   }
-  function waitFor(seq, id) {
+  function waitFor(seq, id, ev) {
     Q.wait.run(seq, id);
-    for (const s of listeners.get(id) || []) { try { s.write(`event: talk\ndata: ${JSON.stringify({ seq })}\n\n`); } catch { /* closed */ } }
+    for (const s of listeners.get(id) || []) { try { s.write(`event: talk\ndata: ${JSON.stringify(ev ? { seq, ev } : { seq })}\n\n`); } catch { /* closed */ } }
   }
   // the Mac asks for a code to show (as its signed-in person): one use, gone after 2 minutes
   function linkCode(u, name) {
