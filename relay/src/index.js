@@ -15,7 +15,7 @@ export default {
   async fetch(req, env, ctx) {
     const url = new URL(req.url), p = url.pathname;
     const hub = hubOf(env);
-    if (p === '/hub/key' || p.startsWith('/office/')) return hub.fetch(req);
+    if (p === '/hub/key' || p === '/hub/status' || p.startsWith('/office/')) return hub.fetch(req);
     // (a file's own address — the token says what's allowed; no hub needed)
     if (p.startsWith('/r2/')) return serveR2(req, env, p);
     if (!(p === '/line' || p.startsWith('/api/talk/'))) return json({ ok: false, error: 'Not here' }, 404);

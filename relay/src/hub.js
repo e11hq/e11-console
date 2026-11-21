@@ -45,6 +45,12 @@ export class TalkHub extends DurableObject {
   async fetch(req) {
     const url = new URL(req.url), p = url.pathname;
     if (p === '/hub/key') return json({ ok: true, key: this.core.meta('pub') });
+    // (how it's doing — no names, no messages: when the office last sent E11 Console's people, how far the copy is, what waits)
+    if (p === '/hub/status') {
+      const d = this.core.dir.snapshot || {};
+      return json({ ok: true, dirAt: Number(this.core.meta('dirAt') || 0) || null, people: (d.users || []).length, clients: (d.projects || []).length,
+        copyN: this.core.n, waiting: this.ctx.storage.sql.exec('SELECT COUNT(*) AS c FROM hub_outbox').toArray()[0].c, officeKey: !!this.core.meta('officeKey') });
+    }
     if (p.startsWith('/office/')) return this.fromOffice(req, p);
     // (the front door's memory of who each sign-in is — a fingerprint and an email; only the Worker reaches this)
     if (p === '/who-cache') {
