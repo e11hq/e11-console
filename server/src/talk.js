@@ -963,7 +963,9 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
             // (in R2, locked on the phone: the key to open it, for the group's phones — R2 only ever has it locked)
             ...(f.store === 'r2' && typeof b.file.key === 'string' && /^[A-Za-z0-9+/]{43}=$/.test(b.file.key) ? { key: b.file.key } : {}),
             // (locked in pieces: phones that know the pieces unlock it; others get it unlocked through the server)
-            ...(f.store === 'r2' && b.file.lock === 'p' && typeof b.file.key === 'string' ? { lock: 'p' } : {}) };
+            ...(f.store === 'r2' && b.file.lock === 'p' && typeof b.file.key === 'string' ? { lock: 'p' } : {}),
+            // (a video sent as the original on purpose — "Original · ProRes RAW" on its bubble, Haris 2026-11-21 13:37)
+            ...(b.file.orig === 'ProRes RAW' ? { orig: 'ProRes RAW' } : {}) };
           if (file.key && f.fkey !== file.key) db.prepare('UPDATE files SET fkey = ? WHERE id = ?').run(file.key, f.id);
           if (file.lock === 'p' && f.lock !== 'p') db.prepare("UPDATE files SET lock = 'p' WHERE id = ?").run(f.id);   // (a voice message's waveform, made on the phone that recorded it)
         }
