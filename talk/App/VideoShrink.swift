@@ -1,6 +1,7 @@
 import AVFoundation
 import VideoToolbox
 import CoreImage
+import UIKit
 
 /* A video made smaller for sending, in HEVC (H.265) — Haris 2026-11-21 12:08: "Sharper at 720". HEVC needs about half the
    bitrate of H.264 for the same look, so at the size Apple's 720p H.264 preset gave, the picture is clearly sharper.
@@ -91,11 +92,21 @@ enum VideoShrink {
           img = img.transformed(by: CGAffineTransform(translationX: -img.extent.minX, y: -img.extent.minY))
         }
         let f = CIFilter(name: "CIColorCube", parameters: [kCIInputImageKey: img, "inputCubeDimension": 33, "inputCubeData": VideoShrink.logCube])
-        req.finish(with: f?.outputImage ?? img, context: VideoShrink.rawCtx)
+        req.finish(with: Watermark.onto(f?.outputImage ?? img, size: req.renderSize), context: VideoShrink.rawCtx)
       }
       comp.renderSize = nat
     } else {
-      comp = AVMutableVideoComposition(propertiesOf: asset)
+      // (every other video: Apple's own colour handling, the watermark laid on each frame)
+      let tr = vt.preferredTransform
+      comp = AVMutableVideoComposition(asset: asset) { req in
+        var img = req.sourceImage
+        if abs(img.extent.width - req.renderSize.width) > 1 {
+          img = img.transformed(by: tr)
+          img = img.transformed(by: CGAffineTransform(translationX: -img.extent.minX, y: -img.extent.minY))
+        }
+        req.finish(with: Watermark.onto(img, size: req.renderSize), context: nil)
+      }
+      comp.renderSize = nat
     }
     comp.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2
     comp.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2
@@ -162,3 +173,37 @@ enum VideoShrink {
 }
 // (one track finished — kept on its own queue only)
 private final class Done: @unchecked Sendable { var yes = false }
+
+/* E11 Talk's mark on every photo and video sent from Photos or the camera (not files): the white speech bubble with E11,
+   at 60% with a light shadow, bottom right, its bubble 11% of the picture's shorter side, 3.5% from the edges — the
+   approved mock-up "A, medium, 60%" (Haris 2026-11-21 14:53–14:54). The image (TalkWatermark) is the bubble 512 px in a
+   600 px square with its shadow. */
+enum Watermark {
+  private static let mark: CGImage? = UIImage(named: "TalkWatermark")?.cgImage
+  private static let ciMark: CIImage? = mark.map { CIImage(cgImage: $0) }
+  // (where it goes, in a picture of this size: the whole 600 px square, so its bubble is 11% of the shorter side)
+  private static func spot(_ w: CGFloat, _ h: CGFloat) -> CGRect {
+    let short = min(w, h), bubble = short * 0.11, box = bubble * 600 / 512, pad = short * 0.035 - (box - bubble) / 2
+    return CGRect(x: w - pad - box, y: pad, width: box, height: box)   // (from the bottom left, as Core Image counts)
+  }
+  // a photo
+  static func onto(_ cg: CGImage) -> CGImage {
+    guard let m = mark else { return cg }
+    let w = CGFloat(cg.width), h = CGFloat(cg.height), r = spot(w, h)
+    let f = UIGraphicsImageRendererFormat(); f.scale = 1; f.opaque = true
+    let img = UIGraphicsImageRenderer(size: CGSize(width: w, height: h), format: f).image { ctx in
+      let c = ctx.cgContext
+      c.translateBy(x: 0, y: h); c.scaleBy(x: 1, y: -1)   // (drawn the way Core Graphics counts: from the bottom left)
+      c.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+      c.draw(m, in: r)
+    }
+    return img.cgImage ?? cg
+  }
+  // a video's frame
+  static func onto(_ frame: CIImage, size: CGSize) -> CIImage {
+    guard let m = ciMark else { return frame }
+    let r = spot(size.width, size.height)
+    let placed = m.transformed(by: CGAffineTransform(scaleX: r.width / m.extent.width, y: r.height / m.extent.height)).transformed(by: CGAffineTransform(translationX: r.minX, y: r.minY))
+    return placed.composited(over: frame).cropped(to: CGRect(origin: .zero, size: size))
+  }
+}

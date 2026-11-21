@@ -1222,8 +1222,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     guard let src = CGImageSourceCreateWithData(d as CFData, nil) else { return nil }
     let o: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
                               kCGImageSourceThumbnailMaxPixelSize: hd ? 4096 : 2048, kCGImageSourceShouldCacheImmediately: true]
-    guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, o as CFDictionary),
-          let out = UIImage(cgImage: cg).jpegData(compressionQuality: 0.8) else { return nil }
+    guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, o as CFDictionary) else { return nil }
+    let marked = Watermark.onto(cg)
+    guard let out = UIImage(cgImage: marked).jpegData(compressionQuality: 0.8) else { return nil }
     return (out, Double(cg.width), Double(cg.height))
   }
   fileprivate func sendFile(_ url: URL, kind: String, name: String, caption: String = "", hd: Bool = false, album: String? = nil) {
@@ -1267,6 +1268,15 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     guard (try? FileManager.default.copyItem(at: src, to: copy)) != nil else { toast("Couldn’t send again — try once more"); return }
     let hd = Talk.sentHD.contains(f.id)
     Talk.shared.deleteForMe(group, m)
+    // (a photo, or a video already made smaller, goes again as it is — made again, it would get a second mark)
+    let ready = m.kind == "photo" || (m.kind == "video" && Talk.madeReady.contains(f.id))
+    if ready, let d = try? Data(contentsOf: copy) {
+      var ref = f; ref.id = "local-" + UUID().uuidString; ref.size = d.count
+      if hd { Talk.sentHD.insert(ref.id) }
+      if Talk.madeReady.contains(f.id) { Talk.madeReady.insert(ref.id) }
+      Talk.shared.send(group, text: m.text, reply: nil, file: ref, localFile: copy, upload: d, album: m.album)
+      toBottom(true); return
+    }
     switch m.kind {
     case "voice": sendVoice(copy, secs: f.secs ?? 0, wave: f.wave ?? "")
     case "video": sendVideo(copy, name: f.name, caption: m.text, hd: hd, album: m.album)

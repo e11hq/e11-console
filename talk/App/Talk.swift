@@ -515,7 +515,7 @@ final class Talk {
           // (mapped, not read whole: a big video's pieces are read from the disk as they go up — Haris 2026-11-21)
           guard let made = made, let d = try? Data(contentsOf: made, options: .alwaysMapped) else { Uploads.end(f.id); end(); failed(); return }
           // (what goes up is what the phone keeps for it)
-          if made != Net.local(f.id) { try? FileManager.default.removeItem(at: Net.local(f.id)); try? FileManager.default.copyItem(at: made, to: Net.local(f.id)) }
+          if made != Net.local(f.id) { try? FileManager.default.removeItem(at: Net.local(f.id)); try? FileManager.default.copyItem(at: made, to: Net.local(f.id)); Talk.madeReady.insert(f.id) }
           again = { let end2 = keepGoing(); if let d2 = try? Data(contentsOf: Net.local(f.id), options: .alwaysMapped) { up(d2, f, end2) } else { end2(); self.mark(g, cid, failed: true) } }
           up(d, f, end)
         }
@@ -573,6 +573,8 @@ final class Talk {
   }
   // (sent in HD from this phone — kept for Send again; this time Talk is open)
   static var sentHD = Set<String>()
+  // (a video whose phone copy is already the made-smaller one — with its watermark: Send again sends it as it is)
+  static var madeReady = Set<String>()
   // (a ProRes that went at full size after all: its label, "Original · …", instead of "From …")
   static var origSaid: [String: String] = [:]
   // ✕ on one of yours going up: stopped — the red !, then Send again or Delete (Haris 2026-11-21 13:18)
