@@ -145,9 +145,12 @@ test('a page asks for its pictures’ R2 addresses: straight from R2, the same f
   await wait(150);
   const local = '/__file/' + r.path.split('/').map(encodeURIComponent).join('/');
   // (this test's clock is a month on, so the file counts as older: the first ask copies it up, the next gets R2's address)
-  assert.equal((await post('am', '/api/r2/links', { urls: [local] })).links[0], null, 'not in R2 yet: the page keeps /__file/');
-  await wait(150);
-  const a = await post('am', '/api/r2/links', { urls: [local, '/__file/nope/x.jpg', '/api/me', local + '?dl=1'] });
+  // (the office upload's own copy may already have put it there — a race on a fast machine, which failed the release of
+  //  1.9.128: either answer is right for the first ask)
+  const l0 = (await post('am', '/api/r2/links', { urls: [local] })).links[0];
+  assert.ok(l0 === null || /X-Amz-Signature/.test(l0), 'not in R2 yet: the page keeps /__file/ — or already there');
+  let a;
+  for (let i = 0; i < 20; i++) { await wait(150); a = await post('am', '/api/r2/links', { urls: [local, '/__file/nope/x.jpg', '/api/me', local + '?dl=1'] }); if (a.links && a.links[0]) break; }
   assert.ok(a.ok && a.links.length === 4);
   assert.match(a.links[0], /X-Amz-Signature/, 'an R2 address for the picture');
   assert.equal(a.links[1], null, 'not one of theirs');
