@@ -169,5 +169,14 @@ export function createApns({ store, keyFile = '', keyId = '', teamId = '', topic
     }));
     return { sent };
   }
-  return { enabled, register, unregister, devices, sendTo, quiet, ack, pendingFor, close: () => { for (const s of Object.values(sessions)) try { s.close(); } catch { /* fine */ } } };
+  // a quiet wake-up for someone's iPhones (no banner, no sound): E11 Talk's "Ask the group" — the app looks whether it has
+  // the file asked for and sends it (Haris 2026-11-20 21:36). iPhone decides how soon it wakes the app.
+  async function wake(userId, e11 = {}) {
+    const list = load()[userId] || [];
+    if (!list.length || !enabled()) return { sent: 0 };
+    let sent = 0;
+    await Promise.all(list.map(async (s) => { const r = await post(s.env, s.token, { aps: { 'content-available': 1 }, e11: { quiet: true, ...e11 } }, 86400, 'background', '5'); if (r.status === 200) sent++; }));
+    return { sent };
+  }
+  return { enabled, register, unregister, devices, sendTo, quiet, wake, ack, pendingFor, close: () => { for (const s of Object.values(sessions)) try { s.close(); } catch { /* fine */ } } };
 }

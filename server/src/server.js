@@ -816,7 +816,11 @@ export function createServer(cfg) {
       }
       // a message's file straight to R2 (newer phones): where to put it, then "it's all there"
       if (p === '/api/talk/r2/start' && req.method === 'POST') { const b = await readBody(req, 16 * 1024); return out(await t.r2Start(u, b.name, b.size, b.keep === true)); }
-      if (p === '/api/talk/r2/done' && req.method === 'POST') { const b = await readBody(req, 64 * 1024); return out(await t.r2Done(u, b.id, b.etags)); }
+      if (p === '/api/talk/r2/done' && req.method === 'POST') { const b = await readBody(req, 64 * 1024); return out(await t.r2Done(u, b.id, b.etags, b.back ? { key: b.key, lock: b.lock } : null)); }
+      // (Ask the group — Haris 2026-11-20 21:36: ask for a gone file; the asks this phone can answer; send one again)
+      if (p === '/api/talk/ask' && req.method === 'POST') { const b = await readBody(req, 16 * 1024); return out(await t.ask(u, dev, b.group, b.file)); }
+      if (p === '/api/talk/asks' && req.method === 'GET') return out(t.asksFor(u, dev));
+      if (p === '/api/talk/resend/start' && req.method === 'POST') { const b = await readBody(req, 16 * 1024); return out(await t.resendStart(u, dev, b.file, b.size)); }
       if (p.startsWith('/api/talk/file/') && (req.method === 'GET' || req.method === 'HEAD')) {
         const f = t.fileFor(dev, p.slice('/api/talk/file/'.length));
         if (!f) return json(res, 404, { ok: false, error: 'That file has gone' });

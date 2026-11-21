@@ -18,6 +18,7 @@ const KEEP_MS = 30 * 86400000;          // never picked up: gone after 30 days
 // (a file a phone has downloaded: kept one more day — the server's "sent" isn't the phone's "got": Cloudflare takes the
 //  whole file at once, and a phone that stalled or lost the line asked again for a file already let go — Haris 2026-11-20 16:57)
 const GOT_MS = 86400000;
+const ASK_DAYS = 90, ASK_WAIT = 7 * 86400000;   // Ask the group: a file asked back within 90 days of sending; an ask waits 7 days
 const IDLE_MS = 90 * 86400000;          // a group with no new messages for 90 days is deleted (Haris 2026-11-05)
 const EDIT_MS = 15 * 60000;             // edit your own message: 15 minutes (as WhatsApp)
 const DEL_ALL_MS = 2 * 86400000;        // delete for everyone: about 2 days
@@ -77,6 +78,14 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   // (how it was locked: null — in one go; 'p' — in pieces of 8 MB, each locked on its own, so a big file never sits whole in
   //  the phone's memory; Haris 2026-11-21 11:00)
   try { db.exec('ALTER TABLE files ADD COLUMN lock TEXT'); } catch { /* already there */ }
+  // "Ask the group" (Haris 2026-11-20 21:36, plan claude/talk-ask-the-group-plan.md): a message's file gone from the server
+  // can come back from a phone in the group that still has it, for 90 days. file_kept: what the file was (kept 90 days);
+  // file_had: which phones had it (the sender's, and each that downloaded it); asks: who asked, answered or not (7 days).
+  db.exec(`CREATE TABLE IF NOT EXISTS file_kept (id TEXT PRIMARY KEY, grp TEXT NOT NULL, msg TEXT NOT NULL, by TEXT NOT NULL, name TEXT NOT NULL,
+             size INTEGER NOT NULL, kind TEXT, at INTEGER NOT NULL);
+           CREATE TABLE IF NOT EXISTS file_had (file TEXT NOT NULL, dev TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (file, dev));
+           CREATE TABLE IF NOT EXISTS asks (file TEXT NOT NULL, uid TEXT NOT NULL, dev TEXT NOT NULL, grp TEXT NOT NULL, at INTEGER NOT NULL,
+             done INTEGER, by TEXT, PRIMARY KEY (file, uid));`);
   const q = (sql) => db.prepare(sql);
   const Q = {
     group: q('SELECT * FROM groups WHERE id = ? AND gone = 0'),
@@ -462,6 +471,9 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   }
   function sweep() {
     const t = now();
+    // (Ask the group: the record of a file and its phones kept 90 days; asks 7 days — Haris 2026-11-20)
+    for (const r of db.prepare('SELECT id FROM file_kept WHERE at < ?').all(t - ASK_DAYS * 86400000)) { db.prepare('DELETE FROM file_had WHERE file = ?').run(r.id); db.prepare('DELETE FROM file_kept WHERE id = ?').run(r.id); }
+    db.prepare('DELETE FROM asks WHERE at < ?').run(t - ASK_WAIT);
     for (const r of Q.oldEvents.all(t - KEEP_MS)) Q.dropWaiting.run(r.seq);
     const gone = [];
     for (const r of Q.orphanEvents.all()) {
@@ -985,6 +997,11 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         const seq = emit(g, 'msg', { id, cid: clip(b.cid, 60), kind: file ? file.kind : contact ? 'contact' : place ? 'location' : 'text', text, file, reply, mentions, ...(b.fwd === true ? { fwd: true } : {}), ...(link ? { link } : {}), ...(task ? { task } : {}),
           ...(contact ? { contact } : {}), ...(place ? { location: place } : {}),
           ...(file && typeof b.album === 'string' && /^[A-Za-z0-9-]{6,40}$/.test(b.album) ? { album: b.album } : {}) }, u.id);   // (album: photos and videos sent together — one album in the chat, Haris 2026-11-12)   // (fwd: forwarded from another chat — "Forwarded" over it)
+        // (Ask the group: what the file was, and that the sending phone has it — 90 days)
+        if (file) {
+          db.prepare('INSERT OR REPLACE INTO file_kept (id, grp, msg, by, name, size, kind, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(file.id, g.id, id, u.id, file.name, file.size || 0, file.kind, t);
+          if (!isMacId(dev.id)) db.prepare('INSERT OR IGNORE INTO file_had (file, dev, at) VALUES (?, ?, ?)').run(file.id, dev.id, t);
+        }
         // (each other member's phone downloads it — now, or later when their Auto-download is off; kept for them until then)
         if (file) for (const d of devicesFor(memberIds(g), u.id)) if (d !== u.id && d !== dev.id) Q.addNeed.run(file.id, d, g.id, t);   // (the sending phone has its own copy)   // (linked Macs too — their own Auto-download)
         Q.touch.run(t, g.id);
@@ -1007,6 +1024,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
           emit(g, 'del', { id: s.id }, u.id);
           const fl = JSON.parse(s.files || '[]');
           for (const id of fl) db.prepare('DELETE FROM needs WHERE file = ?').run(id);   // (deleted for everyone: nobody downloads it any more)
+          for (const id of fl) { for (const x of ['file_kept WHERE id', 'file_had WHERE file', 'asks WHERE file']) db.prepare(`DELETE FROM ${x} = ?`).run(id); }   // (and never asked back)
           dropFiles(fl);
           if ((pinOf(g) || {}).id === s.id) { db.prepare('UPDATE groups SET pin = NULL WHERE id = ?').run(g.id); changed(g, u.id); }
         } else {
@@ -1162,7 +1180,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       return { ok: true, id, ...(s.put ? { put: s.put } : { part: s.part, urls: s.urls }) };
     } catch (e) { Q.dropFile.run(id); return bad(e.message, 502); }
   }
-  async function r2Done(u, id, etags) {
+  async function r2Done(u, id, etags, back = null) {
     const f = Q.getFile.get(String(id || ''));
     if (!f || f.by !== u.id || f.store !== 'r2') return bad('Upload not found — please try again', 404);
     if (f.done) return { ok: true, id: f.id, size: f.size, done: true };
@@ -1175,12 +1193,80 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       if (got !== f.size) return bad('Part of the file didn’t arrive — please try again');
     } catch (e) { return bad(e.message, 502); }
     db.prepare('UPDATE files SET done = 1, r2up = NULL WHERE id = ?').run(f.id);
+    if (back) backDone(u, f, back);
     return { ok: true, id: f.id, size: f.size, done: true };
+  }
+
+  /* ---------- Ask the group (Haris 2026-11-20 21:36) ---------- */
+  const ownerOf = (dev) => (isMacId(dev) ? ((db.prepare('SELECT uid FROM macs WHERE id = ?').get(dev) || {}).uid || null)
+    : isDevId(dev) ? ((db.prepare('SELECT uid FROM phones WHERE id = ?').get(dev) || {}).uid || null) : dev);
+  // someone asks for a message's file the server no longer has
+  async function ask(u, dev, groupId, fileId) {
+    const g = Q.group.get(String(groupId || ''));
+    if (!g || !member(g, u.id)) return bad('Not found', 404);
+    const fk = db.prepare('SELECT * FROM file_kept WHERE id = ?').get(String(fileId || ''));
+    if (!fk || fk.grp !== g.id) return bad('That file can’t be asked for — it was deleted, or it’s older than 90 days', 404);
+    if (now() - fk.at > ASK_DAYS * 86400000) return bad('That file is older than 90 days — it’s gone for good', 410);
+    const f = Q.getFile.get(fk.id);
+    if (f && f.done) { Q.addNeed.run(fk.id, dev.id, g.id, now()); return { ok: true, here: true }; }   // (back already: download it)
+    db.prepare('INSERT OR REPLACE INTO asks (file, uid, dev, grp, at, done, by) VALUES (?, ?, ?, ?, ?, NULL, NULL)').run(fk.id, u.id, dev.id, g.id, now());
+    // (the phones that had it — their people, still in the group — are woken quietly to look)
+    const owners = new Set(db.prepare('SELECT dev FROM file_had WHERE file = ?').all(fk.id).map((r) => ownerOf(r.dev)).filter((x) => x && member(g, x)));
+    if (apns && apns.enabled() && apns.wake) for (const o of owners) apns.wake(o, { ask: fk.id }).catch(() => {});
+    return { ok: true, asked: true, phones: owners.size };
+  }
+  // the asks this phone can answer: files it had, asked for in the last 7 days, not answered yet
+  function asksFor(u, dev) {
+    const rows = db.prepare(`SELECT a.file, a.grp, a.at, k.name, k.size, k.kind FROM asks a JOIN file_kept k ON k.id = a.file
+      JOIN file_had h ON h.file = a.file WHERE a.done IS NULL AND a.at > ? AND (h.dev = ? OR h.dev = ?) GROUP BY a.file`).all(now() - ASK_WAIT, dev.id, u.id);
+    return { ok: true, asks: rows.filter((r) => { const g = Q.group.get(r.grp); return g && member(g, u.id); })
+      .map((r) => ({ file: r.file, group: r.grp, name: r.name, size: r.size, kind: r.kind, at: r.at })) };
+  }
+  // a phone that has it sends it again: straight to R2 under the file's own id (its message stays as it was)
+  async function resendStart(u, dev, fileId, size) {
+    if (!r2 || !r2.on) return bad('Not here', 404);
+    const id = String(fileId || '');
+    const a = db.prepare('SELECT * FROM asks WHERE file = ? AND done IS NULL AND at > ? LIMIT 1').get(id, now() - ASK_WAIT);
+    const fk = db.prepare('SELECT * FROM file_kept WHERE id = ?').get(id);
+    if (!a || !fk) return bad('Nobody is asking for it now', 404);
+    if (!db.prepare('SELECT 1 FROM file_had WHERE file = ? AND (dev = ? OR dev = ?)').get(id, dev.id, u.id)) return bad('Not one of yours', 403);
+    const g = Q.group.get(fk.grp); if (!g || !member(g, u.id)) return bad('Not found', 404);
+    size = Number(size);
+    if (!Number.isInteger(size) || size <= 0 || size > R2_MAX) return bad('Bad size');
+    const f = Q.getFile.get(id);
+    if (f && f.done) return { ok: true, here: true };
+    if (f && now() - f.at < 15 * 60000 && f.by !== u.id) return { ok: true, taken: true };   // (another phone is sending it)
+    if (f) Q.dropFile.run(id);
+    Q.newFile.run(id, u.id, fk.name, now());
+    db.prepare("UPDATE files SET store = 'r2', size = ?, r2k = NULL WHERE id = ?").run(size, id);
+    try {
+      const s = await r2.start(r2Key({ id }), size);
+      if (s.upload) db.prepare('UPDATE files SET r2up = ? WHERE id = ?').run(s.upload, id);
+      return { ok: true, id, ...(s.put ? { put: s.put } : { part: s.part, urls: s.urls }) };
+    } catch (e) { Q.dropFile.run(id); return bad(e.message, 502); }
+  }
+  // sent again: its key kept, the people who asked told and their phones download it
+  function backDone(u, f, back) {
+    const key = goodKey(back.key) ? back.key : null, lock = back.lock === 'p' ? 'p' : null;
+    db.prepare('UPDATE files SET fkey = ?, lock = ? WHERE id = ?').run(key, lock, f.id);
+    const fk = db.prepare('SELECT * FROM file_kept WHERE id = ?').get(f.id), g = fk && Q.group.get(fk.grp);
+    if (!g) return;
+    const askers = db.prepare('SELECT * FROM asks WHERE file = ? AND done IS NULL').all(f.id).filter((a) => member(g, a.uid));
+    db.prepare('UPDATE asks SET done = ?, by = ? WHERE file = ? AND done IS NULL').run(now(), u.id, f.id);
+    const t = now();
+    for (const a of askers) for (const d of devicesFor([a.uid])) if (!isMacId(d)) Q.addNeed.run(f.id, d, g.id, t);
+    if (!askers.length) return;
+    emit(g, 'back', { file: f.id, msg: fk.msg, ...(key ? { key } : {}), ...(lock ? { lock } : {}) }, u.id, askers.map((a) => a.uid));
+    if (apns && apns.enabled()) {
+      const what = { photo: 'photo', video: 'video', voice: 'voice message' }[fk.kind] || 'file';
+      for (const a of askers) apns.sendTo(a.uid, { title: g.name, body: `Your ${what} from ${nameOf(fk.by)} is back`, tag: g.id, kind: 'talk', groupId: g.id, msgId: fk.msg }).catch(() => {});
+    }
   }
 
   // a phone has the whole file now: it waits for that person no more (Auto-download off — Haris 2026-11-13)
   function fetched(u, id) {
     Q.gotNeed.run(now(), String(id), u.id);
+    if (!isMacId(u.id) && db.prepare('SELECT 1 FROM file_kept WHERE id = ?').get(String(id))) db.prepare('INSERT OR IGNORE INTO file_had (file, dev, at) VALUES (?, ?, ?)').run(String(id), u.id, now());
     if (!needed(String(id))) dropFiles([String(id)]);
   }
 
@@ -1272,6 +1358,6 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   function personByEmail(e) { const u = access.userByEmail(e); if (u) return personOf(u); const k = contactByEmail(e); return k ? { id: k.id, name: k.name, role: 'Client', photo: null, color: null } : null; }
   // (how much Talk keeps in R2 — counted with E11 Console's files under one ceiling, consoler2.js)
   const r2Bytes = () => Number(db.prepare("SELECT COALESCE(SUM(size), 0) AS n FROM files WHERE store = 'r2'").get().n);
-  return { r2Bytes, phoneFor, r2, r2Key, r2Start, r2Done, state, act, sync, ack, got, unreadFor, reviewDemo, sample, upload, tasksChanged, peopleChanged, linksChanged, contactByEmail, personByEmail, fileFor, filePath, fetched, listen, sweep, isAdminOf,
+  return { r2Bytes, phoneFor, r2, r2Key, r2Start, r2Done, ask, asksFor, resendStart, state, act, sync, ack, got, unreadFor, reviewDemo, sample, upload, tasksChanged, peopleChanged, linksChanged, contactByEmail, personByEmail, fileFor, filePath, fetched, listen, sweep, isAdminOf,
     linkCode, linkStatus, macFor, unlinkMac, macCode, macStatus, macByKey, userById, history, hasFiles, resend, close: () => { clearInterval(sweepTimer); for (const set of listeners.values()) for (const r of set) try { r.end(); } catch { /* fine */ } db.close(); } };
 }
