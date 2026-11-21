@@ -181,7 +181,7 @@ const MacTrash = (() => {
     // (dl: the file itself, for dragging it out to Finder — Mac app 13 with MacNative.swift, Haris 2026-11-18)
     const fileOf = (a) => ({ id: String(a.id), name: a.name, ext: (fileExt(a.name) || 'file').slice(0, 4), color: EXT[fileExt(a.name)] || '#87909e', pic: picOf(a) ? abs(picOf(a)) : '', sz: fmtSize(a.size) || '', ...(a.path ? { dl: abs(fileUrl(a)), size: a.size || 0 } : {}) });
     // (a person's face for the window W2 — Haris 2026-11-18 19:16: their photo, or their initials on their colour)
-    const face = (id) => { const u = userById(id), n = fullName(u) || 'Former member'; return { name: n, ini: initials(n), color: avColor(id || 'x'), ...(u && u.avatar ? { pic: abs(fileUrl({ path: u.avatar })) } : {}) }; };
+    const face = (id) => { const u = userById(id), n = fullName(u) || 'Former member'; return { name: n, ini: initials(n), color: avColor(id || 'x'), ...(u && u.avatar ? { pic: abs(R2Pics.get(fileUrl({ path: u.avatar }))) } : {}) }; };
     const goes = new Date(Date.now() + left * 86400000);
     const p0 = t.projectId && typeof proj === 'function' ? proj(t.projectId) : null;
     return {

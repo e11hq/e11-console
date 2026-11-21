@@ -243,7 +243,7 @@ const Viewer = (() => {
         if (!el || ui.previewAtt !== a) return;
         const pages = (r && r.pages) || [];
         if (!pages.length) { el.innerHTML = `<p class="fv-wait">${r && r.unavailable ? 'Full previews of Office files arrive with the next server update.' : 'This file couldn’t be previewed — download it to see it.'}</p>`; return; }
-        el.innerHTML = pages.map((p, i) => `<img class="fv-page" src="${'/__file/' + p.split('/').map(encodeURIComponent).join('/')}" alt="Page ${i + 1}" loading="${i < 2 ? 'eager' : 'lazy'}" draggable="false">`).join('')
+        el.innerHTML = pages.map((p, i) => `<img class="fv-page" src="${R2Pics.get('/__file/' + p.split('/').map(encodeURIComponent).join('/'))}" alt="Page ${i + 1}" loading="${i < 2 ? 'eager' : 'lazy'}" draggable="false">`).join('')
           + (r.total > pages.length ? `<p class="fv-wait">Showing the first ${pages.length} of ${r.total} pages — download it for the rest.</p>` : '');
         pageChip(slide, pages.length);
       }).catch(() => { const el = slide.querySelector('#fv-pages'); if (el) el.innerHTML = '<p class="fv-wait">This file couldn’t be previewed right now.</p>'; });

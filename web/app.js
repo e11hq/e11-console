@@ -289,7 +289,7 @@ const NativePop = (() => {
     });
     return out.length ? out : [{ h: '', items: ['Improvements and fixes.'] }];
   };
-  const person = (id) => { const u = userById(id); return { id, name: fullName(u), ini: initials(fullName(u)), color: avColor(id || 'x'), photo: u && u.avatar ? fileUrl({ path: u.avatar }) : null }; };
+  const person = (id) => { const u = userById(id); return { id, name: fullName(u), ini: initials(fullName(u)), color: avColor(id || 'x'), photo: u && u.avatar ? R2Pics.get(fileUrl({ path: u.avatar })) : null }; };
   return { get on() { return on(); }, get known() { return known; }, ready, show, sections, person };
 })();
 
@@ -2249,7 +2249,7 @@ function avatarHTML(id, size = 24, cls = '') {
   const u = userById(id);
   const name = fullName(u);
   const st = `width:${size}px;height:${size}px;font-size:${Math.round(size * 0.4)}px`;
-  if (u && u.avatar && Host.isNative) return `<span class="av ${cls}" style="${st}" title="${esc(name)}" data-uid="${esc(id || '')}"><img src="${fileUrl({ path: u.avatar })}" alt=""></span>`;
+  if (u && u.avatar && Host.isNative) return `<span class="av ${cls}" style="${st}" title="${esc(name)}" data-uid="${esc(id || '')}"><img src="${R2Pics.get(fileUrl({ path: u.avatar }))}" alt=""></span>`;
   return `<span class="av ${cls}" style="${st};background:${avColor(id || 'x')}" title="${esc(name)}" data-uid="${esc(id || '')}">${esc(initials(name))}</span>`;
 }
 function avatarStack(ids, size = 20, max = 3, t = null) {
@@ -4414,7 +4414,7 @@ const OFFICE_EXT = ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'odt', 'odp', '
 const OFFICE_LABEL = { ppt: 'PowerPoint', pptx: 'PowerPoint', key: 'Keynote', doc: 'Word', docx: 'Word', pages: 'Pages', xls: 'Excel', xlsx: 'Excel', numbers: 'Numbers', zip: 'Archive' };
 // Thumbnail made by macOS Quick Look (cached in the data folder); placeholder until it exists
 function thumbImg(a, mode) {
-  if (a.thumb) return `<img class="qthumb" draggable="false" src="${'/__file/' + a.thumb.split('/').map(encodeURIComponent).join('/')}" alt="">`;
+  if (a.thumb) return `<img class="qthumb" draggable="false" src="${R2Pics.get('/__file/' + a.thumb.split('/').map(encodeURIComponent).join('/'))}" alt="">`;
   const e = fileExt(a.name);
   return `<div class="thumb-ph" data-thumb-for="${a.id}" data-mode="${mode}"><span class="ext">${esc((e || 'file').slice(0, 5))}</span><small>${esc(OFFICE_LABEL[e] || 'File')}</small></div>`;
 }
@@ -7592,7 +7592,7 @@ const LogoLook = (() => {
 })();
 function clientLogoHTML(c, size) {
   return c.logo
-    ? (() => { const src = '/__file/' + c.logo.split('/').map(encodeURIComponent).join('/'), bg = LogoLook.known(src); return `<span class="cl-logo ${isSquareLogo(c.logo) ? 'sq' : ''}" style="--s:${size}px${bg ? `;--lg-bg:${bg}` : ''}"><img src="${src}" alt=""></span>`; })()
+    ? (() => { const src = R2Pics.get('/__file/' + c.logo.split('/').map(encodeURIComponent).join('/')), bg = LogoLook.known(src); return `<span class="cl-logo ${isSquareLogo(c.logo) ? 'sq' : ''}" style="--s:${size}px${bg ? `;--lg-bg:${bg}` : ''}"><img src="${src}" alt=""></span>`; })()
     : `<span class="cl-logo mono" style="--s:${size}px;--c:${avColor(c.id)}">${esc(initials(c.name))}</span>`;
 }
 
