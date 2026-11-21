@@ -879,6 +879,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
   // each message kept by its id; only one that shows something new is drawn again
   private func reload(animated: Bool) {
+    // (not fully back in Talk yet — leaving or coming back: drawn without fades; iPhone can stop a fade halfway then)
+    let animated = animated && UIApplication.shared.applicationState == .active
     let l = Talk.shared.log(group)
     var snap = NSDiffableDataSourceSnapshot<String, ChatItem>()
     var newKeyOf: [String: String] = [:], newIdOf: [String: String] = [:]
@@ -1004,7 +1006,23 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     keyUp = kbOverlap > home + 20   // (the keyboard guide counts the home line when the keyboard is down)
     fitBottom()
   }
-  @objc private func backInApp() { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.kbSettled() }; if view.window != nil { Talk.shared.refreshTasks(group); Talk.shared.refreshLinks(group) } }
+  @objc private func backInApp() {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.kbSettled() }
+    if view.window != nil { Talk.shared.refreshTasks(group); Talk.shared.refreshLinks(group) }
+    // (back in Talk: the bubbles on the screen set once more, in place, with no fades — the newest and photos were sometimes
+    //  left blank after another app, until the chat was opened again; Haris 2026-11-21 13:51)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.redrawShown() }
+  }
+  private func redrawShown() {
+    guard view.window != nil, UIApplication.shared.applicationState == .active else { return }
+    reload(animated: false)
+    var snap = data.snapshot()
+    let shown = (table.indexPathsForVisibleRows ?? []).compactMap { data.itemIdentifier(for: $0) }
+    guard !shown.isEmpty else { return }
+    snap.reconfigureItems(shown)
+    UIView.performWithoutAnimation { data.apply(snap, animatingDifferences: false); table.layoutIfNeeded() }
+    for c in table.visibleCells { c.contentView.alpha = 1 }
+  }
   @objc private func kbMoved(_ n: Notification) {
     if let f = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue {
       kbOverlap = max(0, view.bounds.maxY - view.convert(f, from: nil).minY)
