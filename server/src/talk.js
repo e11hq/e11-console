@@ -253,7 +253,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     //  once without asking again; it still waits for its phone like any event, and the sync after still collects it —
     //  Haris 2026-11-21 12:08 "whatsapp shows the delivered quickly", 12:33 "lets go with A")
     let ev = LIVE.has(type) ? { seq, group: g.id, type, at, by: by || null, ...data } : null;
-    if (ev && JSON.stringify(ev).length > 32 * 1024) ev = null;   // (a big one: only the nudge, as before)
+    if (ev && JSON.stringify(ev).length > 96 * 1024) ev = null;   // (a big one: only the nudge, as before — room for a photo's preview)
     for (const uid of devicesFor(to, by)) waitFor(seq, uid, ev);
     if (type === 'msg' && data && data.kind !== 'sys' && onUnread) { try { onUnread(to.filter((x) => x !== by && !isMacId(x))); } catch { /* fine */ } }
     return seq;
@@ -960,6 +960,9 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
             wave: typeof b.file.wave === 'string' ? clip(b.file.wave.replace(/[^A-Za-z0-9+/=]/g, ''), 400) : null,
             // (a photo's or video's tiny picture, made on the phone that sent it: shown blurred until the real one is downloaded)
             ...(typeof b.file.thumb === 'string' && b.file.thumb.length <= 4000 ? { thumb: b.file.thumb.replace(/[^A-Za-z0-9+/=]/g, '') } : {}),
+            // (…and a sharp small preview, about 320 px, shown at once on the other phones instead of the blur — WhatsApp's,
+            //  Haris 2026-11-21 13:09 "Yes put it on the list", 15:18 "Start")
+            ...(typeof b.file.prev === 'string' && b.file.prev.length <= 48000 ? { prev: b.file.prev.replace(/[^A-Za-z0-9+/=]/g, '') } : {}),
             // (in R2, locked on the phone: the key to open it, for the group's phones — R2 only ever has it locked)
             ...(f.store === 'r2' && typeof b.file.key === 'string' && /^[A-Za-z0-9+/]{43}=$/.test(b.file.key) ? { key: b.file.key } : {}),
             // (locked in pieces: phones that know the pieces unlock it; others get it unlocked through the server)
