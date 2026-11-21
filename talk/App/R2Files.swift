@@ -137,6 +137,7 @@ extension Net {
             sent[i] = Int(p); progress(min(0.99, Double(sent.reduce(0, +)) / total))
           } done: { e in
             going -= 1
+            guard !over else { return }   // (already ended — another part failed, or ✕: said once)
             guard let e = e else { over = true; return done(nil, nil) }
             etags[i] = e; pump()
           }
@@ -184,6 +185,7 @@ extension Net {
             sent[i] = Int(p); progress(min(0.99, Double(sent.reduce(0, +)) / total))
           } done: { e in
             going -= 1
+            guard !over else { return }   // (already ended — another part failed, or ✕: said once)
             guard let e = e else { over = true; return done(nil, nil) }
             etags[i] = e; pump()
           }

@@ -1150,10 +1150,11 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (ProRes RAW — a camera's raw footage — goes as the original, on purpose, with a word saying so: Haris 2026-11-21 13:18)
     let raw = VideoShrink.isRaw(asset)
     let fname = raw ? name : (name as NSString).deletingPathExtension + ".mp4"
-    Talk.shared.send(group, text: caption, reply: replying, file: Msg.FileRef(id: tmpId, name: fname, size: size, kind: "video", w: w, h: h, secs: secs.isFinite ? secs : nil),
+    var ref = Msg.FileRef(id: tmpId, name: fname, size: size, kind: "video", w: w, h: h, secs: secs.isFinite ? secs : nil)
+    if raw { ref.orig = "ProRes RAW" }
+    Talk.shared.send(group, text: caption, reply: replying, file: ref,
                      localFile: url, album: album, prepare: { ready in
       if raw {
-        toast("Sent as the original (ProRes RAW)")
         if Attach.tooBig(url) { toast("That video is over 1 GB — send a shorter part"); ready(nil); return }
         ready(url); return
       }
@@ -2375,7 +2376,7 @@ final class BubbleCell: UITableViewCell {
     playDisc.backgroundColor = UIColor(red: 0.96, green: 0.94, blue: 0.92, alpha: 0.85); playDisc.layer.cornerRadius = 25; playDisc.isUserInteractionEnabled = false
     let tri = UIImageView(image: UIImage(systemName: "play.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 19, weight: .regular))); tri.tintColor = UIColor(white: 0.23, alpha: 1)
     playDisc.addSubview(tri); tri.translatesAutoresizingMaskIntoConstraints = false
-    vlen.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular); vlen.textColor = .white
+    vlen.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular); vlen.textColor = .white; vlen.numberOfLines = 2
     vlen.layer.shadowColor = UIColor.black.cgColor; vlen.layer.shadowOpacity = 0.6; vlen.layer.shadowRadius = 2; vlen.layer.shadowOffset = CGSize(width: 0, height: 1)
     [ps, playDisc, vlen].forEach { photo.addSubview($0); $0.translatesAutoresizingMaskIntoConstraints = false }
     NSLayoutConstraint.activate([ps.leadingAnchor.constraint(equalTo: photo.leadingAnchor, constant: 12), ps.topAnchor.constraint(equalTo: photo.topAnchor, constant: 8),
@@ -2728,6 +2729,9 @@ final class BubbleCell: UITableViewCell {
       else if headed { photoWrap.reach(-8, 12, caption ? 0 : 7, 12) }
       else { photoWrap.reach(8, 12, caption ? 0 : 7, mine ? 11 : 12) }
       if let s = f.secs { vlen.text = String(format: "%d:%02d", Int(s) / 60, Int(s) % 60) }
+      // (sent as the original on purpose: said on the bubble, on both phones — Haris 2026-11-21 13:33)
+      // (a line of its own above the length, so it never runs into the time on the right)
+      if let o = f.orig { vlen.text = "Original · " + o + "\n" + (vlen.text ?? "") }
       // (the same photo drawn again keeps its picture — it blanked for a moment on every redraw, all photos flashing)
       let known = isVideo ? BubbleCell.frames.object(forKey: f.id as NSString) : BubbleCell.pictures.object(forKey: f.id as NSString)
       if album.count >= 4 {

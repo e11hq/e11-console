@@ -72,7 +72,9 @@ struct Msg: Codable, Equatable {
     }
   }
   struct LinkPrev: Codable, Equatable, Hashable { var url: String; var title: String?; var site: String?; var video: Bool; var img: String?; var icon: String?; var e11: String? = nil; var pic: String? = nil; var client: String? = nil; var sub: String? = nil; var state: String? = nil }   // (client / sub / state: an E11 link's live card — "ok", "off", "gone", "none": no such link)   // (pic: an E11 link's picture, its page's own — a web address)   // (e11: one of our own links — "file" / "folder", its card from the server)
-  struct FileRef: Codable, Equatable { var id: String; var name: String; var size: Int; var kind: String; var w: Double?; var h: Double?; var secs: Double?; var wave: String? = nil; var thumb: String? = nil }
+  struct FileRef: Codable, Equatable { var id: String; var name: String; var size: Int; var kind: String; var w: Double?; var h: Double?; var secs: Double?; var wave: String? = nil; var thumb: String? = nil
+    var orig: String? = nil   // (sent as the original on purpose: "ProRes RAW" — its bubble says so)
+  }
   struct Reply: Codable, Equatable { var id: String; var by: String; var text: String; var kind: String }
 }
 
@@ -317,7 +319,9 @@ final class Talk {
       let f = (e["file"] as? [String: Any]).flatMap { f -> Msg.FileRef? in
         guard let fid = f["id"] as? String else { return nil }
         if let k = f["key"] as? String { FileKeys.set(fid, (f["lock"] as? String) == "p" ? "p:" + k : k) }   // (locked in R2: its key — R2Files; in pieces: "p:")
-        return Msg.FileRef(id: fid, name: f["name"] as? String ?? "File", size: f["size"] as? Int ?? 0, kind: f["kind"] as? String ?? "file", w: f["w"] as? Double, h: f["h"] as? Double, secs: f["secs"] as? Double, wave: f["wave"] as? String, thumb: f["thumb"] as? String)
+        var ref = Msg.FileRef(id: fid, name: f["name"] as? String ?? "File", size: f["size"] as? Int ?? 0, kind: f["kind"] as? String ?? "file", w: f["w"] as? Double, h: f["h"] as? Double, secs: f["secs"] as? Double, wave: f["wave"] as? String, thumb: f["thumb"] as? String)
+        ref.orig = f["orig"] as? String
+        return ref
       }
       let r = (e["reply"] as? [String: Any]).flatMap { r -> Msg.Reply? in
         guard let rid = r["id"] as? String, !rid.isEmpty else { return nil }
@@ -458,7 +462,7 @@ final class Talk {
       if let p = place { b["location"] = p.json }
       if fwd { b["fwd"] = true }
       if let r = m.reply { b["reply"] = ["id": r.id, "by": r.by, "text": r.text, "kind": r.kind] }
-      if let f = file, let fid = fileId { var fd: [String: Any] = ["id": fid, "kind": f.kind]; fd["w"] = f.w; fd["h"] = f.h; fd["secs"] = f.secs; fd["wave"] = f.wave; fd["thumb"] = thumb
+      if let f = file, let fid = fileId { var fd: [String: Any] = ["id": fid, "kind": f.kind]; fd["w"] = f.w; fd["h"] = f.h; fd["secs"] = f.secs; fd["wave"] = f.wave; fd["thumb"] = thumb; fd["orig"] = f.orig
         // (locked in pieces — "p:" before its key on the phone: the server's word for it is lock "p")
         if let k = fileKey { if k.hasPrefix("p:") { fd["key"] = String(k.dropFirst(2)); fd["lock"] = "p" } else { fd["key"] = k } }
         b["file"] = fd }
@@ -469,20 +473,30 @@ final class Talk {
       }
     }
     // (it didn't go: if Talk was left meanwhile, again when Talk is back — else the red !, a tap: Send again / Delete)
-    var again: (() -> Void)?, tries = 0, leftAt = BgWatch.left
+    var again: (() -> Void)?, tries = 0, leftAt = BgWatch.left, attempt = 0, failedAt = -1
     let failed = { [weak self] in
       if let f = file, Uploads.isStopped(f.id) { return }
+      guard failedAt != attempt else { return }   // (one word per try — three parts failing together said it three times)
+      failedAt = attempt
       if BgWatch.left != leftAt, tries < 3, let a = again {
         tries += 1
-        BgWatch.whenBack { leftAt = BgWatch.left; a() }
+        BgWatch.whenBack { leftAt = BgWatch.left; attempt += 1; a() }
       } else { self?.mark(g, cid, failed: true) }
     }
-    let up = { (data: Data, f: Msg.FileRef) in
+    // (iPhone's extra time after leaving Talk, held until the file is up — it was let go the moment the upload began, so a
+    //  switch of apps stopped it at once; Haris 2026-11-21 13:37)
+    let keepGoing = { () -> () -> Void in
+      var id = UIBackgroundTaskIdentifier.invalid
+      id = UIApplication.shared.beginBackgroundTask(withName: "talk-send") { UIApplication.shared.endBackgroundTask(id); id = .invalid }
+      return { if id != .invalid { UIApplication.shared.endBackgroundTask(id); id = .invalid } }
+    }
+    let up = { (data: Data, f: Msg.FileRef, finished: @escaping () -> Void) in
       Uploads.set(f.id, 0, total: data.count)
       var going = true   // (a late word of progress after it's up doesn't bring the ring back)
       Net.shared.uploadMsg(data, name: f.name, stop: f.id, progress: { p in guard going else { return }; progress?(p); Uploads.set(f.id, p, total: data.count) }) { fid, key in
         going = false; Uploads.end(f.id); Uploads.done(f.id)
-        if Uploads.isStopped(f.id) { return }   // (its ✕: stopped, the message gone already)
+        defer { finished() }
+        if Uploads.isStopped(f.id) { return }   // (its ✕: stopped)
         if let fid = fid, let key = key { FileKeys.set(fid, key); fileKey = key }
         guard let fid = fid else { failed(); return }
         try? FileManager.default.copyItem(at: Net.local(f.id), to: Net.local(fid))
@@ -491,27 +505,24 @@ final class Talk {
       }
     }
     if let prep = prepare, let f = file {
-      // (started over if Talk was left: made smaller again from the picked original, which prep keeps)
+      // (started over if Talk was left while it was made smaller: made smaller again from the picked original, which prep
+      //  keeps; left while it was going up: only the upload again, from the copy already made)
       again = {
         Uploads.set(f.id, 0, total: max(1, f.size))
-        let bg = UIApplication.shared.beginBackgroundTask(withName: "talk-send") {}
+        let end = keepGoing()
         prep { made in
-          if Uploads.isStopped(f.id) { UIApplication.shared.endBackgroundTask(bg); return }   // (its ✕ while it was being made smaller)
+          if Uploads.isStopped(f.id) { end(); return }   // (its ✕ while it was being made smaller)
           // (mapped, not read whole: a big video's pieces are read from the disk as they go up — Haris 2026-11-21)
-          guard let made = made, let d = try? Data(contentsOf: made, options: .alwaysMapped) else { Uploads.end(f.id); UIApplication.shared.endBackgroundTask(bg); failed(); return }
+          guard let made = made, let d = try? Data(contentsOf: made, options: .alwaysMapped) else { Uploads.end(f.id); end(); failed(); return }
           // (what goes up is what the phone keeps for it)
           if made != Net.local(f.id) { try? FileManager.default.removeItem(at: Net.local(f.id)); try? FileManager.default.copyItem(at: made, to: Net.local(f.id)) }
-          up(d, f)
-          UIApplication.shared.endBackgroundTask(bg)
+          again = { let end2 = keepGoing(); if let d2 = try? Data(contentsOf: Net.local(f.id), options: .alwaysMapped) { up(d2, f, end2) } else { end2(); self.mark(g, cid, failed: true) } }
+          up(d, f, end)
         }
       }
       again?()
     } else if let data = upload, let f = file {
-      again = {
-        let bg = UIApplication.shared.beginBackgroundTask(withName: "talk-send") {}
-        up(data, f)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 25) { UIApplication.shared.endBackgroundTask(bg) }
-      }
+      again = { let end = keepGoing(); up(data, f, end) }
       again?()
     } else if file == nil, !fwd, task == nil, contact == nil, place == nil, let u = LinkPrevMaker.firstLink(text), !LinkPrevMaker.ours(u), { if case .none = link { return false }; return true }() {
       // (words with a link: its preview — read in the box while it was typed, as far as it got (WhatsApp's), or else read
