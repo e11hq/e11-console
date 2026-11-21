@@ -1,5 +1,6 @@
 import AVFoundation
 import VideoToolbox
+import CoreImage
 
 /* A video made smaller for sending, in HEVC (H.265) — Haris 2026-11-21 12:08: "Sharper at 720". HEVC needs about half the
    bitrate of H.264 for the same look, so at the size Apple's 720p H.264 preset gave, the picture is clearly sharper.
@@ -19,6 +20,32 @@ enum VideoShrink {
   }
   // which ProRes it is, for its bubble's label (Haris 2026-11-21 14:00: "Add labels to every prores type") — the kind, and
   // "Log" when filmed in Apple Log; nil for any other video
+  // Apple Log: iPhone marks it only as "com.apple.rec2020.apple-log" (the file's 'logs' box, read 2026-11-21 from Haris's
+  // iPhone 17 Pro clip IMG_4844 — its colour box says Rec. 2020 with no transfer, so Apple's own conversion leaves it flat)
+  static func isAppleLog(_ asset: AVAsset) -> Bool {
+    guard let t = asset.tracks(withMediaType: .video).first, let d0 = t.formatDescriptions.first else { return false }
+    let all = (CMFormatDescriptionGetExtensions(d0 as! CMFormatDescription) as NSDictionary?)?.description ?? ""
+    return all.contains("apple-log") || all.contains("AppleLog")
+  }
+  /* Apple Log → normal colours, as a 33-point colour cube on the code values: Apple's published Apple Log curve undone
+     (R0 −0.05641088, Rt 0.01, c 47.28711236, b 0.00964052, γ 0.08550479, β 0.69336945), Rec. 2020 → Rec. 709 colours, a soft
+     shoulder for the highlights, then Rec. 709's own curve — tried on a frame of IMG_4844 first: it looks like a normal video */
+  private static let logCube: Data = {
+    let n = 33
+    let R0 = -0.05641088, Rt = 0.01, c = 47.28711236, b = 0.00964052, g = 0.08550479, B = 0.69336945
+    let Pt = c * (Rt - R0) * (Rt - R0)
+    func lin(_ p: Double) -> Double { p >= Pt ? pow(2, (p - B) / g) - b : (max(p, 0) / c).squareRoot() + R0 }
+    func tone(_ x: Double) -> Double { let x = max(x, 0); return x / (1 + x / 4) * 1.25 }
+    func oetf(_ l: Double) -> Double { let l = min(max(l, 0), 1); return l < 0.018 ? 4.5 * l : 1.099 * pow(l, 0.45) - 0.099 }
+    var out = [Float](); out.reserveCapacity(n * n * n * 4)
+    for bi in 0..<n { for gi in 0..<n { for ri in 0..<n {
+      let r = lin(Double(ri) / Double(n - 1)), gg = lin(Double(gi) / Double(n - 1)), bb = lin(Double(bi) / Double(n - 1))
+      let r7 = 1.6605 * r - 0.5876 * gg - 0.0728 * bb, g7 = -0.1246 * r + 1.1329 * gg - 0.0083 * bb, b7 = -0.0182 * r - 0.1006 * gg + 1.1187 * bb
+      out += [Float(oetf(tone(r7))), Float(oetf(tone(g7))), Float(oetf(tone(b7))), 1]
+    } } }
+    return out.withUnsafeBufferPointer { Data(buffer: $0) }
+  }()
+  private static let rawCtx = CIContext(options: [.workingColorSpace: NSNull(), .outputColorSpace: NSNull()])
   static func proRes(_ asset: AVAsset) -> String? {
     guard let t = asset.tracks(withMediaType: .video).first, let d0 = t.formatDescriptions.first else { return nil }
     let d = d0 as! CMFormatDescription
@@ -30,7 +57,7 @@ enum VideoShrink {
     //  17 Pro Log clip wasn't found by the tag alone, Haris 2026-11-21 14:36)
     let tf = CMFormatDescriptionGetExtension(d, extensionKey: kCMFormatDescriptionExtension_TransferFunction) as? String ?? ""
     let all = (CMFormatDescriptionGetExtensions(d) as NSDictionary?)?.description ?? ""
-    let log = tf.localizedCaseInsensitiveContains("log") || all.contains("AppleLog") || all.contains("Apple Log")
+    let log = tf.localizedCaseInsensitiveContains("log") || all.contains("apple-log") || all.contains("AppleLog") || all.contains("Apple Log")
     return log ? n + " · Log" : n
   }
   // (why the last one couldn't be made smaller — said when a video goes as its original instead)
@@ -52,7 +79,24 @@ enum VideoShrink {
     // (read through Apple's video composition set to standard colour: a ProRes Log or HDR video is turned into the colours
     //  every phone shows, turned the right way up — tagging the written video alone left Log footage flat and grey,
     //  Haris 2026-11-21 14:32)
-    let comp = AVMutableVideoComposition(propertiesOf: asset)
+    let comp: AVMutableVideoComposition
+    if isAppleLog(asset) {
+      // (Apple Log: the cube above on each frame, on the raw code values — no colour management of Core Image's own)
+      let tr = vt.preferredTransform
+      comp = AVMutableVideoComposition(asset: asset) { req in
+        var img = req.sourceImage
+        // (turned the way it's watched, if Apple hasn't already)
+        if abs(img.extent.width - req.renderSize.width) > 1 {
+          img = img.transformed(by: tr)
+          img = img.transformed(by: CGAffineTransform(translationX: -img.extent.minX, y: -img.extent.minY))
+        }
+        let f = CIFilter(name: "CIColorCube", parameters: [kCIInputImageKey: img, "inputCubeDimension": 33, "inputCubeData": VideoShrink.logCube])
+        req.finish(with: f?.outputImage ?? img, context: VideoShrink.rawCtx)
+      }
+      comp.renderSize = nat
+    } else {
+      comp = AVMutableVideoComposition(propertiesOf: asset)
+    }
     comp.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2
     comp.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2
     comp.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
