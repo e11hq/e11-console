@@ -683,10 +683,12 @@ export function createServer(cfg) {
     // (who has Talk now — the hub asks before taking a phone's request; the app asks when the hub refuses)
     if (p === '/api/talk/relay/mode' && req.method === 'GET') return json(res, 200, { ok: true, mode: r.mode() });
     // the owner: how it's doing, and the switch-over (to the hub) or back (to the office) — E11 Console's own sign-in
-    if (p === '/api/talk/relay/status' || p === '/api/talk/relay/switch') {
+    if (p === '/api/talk/relay/status' || p === '/api/talk/relay/switch' || p === '/api/talk/relay/pushtest') {
       const w = await who(req, res); if (!w) return;
       if (!isOwner(req.realUser || w)) return json(res, 403, { ok: false, error: 'Only the owner' });
       if (p === '/api/talk/relay/status') return json(res, 200, { ok: true, ...r.status() });
+      // (the owner's test: Cloudflare sends one notification itself to the owner's own phones — Apple's answer back)
+      if (p === '/api/talk/relay/pushtest') { if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'POST' }); return json(res, 200, await r.pushTest((req.realUser || w).id)); }
       if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'POST' });
       const b = await readBody(req, 4096).catch(() => ({}));
       return json(res, 200, await r.switchTo(String(b.to || '')));
@@ -913,8 +915,11 @@ export function createServer(cfg) {
       }
       if (p === '/api/talk/push' && req.method === 'POST') {
         const b = await readBody(req, 16 * 1024);
-        if (b.off) { talkApns.unregister(b.token); return out({ ok: true }); }
-        return out(talkApns.register(u.id, b.token, b.env, { ack: b.ack === true }) ? { ok: true, push: talkApns.enabled() } : { ok: false, error: 'Bad token' });
+        // (Talk's hub on Cloudflare keeps the phones' addresses too, to notify them itself when the office can't — TALK-CF-A)
+        if (b.off) { talkApns.unregister(b.token); if (talkRelay) talkRelay.dirSoon(); return out({ ok: true }); }
+        const okReg = talkApns.register(u.id, b.token, b.env, { ack: b.ack === true });
+        if (okReg && talkRelay) talkRelay.dirSoon();
+        return out(okReg ? { ok: true, push: talkApns.enabled() } : { ok: false, error: 'Bad token' });
       }
       if (p === '/api/talk/push/ack' && req.method === 'POST') { const b = await readBody(req, 16 * 1024); return out(await talkApns.ack(u.id, b.token, b.pid)); }
       return json(res, 404, { ok: false, error: 'Not found' });

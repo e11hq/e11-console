@@ -9,6 +9,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { HubCore } from './core.js';
 import { newKey, signHeaders, verify } from './sign.js';
 import { bindingR2 } from './r2.js';
+import { makeApns } from './apns.js';
 
 const TALK_TABLES = ['groups', 'members', 'prefs', 'events', 'waiting', 'sent', 'files', 'contacts', 'macs', 'link_codes', 'phone_seen',
   'phones', 'bare_seen', 'needs', 'opts', 'unread', 'file_kept', 'file_had', 'asks'];
@@ -30,7 +31,14 @@ export class TalkHub extends DurableObject {
       const r2 = bindingR2({ bucket: env.TALK_FILES, secret: env.R2_LINK_SECRET, base: String(env.PUBLIC || '').replace(/\/$/, '') });
       // (notifications: sent by the office for now — the phones' notification tokens are there; once Apple's key is in
       //  Cloudflare, sent from here, office or not. E11 Console's Talk count: the office works it out from its copy)
-      const apns = { enabled: () => !!this.office, sendTo: (uid, p) => this.later('/api/talk/relay/push', { uid, p }), wake: (uid, p) => this.later('/api/talk/relay/push', { uid, p, wake: true }) };
+      // (the office sends them while it can be reached — it also sends again any a phone missed; it can't: Cloudflare sends
+      //  them itself, with Apple's key and the phones' addresses — Haris 2026-11-22 01:00 "A")
+      this.apple = makeApns({ key: env.APNS_KEY, keyId: env.APNS_KEY_ID, teamId: env.APNS_TEAM_ID, topic: env.APNS_TOPIC || 'ae.e11.talk.ios', subs: () => (this.core && this.core.dir.snapshot.push) || {} });
+      const notify = (uid, p, wake) => this.later('/api/talk/relay/push', { uid, p, ...(wake ? { wake: true } : {}) }).then((ok) => {
+        if (ok || !this.apple.on) return;
+        return wake ? this.apple.wake(uid, p) : this.apple.sendTo(uid, p);
+      }).catch(() => {});
+      const apns = { enabled: () => !!this.office || this.apple.on, sendTo: (uid, p) => { const x = notify(uid, p, false); try { this.ctx.waitUntil(x); } catch { /* fine */ } return x; }, wake: (uid, p) => { const x = notify(uid, p, true); try { this.ctx.waitUntil(x); } catch { /* fine */ } return x; } };
       this.core = new HubCore({ sql, copy: (b) => this.toOffice(b), r2: r2.on ? r2 : null, apns, onUnread: (uids) => { this.later('/api/talk/relay/unread', { uids }); } });
       const d = this.core.meta('dir'); if (d) try { this.core.dir.set(JSON.parse(d)); } catch { /* the office sends it again */ }
       if (!this.core.meta('key')) { const k = await newKey(); this.core.meta('key', k.priv); this.core.meta('pub', k.pub); }
@@ -50,7 +58,7 @@ export class TalkHub extends DurableObject {
       if (!this.core.meta('dirAt')) await this.askDir();
       const d = this.core.dir.snapshot || {};
       return json({ ok: true, dirAt: Number(this.core.meta('dirAt') || 0) || null, people: (d.users || []).length, clients: (d.projects || []).length,
-        copyN: this.core.n, waiting: this.ctx.storage.sql.exec('SELECT COUNT(*) AS c FROM hub_outbox').toArray()[0].c, officeKey: !!this.core.meta('officeKey') });
+        phones: Object.values((d.push) || {}).reduce((a, x) => a + (x || []).length, 0), apple: this.apple.on, copyN: this.core.n, waiting: this.ctx.storage.sql.exec('SELECT COUNT(*) AS c FROM hub_outbox').toArray()[0].c, officeKey: !!this.core.meta('officeKey') });
     }
     if (p.startsWith('/office/')) return this.fromOffice(req, p);
     // (the front door's memory of who each sign-in is — a fingerprint and an email; only the Worker reaches this)
@@ -211,6 +219,12 @@ export class TalkHub extends DurableObject {
       // the office's whole Talk, once (moving it here) — or the office asking for this hub's whole Talk (a gap in its copy)
       case '/office/load': return json(this.load(b));
       case '/office/dump': return json(this.dump());
+      // the owner's test (through the office): Cloudflare sends one notification itself to that person's phones — Apple's answer
+      case '/office/pushtest': {
+        if (!this.apple.on) return json({ ok: false, error: 'Apple’s key isn’t in Cloudflare yet' });
+        const r = await this.apple.sendTo(String(b.uid || ''), { title: 'E11 Talk', body: 'A test from Cloudflare — notifications work without the office', kind: 'test', tag: 'test' });
+        return json({ ok: true, ...r });
+      }
       default: return json({ ok: false, error: 'Not here' }, 404);
     }
   }

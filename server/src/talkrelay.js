@@ -211,7 +211,10 @@ export function createTalkRelay({ dbFile, relayUrl = '', store, access, apns = n
       flags[u.id] = { free: !!access.isFreelancer(u), super: !!access.isSuper(u), office: !!access.isOffice(u) };
       see[u.id] = store.list('projects').filter((p) => access.canSee(u, 'projects', p)).map((p) => String(p.id));
     }
-    return { users, projects, clients, meta: { cdUserId: m.cdUserId || null, socialMgrIds: m.socialMgrIds || [] }, flags, see };
+    // (E11 Talk's phones' notification addresses — the hub notifies them itself when the office can't be reached)
+    let push = {};
+    try { const subs = JSON.parse((store.kv && store.kv.get('talk-apns-subs')) || '{}'); for (const [uid, list] of Object.entries(subs)) push[uid] = (list || []).map((x) => ({ token: x.token, env: x.env || 'production', ...(x.platform ? { platform: x.platform } : {}) })); } catch { push = {}; }
+    return { users, projects, clients, meta: { cdUserId: m.cdUserId || null, socialMgrIds: m.socialMgrIds || [] }, flags, see, push };
   }
   let dirTimer = null;
   const sendDir = () => toHub('/office/dir', { dir: dir() }).catch(() => null);
@@ -224,10 +227,11 @@ export function createTalkRelay({ dbFile, relayUrl = '', store, access, apns = n
     if (b.wake) { if (apns.wake) await apns.wake(String(b.uid), b.p).catch(() => {}); } else await apns.sendTo(String(b.uid), b.p).catch(() => {});
     return { ok: true, sent: true };
   }
+  async function pushTest(uid) { try { return await toHub('/office/pushtest', { uid }); } catch (e) { return { ok: false, error: e.message }; } }
   function unread(b) { if (unreadTell && Array.isArray(b && b.uids)) unreadTell(b.uids.map(String)); return { ok: true }; }
 
   return { db: talkDb, publicKey: () => meta('pub'), mode: () => mode, fromHub, copy, resync, load, switchTo, takeOver, handBack, pass, listen,
-    dir, sendDir, dirSoon, tell, push, unread, sign, linked: () => meta('linked') === '1', lastN: () => Number(meta('lastN') || 0),
+    dir, sendDir, dirSoon, tell, push, pushTest, unread, sign, linked: () => meta('linked') === '1', lastN: () => Number(meta('lastN') || 0),
     status: () => ({ mode, linked: meta('linked') === '1', lastN: Number(meta('lastN') || 0), modeAt: Number(meta('modeAt') || 0) || null, takeoverWhy: mode === 'takeover' ? meta('takeoverWhy') : null }),
     close: () => { clearTimeout(dirTimer); clearInterval(backTimer); raw.close(); } };
 }
