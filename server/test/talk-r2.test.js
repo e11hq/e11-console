@@ -155,3 +155,47 @@ test('a link’s preview picture in R2, locked: its key goes with the link (Hari
   const old = await fetch(base + '/api/talk/file/' + s.id, { headers: H('des') });
   assert.deepEqual(Buffer.from(await old.arrayBuffer()), img, 'an older app: unlocked through the server');
 });
+
+// (the phone's lock in pieces: every 8 MB of the locked file one piece — nonce, piece, tag — with "e11p:<n>:<last>" added)
+const PIECE = 8 * 1024 * 1024;
+const lockPieces = (data, key) => {
+  const plain = PIECE - 28, n = Math.ceil(data.length / plain), out = [];
+  for (let i = 0; i < n; i++) {
+    const nonce = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', key, nonce);
+    c.setAAD(Buffer.from(`e11p:${i}:${i === n - 1 ? 1 : 0}`));
+    const x = Buffer.concat([c.update(data.subarray(i * plain, (i + 1) * plain)), c.final()]);
+    out.push(nonce, x, c.getAuthTag());
+  }
+  return Buffer.concat(out);
+};
+test('a big file locked in pieces: phones that know pieces go to R2; an older one gets it unlocked through the server (Haris 2026-11-21)', async () => {
+  const key = crypto.randomBytes(32), big = crypto.randomBytes(PIECE + 3 * 1024 * 1024), sealed = lockPieces(big, key);
+  const s = await post('am', '/api/talk/r2/start', { name: 'clip.mov', size: sealed.length });
+  assert.equal(s.urls.length, 2);
+  const etags = [];
+  for (let i = 0; i < 2; i++) etags.push((await fetch(s.urls[i], { method: 'PUT', body: sealed.subarray(i * PIECE, (i + 1) * PIECE) })).headers.get('etag'));
+  assert.ok((await post('am', '/api/talk/r2/done', { id: s.id, etags })).ok);
+  const m = await post('am', '/api/talk/act', { act: 'send', group: G, file: { id: s.id, kind: 'video', key: key.toString('base64'), lock: 'p' } });
+  assert.ok(m.ok);
+  const ev = (await sync('des')).events.find((e) => e.id === m.id);
+  assert.equal(ev.file.lock, 'p', 'the phones are told it is in pieces');
+  const neu = await fetch(base + '/api/talk/file/' + s.id + '?r2=1&pieces=1', { headers: H('des'), redirect: 'manual' });
+  assert.equal(neu.status, 302, 'a phone that knows pieces: straight to R2');
+  const older = await fetch(base + '/api/talk/file/' + s.id + '?r2=1', { headers: H('des'), redirect: 'manual' });
+  assert.equal(older.status, 200, 'an older phone: not sent to R2');
+  assert.deepEqual(Buffer.from(await older.arrayBuffer()), big, 'unlocked through the server, piece by piece');
+});
+
+test('a piece changed in R2 is never handed out as the file', async () => {
+  const key = crypto.randomBytes(32), data = crypto.randomBytes(PIECE + 1024), sealed = lockPieces(data, key);
+  const s = await post('am', '/api/talk/r2/start', { name: 'b.mov', size: sealed.length });
+  const etags = [];
+  for (let i = 0; i < 2; i++) etags.push((await fetch(s.urls[i], { method: 'PUT', body: sealed.subarray(i * PIECE, (i + 1) * PIECE) })).headers.get('etag'));
+  assert.ok((await post('am', '/api/talk/r2/done', { id: s.id, etags })).ok);
+  assert.ok((await post('am', '/api/talk/act', { act: 'send', group: G, file: { id: s.id, kind: 'video', key: key.toString('base64'), lock: 'p' } })).ok);
+  const k = [...objects.keys()].find((x) => x.endsWith('/msg/' + s.id));
+  const o = objects.get(k); o[PIECE + 20] ^= 1;   // (a byte of the last piece changed)
+  let got = null;
+  try { got = Buffer.from(await (await fetch(base + '/api/talk/file/' + s.id, { headers: H('des') })).arrayBuffer()); } catch { got = null; }
+  assert.ok(!got || !got.equals(data), 'not the file');
+});

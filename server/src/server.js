@@ -670,6 +670,7 @@ export function createServer(cfg) {
         res.on('finish', () => t.fetched(dev, f.id));
         return Readable.fromWeb(r.body).pipe(res);
       }
+      if (f.lock === 'p') return talkR2Pieces(t, f, k, req, res, dev);
       // (locked on the phone with AES-GCM, Apple's "combined" form: 12 bytes of nonce, the file, 16 bytes of tag)
       const len = f.size - 28;
       if (len < 0) return json(res, 404, { ok: false, error: 'That file has gone' });
@@ -687,6 +688,43 @@ export function createServer(cfg) {
       res.on('finish', () => t.fetched(dev, f.id));
       return Readable.fromWeb(r.body).pipe(d).pipe(res);
     } catch (e) { console.error('talk r2 read:', e.message); if (!res.headersSent) return json(res, 502, { ok: false, error: 'Couldn’t reach the file' }); res.destroy(); }
+  }
+  // A file locked in pieces (E11 Talk, Haris 2026-11-21 11:00): every 8 MB of R2's copy is one piece — 12 bytes of nonce, the
+  // piece, 16 bytes of tag — locked with the file's key and "e11p:<n>:<1 if last else 0>" as its added data, so pieces can't
+  // be moved, dropped or cut short. Unlocked here piece by piece for apps that can't (never the whole file in memory).
+  const PIECE = 8 * 1024 * 1024;
+  async function talkR2Pieces(t, f, k, req, res, dev) {
+    const n = Math.ceil(f.size / PIECE), len = f.size - 28 * n;
+    if (!n || len < 0) return json(res, 404, { ok: false, error: 'That file has gone' });
+    const type = mimeOf(f.name);
+    const r = req.method === 'HEAD' ? null : await t.r2.get(t.r2Key(f));
+    if (r && !r.ok) return json(res, 404, { ok: false, error: 'That file has gone' });
+    res.writeHead(200, { 'Content-Type': type, 'Content-Length': len, 'Cache-Control': 'private, max-age=86400' });
+    if (!r) return res.end();
+    let i = 0, held = [], heldLen = 0, broken = false;
+    const open = (buf, last) => {
+      const d = crypto.createDecipheriv('aes-256-gcm', k, buf.subarray(0, 12));
+      d.setAAD(Buffer.from(`e11p:${i}:${last ? 1 : 0}`)); d.setAuthTag(buf.subarray(buf.length - 16));
+      const out = Buffer.concat([d.update(buf.subarray(12, buf.length - 16)), d.final()]);
+      i++;
+      return out;
+    };
+    const src = Readable.fromWeb(r.body);
+    try {
+      for await (const chunk of src) {
+        held.push(chunk); heldLen += chunk.length;
+        while (heldLen >= PIECE && i < n - 1) {
+          const all = Buffer.concat(held), piece = all.subarray(0, PIECE);
+          held = [all.subarray(PIECE)]; heldLen = all.length - PIECE;
+          if (!res.write(open(piece, false))) await new Promise((z) => res.once('drain', z));
+        }
+      }
+      const rest = Buffer.concat(held);
+      if (i !== n - 1 || rest.length !== f.size - PIECE * (n - 1)) throw new Error('pieces missing');
+      res.end(open(rest, true));
+      t.fetched(dev, f.id);
+    } catch (e) { broken = true; console.error('talk r2 pieces:', e.message); res.destroy(); }
+    return broken;
   }
   async function talkLocal(pass, url, req, res) {
     const t = talkNow();
@@ -785,7 +823,8 @@ export function createServer(cfg) {
         if (f.store === 'r2') {
           // (newer phones, ?r2=1: off to R2 itself for 15 minutes — it reaches the phone locked, the phone unlocks it. Counted
           //  as fetched now: the file stays a day more for a download that breaks — 1.9.111)
-          if (url.searchParams.get('r2') === '1' && t.r2 && t.r2.on) { t.fetched(dev, f.id); res.writeHead(302, { Location: t.r2.getUrl(t.r2Key(f)), 'Cache-Control': 'no-store' }); return res.end(); }
+          // (locked in pieces: only phones that say they unlock pieces go to R2 — ?pieces=1; an older one gets it unlocked here)
+          if (url.searchParams.get('r2') === '1' && t.r2 && t.r2.on && (f.lock !== 'p' || url.searchParams.get('pieces') === '1')) { t.fetched(dev, f.id); res.writeHead(302, { Location: t.r2.getUrl(t.r2Key(f)), 'Cache-Control': 'no-store' }); return res.end(); }
           return talkR2Out(t, f, req, res, dev);
         }
         const full = t.filePath(f), size = fs.statSync(full).size;

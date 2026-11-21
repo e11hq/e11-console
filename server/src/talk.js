@@ -74,6 +74,9 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   // (where in R2, when not msg/<id>: a group's picture under grp/, out of the bucket's 31-day rule — it stays while the group
   //  uses it; Haris 2026-11-21 10:51)
   try { db.exec('ALTER TABLE files ADD COLUMN r2k TEXT'); } catch { /* already there */ }
+  // (how it was locked: null — in one go; 'p' — in pieces of 8 MB, each locked on its own, so a big file never sits whole in
+  //  the phone's memory; Haris 2026-11-21 11:00)
+  try { db.exec('ALTER TABLE files ADD COLUMN lock TEXT'); } catch { /* already there */ }
   const q = (sql) => db.prepare(sql);
   const Q = {
     group: q('SELECT * FROM groups WHERE id = ? AND gone = 0'),
@@ -940,8 +943,11 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
             // (a photo's or video's tiny picture, made on the phone that sent it: shown blurred until the real one is downloaded)
             ...(typeof b.file.thumb === 'string' && b.file.thumb.length <= 4000 ? { thumb: b.file.thumb.replace(/[^A-Za-z0-9+/=]/g, '') } : {}),
             // (in R2, locked on the phone: the key to open it, for the group's phones — R2 only ever has it locked)
-            ...(f.store === 'r2' && typeof b.file.key === 'string' && /^[A-Za-z0-9+/]{43}=$/.test(b.file.key) ? { key: b.file.key } : {}) };
-          if (file.key && f.fkey !== file.key) db.prepare('UPDATE files SET fkey = ? WHERE id = ?').run(file.key, f.id);   // (a voice message's waveform, made on the phone that recorded it)
+            ...(f.store === 'r2' && typeof b.file.key === 'string' && /^[A-Za-z0-9+/]{43}=$/.test(b.file.key) ? { key: b.file.key } : {}),
+            // (locked in pieces: phones that know the pieces unlock it; others get it unlocked through the server)
+            ...(f.store === 'r2' && b.file.lock === 'p' && typeof b.file.key === 'string' ? { lock: 'p' } : {}) };
+          if (file.key && f.fkey !== file.key) db.prepare('UPDATE files SET fkey = ? WHERE id = ?').run(file.key, f.id);
+          if (file.lock === 'p' && f.lock !== 'p') db.prepare("UPDATE files SET lock = 'p' WHERE id = ?").run(f.id);   // (a voice message's waveform, made on the phone that recorded it)
         }
         // (a task shared with # — staff groups only, a task this person sees; its card made here)
         let task = null;
