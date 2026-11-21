@@ -58,6 +58,17 @@ enum Auto {
   static func size(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, countStyle: .file) }
 }
 
+/* leaving Talk (another app, the home screen): counted, so a send that stopped because of it isn't called failed — it goes
+   on by itself when Talk is back (Haris 2026-11-21 13:18: "failed sent while we switched apps (should not happen)") */
+enum BgWatch {
+  static var left = 0
+  private static var waiting: [() -> Void] = []
+  static func whenBack(_ f: @escaping () -> Void) {
+    if UIApplication.shared.applicationState == .active { f() } else { waiting.append(f) }
+  }
+  static func back() { let w = waiting; waiting = []; w.forEach { $0() } }
+}
+
 /* a file of yours going up: how far it is, for the same ring as a download (Haris 2026-11-16) — set as each part goes,
    gone once it's on the server; each change told to the bubbles showing it, as a download's */
 enum Uploads {

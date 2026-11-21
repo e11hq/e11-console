@@ -468,31 +468,51 @@ final class Talk {
         if (j?["ok"] as? Bool) == true { DispatchQueue.main.async { ChatSound.send() }; self.sync() } else { self.mark(g, cid, failed: true) }
       }
     }
+    // (it didn't go: if Talk was left meanwhile, again when Talk is back — else the red !, a tap: Send again / Delete)
+    var again: (() -> Void)?, tries = 0, leftAt = BgWatch.left
+    let failed = { [weak self] in
+      if let f = file, Uploads.isStopped(f.id) { return }
+      if BgWatch.left != leftAt, tries < 3, let a = again {
+        tries += 1
+        BgWatch.whenBack { leftAt = BgWatch.left; a() }
+      } else { self?.mark(g, cid, failed: true) }
+    }
     let up = { (data: Data, f: Msg.FileRef) in
       Uploads.set(f.id, 0, total: data.count)
       var going = true   // (a late word of progress after it's up doesn't bring the ring back)
-      Net.shared.uploadMsg(data, name: f.name, stop: f.id, progress: { p in guard going else { return }; progress?(p); Uploads.set(f.id, p, total: data.count) }) { [weak self] fid, key in
+      Net.shared.uploadMsg(data, name: f.name, stop: f.id, progress: { p in guard going else { return }; progress?(p); Uploads.set(f.id, p, total: data.count) }) { fid, key in
         going = false; Uploads.end(f.id); Uploads.done(f.id)
         if Uploads.isStopped(f.id) { return }   // (its ✕: stopped, the message gone already)
         if let fid = fid, let key = key { FileKeys.set(fid, key); fileKey = key }
-        guard let fid = fid else { self?.mark(g, cid, failed: true); return }
+        guard let fid = fid else { failed(); return }
         try? FileManager.default.copyItem(at: Net.local(f.id), to: Net.local(fid))
         m.file?.id = fid
         go(fid)
       }
     }
     if let prep = prepare, let f = file {
-      Uploads.set(f.id, 0, total: max(1, f.size))
-      prep { [weak self] made in
-        if Uploads.isStopped(f.id) { return }   // (its ✕ while it was being made smaller)
-        // (mapped, not read whole: a big video's pieces are read from the disk as they go up — Haris 2026-11-21)
-        guard let made = made, let d = try? Data(contentsOf: made, options: .alwaysMapped) else { Uploads.end(f.id); self?.mark(g, cid, failed: true); return }
-        // (what goes up is what the phone keeps for it)
-        if made != Net.local(f.id) { try? FileManager.default.removeItem(at: Net.local(f.id)); try? FileManager.default.copyItem(at: made, to: Net.local(f.id)) }
-        up(d, f)
+      // (started over if Talk was left: made smaller again from the picked original, which prep keeps)
+      again = {
+        Uploads.set(f.id, 0, total: max(1, f.size))
+        let bg = UIApplication.shared.beginBackgroundTask(withName: "talk-send") {}
+        prep { made in
+          if Uploads.isStopped(f.id) { UIApplication.shared.endBackgroundTask(bg); return }   // (its ✕ while it was being made smaller)
+          // (mapped, not read whole: a big video's pieces are read from the disk as they go up — Haris 2026-11-21)
+          guard let made = made, let d = try? Data(contentsOf: made, options: .alwaysMapped) else { Uploads.end(f.id); UIApplication.shared.endBackgroundTask(bg); failed(); return }
+          // (what goes up is what the phone keeps for it)
+          if made != Net.local(f.id) { try? FileManager.default.removeItem(at: Net.local(f.id)); try? FileManager.default.copyItem(at: made, to: Net.local(f.id)) }
+          up(d, f)
+          UIApplication.shared.endBackgroundTask(bg)
+        }
       }
+      again?()
     } else if let data = upload, let f = file {
-      up(data, f)
+      again = {
+        let bg = UIApplication.shared.beginBackgroundTask(withName: "talk-send") {}
+        up(data, f)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 25) { UIApplication.shared.endBackgroundTask(bg) }
+      }
+      again?()
     } else if file == nil, !fwd, task == nil, contact == nil, place == nil, let u = LinkPrevMaker.firstLink(text), !LinkPrevMaker.ours(u), { if case .none = link { return false }; return true }() {
       // (words with a link: its preview — read in the box while it was typed, as far as it got (WhatsApp's), or else read
       //  here first — the picture and the site's icon sent up as files, then the message with it)
@@ -540,6 +560,10 @@ final class Talk {
     var l = log(g)
     if let i = l.msgs.firstIndex(where: { $0.cid == cid && $0.pending }) { l.msgs[i].failed = failed; if failed, l.msgs[i].link?.state == "reading" { l.msgs[i].link = nil }; logs[g] = l; saveSoon(g); NotificationCenter.default.post(name: .talkGroup, object: g) }
   }
+  // (sent in HD from this phone — kept for Send again; this time Talk is open)
+  static var sentHD = Set<String>()
+  // ✕ on one of yours going up: stopped — the red !, then Send again or Delete (Haris 2026-11-21 13:18)
+  func stopped(_ g: String, _ m: Msg) { if let c = m.cid { mark(g, c, failed: true) } }
   func retry(_ g: String, _ m: Msg) {
     deleteForMe(g, m)
     send(g, text: m.text, reply: nil, contact: m.contact, place: m.place)

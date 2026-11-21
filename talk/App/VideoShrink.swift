@@ -11,6 +11,12 @@ enum VideoShrink {
   static func bitrate(hd: Bool) -> Int { hd ? 8_000_000 : 4_000_000 }
 
   // (stop: the sending bubble's id — its ✕ stops this; progress: 0…1 as the frames go)
+  // ProRes RAW (or RAW HQ): a camera's raw footage — sent as the original, never made smaller (Haris 2026-11-21 13:18)
+  static func isRaw(_ asset: AVAsset) -> Bool {
+    guard let t = asset.tracks(withMediaType: .video).first, let d = t.formatDescriptions.first else { return false }
+    let c = CMFormatDescriptionGetMediaSubType(d as! CMFormatDescription)
+    return c == 0x6170726E || c == 0x61707268   // 'aprn', 'aprh'
+  }
   static func run(_ asset: AVAsset, hd: Bool, to out: URL, stop: String? = nil, progress: ((Double) -> Void)? = nil, done: @escaping (Bool) -> Void) {
     guard let vt = asset.tracks(withMediaType: .video).first,
           let reader = try? AVAssetReader(asset: asset),

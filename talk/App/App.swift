@@ -255,6 +255,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
   }
   func sceneDidBecomeActive(_ s: UIScene) {
     OccasionIcon.apply()   // (the app's icon on occasions — today's, Dubai)
+    BgWatch.back()   // (sends stopped by leaving Talk: on again)
     guard Net.shared.signedIn, tabs != nil else { return }
     Net.shared.listen()
     // (signed in through E11 Console, and Console signed out since — its key gone: Talk signs out too, the plan)
@@ -267,7 +268,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
     AskGroup.check()   // (files the group asked for, that this phone has — AskGroup)
     ShareHistory.retry()   // (a chat history that couldn't be shared — ShareHistory)
   }
-  func sceneDidEnterBackground(_ s: UIScene) { Net.shared.stopListening(); Talk.shared.flush(); Talk.shared.badge(); Backup.shared.backUpIfDue() }
+  func sceneDidEnterBackground(_ s: UIScene) { BgWatch.left += 1; Net.shared.stopListening(); Talk.shared.flush(); Talk.shared.badge(); Backup.shared.backUpIfDue() }
 }
 
 // ---------- Settings ----------

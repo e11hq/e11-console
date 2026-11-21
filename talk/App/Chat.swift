@@ -199,7 +199,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         c.showPick(self.selecting, picked: self.picked.contains(id), mine: self.msgs[id]?.by == Talk.shared.me?.id, animated: false)
         c.onReplyTap = { [weak self] rid in self?.jump(to: rid) }
         c.onFileTap = { [weak self, weak c] m in self?.openFrom = (m.kind == "photo" || m.kind == "video") ? c?.photo : nil; self?.open(m) }
-        c.onRetry = { [weak self] m in guard let self = self else { return }; Talk.shared.retry(self.group, m) }
+        c.onRetry = { [weak self] m in self?.failedTap(m) }
         c.onReactsTap = { [weak self] m in self?.whoReacted(m) }
         c.onForward = { [weak self] m in self?.forward(m) }
         c.onShared = { [weak self] m, what, from in
@@ -1146,9 +1146,19 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let secs = CMTimeGetSeconds(asset.duration)
     let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.intValue ?? 0
     let tmpId = "local-" + UUID().uuidString
-    let fname = (name as NSString).deletingPathExtension + ".mp4"
+    if hd { Talk.sentHD.insert(tmpId) }   // (for Send again)
+    // (ProRes RAW — a camera's raw footage — goes as the original, on purpose, with a word saying so: Haris 2026-11-21 13:18)
+    let raw = VideoShrink.isRaw(asset)
+    let fname = raw ? name : (name as NSString).deletingPathExtension + ".mp4"
     Talk.shared.send(group, text: caption, reply: replying, file: Msg.FileRef(id: tmpId, name: fname, size: size, kind: "video", w: w, h: h, secs: secs.isFinite ? secs : nil),
                      localFile: url, album: album, prepare: { ready in
+      if raw {
+        toast("Sent as the original (ProRes RAW)")
+        if Attach.tooBig(url) { toast("That video is over 1 GB — send a shorter part"); ready(nil); return }
+        ready(url); return
+      }
+      // (Talk left while it was made smaller: nothing sent — it starts again when Talk is back; never the original instead)
+      let left = BgWatch.left
       // (HEVC first — sharper at the same size, Haris 2026-11-21 12:08; Apple's H.264 preset as before if it can't)
       let hevc = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mp4")
       VideoShrink.run(asset, hd: hd, to: hevc, stop: tmpId, progress: { Uploads.prep(tmpId, $0) }) { ok in DispatchQueue.main.async {
@@ -1158,15 +1168,19 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
           ready(hevc); return
         }
         try? FileManager.default.removeItem(at: hevc)
-      guard let ex = AVAssetExportSession(asset: asset, presetName: hd ? AVAssetExportPreset1920x1080 : AVAssetExportPreset1280x720) else { ready(url); return }
-      let out = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mp4")
-      ex.outputURL = out; ex.outputFileType = .mp4; ex.shouldOptimizeForNetworkUse = true
-      // (1 GB counted on what goes, after it's made smaller — WhatsApp's way, Haris 2026-11-20 17:38: a long 4K video fits at 720p)
-      ex.exportAsynchronously { DispatchQueue.main.async {
-        let made = ex.status == .completed ? out : url
-        if Attach.tooBig(made) { toast("That video is over 1 GB even made smaller — send a shorter part"); ready(nil); return }
-        ready(made)
-      } }
+        if BgWatch.left != left { ready(nil); return }
+        guard let ex = AVAssetExportSession(asset: asset, presetName: hd ? AVAssetExportPreset1920x1080 : AVAssetExportPreset1280x720) else { ready(url); return }
+        let out = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mp4")
+        ex.outputURL = out; ex.outputFileType = .mp4; ex.shouldOptimizeForNetworkUse = true
+        // (1 GB counted on what goes, after it's made smaller — WhatsApp's way, Haris 2026-11-20 17:38: a long 4K video fits at 720p)
+        ex.exportAsynchronously { DispatchQueue.main.async {
+          if Uploads.isStopped(tmpId) { ready(nil); return }
+          if ex.status != .completed && BgWatch.left != left { ready(nil); return }
+          if ex.status != .completed { toast("Sent as the original — it couldn’t be made smaller") }
+          let made = ex.status == .completed ? out : url
+          if Attach.tooBig(made) { toast("That video is over 1 GB even made smaller — send a shorter part"); ready(nil); return }
+          ready(made)
+        } }
       } }
     })
     replying = nil
@@ -1197,6 +1211,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       if kind == "photo", let p = ChatVC.photoData(d, hd: hd) { data = p.data; w = p.w; h = p.h }
       else if kind == "photo" { kind = "file" }
       let tmpId = "local-" + UUID().uuidString
+      if hd { DispatchQueue.main.async { Talk.sentHD.insert(tmpId) } }   // (for Send again)
       let local = FileManager.default.temporaryDirectory.appendingPathComponent(tmpId)
       try? data.write(to: local)
       let fname = kind == "photo" ? (name as NSString).deletingPathExtension + ".jpg" : name
@@ -1208,6 +1223,32 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     }
   }
 
+  // the red ! on one of yours that didn't go (or was stopped with ✕): Send again or Delete (Haris 2026-11-21 13:18 — it had
+  // sent again only the words, the photo or video lost, a small bubble left on the clock)
+  private func failedTap(_ m: Msg) {
+    let a = UIAlertController(title: nil, message: "This message wasn’t sent.", preferredStyle: .actionSheet)
+    a.addAction(UIAlertAction(title: "Send again", style: .default) { [weak self] _ in self?.sendAgain(m) })
+    a.addAction(UIAlertAction(title: "Delete", style: .destructive) { [weak self] _ in guard let self = self else { return }; Talk.shared.deleteForMe(self.group, m) })
+    a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+    present(a, animated: true)
+  }
+  private func sendAgain(_ m: Msg) {
+    guard let f = m.file else { Talk.shared.retry(group, m); return }
+    // (the phone's own copy, kept aside before the failed one is taken away with it)
+    let src = Net.local(f.id)
+    guard FileManager.default.fileExists(atPath: src.path) else { toast("Couldn’t send again — it isn’t on this phone any more"); return }
+    let copy = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + "-" + f.name)
+    guard (try? FileManager.default.copyItem(at: src, to: copy)) != nil else { toast("Couldn’t send again — try once more"); return }
+    let hd = Talk.sentHD.contains(f.id)
+    Talk.shared.deleteForMe(group, m)
+    switch m.kind {
+    case "voice": sendVoice(copy, secs: f.secs ?? 0, wave: f.wave ?? "")
+    case "video": sendVideo(copy, name: f.name, caption: m.text, hd: hd, album: m.album)
+    case "photo": sendFile(copy, kind: "photo", name: f.name, caption: m.text, hd: hd, album: m.album)
+    default: sendFile(copy, kind: "file", name: f.name, caption: m.text)
+    }
+  }
+
   // ---------- reading ----------
   private func open(_ m: Msg) {
     guard let f = m.file else { return }
@@ -1215,8 +1256,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     //  downloads it (opened with the next tap, as WhatsApp); a photo or video not here — downloaded first, then opened)
     // (no longer on the server: asked back from the group's phones within 90 days — AskGroup, Haris 2026-11-20 21:36)
     if Auto.gone(m) { AskGroup.offer(m, group: group, from: self); return }
-    // (one of yours going up — its ✕: stopped, and the message goes, as WhatsApp; Haris 2026-11-21 12:56)
-    if m.pending, !m.failed, Uploads.going[f.id] != nil { Uploads.stop(f.id); Talk.shared.deleteForMe(group, m); return }
+    // (one of yours going up — its ✕: stopped, the red ! — then Send again or Delete; Haris 2026-11-21 12:56, 13:18)
+    if m.pending, !m.failed, Uploads.going[f.id] != nil { Uploads.stop(f.id); Talk.shared.stopped(group, m); return }
     if Downloads.shared.running(f.id) { Downloads.shared.cancel(f.id); return }
     if !Auto.here(f) && m.kind != "voice" {
       if m.kind == "photo" || m.kind == "video" { Downloads.shared.start(f.id, size: f.size) { [weak self] ok in if ok { self?.open(m) } } }
