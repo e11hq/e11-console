@@ -324,6 +324,13 @@ private final class StreamDelegate: NSObject, URLSessionDataDelegate {
     // (E11 Console's people or clients changed — a name, a photo, a role, a client renamed or gone: read again while Talk is
     //  open, not only when it comes back; only what changed is drawn again — Haris 2026-11-16)
     if text.contains("event: people") { DispatchQueue.main.async { Talk.shared.refresh() } }
+    // (a ✓✓ rides on the live line itself — shown at once; the sync that follows still collects it, kept once)
+    for block in text.components(separatedBy: "\n\n") where block.contains("event: talk") && block.contains("\"ev\"") {
+      guard let line = block.split(separator: "\n").first(where: { $0.hasPrefix("data: ") }),
+            let j = try? JSONSerialization.jsonObject(with: Data(line.dropFirst(6).utf8)) as? [String: Any],
+            let ev = j["ev"] as? [String: Any] else { continue }
+      DispatchQueue.main.async { Talk.shared.live(ev) }
+    }
     for block in text.components(separatedBy: "\n\n") where block.contains("event: typing") {
       guard let line = block.split(separator: "\n").first(where: { $0.hasPrefix("data: ") }),
             let j = try? JSONSerialization.jsonObject(with: Data(line.dropFirst(6).utf8)) as? [String: Any],

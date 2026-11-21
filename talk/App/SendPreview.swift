@@ -9,7 +9,9 @@ import QuickLook
    field, paging scroll view, Quick Look's Markup, Apple's video editor and player. */
 final class SendPreviewVC: UIViewController, UIScrollViewDelegate, UITextFieldDelegate, QLPreviewControllerDataSource, QLPreviewControllerDelegate,
                            UIVideoEditorControllerDelegate, UINavigationControllerDelegate {
-  struct Item { var url: URL; var kind: String; var name: String; var caption = ""; var hd = false }
+  // (coming: still on its way from Photos / iCloud — the screen opens at once and its page shows a ring until it's in;
+  //  Haris 2026-11-21 11:59: "the send screen comes straight away", as WhatsApp)
+  struct Item { var url: URL; var kind: String; var name: String; var caption = ""; var hd = false; var key = UUID().uuidString; var coming: Progress? = nil }
   private(set) var items: [Item]
   private var at = 0
   private let to: String
@@ -157,6 +159,26 @@ final class SendPreviewVC: UIViewController, UIScrollViewDelegate, UITextFieldDe
     view.setNeedsLayout(); view.layoutIfNeeded()
     go(min(at, max(0, items.count - 1)), animated: false)
   }
+  // one that was coming is in: only its page and its square drawn again
+  func arrived(_ key: String, url: URL, name: String) {
+    guard let i = items.firstIndex(where: { $0.key == key }) else { return }
+    items[i].url = url; items[i].name = name; items[i].coming = nil
+    if pages.indices.contains(i) {
+      let old = pages[i], new = page(for: items[i])
+      new.frame = old.frame; new.alpha = 0; pager.addSubview(new); pages[i] = new
+      UIView.animate(withDuration: 0.2, animations: { new.alpha = 1 }) { _ in old.removeFromSuperview() }
+    }
+    if let b = stripRow.arrangedSubviews[safe: i] as? UIButton, b.tag == i { b.setImage(thumb(items[i]), for: .normal) }
+    if i == at { showCurrent() }
+  }
+  // one that couldn't come (iCloud off, no internet): taken out, with a word
+  func failed(_ key: String, _ why: String) {
+    guard let i = items.firstIndex(where: { $0.key == key }) else { return }
+    toast(why)
+    items.remove(at: i)
+    if items.isEmpty { dismiss(animated: true); return }
+    at = min(at, items.count - 1); rebuild()
+  }
   // more picked from the chat's pickers (⊕ / +): added at the end, shown
   func add(_ more: [Item]) {
     guard !more.isEmpty else { return }
@@ -164,6 +186,11 @@ final class SendPreviewVC: UIViewController, UIScrollViewDelegate, UITextFieldDe
   }
   private func page(for it: Item) -> UIView {
     let v = UIView()
+    if let pr = it.coming {
+      let ring = ComingRing(pr); ring.translatesAutoresizingMaskIntoConstraints = false; v.addSubview(ring)
+      NSLayoutConstraint.activate([ring.centerXAnchor.constraint(equalTo: v.centerXAnchor), ring.centerYAnchor.constraint(equalTo: v.centerYAnchor, constant: -50)])
+      return v
+    }
     switch it.kind {
     case "photo":
       let iv = UIImageView(image: UIImage(contentsOfFile: it.url.path)); iv.contentMode = .scaleAspectFit
@@ -200,6 +227,7 @@ final class SendPreviewVC: UIViewController, UIScrollViewDelegate, UITextFieldDe
     return v
   }
   private func thumb(_ it: Item) -> UIImage? {
+    if it.coming != nil { return nil }
     switch it.kind {
     case "photo": return UIImage(contentsOfFile: it.url.path)?.preparingThumbnail(of: CGSize(width: 120, height: 120))
     case "video":
@@ -245,6 +273,7 @@ final class SendPreviewVC: UIViewController, UIScrollViewDelegate, UITextFieldDe
   }
   private func save() {
     guard items.indices.contains(at) else { return }
+    if items[at].coming != nil { toast("Still coming — a moment"); return }
     let it = items[at]
     if it.kind == "photo", let i = UIImage(contentsOfFile: it.url.path) { UIImageWriteToSavedPhotosAlbum(i, nil, nil, nil); toast("Saved to Photos") }
     else if it.kind == "video", UIVideoAtPathIsCompatibleWithSavedPhotosAlbum(it.url.path) { UISaveVideoAtPathToSavedPhotosAlbum(it.url.path, nil, nil, nil); toast("Saved to Photos") }
@@ -257,6 +286,7 @@ final class SendPreviewVC: UIViewController, UIScrollViewDelegate, UITextFieldDe
   }
   private func edit() {
     guard items.indices.contains(at) else { return }
+    if items[at].coming != nil { toast("Still coming — a moment"); return }
     let it = items[at]
     if it.kind == "video" {
       guard UIVideoEditorController.canEditVideo(atPath: it.url.path) else { return }
@@ -268,6 +298,7 @@ final class SendPreviewVC: UIViewController, UIScrollViewDelegate, UITextFieldDe
   private var looking: URL?
   private func look(editing: Bool) {
     guard items.indices.contains(at) else { return }
+    if items[at].coming != nil { toast("Still coming — a moment"); return }
     looking = items[at].url
     let q = QLPreviewController(); q.dataSource = self; q.delegate = self
     present(q, animated: true) { if editing { q.setEditing(true, animated: true) } }
@@ -285,7 +316,7 @@ final class SendPreviewVC: UIViewController, UIScrollViewDelegate, UITextFieldDe
   }
   func videoEditorControllerDidCancel(_ e: UIVideoEditorController) { e.dismiss(animated: true) }
   private func playCurrent() {
-    guard let it = items[safe: at] else { return }
+    guard let it = items[safe: at], it.coming == nil else { return }
     let p = AVPlayerViewController(); p.player = AVPlayer(url: it.url)
     present(p, animated: true) { p.player?.play() }
   }
@@ -296,4 +327,29 @@ final class SendPreviewVC: UIViewController, UIScrollViewDelegate, UITextFieldDe
     let all = items
     dismiss(animated: true) { [weak self] in self?.onSend?(all) }
   }
+}
+
+// a ring that fills as a picked photo or video comes from Photos / iCloud (its Progress); "From iCloud" once it takes a while
+private final class ComingRing: UIView {
+  private let track = CAShapeLayer(), fill = CAShapeLayer(), label = UILabel()
+  private var timer: Timer?, started = Date()
+  init(_ p: Progress) {
+    super.init(frame: .zero)
+    let path = UIBezierPath(arcCenter: CGPoint(x: 26, y: 26), radius: 24, startAngle: -.pi / 2, endAngle: 1.5 * .pi, clockwise: true).cgPath
+    for l in [track, fill] { l.path = path; l.fillColor = UIColor.clear.cgColor; l.lineWidth = 3.5; l.lineCap = .round; layer.addSublayer(l) }
+    track.strokeColor = UIColor(white: 1, alpha: 0.18).cgColor; fill.strokeColor = UIColor.white.cgColor; fill.strokeEnd = 0
+    label.font = .systemFont(ofSize: 14, weight: .medium); label.textColor = UIColor(white: 0.75, alpha: 1); label.textAlignment = .center
+    label.translatesAutoresizingMaskIntoConstraints = false; addSubview(label)
+    NSLayoutConstraint.activate([widthAnchor.constraint(equalToConstant: 160), heightAnchor.constraint(equalToConstant: 84),
+                                 label.centerXAnchor.constraint(equalTo: centerXAnchor), label.bottomAnchor.constraint(equalTo: bottomAnchor)])
+    timer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self, weak p] _ in
+      guard let self = self, let p = p else { return }
+      CATransaction.begin(); CATransaction.setAnimationDuration(0.15); self.fill.strokeEnd = CGFloat(max(0.03, p.fractionCompleted)); CATransaction.commit()
+      if Date().timeIntervalSince(self.started) > 1 { self.label.text = "From iCloud · \(Int(p.fractionCompleted * 100))%" }
+    }
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  override func layoutSubviews() { super.layoutSubviews(); let x = (bounds.width - 52) / 2; track.frame = CGRect(x: x, y: 0, width: 52, height: 52); fill.frame = track.frame }
+  override func removeFromSuperview() { timer?.invalidate(); super.removeFromSuperview() }
+  deinit { timer?.invalidate() }
 }

@@ -1067,11 +1067,16 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     toBottom(true)
   }
   private weak var sendPreview: SendPreviewVC?
+  // (picked ones still coming when Send was tapped: sent the moment each is in)
+  fileprivate var sendWhenIn: [String: (item: SendPreviewVC.Item, album: String?)] = [:]
   private func attach(_ kind: String) {
     switch kind {
     case "sheet": plusSheet()
     case "photos":
       var c = PHPickerConfiguration(); c.selectionLimit = 10; c.filter = .any(of: [.images, .videos])
+      // (as it is — iPhone turned each video into another format first, a silent wait before the send screen; it's made
+      //  smaller on sending anyway — Haris 2026-11-21 11:59)
+      c.preferredAssetRepresentationMode = .current
       let p = PHPickerViewController(configuration: c); p.delegate = self; present(p, animated: true)
     case "camera":
       guard UIImagePickerController.isSourceTypeAvailable(.camera) else { toast("No camera here"); return }
@@ -1144,6 +1149,14 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let fname = (name as NSString).deletingPathExtension + ".mp4"
     Talk.shared.send(group, text: caption, reply: replying, file: Msg.FileRef(id: tmpId, name: fname, size: size, kind: "video", w: w, h: h, secs: secs.isFinite ? secs : nil),
                      localFile: url, album: album, prepare: { ready in
+      // (HEVC first — sharper at the same size, Haris 2026-11-21 12:08; Apple's H.264 preset as before if it can't)
+      let hevc = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mp4")
+      VideoShrink.run(asset, hd: hd, to: hevc) { ok in DispatchQueue.main.async {
+        if ok {
+          if Attach.tooBig(hevc) { toast("That video is over 1 GB even made smaller — send a shorter part"); ready(nil); return }
+          ready(hevc); return
+        }
+        try? FileManager.default.removeItem(at: hevc)
       guard let ex = AVAssetExportSession(asset: asset, presetName: hd ? AVAssetExportPreset1920x1080 : AVAssetExportPreset1280x720) else { ready(url); return }
       let out = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mp4")
       ex.outputURL = out; ex.outputFileType = .mp4; ex.shouldOptimizeForNetworkUse = true
@@ -1152,6 +1165,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         let made = ex.status == .completed ? out : url
         if Attach.tooBig(made) { toast("That video is over 1 GB even made smaller — send a shorter part"); ready(nil); return }
         ready(made)
+      } }
       } }
     })
     replying = nil
@@ -1751,23 +1765,41 @@ extension ChatVC: PHPickerViewControllerDelegate, UIImagePickerControllerDelegat
   func picker(_ p: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
     p.dismiss(animated: true)
     guard !results.isEmpty else { return }
-    var got = [SendPreviewVC.Item?](repeating: nil, count: results.count)
-    let group = DispatchGroup()
-    for (i, r) in results.enumerated() {
+    // (the send screen at once, WhatsApp's way — Haris 2026-11-21 11:59: "the send screen comes straight away": each photo
+    //  or video comes in behind it, a ring on its page while it does — from iCloud, how far; before, nothing showed until
+    //  every one was in)
+    var items: [SendPreviewVC.Item] = []
+    for r in results {
       let ip = r.itemProvider
       let isMovie = ip.hasItemConformingToTypeIdentifier(UTType.movie.identifier)
       let type = isMovie ? UTType.movie.identifier : UTType.image.identifier
-      group.enter()
-      ip.loadFileRepresentation(forTypeIdentifier: type) { url, _ in
+      let base = ip.suggestedName ?? (isMovie ? "Video" : "Photo")
+      var it = SendPreviewVC.Item(url: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), kind: isMovie ? "video" : "photo", name: base)
+      let key = it.key
+      it.coming = ip.loadFileRepresentation(forTypeIdentifier: type) { [weak self] url, _ in
+        var copy: URL?
         if let url = url {
-          let copy = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + "-" + url.lastPathComponent)
-          try? FileManager.default.copyItem(at: url, to: copy)
-          got[i] = SendPreviewVC.Item(url: copy, kind: isMovie ? "video" : "photo", name: ip.suggestedName.map { $0 + "." + url.pathExtension } ?? url.lastPathComponent)
+          let c = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + "-" + url.lastPathComponent)
+          if (try? FileManager.default.copyItem(at: url, to: c)) != nil { copy = c }
         }
-        group.leave()
+        DispatchQueue.main.async { self?.came(key, copy, video: isMovie, name: copy.map { _ in base + "." + (url?.pathExtension ?? "") } ?? base) }
       }
+      items.append(it)
     }
-    group.notify(queue: .main) { [weak self] in self?.preview(got.compactMap { $0 }) }
+    preview(items)
+  }
+  private func came(_ key: String, _ url: URL?, video: Bool, name: String) {
+    let waiting = sendWhenIn.removeValue(forKey: key)
+    guard let url = url else {
+      if waiting != nil { toast("Couldn’t get it from Photos or iCloud — try again") } else { sendPreview?.failed(key, "Couldn’t get it from Photos or iCloud") }
+      return
+    }
+    if !video && Attach.tooBig(url) {
+      if waiting != nil { toast("Files up to 1 GB can be sent") } else { sendPreview?.failed(key, "Files up to 1 GB can be sent") }
+      return
+    }
+    if let w = waiting { sendFile(url, kind: w.item.kind, name: name, caption: w.item.caption.trimmingCharacters(in: .whitespacesAndNewlines), hd: w.item.hd, album: w.album) }
+    else { sendPreview?.arrived(key, url: url, name: name) }
   }
   func imagePickerController(_ p: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
     p.dismiss(animated: true)
@@ -1783,7 +1815,7 @@ extension ChatVC: PHPickerViewControllerDelegate, UIImagePickerControllerDelegat
   private func preview(_ all: [SendPreviewVC.Item]) {
     // (files up to 1 GB — Haris 2026-11-16)
     // (a video counted after it's made smaller — sendVideo; Haris 2026-11-20 17:38)
-    let items = all.filter { $0.kind == "video" || !Attach.tooBig($0.url) }
+    let items = all.filter { $0.kind == "video" || $0.coming != nil || !Attach.tooBig($0.url) }
     if items.count < all.count { toast(all.count == 1 ? "Files up to 1 GB can be sent" : "Files over 1 GB were left out") }
     guard !items.isEmpty else { return }
     if let open = sendPreview { open.add(items); return }
@@ -1792,11 +1824,16 @@ extension ChatVC: PHPickerViewControllerDelegate, UIImagePickerControllerDelegat
       guard let self = self else { return }
       // (four or more photos and videos sent together: one album, WhatsApp's)
       let album = all.filter { $0.kind != "file" }.count >= 4 ? UUID().uuidString : nil
-      for it in all { self.sendFile(it.url, kind: it.kind, name: it.name, caption: it.caption.trimmingCharacters(in: .whitespacesAndNewlines), hd: it.hd, album: it.kind == "file" ? nil : album) }
+      for it in all {
+        let al = it.kind == "file" ? nil : album
+        if it.coming != nil { self.sendWhenIn[it.key] = (it, al); continue }
+        self.sendFile(it.url, kind: it.kind, name: it.name, caption: it.caption.trimmingCharacters(in: .whitespacesAndNewlines), hd: it.hd, album: al)
+      }
     }
     v.onAddMore = { [weak self, weak v] in
       guard let v = v else { return }
       var c = PHPickerConfiguration(); c.selectionLimit = 10; c.filter = .any(of: [.images, .videos])
+      c.preferredAssetRepresentationMode = .current
       let p = PHPickerViewController(configuration: c); p.delegate = self; v.present(p, animated: true)
     }
     sendPreview = v
@@ -2660,7 +2697,12 @@ final class BubbleCell: UITableViewCell {
       // (on the phone, or Auto-download takes it now: the picture; else its little blurred picture, ↓ and its size)
       if album.count < 4 {
         let st = Auto.state(m)
-        if photo.image == nil || thumbFor == f.id, st == .here || (st == .auto && (!isVideo || f.size <= 60 * 1024 * 1024)) { loadPicture(m, f, video: isVideo) }
+        if photo.image == nil || thumbFor == f.id, st == .here || (st == .auto && (!isVideo || f.size <= 60 * 1024 * 1024)) {
+          // (still coming: its little blurred picture at once, the real one fades in over it — WhatsApp's; before, the
+          //  bubble stayed empty until the download was done, Haris 2026-11-21 11:47)
+          if st != .here, photo.image == nil, let t = Thumb.image(f) { photo.image = t; thumbFor = f.id }
+          loadPicture(m, f, video: isVideo)
+        }
         else if photo.image == nil, let t = Thumb.image(f) { photo.image = t; thumbFor = f.id }
       }
     }
@@ -2948,6 +2990,29 @@ final class BubbleCell: UITableViewCell {
   }
   // a video's first frame (kept)
   static let frames = NSCache<NSString, UIImage>()
+  // an album's square: the first four, 2 apart, each filling its own square; "+N" over the fourth for the rest
+  static func albumSquare(_ pics: [UIImage?], _ w: CGFloat, more: Int) -> UIImage {
+    let gap: CGFloat = 2, t = (w - gap) / 2
+    return UIGraphicsImageRenderer(size: CGSize(width: w, height: w)).image { ctx in
+      for (i, p) in pics.enumerated() {
+        let r = CGRect(x: CGFloat(i % 2) * (t + gap), y: CGFloat(i / 2) * (t + gap), width: t, height: t)
+        UIColor.tertiarySystemFill.setFill(); ctx.fill(r)
+        if let p = p {
+          let k = max(t / p.size.width, t / p.size.height), sz = CGSize(width: p.size.width * k, height: p.size.height * k)
+          ctx.cgContext.saveGState(); ctx.cgContext.clip(to: r)
+          p.draw(in: CGRect(x: r.midX - sz.width / 2, y: r.midY - sz.height / 2, width: sz.width, height: sz.height))
+          ctx.cgContext.restoreGState()
+        }
+        if i == 3 && more > 0 {
+          // (laid over the photo — a plain fill replaces what's there, so the photo was wiped and the square left dark,
+          //  Haris 2026-11-12: only with 5 or more, the "+N" square)
+          UIColor(white: 0, alpha: 0.45).setFill(); ctx.fill(r, blendMode: .normal)
+          let s = NSAttributedString(string: "+\(more)", attributes: [.font: UIFont.systemFont(ofSize: 28, weight: .semibold), .foregroundColor: UIColor.white])
+          let z = s.size(); s.draw(at: CGPoint(x: r.midX - z.width / 2, y: r.midY - z.height / 2))
+        }
+      }
+    }
+  }
   static func frame(_ url: URL, _ id: String, _ done: @escaping (UIImage?) -> Void) {
     if let i = frames.object(forKey: id as NSString) { done(i); return }
     DispatchQueue.global(qos: .userInitiated).async {
@@ -3059,7 +3124,18 @@ final class BubbleCell: UITableViewCell {
   private func drawAlbum(_ m: Msg, _ w: CGFloat, tries: Int = 0) {
     let four = Array(album.prefix(4)), key = "album:" + four.compactMap { $0.file?.id }.joined(separator: ",") + "+\(album.count)"
     if let k = BubbleCell.pictures.object(forKey: key as NSString) { photo.image = k; shownFile = key; return }
-    if shownFile != key { photo.image = nil; shownFile = key }
+    if shownFile != key {
+      photo.image = nil; shownFile = key
+      // (some still coming: the square drawn at once from what's here and the others' little blurred pictures — the real
+      //  drawing lands over it; Haris 2026-11-21 11:47)
+      if four.contains(where: { $0.file.map { !Auto.here($0) } ?? false }) {
+        let quick = four.map { a -> UIImage? in
+          guard let f = a.file else { return nil }
+          return (a.kind == "video" ? BubbleCell.frames.object(forKey: f.id as NSString) : BubbleCell.pictures.object(forKey: f.id as NSString)) ?? Thumb.image(f)
+        }
+        if quick.contains(where: { $0 != nil }) { photo.image = BubbleCell.albumSquare(quick, w, more: album.count - 4) }
+      }
+    }
     var pics = [UIImage?](repeating: nil, count: four.count)
     let g = DispatchGroup()
     for (i, a) in four.enumerated() {
@@ -3075,26 +3151,7 @@ final class BubbleCell: UITableViewCell {
     }
     let more = album.count - 4
     g.notify(queue: .main) { [weak self] in
-      let gap: CGFloat = 2, t = (w - gap) / 2
-      let img = UIGraphicsImageRenderer(size: CGSize(width: w, height: w)).image { ctx in
-        for (i, p) in pics.enumerated() {
-          let r = CGRect(x: CGFloat(i % 2) * (t + gap), y: CGFloat(i / 2) * (t + gap), width: t, height: t)
-          UIColor.tertiarySystemFill.setFill(); ctx.fill(r)
-          if let p = p {
-            let k = max(t / p.size.width, t / p.size.height), sz = CGSize(width: p.size.width * k, height: p.size.height * k)
-            ctx.cgContext.saveGState(); ctx.cgContext.clip(to: r)
-            p.draw(in: CGRect(x: r.midX - sz.width / 2, y: r.midY - sz.height / 2, width: sz.width, height: sz.height))
-            ctx.cgContext.restoreGState()
-          }
-          if i == 3 && more > 0 {
-            // (laid over the photo — a plain fill replaces what's there, so the photo was wiped and the square left dark,
-            //  Haris 2026-11-12: only with 5 or more, the "+N" square)
-            UIColor(white: 0, alpha: 0.45).setFill(); ctx.fill(r, blendMode: .normal)
-            let s = NSAttributedString(string: "+\(more)", attributes: [.font: UIFont.systemFont(ofSize: 28, weight: .semibold), .foregroundColor: UIColor.white])
-            let z = s.size(); s.draw(at: CGPoint(x: r.midX - z.width / 2, y: r.midY - z.height / 2))
-          }
-        }
-      }
+      let img = BubbleCell.albumSquare(pics, w, more: more)
       if pics.allSatisfy({ $0 != nil }) { BubbleCell.pictures.setObject(img, forKey: key as NSString) }
       // (only the latest drawing for this bubble lands — an older one finishing late must not cover it)
       guard let self = self, self.msg?.id == m.id, self.shownFile == key else { return }

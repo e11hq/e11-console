@@ -397,7 +397,8 @@ final class Talk {
       }
     case "got":
       // (a phone has the messages up to here — Message info's Delivered to)
-      if let up = e["upto"] as? String { var marks = l.gotAt ?? [:]; marks[by, default: []].append(.init(upto: up, at: at)); marks[by] = Array(marks[by]!.suffix(300)); l.gotAt = marks }
+      // (the same "got" comes twice — first on the live line, then in the sync — kept once)
+      if let up = e["upto"] as? String, l.gotAt?[by]?.last?.upto != up { var marks = l.gotAt ?? [:]; marks[by, default: []].append(.init(upto: up, at: at)); marks[by] = Array(marks[by]!.suffix(300)); l.gotAt = marks }
     default: return nil
     }
     logs[g] = l
@@ -1048,6 +1049,14 @@ enum LinkPrevMaker {
 // again; gone at once when their message comes ----------
 extension Talk {
   private static var typingNow: [String: [String: Double]] = [:]
+  // a "got" (✓✓) that came on the live line itself: shown at once, without waiting for the sync (Haris 2026-11-21 12:08)
+  func live(_ e: [String: Any]) {
+    guard me != nil, (e["type"] as? String) == "got" else { return }
+    var groupChanged = false
+    guard let g = apply(e, &groupChanged) else { return }
+    flush()
+    NotificationCenter.default.post(name: .talkGroup, object: g)
+  }
   func typed(_ g: String, _ by: String) {
     guard by != me?.id else { return }
     let was = typers(g)
