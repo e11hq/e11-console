@@ -265,6 +265,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
     // (Auto-download: the network watched; what waited for Wi-Fi comes if it's here now)
     Auto.startOnce(); Talk.shared.catchUp()
     AskGroup.check()   // (files the group asked for, that this phone has — AskGroup)
+    ShareHistory.retry()   // (a chat history that couldn't be shared — ShareHistory)
   }
   func sceneDidEnterBackground(_ s: UIScene) { Net.shared.stopListening(); Talk.shared.flush(); Talk.shared.badge(); Backup.shared.backUpIfDue() }
 }

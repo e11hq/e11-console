@@ -721,10 +721,29 @@ final class AddPeopleVC: UITableViewController, UISearchResultsUpdating {
     guard let id = data.itemIdentifier(for: ip), byId[id] != nil else { return }
     picked.remove(id); UISelectionFeedbackGenerator().selectionChanged(); counted()
   }
+  // ("Show them the chat history?" — Haris 2026-11-20 21:47–21:53: the person adding chooses; a client contact starts on
+  //  No; the group is told; your phone sends what it has, up to 90 days)
   private func add() {
+    let ids = Array(picked)
+    let contact = ids.contains { byId[$0]?.contact == true }
+    let a = UIAlertController(title: "Show them the chat history?", message: contact
+      ? "A client contact is being added — they’ll see the messages you share. Everyone in the group is told."
+      : "They’ll see the group’s earlier messages from your phone. Everyone in the group is told.", preferredStyle: .actionSheet)
+    let choices: [(String, Int)] = contact
+      ? [("No", 0), ("Last 7 days", 7), ("Last 30 days", 30), ("Everything (90 days)", 90)]
+      : [("Last 7 days", 7), ("Last 30 days", 30), ("Everything (90 days)", 90), ("No", 0)]
+    for (title, days) in choices { a.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in self?.add(ids, history: days) }) }
+    a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+    present(a, animated: true)
+  }
+  private func add(_ ids: [String], history days: Int) {
     navigationItem.rightBarButtonItem?.isEnabled = false
-    Net.shared.act(["act": "addPeople", "group": group, "ids": Array(picked)]) { [weak self] j in
-      if (j?["ok"] as? Bool) == true { Talk.shared.refresh(); Talk.shared.sync(); self?.dismiss(animated: true) }
+    let g = group
+    Net.shared.act(["act": "addPeople", "group": g, "ids": ids]) { [weak self] j in
+      if (j?["ok"] as? Bool) == true {
+        if days > 0 { ShareHistory.send(g, to: ids, days: days) }
+        Talk.shared.refresh(); Talk.shared.sync(); self?.dismiss(animated: true)
+      }
       else { toast(j?["error"] as? String ?? "Couldn’t add them — try again"); self?.counted() }
     }
   }

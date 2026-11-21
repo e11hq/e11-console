@@ -347,6 +347,27 @@ final class Talk {
         if let old = l.msgs[i].file?.id, let new = m.file?.id, old != new { try? FileManager.default.copyItem(at: Net.local(old), to: Net.local(new)) }
         l.msgs[i] = keep
       } else { l.msgs.append(m) }
+    case "history":
+      // ("Show them the chat history?": the group's earlier messages, shared by the person who added this one — placed in
+      //  time order before what came after, read, with a line saying who shared them; their files' keys — Haris 2026-11-20)
+      let old = ((e["msgs"] as? [[String: Any]]) ?? []).compactMap { j -> Msg? in
+        guard let d = try? JSONSerialization.data(withJSONObject: j), var m = try? JSONDecoder().decode(Msg.self, from: d) else { return nil }
+        m.pending = false; m.failed = false; m.goneForMe = nil
+        return m
+      }
+      for (fid, k) in (e["keys"] as? [String: String]) ?? [:] { FileKeys.set(fid, k) }
+      let have = Set(l.msgs.map { $0.id })
+      let add = old.filter { !have.contains($0.id) }.sorted { $0.seq < $1.seq }
+      if let first = add.first, let newest = add.last {
+        let since = (e["since"] as? Double) ?? first.at
+        let day = DateFormatter(); day.dateFormat = "d MMM"
+        let who = people[by]?.name ?? "Someone"
+        let line = Msg(id: "hist-" + first.id, cid: nil, seq: first.seq, by: by, at: first.at - 1, kind: "sys", text: "\(who) shared the history from \(day.string(from: Date(timeIntervalSince1970: since / 1000)))", file: nil, reply: nil, mentions: [])
+        // (in before the messages that came after them; one of yours still going up stays where it is, at the end)
+        let at = l.msgs.firstIndex { $0.pending || $0.seq > newest.seq } ?? l.msgs.count
+        l.msgs.insert(contentsOf: [line] + add, at: at)
+        if l.myRead == nil { l.myRead = newest.id }   // (old messages: read)
+      }
     case "back":
       // (a file asked back from the group is on the server again — AskGroup)
       if let fid = e["file"] as? String {
