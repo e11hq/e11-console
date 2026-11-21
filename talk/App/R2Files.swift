@@ -94,9 +94,10 @@ extension Net {
   // (keep: a group's picture — kept in R2 while the group uses it, not under messages' 31-day rule)
   // (back: a file asked for by the group, sent again under its own id — Ask the group, Haris 2026-11-20 21:36; nothing else
   //  happens if it's back already or another phone is sending it)
-  func uploadMsg(_ data: Data, name: String, keep: Bool = false, back: String? = nil, progress: @escaping (Double) -> Void, done: @escaping (String?, String?) -> Void) {
+  // (stop: the sending bubble's id — its ✕ cancels what's going up, Uploads.stop)
+  func uploadMsg(_ data: Data, name: String, keep: Bool = false, back: String? = nil, stop: String? = nil, progress: @escaping (Double) -> Void, done: @escaping (String?, String?) -> Void) {
     // (over 200 MB: locked in pieces, one at a time as they go up — its key given back as "p:<key>"; Haris 2026-11-21 11:00)
-    if data.count > 200 * 1024 * 1024 { return uploadPieces(data, name: name, back: back, progress: progress, done: done) }
+    if data.count > 200 * 1024 * 1024 { return uploadPieces(data, name: name, back: back, stop: stop, progress: progress, done: done) }
     guard let sealed = FileLock.seal(data) else { return back != nil ? done(nil, nil) : upload(data, name: name, progress: progress) { done($0, nil) } }
     let start: (String, [String: Any]) = back.map { ("/api/talk/resend/start", ["file": $0, "size": sealed.data.count] as [String: Any]) } ?? ("/api/talk/r2/start", ["name": name, "size": sealed.data.count, "keep": keep] as [String: Any])
     post(start.0, start.1) { [weak self] j in
@@ -117,8 +118,9 @@ extension Net {
           progress(1); done(id, sealed.key)
         }
       }
+      if Uploads.isStopped(stop) { return done(nil, nil) }
       if let put = (j["put"] as? String).flatMap(URL.init(string:)) {
-        self.putR2(put, body) { p in progress(min(0.99, Double(p) / total)) } done: { e in finish(e.map { [$0] }) }
+        self.putR2(put, body, stop: stop) { p in progress(min(0.99, Double(p) / total)) } done: { e in finish(e.map { [$0] }) }
         return
       }
       guard let urls = (j["urls"] as? [String])?.compactMap(URL.init(string:)), let part = j["part"] as? Int, part > 0, !urls.isEmpty else { return done(nil, nil) }
@@ -126,11 +128,12 @@ extension Net {
       var next = 0, going = 0, over = false
       func pump() {
         guard !over else { return }
+        if Uploads.isStopped(stop) { over = true; return done(nil, nil) }
         if next >= urls.count && going == 0 { over = true; return finish(etags.contains(where: { $0 == nil }) ? nil : etags.map { $0! }) }
         while going < 3 && next < urls.count {
           let i = next; next += 1; going += 1
           let piece = body.subdata(in: (i * part)..<min(body.count, (i + 1) * part))
-          self.putR2(urls[i], piece) { p in
+          self.putR2(urls[i], piece, stop: stop) { p in
             sent[i] = Int(p); progress(min(0.99, Double(sent.reduce(0, +)) / total))
           } done: { e in
             going -= 1
@@ -143,7 +146,7 @@ extension Net {
     }
   }
   // a big file in pieces: each 8 MB part of R2's upload is one piece, locked just before it goes (three at a time)
-  private func uploadPieces(_ data: Data, name: String, back: String? = nil, progress: @escaping (Double) -> Void, done: @escaping (String?, String?) -> Void) {
+  private func uploadPieces(_ data: Data, name: String, back: String? = nil, stop: String? = nil, progress: @escaping (Double) -> Void, done: @escaping (String?, String?) -> Void) {
     let key = SymmetricKey(size: .bits256), keyText = key.withUnsafeBytes { Data($0) }.base64EncodedString()
     let n = FileLock.pieces(data.count), sealedSize = data.count + 28 * n
     let start: (String, [String: Any]) = back.map { ("/api/talk/resend/start", ["file": $0, "size": sealedSize] as [String: Any]) } ?? ("/api/talk/r2/start", ["name": name, "size": sealedSize] as [String: Any])
@@ -161,6 +164,7 @@ extension Net {
       var next = 0, going = 0, over = false
       func pump() {
         guard !over else { return }
+        if Uploads.isStopped(stop) { over = true; return done(nil, nil) }
         if next >= n && going == 0 {
           over = true
           guard !etags.contains(where: { $0 == nil }) else { return done(nil, nil) }
@@ -176,7 +180,7 @@ extension Net {
           let i = next; next += 1; going += 1
           let lo = i * FileLock.piecePlain, hi = min(data.count, lo + FileLock.piecePlain)
           guard let piece = autoreleasepool(invoking: { FileLock.sealPiece(data.subdata(in: lo..<hi), key: key, index: i, last: i == n - 1) }) else { over = true; return done(nil, nil) }
-          self.putR2(urls[i], piece) { p in
+          self.putR2(urls[i], piece, stop: stop) { p in
             sent[i] = Int(p); progress(min(0.99, Double(sent.reduce(0, +)) / total))
           } done: { e in
             going -= 1
@@ -189,7 +193,7 @@ extension Net {
     }
   }
   // one piece to R2's address (its ETag back, on the main thread; nil: it didn't go)
-  private func putR2(_ url: URL, _ data: Data, sent: @escaping (Int64) -> Void, done: @escaping (String?) -> Void) {
+  private func putR2(_ url: URL, _ data: Data, stop: String? = nil, sent: @escaping (Int64) -> Void, done: @escaping (String?) -> Void) {
     var r = URLRequest(url: url); r.httpMethod = "PUT"; r.timeoutInterval = 120
     var watch: NSKeyValueObservation?
     let t = Net.r2Session.uploadTask(with: r, from: data) { _, resp, _ in
@@ -200,6 +204,7 @@ extension Net {
     watch = t.observe(\.countOfBytesSent) { t, _ in
       let n = t.countOfBytesSent; DispatchQueue.main.async { sent(n) }
     }
+    Uploads.add(t, to: stop)
     t.resume()
   }
   static let r2Session: URLSession = {

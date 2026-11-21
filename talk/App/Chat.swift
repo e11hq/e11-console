@@ -1151,7 +1151,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
                      localFile: url, album: album, prepare: { ready in
       // (HEVC first — sharper at the same size, Haris 2026-11-21 12:08; Apple's H.264 preset as before if it can't)
       let hevc = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mp4")
-      VideoShrink.run(asset, hd: hd, to: hevc) { ok in DispatchQueue.main.async {
+      VideoShrink.run(asset, hd: hd, to: hevc, stop: tmpId, progress: { Uploads.prep(tmpId, $0) }) { ok in DispatchQueue.main.async {
+        if Uploads.isStopped(tmpId) { try? FileManager.default.removeItem(at: hevc); ready(nil); return }
         if ok {
           if Attach.tooBig(hevc) { toast("That video is over 1 GB even made smaller — send a shorter part"); ready(nil); return }
           ready(hevc); return
@@ -1214,6 +1215,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     //  downloads it (opened with the next tap, as WhatsApp); a photo or video not here — downloaded first, then opened)
     // (no longer on the server: asked back from the group's phones within 90 days — AskGroup, Haris 2026-11-20 21:36)
     if Auto.gone(m) { AskGroup.offer(m, group: group, from: self); return }
+    // (one of yours going up — its ✕: stopped, and the message goes, as WhatsApp; Haris 2026-11-21 12:56)
+    if m.pending, !m.failed, Uploads.going[f.id] != nil { Uploads.stop(f.id); Talk.shared.deleteForMe(group, m); return }
     if Downloads.shared.running(f.id) { Downloads.shared.cancel(f.id); return }
     if !Auto.here(f) && m.kind != "voice" {
       if m.kind == "photo" || m.kind == "video" { Downloads.shared.start(f.id, size: f.size) { [weak self] ok in if ok { self?.open(m) } } }
@@ -3090,8 +3093,8 @@ final class BubbleCell: UITableViewCell {
       let put = {
         switch st {
         case .loading(let w, let e):
-          self.cardDown.isHidden = true; self.cardRing.isHidden = false; self.cardRing.set(Double(w) / Double(max(e, 1)))
-          self.cardSize.text = Auto.size(w) + " of " + Auto.size(max(e, 1))
+          self.cardDown.isHidden = true; self.cardRing.isHidden = false; self.cardRing.set(e < 0 ? Double(w) / 100 : Double(w) / Double(max(e, 1)))
+          self.cardSize.text = e < 0 ? "Preparing · \(w)%" : Auto.size(w) + " of " + Auto.size(max(e, 1))
         case .gone:
           self.cardDown.isHidden = true; self.cardRing.isHidden = true
           self.cardSize.text = AskGroup.isAsking(f.id) ? "Asking the group…" : AskGroup.can(m) ? "No longer available · Tap to ask the group" : "No longer available"

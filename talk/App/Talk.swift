@@ -471,8 +471,9 @@ final class Talk {
     let up = { (data: Data, f: Msg.FileRef) in
       Uploads.set(f.id, 0, total: data.count)
       var going = true   // (a late word of progress after it's up doesn't bring the ring back)
-      Net.shared.uploadMsg(data, name: f.name, progress: { p in guard going else { return }; progress?(p); Uploads.set(f.id, p, total: data.count) }) { [weak self] fid, key in
-        going = false; Uploads.end(f.id)
+      Net.shared.uploadMsg(data, name: f.name, stop: f.id, progress: { p in guard going else { return }; progress?(p); Uploads.set(f.id, p, total: data.count) }) { [weak self] fid, key in
+        going = false; Uploads.end(f.id); Uploads.done(f.id)
+        if Uploads.isStopped(f.id) { return }   // (its ✕: stopped, the message gone already)
         if let fid = fid, let key = key { FileKeys.set(fid, key); fileKey = key }
         guard let fid = fid else { self?.mark(g, cid, failed: true); return }
         try? FileManager.default.copyItem(at: Net.local(f.id), to: Net.local(fid))
@@ -483,6 +484,7 @@ final class Talk {
     if let prep = prepare, let f = file {
       Uploads.set(f.id, 0, total: max(1, f.size))
       prep { [weak self] made in
+        if Uploads.isStopped(f.id) { return }   // (its ✕ while it was being made smaller)
         // (mapped, not read whole: a big video's pieces are read from the disk as they go up — Haris 2026-11-21)
         guard let made = made, let d = try? Data(contentsOf: made, options: .alwaysMapped) else { Uploads.end(f.id); self?.mark(g, cid, failed: true); return }
         // (what goes up is what the phone keeps for it)

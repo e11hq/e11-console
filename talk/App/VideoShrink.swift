@@ -10,7 +10,8 @@ enum VideoShrink {
   // (bits per second: 720p 4 Mbps, 1080p 8 Mbps — to be checked against real videos with Haris and tuned)
   static func bitrate(hd: Bool) -> Int { hd ? 8_000_000 : 4_000_000 }
 
-  static func run(_ asset: AVAsset, hd: Bool, to out: URL, done: @escaping (Bool) -> Void) {
+  // (stop: the sending bubble's id — its ✕ stops this; progress: 0…1 as the frames go)
+  static func run(_ asset: AVAsset, hd: Bool, to out: URL, stop: String? = nil, progress: ((Double) -> Void)? = nil, done: @escaping (Bool) -> Void) {
     guard let vt = asset.tracks(withMediaType: .video).first,
           let reader = try? AVAssetReader(asset: asset),
           let writer = try? AVAssetWriter(outputURL: out, fileType: .mp4) else { done(false); return }
@@ -49,21 +50,24 @@ enum VideoShrink {
     writer.startSession(atSourceTime: .zero)
 
     let g = DispatchGroup(), q = DispatchQueue(label: "talk.shrink.v"), qa = DispatchQueue(label: "talk.shrink.a")
-    func pump(_ input: AVAssetWriterInput, _ output: AVAssetReaderTrackOutput, _ queue: DispatchQueue) {
+    let length = max(0.1, CMTimeGetSeconds(asset.duration))
+    func pump(_ input: AVAssetWriterInput, _ output: AVAssetReaderTrackOutput, _ queue: DispatchQueue, video: Bool) {
       g.enter()
       let state = Done()
       input.requestMediaDataWhenReady(on: queue) {
         while input.isReadyForMoreMediaData && !state.yes {
+          if Uploads.isStopped(stop) { state.yes = true; reader.cancelReading(); input.markAsFinished(); g.leave(); return }
           if reader.status == .reading, let b = output.copyNextSampleBuffer() {
+            if video, let p = progress { let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(b)); if t.isFinite { p(min(1, t / length)) } }
             if !input.append(b) { state.yes = true; input.markAsFinished(); g.leave() }
           } else { state.yes = true; input.markAsFinished(); g.leave() }
         }
       }
     }
-    pump(vIn, vOut, q)
-    if let o = aOut, let i = aIn { pump(i, o, qa) }
+    pump(vIn, vOut, q, video: true)
+    if let o = aOut, let i = aIn { pump(i, o, qa, video: false) }
     g.notify(queue: .global(qos: .userInitiated)) {
-      if reader.status == .failed || writer.status == .failed { reader.cancelReading(); writer.cancelWriting(); done(false); return }
+      if Uploads.isStopped(stop) || reader.status == .failed || writer.status == .failed { reader.cancelReading(); writer.cancelWriting(); done(false); return }
       writer.finishWriting { done(writer.status == .completed) }
     }
   }

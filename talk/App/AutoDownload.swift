@@ -74,6 +74,32 @@ enum Uploads {
     going[id] = nil; told[id] = nil
     NotificationCenter.default.post(name: .talkFile, object: id)
   }
+  // a video being made smaller before it goes: "Preparing · 40%" on its ring (the second number -1 says so) — it showed
+  // "Zero KB of" the original's size the whole time (Haris 2026-11-21 12:56)
+  static func prep(_ id: String, _ frac: Double) {
+    let pct = Int(min(1, max(0, frac)) * 100)
+    DispatchQueue.main.async {
+      guard !isStopped(id), told[id] != -1 - pct else { return }
+      told[id] = -1 - pct; going[id] = (Int64(pct), -1)
+      NotificationCenter.default.post(name: .talkFile, object: id)
+    }
+  }
+  // ✕ on one of yours going up: it stops — the making-smaller and the upload — and the message goes (Haris 2026-11-21 12:56:
+  // "the x when video is uploading on bubble does nothing")
+  private static let lock = NSLock()
+  private static var stopped = Set<String>(), tasks: [String: [URLSessionTask]] = [:]
+  static func isStopped(_ id: String?) -> Bool { guard let id = id else { return false }; lock.lock(); defer { lock.unlock() }; return stopped.contains(id) }
+  static func add(_ t: URLSessionTask, to id: String?) {
+    guard let id = id else { return }
+    lock.lock(); let gone = stopped.contains(id); if !gone { tasks[id, default: []].append(t) }; lock.unlock()
+    if gone { t.cancel() }
+  }
+  static func stop(_ id: String) {
+    lock.lock(); stopped.insert(id); let ts = tasks.removeValue(forKey: id) ?? []; lock.unlock()
+    ts.forEach { $0.cancel() }
+    end(id)
+  }
+  static func done(_ id: String) { lock.lock(); tasks[id] = nil; lock.unlock() }
 }
 
 /* a file downloaded on a tap (or as Wi-Fi comes back): how far it is, for the ring; stopped with the ring */
@@ -210,9 +236,15 @@ final class DownloadBadge: UIView {
     var loading = false
     if case .loading(let w, let e) = s {
       loading = true
-      let total = max(e, 1)
-      arc.strokeEnd = CGFloat(min(1, max(0.02, Double(w) / Double(total))))
-      howMuch.text = Auto.size(w) + " of " + Auto.size(total)
+      if e < 0 {
+        // (being made smaller first: how far, in percent)
+        arc.strokeEnd = CGFloat(min(1, max(0.02, Double(w) / 100)))
+        howMuch.text = "Preparing · \(w)%"
+      } else {
+        let total = max(e, 1)
+        arc.strokeEnd = CGFloat(min(1, max(0.02, Double(w) / Double(total))))
+        howMuch.text = Auto.size(w) + " of " + Auto.size(total)
+      }
     }
     disc.isHidden = !loading; howMuch.isHidden = !loading
     pillText.text = Auto.size(Int64(size))
