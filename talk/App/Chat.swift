@@ -2191,6 +2191,12 @@ enum Ticks {
       c.setStroke(); p.stroke()
     }
   }
+  // the clock (sending) or ! (not sent): the symbol drawn in the middle of the same 16 × 10 space as the tick
+  static func symbol(_ name: String, _ c: UIColor) -> UIImage {
+    let s = UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 10, weight: .bold))!.withTintColor(c)
+    let k = min(1, 10 / max(s.size.height, 1), 16 / max(s.size.width, 1)), w = s.size.width * k, h = s.size.height * k
+    return UIGraphicsImageRenderer(size: CGSize(width: 16, height: 10)).image { _ in s.draw(in: CGRect(x: (16 - w) / 2, y: (10 - h) / 2, width: w, height: h)) }
+  }
 }
 
 // a tap on something in a bubble (a card, a photo, a link): only a quick one — a finger held on it is the bubble being held,
@@ -3056,7 +3062,10 @@ final class BubbleCell: UITableViewCell {
       let allGot = !others.isEmpty && others.allSatisfy { p in l.read(p, m.id) || l.time(l.gotAt, p, m.id) != nil }
       f.append(NSAttributedString(string: " "))
       if m.pending {
-        f.append(NSAttributedString(attachment: NSTextAttachment(image: UIImage(systemName: m.failed ? "exclamationmark.circle" : "clock", withConfiguration: UIImage.SymbolConfiguration(pointSize: 10, weight: .bold))!.withTintColor(dim.resolvedColor(with: traitCollection)))))
+        // (the clock, or !, in the tick's own 16 × 10 space — so the bubble doesn't move when it turns into the tick, Haris 2026-11-22)
+        let t = NSTextAttachment(image: Ticks.symbol(m.failed ? "exclamationmark.circle" : "clock", dim.resolvedColor(with: traitCollection)))
+        t.bounds = CGRect(x: 0, y: -1, width: 16, height: 10)
+        f.append(NSAttributedString(attachment: t))
       } else {
         let c: UIColor = allSeen ? Look.readTick : over ? .white : Look.mineTime
         let t = NSTextAttachment(image: Ticks.image(c.resolvedColor(with: traitCollection), double: allSeen || allGot))

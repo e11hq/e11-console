@@ -349,6 +349,7 @@ final class Talk {
       if let i = l.msgs.firstIndex(where: { $0.id == id || ($0.pending && m.cid != nil && $0.cid == m.cid) }) {
         // (one of mine sent from here: it keeps its place, with the server's id; a photo keeps the copy it was sent from)
         var keep = m; keep.reactions = l.msgs[i].reactions
+        if let c = m.cid, l.msgs[i].cid == c { keep.at = l.msgs[i].at }   // (mine from here: the time it was sent on this phone stays)
         if let old = l.msgs[i].file?.id, let new = m.file?.id, old != new { try? FileManager.default.copyItem(at: Net.local(old), to: Net.local(new)) }
         l.msgs[i] = keep
       } else { l.msgs.append(m) }
@@ -584,7 +585,7 @@ final class Talk {
     if l.msgs.contains(where: { $0.id == id && !$0.pending }) { return }   // (already here by the live line)
     l.msgs[i].id = id; l.msgs[i].pending = false; l.msgs[i].failed = false
     if let s = seq { l.msgs[i].seq = s }
-    if let a = at { l.msgs[i].at = a }
+    _ = at   // (the bubble keeps the time from this phone — the server's can be a minute on, Haris 2026-11-22)
     logs[g] = l; saveSoon(g)
     NotificationCenter.default.post(name: .talkGroup, object: g)
   }
