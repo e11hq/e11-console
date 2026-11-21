@@ -624,7 +624,8 @@ final class Talk {
     let cut = Date().timeIntervalSince1970 * 1000 - 90 * 86400000
     for g in groups.keys {
       var l = log(g)
-      let old = l.msgs.filter { $0.at < cut && !$0.pending }
+      // (a starred message stays, with its file — only its group going takes it: Haris 2026-11-21 16:42)
+      let old = l.msgs.filter { $0.at < cut && !$0.pending && !isStarred(g, $0.id) }
       guard !old.isEmpty else { continue }
       for m in old { if let f = m.file { try? FileManager.default.removeItem(at: Net.local(f.id)) } }
       let ids = Set(old.map { $0.id })
