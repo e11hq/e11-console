@@ -1228,6 +1228,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
                               kCGImageSourceThumbnailMaxPixelSize: hd ? 4096 : 2048, kCGImageSourceShouldCacheImmediately: true]
     guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, o as CFDictionary) else { return nil }
     let marked = Watermark.onto(cg)
+    // (HEIC, as the iPhone's camera: about half a JPEG's size at the same sharpness — Haris 2026-11-21 12:27, 15:18; a
+    //  phone that can't make HEIC: JPEG as before)
+    let heic = NSMutableData()
+    if let dest = CGImageDestinationCreateWithData(heic, "public.heic" as CFString, 1, nil) {
+      CGImageDestinationAddImage(dest, marked, [kCGImageDestinationLossyCompressionQuality: 0.7] as CFDictionary)
+      if CGImageDestinationFinalize(dest), heic.length > 0 { return (heic as Data, Double(cg.width), Double(cg.height)) }
+    }
     guard let out = UIImage(cgImage: marked).jpegData(compressionQuality: 0.8) else { return nil }
     return (out, Double(cg.width), Double(cg.height))
   }
@@ -1245,7 +1252,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       if hd { DispatchQueue.main.async { Talk.sentHD.insert(tmpId) } }   // (for Send again)
       let local = FileManager.default.temporaryDirectory.appendingPathComponent(tmpId)
       try? data.write(to: local)
-      let fname = kind == "photo" ? (name as NSString).deletingPathExtension + ".jpg" : name
+      // (its name as what it is now: .heic, or .jpg where HEIC couldn't be made)
+      let isHeic = data.count > 12 && String(decoding: data.subdata(in: 4..<12), as: UTF8.self).hasPrefix("ftyphei")
+      let fname = kind == "photo" ? (name as NSString).deletingPathExtension + (isHeic ? ".heic" : ".jpg") : name
       DispatchQueue.main.async {
         guard let self = self else { return }
         Talk.shared.send(self.group, text: caption, reply: reply, file: Msg.FileRef(id: tmpId, name: fname, size: data.count, kind: kind, w: w, h: h, secs: nil), localFile: local, upload: data, album: kind == "photo" ? album : nil)
@@ -1600,8 +1609,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         more.append(UIAction(title: "Save / Share", image: UIImage(systemName: "square.and.arrow.up")) { [weak self] _ in
           Net.shared.file(f.id) { url in
             guard let url = url else { toast("That file isn’t on the server any more"); return }
-            let named = FileManager.default.temporaryDirectory.appendingPathComponent(f.name)
-            try? FileManager.default.removeItem(at: named); try? FileManager.default.copyItem(at: url, to: named)
+            let named = ShareCopy.named(f, from: url)
             self?.present(UIActivityViewController(activityItems: [named], applicationActivities: nil), animated: true)
           }
         })

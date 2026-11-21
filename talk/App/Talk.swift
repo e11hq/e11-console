@@ -74,6 +74,7 @@ struct Msg: Codable, Equatable {
   struct LinkPrev: Codable, Equatable, Hashable { var url: String; var title: String?; var site: String?; var video: Bool; var img: String?; var icon: String?; var e11: String? = nil; var pic: String? = nil; var client: String? = nil; var sub: String? = nil; var state: String? = nil }   // (client / sub / state: an E11 link's live card — "ok", "off", "gone", "none": no such link)   // (pic: an E11 link's picture, its page's own — a web address)   // (e11: one of our own links — "file" / "folder", its card from the server)
   struct FileRef: Codable, Equatable { var id: String; var name: String; var size: Int; var kind: String; var w: Double?; var h: Double?; var secs: Double?; var wave: String? = nil; var thumb: String? = nil
     var orig: String? = nil   // (sent as the original on purpose: "ProRes RAW" — its bubble says so)
+    var prev: String? = nil   // (a sharp small preview, about 320 px — shown at once on phones that haven't downloaded it)
   }
   struct Reply: Codable, Equatable { var id: String; var by: String; var text: String; var kind: String }
 }
@@ -320,7 +321,7 @@ final class Talk {
         guard let fid = f["id"] as? String else { return nil }
         if let k = f["key"] as? String { FileKeys.set(fid, (f["lock"] as? String) == "p" ? "p:" + k : k) }   // (locked in R2: its key — R2Files; in pieces: "p:")
         var ref = Msg.FileRef(id: fid, name: f["name"] as? String ?? "File", size: f["size"] as? Int ?? 0, kind: f["kind"] as? String ?? "file", w: f["w"] as? Double, h: f["h"] as? Double, secs: f["secs"] as? Double, wave: f["wave"] as? String, thumb: f["thumb"] as? String)
-        ref.orig = f["orig"] as? String
+        ref.orig = f["orig"] as? String; ref.prev = f["prev"] as? String
         return ref
       }
       let r = (e["reply"] as? [String: Any]).flatMap { r -> Msg.Reply? in
@@ -463,6 +464,8 @@ final class Talk {
       if fwd { b["fwd"] = true }
       if let r = m.reply { b["reply"] = ["id": r.id, "by": r.by, "text": r.text, "kind": r.kind] }
       if let f = file, let fid = fileId { var fd: [String: Any] = ["id": fid, "kind": f.kind]; fd["w"] = f.w; fd["h"] = f.h; fd["secs"] = f.secs; fd["wave"] = f.wave; fd["thumb"] = thumb; fd["orig"] = Talk.origSaid[f.id] ?? f.orig
+        // (the sharp preview, from what was really sent — the photo with its mark, the video made smaller in its colours)
+        if f.kind == "photo" || f.kind == "video" { fd["prev"] = f.prev ?? Thumb.preview(Net.local(fid), kind: f.kind) }
         // (locked in pieces — "p:" before its key on the phone: the server's word for it is lock "p")
         if let k = fileKey { if k.hasPrefix("p:") { fd["key"] = String(k.dropFirst(2)); fd["lock"] = "p" } else { fd["key"] = k } }
         b["file"] = fd }

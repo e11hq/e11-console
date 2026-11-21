@@ -8,11 +8,16 @@ import UserNotifications
 final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
   func application(_ app: UIApplication, didFinishLaunchingWithOptions o: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
     UNUserNotificationCenter.current().delegate = self
+    BgUploads.shared.start()
     // (reply straight from the banner, or mark it read — stage 2)
     let reply = UNTextInputNotificationAction(identifier: "reply", title: "Reply", options: [], textInputButtonTitle: "Send", textInputPlaceholder: "Message")
     let read = UNNotificationAction(identifier: "read", title: "Mark as read", options: [])
     UNUserNotificationCenter.current().setNotificationCategories([UNNotificationCategory(identifier: "talk-msg", actions: [reply, read], intentIdentifiers: [], options: [])])
     return true
+  }
+  // (uploads iPhone went on with while Talk was closed: Talk woken to take the next step — BgUploads)
+  func application(_ app: UIApplication, handleEventsForBackgroundURLSession id: String, completionHandler: @escaping () -> Void) {
+    BgUploads.shared.woken(completionHandler); BgUploads.shared.start()
   }
   func application(_ app: UIApplication, configurationForConnecting s: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
     UISceneConfiguration(name: "Default", sessionRole: s.role)

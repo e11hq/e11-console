@@ -342,8 +342,7 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     guard let m = items[safe: at], let f = m.file else { return }
     Net.shared.file(f.id) { [weak self] url in DispatchQueue.main.async {
       guard let self = self, let url = url else { return }
-      let named = FileManager.default.temporaryDirectory.appendingPathComponent(f.name)
-      try? FileManager.default.removeItem(at: named); try? FileManager.default.copyItem(at: url, to: named)
+      let named = ShareCopy.named(f, from: url)
       self.present(UIActivityViewController(activityItems: [named], applicationActivities: nil), animated: true)
     } }
   }

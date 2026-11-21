@@ -191,11 +191,29 @@ enum Thumb {
     guard let i = img, let d = i.jpegData(compressionQuality: 0.5), d.count < 2900 else { return nil }
     return d.base64EncodedString()
   }
+  // a sharp small preview, about 320 px across, sent with the message so the other phones show it at once instead of the
+  // blur (WhatsApp's — Haris 2026-11-21 13:09, 15:18); a JPEG kept under 36 KB
+  static func preview(_ url: URL, kind: String) -> String? {
+    var cg: CGImage?
+    if kind == "photo" {
+      cg = CGImageSourceCreateWithURL(url as CFURL, nil).flatMap { CGImageSourceCreateThumbnailAtIndex($0, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 320] as CFDictionary) }
+    } else if kind == "video" {
+      let g = AVAssetImageGenerator(asset: AVURLAsset(url: url)); g.appliesPreferredTrackTransform = true; g.maximumSize = CGSize(width: 320, height: 320)
+      g.requestedTimeToleranceBefore = .positiveInfinity; g.requestedTimeToleranceAfter = .positiveInfinity
+      cg = try? g.copyCGImage(at: CMTime(seconds: 0.1, preferredTimescale: 600), actualTime: nil)
+    }
+    guard let c = cg else { return nil }
+    let i = UIImage(cgImage: c)
+    for q in [0.6, 0.45, 0.3] as [CGFloat] { if let d = i.jpegData(compressionQuality: q), d.count <= 35_000 { return d.base64EncodedString() } }
+    return nil
+  }
   private static let made = NSCache<NSString, UIImage>()
   private static let ctx = CIContext()   // (one, kept — making one for each picture is slow)
   // (blurred once, kept)
   static func image(_ f: Msg.FileRef) -> UIImage? {
     if let i = made.object(forKey: f.id as NSString) { return i }
+    // (the sharp preview when it came with the message — no blur)
+    if let s = f.prev, let d = Data(base64Encoded: s), let p = UIImage(data: d) { made.setObject(p, forKey: f.id as NSString); return p }
     guard let s = f.thumb, let d = Data(base64Encoded: s), let small = UIImage(data: d), let ci = CIImage(image: small) else { return nil }
     let k: CGFloat = 8, ext = ci.extent
     let up = ci.transformed(by: CGAffineTransform(scaleX: k, y: k)).clampedToExtent()
@@ -310,5 +328,23 @@ final class DownloadRing: UIView {
     let p = UIBezierPath(arcCenter: c, radius: r, startAngle: -.pi / 2, endAngle: .pi * 1.5, clockwise: true).cgPath
     track.path = p; arc.path = p; track.frame = bounds; arc.frame = bounds
     square.frame = CGRect(x: c.x - 4.5, y: c.y - 4.5, width: 9, height: 9)
+  }
+}
+
+/* a file handed out of Talk (Save / Share): under its own name; a HEIC photo as a JPEG, so any computer opens it (Windows
+   can't always) — Haris 2026-11-21 12:27 */
+enum ShareCopy {
+  static func named(_ f: Msg.FileRef, from url: URL) -> URL {
+    let tmp = FileManager.default.temporaryDirectory
+    if f.kind == "photo", (f.name as NSString).pathExtension.lowercased() == "heic",
+       let src = CGImageSourceCreateWithURL(url as CFURL, nil), let cg = CGImageSourceCreateImageAtIndex(src, 0, nil),
+       let d = UIImage(cgImage: cg).jpegData(compressionQuality: 0.9) {
+      let out = tmp.appendingPathComponent((f.name as NSString).deletingPathExtension + ".jpg")
+      try? FileManager.default.removeItem(at: out)
+      if (try? d.write(to: out)) != nil { return out }
+    }
+    let named = tmp.appendingPathComponent(f.name)
+    try? FileManager.default.removeItem(at: named); try? FileManager.default.copyItem(at: url, to: named)
+    return named
   }
 }

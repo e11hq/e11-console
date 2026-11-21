@@ -263,8 +263,7 @@ final class MediaVC: UIViewController, UICollectionViewDelegate, QLPreviewContro
     guard let f = m.file else { return }
     Net.shared.file(f.id) { [weak self] url in
       guard let self = self, let url = url else { toast("That file isn’t on the server any more"); return }
-      let named = FileManager.default.temporaryDirectory.appendingPathComponent(f.name)
-      try? FileManager.default.removeItem(at: named); try? FileManager.default.copyItem(at: url, to: named)
+      let named = ShareCopy.named(f, from: url)
       self.presentShare([named], v)
     }
   }

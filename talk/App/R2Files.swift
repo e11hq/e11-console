@@ -113,7 +113,9 @@ extension Net {
         guard let etags = etags else { return done(nil, nil) }
         var b: [String: Any] = ["id": id, "etags": etags]
         if back != nil { b["back"] = true; b["key"] = sealed.key }
+        let bg = UIApplication.shared.beginBackgroundTask(withName: "talk-r2-done") {}
         self.post("/api/talk/r2/done", b) { d in
+          defer { DispatchQueue.main.asyncAfter(deadline: .now() + 20) { UIApplication.shared.endBackgroundTask(bg) } }
           guard (d?["ok"] as? Bool) == true else { return done(nil, nil) }
           progress(1); done(id, sealed.key)
         }
@@ -126,11 +128,14 @@ extension Net {
       guard let urls = (j["urls"] as? [String])?.compactMap(URL.init(string:)), let part = j["part"] as? Int, part > 0, !urls.isEmpty else { return done(nil, nil) }
       var etags = [String?](repeating: nil, count: urls.count), sent = [Int](repeating: 0, count: urls.count)
       var next = 0, going = 0, over = false
+      // (Talk left: every part still to go handed to iPhone at once, so they all go on with Talk closed — Haris 2026-11-21)
+      let fill = UUID()
+      func end() { over = true; BgUploads.shared.fillers[fill] = nil }
       func pump() {
         guard !over else { return }
-        if Uploads.isStopped(stop) { over = true; return done(nil, nil) }
-        if next >= urls.count && going == 0 { over = true; return finish(etags.contains(where: { $0 == nil }) ? nil : etags.map { $0! }) }
-        while going < 3 && next < urls.count {
+        if Uploads.isStopped(stop) { end(); return done(nil, nil) }
+        if next >= urls.count && going == 0 { end(); return finish(etags.contains(where: { $0 == nil }) ? nil : etags.map { $0! }) }
+        while going < BgUploads.width && next < urls.count {
           let i = next; next += 1; going += 1
           let piece = body.subdata(in: (i * part)..<min(body.count, (i + 1) * part))
           self.putR2(urls[i], piece, stop: stop) { p in
@@ -138,11 +143,12 @@ extension Net {
           } done: { e in
             going -= 1
             guard !over else { return }   // (already ended — another part failed, or ✕: said once)
-            guard let e = e else { over = true; return done(nil, nil) }
+            guard let e = e else { end(); return done(nil, nil) }
             etags[i] = e; pump()
           }
         }
       }
+      BgUploads.shared.fillers[fill] = { pump() }
       pump()
     }
   }
@@ -163,55 +169,102 @@ extension Net {
       let total = Double(max(1, sealedSize))
       var etags = [String?](repeating: nil, count: n), sent = [Int](repeating: 0, count: n)
       var next = 0, going = 0, over = false
+      // (Talk left: every part still to go handed to iPhone at once, so they all go on with Talk closed — Haris 2026-11-21)
+      let fill = UUID()
+      func end() { over = true; BgUploads.shared.fillers[fill] = nil }
       func pump() {
         guard !over else { return }
-        if Uploads.isStopped(stop) { over = true; return done(nil, nil) }
+        if Uploads.isStopped(stop) { end(); return done(nil, nil) }
         if next >= n && going == 0 {
-          over = true
+          end()
           guard !etags.contains(where: { $0 == nil }) else { return done(nil, nil) }
           var b: [String: Any] = ["id": id, "etags": etags.map { $0! }]
           if back != nil { b["back"] = true; b["key"] = keyText; b["lock"] = "p" }
+          let bg = UIApplication.shared.beginBackgroundTask(withName: "talk-r2-done") {}
           self.post("/api/talk/r2/done", b) { d in
+            defer { DispatchQueue.main.asyncAfter(deadline: .now() + 20) { UIApplication.shared.endBackgroundTask(bg) } }
             guard (d?["ok"] as? Bool) == true else { return done(nil, nil) }
             progress(1); done(id, "p:" + keyText)
           }
           return
         }
-        while going < 3 && next < n {
+        while going < BgUploads.width && next < n {
           let i = next; next += 1; going += 1
           let lo = i * FileLock.piecePlain, hi = min(data.count, lo + FileLock.piecePlain)
-          guard let piece = autoreleasepool(invoking: { FileLock.sealPiece(data.subdata(in: lo..<hi), key: key, index: i, last: i == n - 1) }) else { over = true; return done(nil, nil) }
+          guard let piece = autoreleasepool(invoking: { FileLock.sealPiece(data.subdata(in: lo..<hi), key: key, index: i, last: i == n - 1) }) else { end(); return done(nil, nil) }
           self.putR2(urls[i], piece, stop: stop) { p in
             sent[i] = Int(p); progress(min(0.99, Double(sent.reduce(0, +)) / total))
           } done: { e in
             going -= 1
             guard !over else { return }   // (already ended — another part failed, or ✕: said once)
-            guard let e = e else { over = true; return done(nil, nil) }
+            guard let e = e else { end(); return done(nil, nil) }
             etags[i] = e; pump()
           }
         }
       }
+      BgUploads.shared.fillers[fill] = { pump() }
       pump()
     }
   }
   // one piece to R2's address (its ETag back, on the main thread; nil: it didn't go)
   private func putR2(_ url: URL, _ data: Data, stop: String? = nil, sent: @escaping (Int64) -> Void, done: @escaping (String?) -> Void) {
-    var r = URLRequest(url: url); r.httpMethod = "PUT"; r.timeoutInterval = 120
-    var watch: NSKeyValueObservation?
-    let t = Net.r2Session.uploadTask(with: r, from: data) { _, resp, _ in
-      let h = resp as? HTTPURLResponse
-      let e = h?.statusCode == 200 ? (h?.value(forHTTPHeaderField: "ETag") ?? "") : nil
-      DispatchQueue.main.async { watch?.invalidate(); watch = nil; done(e) }
-    }
-    watch = t.observe(\.countOfBytesSent) { t, _ in
-      let n = t.countOfBytesSent; DispatchQueue.main.async { sent(n) }
-    }
-    Uploads.add(t, to: stop)
-    t.resume()
+    BgUploads.shared.put(url, data, stop: stop, sent: sent, done: done)
   }
   static let r2Session: URLSession = {
     let c = URLSessionConfiguration.default
     c.httpCookieStorage = nil; c.httpShouldSetCookies = false; c.timeoutIntervalForRequest = 120
     return URLSession(configuration: c)
   }()
+}
+
+/* Uploads that go on with Talk closed (Haris 2026-11-21 13:24 "plan it", 15:18 "Start": claude/talk-background-uploads-plan.md).
+   Every part going to R2 is handed to iPhone's own background transfers: written to a file, sent by iPhone itself — in
+   another app, with the phone locked — and Talk woken when it's done, to send the next parts, then "done" and the message.
+   While Talk is open, three parts at a time; once Talk is left, every part still to go is handed over at once. Swiping
+   Talk away in the app switcher stops them (iPhone's rule): the red ! when Talk opens, Send again. */
+final class BgUploads: NSObject, URLSessionDataDelegate {
+  static let shared = BgUploads()
+  // (three at a time while Talk is open; all the rest once it's left)
+  static var width: Int { UIApplication.shared.applicationState == .background ? 1000 : 3 }
+  var fillers: [UUID: () -> Void] = [:]
+  private var waiting: [Int: (sent: (Int64) -> Void, done: (String?) -> Void, file: URL)] = [:]
+  private var wake: (() -> Void)?
+  private lazy var session: URLSession = {
+    let c = URLSessionConfiguration.background(withIdentifier: "ae.e11.talk.uploads")
+    c.isDiscretionary = false; c.sessionSendsLaunchEvents = true
+    c.httpCookieStorage = nil; c.httpShouldSetCookies = false; c.timeoutIntervalForRequest = 120
+    return URLSession(configuration: c, delegate: self, delegateQueue: .main)
+  }()
+  override init() {
+    super.init()
+    NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+      self?.fillers.values.forEach { $0() }
+    }
+  }
+  func start() { _ = session }   // (at launch: reconnects to what iPhone was sending for us)
+  func put(_ url: URL, _ data: Data, stop: String?, sent: @escaping (Int64) -> Void, done: @escaping (String?) -> Void) {
+    guard Thread.isMainThread else { DispatchQueue.main.async { self.put(url, data, stop: stop, sent: sent, done: done) }; return }
+    let file = FileManager.default.temporaryDirectory.appendingPathComponent("bgup-" + UUID().uuidString)
+    guard (try? data.write(to: file)) != nil else { DispatchQueue.main.async { done(nil) }; return }
+    var r = URLRequest(url: url); r.httpMethod = "PUT"
+    let t = session.uploadTask(with: r, fromFile: file)
+    waiting[t.taskIdentifier] = (sent, done, file)
+    Uploads.add(t, to: stop)
+    t.resume()
+  }
+  func urlSession(_ s: URLSession, task: URLSessionTask, didSendBodyData _: Int64, totalBytesSent: Int64, totalBytesExpectedToSend _: Int64) {
+    waiting[task.taskIdentifier]?.sent(totalBytesSent)
+  }
+  func urlSession(_ s: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+    guard let w = waiting.removeValue(forKey: task.taskIdentifier) else { return }   // (from before Talk was closed: nothing waits for it)
+    try? FileManager.default.removeItem(at: w.file)
+    let h = task.response as? HTTPURLResponse
+    w.done(error == nil && h?.statusCode == 200 ? (h?.value(forHTTPHeaderField: "ETag") ?? "") : nil)
+  }
+  // woken by iPhone with everything handed over done: told back once the next steps have had their moment
+  func woken(_ f: @escaping () -> Void) { wake = f }
+  func urlSessionDidFinishEvents(forBackgroundURLSession s: URLSession) {
+    let f = wake; wake = nil
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { f?() }
+  }
 }
