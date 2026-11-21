@@ -466,17 +466,34 @@ final class HelpVC: UITableViewController {
 final class AboutVC: UITableViewController {
   init() { super.init(style: .insetGrouped) }
   required init?(coder: NSCoder) { fatalError() }
-  override func viewDidLoad() { super.viewDidLoad(); title = "About E11 Talk"; navigationItem.largeTitleDisplayMode = .never }
-  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { 2 }
+  // (the owner only: how much of Cloudflare's free day Talk has used — one number, the highest of its daily limits;
+  //  the server answers only the owner, so for anyone else there's no row — Haris 2026-11-22 02:14)
+  private var used: Double?
+  override func viewDidLoad() {
+    super.viewDidLoad(); title = "About E11 Talk"; navigationItem.largeTitleDisplayMode = .never
+    Net.shared.get("/api/talk/relay/usage") { [weak self] j in
+      guard let self = self, (j?["ok"] as? Bool) == true, let p = (j?["percent"] as? NSNumber)?.doubleValue else { return }
+      self.used = p; self.tableView.reloadData()
+    }
+  }
+  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { used == nil ? 2 : 3 }
   override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
     "Chats live on this phone. The server only passes each message on and lets it go once everyone has it."
+      + (used == nil ? "" : "\n\nCloudflare today: the highest of its free daily limits used so far. It starts again at 4 AM; over it, the office server carries Talk until then.")
   }
   override func tableView(_ tv: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
     let c = UITableViewCell(style: .value1, reuseIdentifier: nil); c.selectionStyle = .none
     var cfg = UIListContentConfiguration.valueCell()
     let v = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
     let b = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
-    if ip.row == 0 { cfg.text = "Version"; cfg.secondaryText = "\(v) (\(b))" } else { cfg.text = "Server"; cfg.secondaryText = Server.host }
+    if ip.row == 0 { cfg.text = "Version"; cfg.secondaryText = "\(v) (\(b))" }
+    else if ip.row == 1 { cfg.text = "Server"; cfg.secondaryText = Server.host }
+    else {
+      // "Cloudflare today: 12% of the free limit · resets 4 AM" (Cloudflare's day starts at midnight UTC)
+      let p = used ?? 0
+      cfg.text = "Cloudflare today"; cfg.secondaryText = "\(p < 1 && p > 0 ? "<1" : String(Int(p.rounded())))% of free limit"
+      cfg.secondaryTextProperties.color = p >= 80 ? .systemRed : .secondaryLabel
+    }
     c.contentConfiguration = cfg
     return c
   }
