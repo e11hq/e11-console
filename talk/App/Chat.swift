@@ -1984,6 +1984,10 @@ final class DayHeader: UITableViewHeaderFooterView {
 final class IntroCell: UITableViewCell {
   private let card = UIView(), pic = Avatar(frame: CGRect(x: 0, y: 0, width: 48, height: 48)), badge = UIButton(type: .system)
   private let title = UILabel(), sub = UILabel(), about = UILabel(), describe = UIButton(type: .system), add = UIButton(type: .system), stack = UIStackView()
+  // (above the card, for peace of mind: "🔒 Messages and files are sent encrypted." — sized and coloured as WhatsApp's note,
+  //  measured from Haris's screenshots: 12 pt, cream #FDF1D7 with black in light, #171717 with gold #F2D492 in dark; true
+  //  as it says — encrypted on the way, never "end-to-end", Haris 2026-11-22 02:43)
+  private let note = UIView(), noteL = UILabel()
   var onPic: (() -> Void)?, onAdd: (() -> Void)?, onDescribe: (() -> Void)?
   private var canEdit = false
   static let cardBg = Look.dyn(0x262628, 0xFFFFFF), btnBg = Look.dyn(0x3A3A3E, 0xEFEFF4)
@@ -2031,14 +2035,23 @@ final class IntroCell: UITableViewCell {
     stack.setCustomSpacing(16, after: picBox); stack.setCustomSpacing(4, after: title); stack.setCustomSpacing(12, after: sub)
     stack.setCustomSpacing(14, after: about); stack.setCustomSpacing(14, after: describe)
     card.addSubview(stack); contentView.addSubview(card)
-    [card, stack, add].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+    noteText(); noteL.numberOfLines = 0; noteL.textAlignment = .center
+    noteL.accessibilityLabel = "Messages and files are sent encrypted."
+    note.backgroundColor = Look.dyn(0x171717, 0xFDF1D7); note.layer.cornerRadius = 7; note.layer.cornerCurve = .continuous
+    note.addSubview(noteL); contentView.addSubview(note)
+    [card, stack, add, note, noteL].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+    NSLayoutConstraint.activate([
+      note.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 6), note.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+      note.widthAnchor.constraint(lessThanOrEqualToConstant: 278),
+      noteL.topAnchor.constraint(equalTo: note.topAnchor, constant: 6.5), noteL.bottomAnchor.constraint(equalTo: note.bottomAnchor, constant: -6.5),
+      noteL.leadingAnchor.constraint(equalTo: note.leadingAnchor, constant: 13), noteL.trailingAnchor.constraint(equalTo: note.trailingAnchor, constant: -13)])
     NSLayoutConstraint.activate([
       picBox.widthAnchor.constraint(equalToConstant: 48), picBox.heightAnchor.constraint(equalToConstant: 48),
       pic.topAnchor.constraint(equalTo: picBox.topAnchor), pic.leadingAnchor.constraint(equalTo: picBox.leadingAnchor),
       pic.widthAnchor.constraint(equalToConstant: 48), pic.heightAnchor.constraint(equalToConstant: 48),
       badge.widthAnchor.constraint(equalToConstant: 18), badge.heightAnchor.constraint(equalToConstant: 18),
       badge.trailingAnchor.constraint(equalTo: picBox.trailingAnchor, constant: 4), badge.bottomAnchor.constraint(equalTo: picBox.bottomAnchor, constant: 3),
-      card.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 6), card.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -8),
+      card.topAnchor.constraint(equalTo: note.bottomAnchor, constant: 10), card.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -8),
       card.centerXAnchor.constraint(equalTo: contentView.centerXAnchor), card.widthAnchor.constraint(equalToConstant: 268),
       stack.topAnchor.constraint(equalTo: card.topAnchor, constant: 22), stack.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -12),
       stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 12), stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12),
@@ -2046,6 +2059,19 @@ final class IntroCell: UITableViewCell {
       add.widthAnchor.constraint(equalTo: stack.widthAnchor), { let h = add.heightAnchor.constraint(equalToConstant: 40); h.priority = .init(999); return h }()])
   }
   required init?(coder: NSCoder) { fatalError() }
+  // (the note's words and lock in this look's colour — made again when light / dark changes)
+  private func noteText() {
+    let ink = Look.dyn(0xF2D492, 0x000000).resolvedColor(with: traitCollection)
+    let lock = NSTextAttachment(image: UIImage(systemName: "lock.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 10, weight: .semibold))!.withTintColor(ink, renderingMode: .alwaysOriginal))
+    let line = NSMutableParagraphStyle(); line.alignment = .center; line.minimumLineHeight = 17.5; line.maximumLineHeight = 17.5
+    let t = NSMutableAttributedString(attachment: lock); t.append(NSAttributedString(string: " Messages and files are sent encrypted."))
+    t.addAttributes([.font: UIFont.systemFont(ofSize: 12), .foregroundColor: ink, .paragraphStyle: line], range: NSRange(location: 0, length: t.length))
+    noteL.attributedText = t
+  }
+  override func traitCollectionDidChange(_ p: UITraitCollection?) {
+    super.traitCollectionDidChange(p)
+    if p?.userInterfaceStyle != traitCollection.userInterfaceStyle { noteText() }
+  }
   func set(_ g: Group) {
     let T = Talk.shared, can = T.canManage(g), mine = g.creator == T.me?.id
     let who = T.people[g.creator]?.name ?? "Someone"
