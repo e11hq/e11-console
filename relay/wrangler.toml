@@ -1,0 +1,6 @@
+# E11 Talk on Cloudflare (claude/talk-cloudflare-relay-plan.md — Haris 2026-11-21). Published only by
+# .github/workflows/talk-relay.yml with the repo's CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID.
+name = "e11-talk-relay"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+workers_dev = false
