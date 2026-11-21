@@ -22,3 +22,8 @@ new_sqlite_classes = ["TalkHub"]
 [vars]
 OFFICE = "https://talk.e11hq.com"
 HUB_NAME = "live"
+
+# Talk's own R2 bucket (the same one the office uses) — through this binding, no R2 keys
+[[r2_buckets]]
+binding = "TALK_FILES"
+bucket_name = "e11-talk-files"
