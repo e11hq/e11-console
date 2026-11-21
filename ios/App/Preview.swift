@@ -434,7 +434,8 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     func glass(_ b: UIButton, _ sym: String, _ label: String, size: CGFloat = 42, red: Bool = false) {
       var c: UIButton.Configuration
       if #available(iOS 26.0, *) { c = .glass() } else { c = .gray(); c.cornerStyle = .capsule; c.baseForegroundColor = .white; c.background.backgroundColor = UIColor(white: 0.16, alpha: 0.8) }
-      c.image = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: size > 44 ? 20 : 17, weight: size > 44 ? .regular : .semibold)); c.contentInsets = .zero
+      // (the icon at Apple's own size and weight, as Photos — 15 regular in the 42 circle; it was 17 semibold, tight: Haris 2026-11-21 19:38)
+      c.image = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: size > 44 ? 20 : 15, weight: .regular)); c.contentInsets = .zero
       if red { c.baseForegroundColor = .systemRed }
       b.configuration = c; b.accessibilityLabel = label; b.translatesAutoresizingMaskIntoConstraints = false
       NSLayoutConstraint.activate([b.widthAnchor.constraint(equalToConstant: size), b.heightAnchor.constraint(equalToConstant: size)])
