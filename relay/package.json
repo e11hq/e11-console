@@ -1,0 +1,2 @@
+{ "name": "e11-talk-relay", "private": true, "type": "module",
+  "scripts": { "test": "node --import ./test/register.mjs --test test/*.test.mjs" } }

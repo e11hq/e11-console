@@ -31,6 +31,8 @@ jobs:
           [ -n "$CLOUDFLARE_API_TOKEN" ] || { echo "CLOUDFLARE_API_TOKEN missing"; exit 1; }
           [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || { echo "CLOUDFLARE_ACCOUNT_ID missing"; exit 1; }
           echo "Both secrets present"
+      - name: Tests (E11 Talk's own code over the hub's database)
+        run: node --import ./test/register.mjs --test test/*.test.mjs
       - name: The token works (who it is, which account)
         run: npx --yes wrangler@4 whoami
       - name: The Worker builds (nothing published)

@@ -1,6 +1,24 @@
-# E11 Talk on Cloudflare (claude/talk-cloudflare-relay-plan.md — Haris 2026-11-21). Published only by
-# .github/workflows/talk-relay.yml with the repo's CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID.
+# E11 Talk on Cloudflare (TALK-CF-A — claude/talk-cloudflare-relay-plan.md, Haris 2026-11-21). Published only by
+# .github/workflows/talk-relay.yml with the repo's CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID. Not in use yet.
 name = "e11-talk-relay"
 main = "src/index.js"
 compatibility_date = "2025-06-01"
+compatibility_flags = ["nodejs_compat"]
 workers_dev = false
+
+# E11 Talk's own code (server/src/talk.js) runs here unchanged: its database and files are the hub's
+[alias]
+"node:sqlite" = "./src/shims/sqlite.js"
+"node:fs" = "./src/shims/fs.js"
+
+[[durable_objects.bindings]]
+name = "HUB"
+class_name = "TalkHub"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["TalkHub"]
+
+[vars]
+OFFICE = "https://talk.e11hq.com"
+HUB_NAME = "live"
