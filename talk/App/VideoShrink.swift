@@ -36,15 +36,24 @@ enum VideoShrink {
     guard let vt = asset.tracks(withMediaType: .video).first,
           let reader = try? AVAssetReader(asset: asset),
           let writer = try? AVAssetWriter(outputURL: out, fileType: .mp4) else { done(false); return }
-    // the size: the long side at most 1280 (HD 1920), the video's own shape, even numbers
-    let nat = vt.naturalSize, long = max(nat.width, nat.height), cap: CGFloat = hd ? 1920 : 1280
+    // the size: the long side at most 1280 (HD 1920), the video's own shape (turned the way it's watched), even numbers
+    let turned = vt.naturalSize.applying(vt.preferredTransform)
+    let nat = CGSize(width: abs(turned.width), height: abs(turned.height)), long = max(nat.width, nat.height), cap: CGFloat = hd ? 1920 : 1280
     let k = long > cap ? cap / long : 1
     let w = Int((nat.width * k / 2).rounded()) * 2, h = Int((nat.height * k / 2).rounded()) * 2
     guard w > 0, h > 0 else { done(false); return }
     let own = Int(vt.estimatedDataRate), rate = own > 0 ? min(bitrate(hd: hd), own) : bitrate(hd: hd)
     let fps = vt.nominalFrameRate > 0 ? Double(vt.nominalFrameRate) : 30
 
-    let vOut = AVAssetReaderTrackOutput(track: vt, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange])
+    // (read through Apple's video composition set to standard colour: a ProRes Log or HDR video is turned into the colours
+    //  every phone shows, turned the right way up — tagging the written video alone left Log footage flat and grey,
+    //  Haris 2026-11-21 14:32)
+    let comp = AVMutableVideoComposition(propertiesOf: asset)
+    comp.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2
+    comp.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2
+    comp.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
+    let vOut = AVAssetReaderVideoCompositionOutput(videoTracks: [vt], videoSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange])
+    vOut.videoComposition = comp
     vOut.alwaysCopiesSampleData = false
     guard reader.canAdd(vOut) else { done(false); return }
     reader.add(vOut)
@@ -57,7 +66,7 @@ enum VideoShrink {
       // (standard colour, as every phone shows it — a ProRes Log or HDR video turned into it, not tagged with its own)
       AVVideoColorPropertiesKey: [AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2, AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
                                   AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2]])
-    vIn.transform = vt.preferredTransform; vIn.expectsMediaDataInRealTime = false
+    vIn.expectsMediaDataInRealTime = false   // (already turned the right way up by the composition)
     guard writer.canAdd(vIn) else { done(false); return }
     writer.add(vIn)
 
@@ -79,7 +88,7 @@ enum VideoShrink {
 
     let g = DispatchGroup(), q = DispatchQueue(label: "talk.shrink.v"), qa = DispatchQueue(label: "talk.shrink.a")
     let length = max(0.1, CMTimeGetSeconds(asset.duration))
-    func pump(_ input: AVAssetWriterInput, _ output: AVAssetReaderTrackOutput, _ queue: DispatchQueue, video: Bool) {
+    func pump(_ input: AVAssetWriterInput, _ output: AVAssetReaderOutput, _ queue: DispatchQueue, video: Bool) {
       g.enter()
       let state = Done()
       input.requestMediaDataWhenReady(on: queue) {
