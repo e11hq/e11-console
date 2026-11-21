@@ -3,6 +3,7 @@
 // fingerprint, so a phone already signed in is let in while the office is down). Then the hub.
 // The office's requests (signed) and the hub's public key go straight to the hub.
 import { fingerprint } from './sign.js';
+import { serveR2 } from './r2.js';
 export { TalkHub } from './hub.js';
 
 const DAY = 86400_000, KEEP = 30 * DAY;
@@ -15,6 +16,8 @@ export default {
     const url = new URL(req.url), p = url.pathname;
     const hub = hubOf(env);
     if (p === '/hub/key' || p.startsWith('/office/')) return hub.fetch(req);
+    // (a file's own address — the token says what's allowed; no hub needed)
+    if (p.startsWith('/r2/')) return serveR2(req, env, p);
     if (!(p === '/line' || p.startsWith('/api/talk/'))) return json({ ok: false, error: 'Not here' }, 404);
     const email = await whoIs(req, env, ctx);
     if (!email) return json({ ok: false, error: 'Sign in again' }, 401);

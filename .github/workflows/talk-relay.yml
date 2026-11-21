@@ -35,8 +35,17 @@ jobs:
         run: node --import ./test/register.mjs --test test/*.test.mjs
       - name: The token works (who it is, which account)
         run: npx --yes wrangler@4 whoami
+      - name: R2 buckets on the account (names only)
+        run: npx --yes wrangler@4 r2 bucket list
       - name: The Worker builds (nothing published)
         run: npx --yes wrangler@4 deploy --dry-run --outdir dist
       - name: Publish
         if: inputs.mode == 'deploy'
         run: npx --yes wrangler@4 deploy
+      # (the key the relay signs its file addresses with: made here once, at random — nobody types or sees it)
+      - name: The file-address key, once
+        if: inputs.mode == 'deploy'
+        run: |
+          if ! npx --yes wrangler@4 secret list 2>/dev/null | grep -q R2_LINK_SECRET; then
+            openssl rand -hex 32 | npx --yes wrangler@4 secret put R2_LINK_SECRET
+          fi

@@ -8,6 +8,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { HubCore } from './core.js';
 import { newKey, signHeaders, verify } from './sign.js';
+import { bindingR2 } from './r2.js';
 
 const TALK_TABLES = ['groups', 'members', 'prefs', 'events', 'waiting', 'sent', 'files', 'contacts', 'macs', 'link_codes', 'phone_seen',
   'phones', 'bare_seen', 'needs', 'opts', 'unread', 'file_kept', 'file_had', 'asks'];
@@ -23,7 +24,9 @@ export class TalkHub extends DurableObject {
       const sql = ctx.storage.sql;
       sql.exec('CREATE TABLE IF NOT EXISTS hub_outbox (n INTEGER PRIMARY KEY, body TEXT NOT NULL)');
       sql.exec('CREATE TABLE IF NOT EXISTS hub_who (fp TEXT PRIMARY KEY, email TEXT NOT NULL, at INTEGER NOT NULL)');
-      this.core = new HubCore({ sql, copy: (b) => this.toOffice(b) });
+      // (files: Talk's R2 bucket through this Worker's own binding — no R2 keys)
+      const r2 = bindingR2({ bucket: env.TALK_FILES, secret: env.R2_LINK_SECRET, base: String(env.PUBLIC || '').replace(/\/$/, '') });
+      this.core = new HubCore({ sql, copy: (b) => this.toOffice(b), r2: r2.on ? r2 : null });
       const d = this.core.meta('dir'); if (d) try { this.core.dir.set(JSON.parse(d)); } catch { /* the office sends it again */ }
       if (!this.core.meta('key')) { const k = await newKey(); this.core.meta('key', k.priv); this.core.meta('pub', k.pub); }
       // (lines kept open while the hub slept: listening again)
@@ -57,6 +60,14 @@ export class TalkHub extends DurableObject {
       this.hear(server);
       return new Response(null, { status: 101, webSocket: client });
     }
+    // a message's file: off to its R2 address for 15 minutes (counted as fetched, as the office does for ?r2=1)
+    if (p.startsWith('/api/talk/file/') && (req.method === 'GET' || req.method === 'HEAD')) {
+      const f = this.core.fileFor(w, p.slice('/api/talk/file/'.length));
+      if (!f || f.store !== 'r2' || !this.core.talk.r2) return json({ ok: false, error: 'That file has gone' }, 404);
+      if (f.lock === 'p' && url.searchParams.get('pieces') !== '1') return json({ ok: false, error: 'Update E11 Talk' }, 409);
+      this.core.fetched(w, f.id);
+      return new Response(null, { status: 302, headers: { Location: await this.core.talk.r2.getUrl(this.core.talk.r2Key(f)), 'cache-control': 'no-store' } });
+    }
     const r = await this.call(w, p.replace('/api/talk/', ''), req.method === 'POST' ? await req.json().catch(() => ({})) : Object.fromEntries(url.searchParams));
     return r ? json(r, r.status || (r.ok === false ? 400 : 200)) : json({ ok: false, error: 'Not here' }, 404);
   }
@@ -68,7 +79,13 @@ export class TalkHub extends DurableObject {
       case 'sync': return this.core.sync(w, b.after, b.limit);
       case 'ack': return this.core.ack(w, b.upto);
       case 'got': return this.core.got(w, b.groupId, b.msgId);
-      default: return null;   // (files, Macs, history… the office's for now)
+      case 'r2/start': return this.core.r2Start(w, b);
+      case 'r2/done': return this.core.r2Done(w, b);
+      case 'ask': return this.core.ask(w, b);
+      case 'asks': return this.core.asks(w);
+      case 'resend/start': return this.core.resendStart(w, b);
+      case 'history/share': return this.core.shareHistory(w, b);
+      default: return null;   // (Macs, sign-in… the office's for now)
     }
   }
 
