@@ -1145,7 +1145,7 @@ final class VoiceBubble: UIView, AVAudioPlayerDelegate {
     }
     backgroundColor = .tertiarySystemFill; layer.cornerRadius = 22
     heightAnchor.constraint(equalToConstant: 46).isActive = true
-    widthAnchor.constraint(equalToConstant: 260).isActive = true
+    // (as wide as the comment — no fixed 260 leaving room empty on the right; Haris 2026-11-21 21:34)
     // (the ▶ is a picture of its own in the circle, so it can change smoothly: ••• → ▶, ▶ ⇄ ❙❙)
     icon.image = VoiceBubble.sym("play.fill"); icon.tintColor = .white; icon.contentMode = .center; icon.isUserInteractionEnabled = false
     icon.translatesAutoresizingMaskIntoConstraints = false; play.addSubview(icon)
@@ -1153,9 +1153,9 @@ final class VoiceBubble: UIView, AVAudioPlayerDelegate {
     play.backgroundColor = .systemBlue; play.layer.cornerRadius = 17
     play.addAction(UIAction { [weak self] _ in self?.toggle() }, for: .touchUpInside)
     // (the wave across all the room there is, the time at the right end — it left a gap after the time; Haris 2026-11-21 21:27)
-    wave.spacing = 2; wave.alignment = .center; wave.distribution = .equalSpacing
+    wave.spacing = 1; wave.alignment = .center; wave.distribution = .equalSpacing
     wave.setContentHuggingPriority(.defaultLow, for: .horizontal)
-    for i in 0..<32 {
+    for i in 0..<40 {
       let h = 5 + CGFloat(abs(sin(Double(i) * 1.7) * cos(Double(i) * 0.45))) * 18
       let b = UIView(); b.backgroundColor = .secondaryLabel; b.layer.cornerRadius = 1.5
       b.translatesAutoresizingMaskIntoConstraints = false; b.widthAnchor.constraint(equalToConstant: 3).isActive = true; b.heightAnchor.constraint(equalToConstant: h).isActive = true
@@ -1163,7 +1163,7 @@ final class VoiceBubble: UIView, AVAudioPlayerDelegate {
     }
     time.font = .monospacedDigitSystemFont(ofSize: 12.5, weight: .medium); time.textColor = .secondaryLabel; time.text = VoiceBubble.fmt(dur)
     time.textAlignment = .right; time.setContentHuggingPriority(.required, for: .horizontal); time.setContentCompressionResistancePriority(.required, for: .horizontal)
-    let h = UIStackView(arrangedSubviews: [play, wave, time]); h.spacing = 8; h.alignment = .center
+    let h = UIStackView(arrangedSubviews: [play, wave, time]); h.spacing = 10; h.alignment = .center
     h.translatesAutoresizingMaskIntoConstraints = false; addSubview(h)
     NSLayoutConstraint.activate([play.widthAnchor.constraint(equalToConstant: 34), play.heightAnchor.constraint(equalToConstant: 34), h.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6), h.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16), h.centerYAnchor.constraint(equalTo: centerYAnchor)])
   }
@@ -1215,7 +1215,8 @@ final class VoiceBubble: UIView, AVAudioPlayerDelegate {
     guard let p = player, p.duration > 0 else { return }
     let f = p.currentTime / p.duration, n = Int(Double(bars.count) * f)
     for (i, b) in bars.enumerated() { b.backgroundColor = i < n ? .systemBlue : .secondaryLabel }
-    time.text = VoiceBubble.fmt(Int(p.currentTime)) + " / " + VoiceBubble.fmt(Int(p.duration))
+    // (one time, as Apple's Messages: what's left while it plays — "0:00 / 0:02" was cut short; Haris 2026-11-21 21:34)
+    time.text = VoiceBubble.fmt(max(0, Int((p.duration - p.currentTime).rounded(.up))))
   }
   func audioPlayerDidFinishPlaying(_ p: AVAudioPlayer, successfully flag: Bool) { paint(false); p.currentTime = 0; bars.forEach { $0.backgroundColor = .secondaryLabel }; time.text = VoiceBubble.fmt(Int(p.duration)) }
 }

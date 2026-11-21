@@ -1068,7 +1068,8 @@ final class CommentCell: UIView {
     // files: pictures as fixed-size tiles (their room kept from the start), others as file rows
     let files = (it["files"] as? [[String: Any]]) ?? []
     for f in files where (f["voice"] as? Bool) == true {
-      let w = UIStackView(arrangedSubviews: [VoiceBubble(path: f["url"] as? String ?? "", dur: f["dur"] as? Int ?? 0, pending: (f["pending"] as? Bool) == true), UIView()]); w.alignment = .center
+      // (the full width of the comment, as its words — Haris 2026-11-21 21:34)
+      let w = UIStackView(arrangedSubviews: [VoiceBubble(path: f["url"] as? String ?? "", dur: f["dur"] as? Int ?? 0, pending: (f["pending"] as? Bool) == true)]); w.alignment = .center
       stack.addArrangedSubview(w)
     }
     let rest = files.filter { ($0["voice"] as? Bool) != true }
