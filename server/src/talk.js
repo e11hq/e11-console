@@ -1197,6 +1197,41 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     return { ok: true, id: f.id, size: f.size, done: true };
   }
 
+  /* ---------- "Show them the chat history?" (Haris 2026-11-20 21:47–21:53, plan claude/talk-share-history-plan.md) ----------
+     The person who just added people sends the group's earlier messages from their own phone; this server only passes them to
+     those people's phones (kept until each has picked them up, like any message) and keeps nothing else. Each message must be
+     one of this group's, sent by whom it says, within 90 days, not deleted for everyone; its files only its own. The group is
+     told: "<name> shared the chat history with <names>". */
+  function shareHistory(u, groupId, to, msgs, keys, since) {
+    const g = Q.group.get(String(groupId || ''));
+    if (!g || !member(g, u.id)) return bad('Not found', 404);
+    const t = now();
+    // (only the people this person added, just now — within the hour)
+    const people = cleanIds(to).filter((id) => { const m = db.prepare('SELECT * FROM members WHERE grp = ? AND uid = ?').get(g.id, id); return m && m.added_by === u.id && t - m.added_at < 3600000; });
+    if (!people.length) return bad('Share the history right after adding them', 403);
+    const from = Math.max(Number(since) || 0, t - ASK_DAYS * 86400000);
+    const deleted = new Set(db.prepare("SELECT data FROM events WHERE grp = ? AND type = 'del'").all(g.id).map((r) => { try { return JSON.parse(r.data).id; } catch { return null; } }));
+    const out = [], fileIds = new Set();
+    for (const m of (Array.isArray(msgs) ? msgs : []).slice(0, 5000)) {
+      if (!m || typeof m !== 'object') continue;
+      const s = Q.getSent.get(String(m.id || ''));
+      if (!s || s.grp !== g.id || s.by !== m.by || s.at < from || deleted.has(s.id)) continue;
+      const own = new Set(JSON.parse(s.files || '[]'));
+      const ids = [m.file && m.file.id, m.link && m.link.img, m.link && m.link.icon].filter(Boolean).map(String);
+      if (ids.some((x) => !own.has(x))) continue;   // (a file that isn't this message's own: never)
+      const j = JSON.stringify(m);
+      if (j.length > 20000) continue;
+      out.push(JSON.parse(j)); ids.forEach((x) => fileIds.add(x));
+    }
+    const k = {};
+    for (const id of fileIds) if (keys && typeof keys[id] === 'string' && keys[id].length < 80) k[id] = keys[id];
+    // (files still here: kept for the new people's phones until they have them, as for any message)
+    for (const id of fileIds) { const f = Q.getFile.get(id); if (f && f.done) for (const d of devicesFor(people)) if (!isMacId(d)) Q.addNeed.run(id, d, g.id, t); }
+    emit(g, 'history', { by: u.id, since: from, msgs: out, keys: k }, u.id, people);
+    sys(g, u.id, `${nameOf(u.id)} shared the chat history with ${people.map(nameOf).join(', ')}`);
+    return { ok: true, shared: out.length };
+  }
+
   /* ---------- Ask the group (Haris 2026-11-20 21:36) ---------- */
   const ownerOf = (dev) => (isMacId(dev) ? ((db.prepare('SELECT uid FROM macs WHERE id = ?').get(dev) || {}).uid || null)
     : isDevId(dev) ? ((db.prepare('SELECT uid FROM phones WHERE id = ?').get(dev) || {}).uid || null) : dev);
@@ -1358,6 +1393,6 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   function personByEmail(e) { const u = access.userByEmail(e); if (u) return personOf(u); const k = contactByEmail(e); return k ? { id: k.id, name: k.name, role: 'Client', photo: null, color: null } : null; }
   // (how much Talk keeps in R2 — counted with E11 Console's files under one ceiling, consoler2.js)
   const r2Bytes = () => Number(db.prepare("SELECT COALESCE(SUM(size), 0) AS n FROM files WHERE store = 'r2'").get().n);
-  return { r2Bytes, phoneFor, r2, r2Key, r2Start, r2Done, ask, asksFor, resendStart, state, act, sync, ack, got, unreadFor, reviewDemo, sample, upload, tasksChanged, peopleChanged, linksChanged, contactByEmail, personByEmail, fileFor, filePath, fetched, listen, sweep, isAdminOf,
+  return { r2Bytes, phoneFor, r2, r2Key, r2Start, r2Done, ask, asksFor, resendStart, shareHistory, state, act, sync, ack, got, unreadFor, reviewDemo, sample, upload, tasksChanged, peopleChanged, linksChanged, contactByEmail, personByEmail, fileFor, filePath, fetched, listen, sweep, isAdminOf,
     linkCode, linkStatus, macFor, unlinkMac, macCode, macStatus, macByKey, userById, history, hasFiles, resend, close: () => { clearInterval(sweepTimer); for (const set of listeners.values()) for (const r of set) try { r.end(); } catch { /* fine */ } db.close(); } };
 }

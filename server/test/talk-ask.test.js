@@ -100,3 +100,32 @@ test('the rules: only members ask; a file deleted for everyone isn’t asked bac
   app.talk.sweep();
   assert.equal((await post('des', DES, '/api/talk/resend/start', { file: R.id, size: 10 })).ok, false, 'and nothing to send');
 });
+
+test('“Show them the chat history?”: the adder’s phone shares the group’s earlier messages with the people just added (Haris 2026-11-20 21:53)', async () => {
+  const G2 = (await post('am', AM, '/api/talk/act', { act: 'newGroup', client: 'p1', name: 'Launch', members: ['u-des'] })).group.id;
+  const m1 = await post('am', AM, '/api/talk/act', { act: 'send', group: G2, text: 'Brief is in' });
+  const m2 = await post('des', DES, '/api/talk/act', { act: 'send', group: G2, text: 'Looks good' });
+  const m3 = await post('am', AM, '/api/talk/act', { act: 'send', group: G2, text: 'oops' });
+  await post('am', AM, '/api/talk/act', { act: 'del', msg: m3.id });
+  const other = await post('am', AM, '/api/talk/act', { act: 'send', group: G, text: 'another group' });
+  const msgs = [
+    { id: m1.id, by: 'u-am', at: clock, kind: 'text', text: 'Brief is in' },
+    { id: m2.id, by: 'u-des', at: clock, kind: 'text', text: 'Looks good' },
+    { id: m3.id, by: 'u-am', at: clock, kind: 'text', text: 'oops' },
+    { id: other.id, by: 'u-am', at: clock, kind: 'text', text: 'another group' },
+    { id: m2.id + 'x', by: 'u-des', at: clock, kind: 'text', text: 'made up' },
+  ];
+  assert.equal((await post('am', AM, '/api/talk/history/share', { group: G2, to: ['u-out'], msgs })).ok, false, 'not added yet: no');
+  assert.ok((await post('am', AM, '/api/talk/act', { act: 'addPeople', group: G2, ids: ['u-out'] })).ok);
+  assert.equal((await post('des', DES, '/api/talk/history/share', { group: G2, to: ['u-out'], msgs })).ok, false, 'only the one who added them');
+  const r = await post('am', AM, '/api/talk/history/share', { group: G2, to: ['u-out'], msgs, since: 0 });
+  assert.ok(r.ok);
+  assert.equal(r.shared, 2, 'only this group’s real messages, not deleted for everyone');
+  const ev = (await get('out', OUT, '/api/talk/sync?after=0')).events.find((e) => e.type === 'history');
+  assert.deepEqual(ev.msgs.map((m) => m.text), ['Brief is in', 'Looks good']);
+  const line = (await get('des', DES, '/api/talk/sync?after=0')).events.filter((e) => e.kind === 'sys').map((e) => e.text).pop();
+  assert.match(line, /Leila shared the chat history with Sara/, 'the group is told');
+  assert.ok(!(await get('des', DES, '/api/talk/sync?after=0')).events.some((e) => e.type === 'history'), 'the others don’t get it');
+  clock += 2 * 3600000;
+  assert.equal((await post('am', AM, '/api/talk/history/share', { group: G2, to: ['u-out'], msgs })).ok, false, 'not hours later');
+});

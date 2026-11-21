@@ -820,6 +820,12 @@ export function createServer(cfg) {
       // (Ask the group — Haris 2026-11-20 21:36: ask for a gone file; the asks this phone can answer; send one again)
       if (p === '/api/talk/ask' && req.method === 'POST') { const b = await readBody(req, 16 * 1024); return out(await t.ask(u, dev, b.group, b.file)); }
       if (p === '/api/talk/asks' && req.method === 'GET') return out(t.asksFor(u, dev));
+      // ("Show them the chat history?" — the adder's phone sends the group's earlier messages to the people just added)
+      if (p === '/api/talk/history/share' && req.method === 'POST') {
+        if (req.talkMac) return json(res, 403, { ok: false, error: 'Only on the phone' });
+        const b = await readBody(req, 24 * 1024 * 1024);
+        return out(t.shareHistory(u, b.group, b.to, b.msgs, b.keys, b.since));
+      }
       if (p === '/api/talk/resend/start' && req.method === 'POST') { const b = await readBody(req, 16 * 1024); return out(await t.resendStart(u, dev, b.file, b.size)); }
       if (p.startsWith('/api/talk/file/') && (req.method === 'GET' || req.method === 'HEAD')) {
         const f = t.fileFor(dev, p.slice('/api/talk/file/'.length));
