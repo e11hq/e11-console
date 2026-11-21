@@ -386,6 +386,13 @@ final class Talk {
     case "read":
       if let up = e["upto"] as? String {
         l.readBy[by] = up
+        // (read on another of your phones: read here too — this phone's count, its icon badge and E11 Console's Talk button
+        //  stayed on the old number while the same account was on two phones: Haris 2026-11-21 11:40)
+        if by == me?.id, let ui = l.msgs.firstIndex(where: { $0.id == up }),
+           l.myRead.flatMap({ r in l.msgs.firstIndex { $0.id == r } }).map({ ui > $0 }) ?? true {
+          l.myRead = up; _ = unmark(g)
+          DispatchQueue.main.async { NotificationCenter.default.post(name: .talkChanged, object: nil); Talk.shared.badge() }
+        }
         var marks = l.readAt ?? [:]; marks[by, default: []].append(.init(upto: up, at: at)); marks[by] = Array(marks[by]!.suffix(300)); l.readAt = marks
       }
     case "got":
