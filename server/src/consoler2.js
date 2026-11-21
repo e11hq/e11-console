@@ -49,7 +49,9 @@ export function createConsoleR2({ r2, files, dataDir, dbFile, now = () => Date.n
   // what they fetched; it works for an hour at most.
   // (download: true — saved under its own name; a string — under that name. copy: false — not copied up from here: someone
   //  in the office, where the office network is fastest anyway)
-  function link(rel, { download = false, copy = true } = {}) {
+  // (long: the same address for 6 hours, working for 12 — a page that puts it straight into a picture, so Safari and the
+  //  Mac app keep it: they don't keep a picture that came through our redirect — Haris 2026-11-21 10:28, option B)
+  function link(rel, { download = false, copy = true, long = false } = {}) {
     if (!on || !rel || unsafe(rel)) return null;
     const o = Q.get.get(rel);
     if (!o) { if (copy) want(rel, { asked: true }); return null; }
@@ -58,7 +60,7 @@ export function createConsoleR2({ r2, files, dataDir, dbFile, now = () => Date.n
       if (!st || st.size !== o.size || Math.abs(st.mtimeMs - o.mtime) > 1) { forget(rel); if (copy) want(rel, { asked: true }); return null; }   // (not the same file any more)
     }
     const name = path.basename(rel);
-    return r2.getUrl(o.key, { slot: 30 * 60000, expires: 3600, type: mime(name), download: download ? (typeof download === 'string' ? download : name) : null });
+    return r2.getUrl(o.key, { slot: long ? 6 * 3600000 : 30 * 60000, expires: long ? 12 * 3600 : 3600, type: mime(name), download: download ? (typeof download === 'string' ? download : name) : null });
   }
 
   /* ---------- copies going up (one at a time, in the background) ---------- */

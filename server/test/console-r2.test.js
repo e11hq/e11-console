@@ -138,3 +138,23 @@ test('a shared file link: its download and its view come from R2 when R2 has the
   const got = await fetch(dl.headers.get('location'));
   assert.deepEqual(Buffer.from(await got.arrayBuffer()), data);
 });
+
+test('a page asks for its pictures’ R2 addresses: straight from R2, the same for hours; not allowed → none (Haris 2026-11-21 10:28)', async () => {
+  const data = crypto.randomBytes(90 * 1024);
+  const r = await (await fetch(base + '/api/host/writeChunkBin?taskId=t1&name=tile.jpg&offset=0', { method: 'POST', headers: { ...H('am'), 'Content-Type': 'application/octet-stream' }, body: data })).json();
+  await wait(150);
+  const local = '/__file/' + r.path.split('/').map(encodeURIComponent).join('/');
+  // (this test's clock is a month on, so the file counts as older: the first ask copies it up, the next gets R2's address)
+  assert.equal((await post('am', '/api/r2/links', { urls: [local] })).links[0], null, 'not in R2 yet: the page keeps /__file/');
+  await wait(150);
+  const a = await post('am', '/api/r2/links', { urls: [local, '/__file/nope/x.jpg', '/api/me', local + '?dl=1'] });
+  assert.ok(a.ok && a.links.length === 4);
+  assert.match(a.links[0], /X-Amz-Signature/, 'an R2 address for the picture');
+  assert.equal(a.links[1], null, 'not one of theirs');
+  assert.equal(a.links[2], null, 'not a file');
+  assert.equal(a.links[3], null, 'downloads keep the server');
+  assert.deepEqual(Buffer.from(await (await fetch(a.links[0])).arrayBuffer()), data);
+  const b = await post('am', '/api/r2/links', { urls: [local] });
+  assert.equal(b.links[0], a.links[0], 'the same address a moment later (so it is kept)');
+  assert.match(decodeURIComponent(a.links[0]), /max-age=21600/, 'kept for 6 hours');
+});

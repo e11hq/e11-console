@@ -4351,14 +4351,48 @@ const fileUrl = (a) => '/__file/' + String(a.path).split('/').map(encodeURICompo
 // A smaller copy of an image for lists, tiles and previews (made once by the server); full size stays for the viewer and downloads
 // Videos are watched from their light copy (720p, starts at once; server viewcopy.js); Download keeps the original
 const viewUrl = (a) => fileUrl(a) + (Host.isServer ? '?view=1' : '');
-const posterUrl = (a) => (a && a.thumb ? '/__file/' + a.thumb.split('/').map(encodeURIComponent).join('/') : '');
+// Pictures straight from Cloudflare R2 (Haris 2026-11-21 10:28, option B): a picture's /__file/ address is sent on to R2 by
+// the server — and Safari and the Mac app don't keep a picture that came through that redirect: they fetched it again each
+// time the page was drawn (grey first). So a tile's, thumbnail's or cover's R2 address is asked of the server (in one request
+// for all the page's new ones, checked as /__file/ is) and used straight in the picture — the same for 6 hours, so it's kept.
+// Until it's known, and for a picture R2 doesn't have, the /__file/ address as before.
+const R2Pics = (() => {
+  const map = new Map();   // /__file/ address → { u: the address to use, until }
+  const want = new Set();
+  let timer = 0;
+  async function flush() {
+    timer = 0;
+    const list = [...want].slice(0, 200);
+    list.forEach((l) => want.delete(l));
+    if (want.size) timer = setTimeout(flush, 50);   // (more than 200 new: the rest next)
+    const now = Date.now();
+    list.forEach((l) => map.set(l, { u: l, until: now + 5 * 60000 }));   // (asked: not again for 5 minutes, whatever the answer)
+    let r = null;
+    try { r = await api('POST', '/api/r2/links', { urls: list }, { timeout: 15000 }); } catch (e) { return; }
+    (r && r.links || []).forEach((u, i) => { if (u && list[i]) map.set(list[i], { u, until: Date.now() + 5.5 * 3600000 }); });
+    if (map.size > 3000) [...map.keys()].slice(0, map.size - 3000).forEach((k) => map.delete(k));
+    // (used from the next drawing on; nothing is drawn again just for this)
+  }
+  return {
+    get(local) {
+      // (not inside the iPhone app: its own screens fetch with the sign-in set by hand — an R2 address must never get it; they
+      //  ask with r2=1 and drop it on the redirect themselves)
+      if (!local || !Host.isServer || Host.isIOSApp || !/^\/__file\//.test(local)) return local;
+      const e = map.get(local);
+      if (e && e.until > Date.now()) return e.u;
+      if (!want.has(local)) { want.add(local); if (!timer) timer = setTimeout(flush, 120); }
+      return local;
+    },
+  };
+})();
+const posterUrl = (a) => (a && a.thumb ? R2Pics.get('/__file/' + a.thumb.split('/').map(encodeURIComponent).join('/')) : '');
 // a video player that shows its thumbnail as a cover and loads nothing until someone presses play
 // (controls off: a cover picture only — the video plays in the preview, see videoPlay)
 const videoTag = (a, cls, extra = '', controls = true) => `<video class="${cls}" src="${viewUrl(a)}" ${controls ? 'controls' : 'muted tabindex="-1"'} playsinline preload="none"${a.thumb ? ` poster="${posterUrl(a)}"` : ''} data-vposter="${esc(a.id)}" ${extra}></video>`;
 // Videos everywhere (comments, task files, Client Assets, reviews) show their cover picture with a play mark; a tap
 // opens the preview, where the video plays. Nothing plays inside a list.
 const videoPlay = () => `<span class="vplay" aria-hidden="true">${icon('play')}</span>`;
-const imgUrl = (a, w) => fileUrl(a) + (Host.isServer && !/\.svg$/i.test(String(a.path)) ? '?w=' + w : '');
+const imgUrl = (a, w) => R2Pics.get(fileUrl(a) + (Host.isServer && !/\.svg$/i.test(String(a.path)) ? '?w=' + w : ''));
 function fileIcon(a) {
   return isImage(a) && Host.isNative
     ? `<div class="ficon thumb"><img src="${imgUrl(a, 160)}" alt="" loading="lazy"></div>`

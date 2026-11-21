@@ -1862,6 +1862,27 @@ export function createServer(cfg) {
       return files.serve(req, res, show);
     }
 
+    // (pictures a page shows — tiles, thumbnails, covers: their Cloudflare R2 addresses, so the page loads them straight from
+    //  R2 with no redirect. Safari and the Mac app don't keep a picture that came through a redirect and drew it again each
+    //  time — Haris 2026-11-21 10:28, option B. Each one checked as /__file/ checks it; null: the page keeps /__file/)
+    if (p === '/api/r2/links' && req.method === 'POST') {
+      const b = await readBody(req, 256 * 1024);
+      const list = Array.isArray(b.urls) ? b.urls.slice(0, 200) : [];
+      const copy = !office.info(req).local;
+      const links = await Promise.all(list.map(async (s) => {
+        try {
+          const q = new URL(String(s), 'http://x');
+          if (!q.pathname.startsWith('/__file/') || q.searchParams.get('view') || q.searchParams.get('dl')) return null;
+          const rel = decodeURIComponent(q.pathname.slice('/__file/'.length));
+          if (!rel || !access.canReadFile(u, rel)) return null;
+          let show = rel;
+          if (q.searchParams.get('w')) { await consoleR2.ready(rel); const sized = await files.makeSized(rel, q.searchParams.get('w')); if (sized) show = files.rel(sized); }
+          return consoleR2.link(show, { copy, long: true }) || null;
+        } catch { return null; }
+      }));
+      return json(res, 200, { ok: true, links });
+    }
+
     // (the owner's About: how much Cloudflare R2 holds, Console's and Talk's, and what it means this month)
     if (p === '/api/r2/usage' && req.method === 'GET') {
       if (!isOwner(u)) return json(res, 403, { ok: false, error: 'Only the owner' });
