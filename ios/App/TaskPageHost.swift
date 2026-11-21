@@ -279,12 +279,14 @@ extension Main {
     }
     p.onAttachFrom = { [weak self, weak p] src in
       guard let self = self, let p = p else { return }
-      Picker.shared.pick(from: self.topMost(), single: false, source: src, title: p.model?["title"] as? String) { [weak self, weak p] r in
+      var early: Set<String> = []
+      Picker.shared.pick(from: self.topMost(), single: false, source: src, title: p.model?["title"] as? String, onPicked: { [weak p] n in early = p?.preparingCards(n) ?? [] }) { [weak self, weak p] r in
         guard let self = self, let p = p else { return }
         let picked = ((r["files"] as? [[String: Any]]) ?? []).compactMap { f -> (URL, String)? in
           guard let tok = f["token"] as? String, let u = Picker.shared.url(tok) else { return nil }
           return (u, f["name"] as? String ?? "File")
         }
+        p.dropUploads(early, redraw: picked.isEmpty)
         self.uploadToTask(p, picked)
       }
     }
@@ -304,12 +306,14 @@ extension Main {
     p.onAttachFiles = { [weak self, weak p] in
       guard let self = self, let p = p else { return }
       self.onSheetHost { [weak self] host in guard let self = self else { return }
-        Picker.shared.pick(from: host, single: false, source: "sheet", title: p.model?["title"] as? String) { [weak self, weak p] r in
+        var early: Set<String> = []
+        Picker.shared.pick(from: host, single: false, source: "sheet", title: p.model?["title"] as? String, onPicked: { [weak p] n in early = p?.preparingCards(n) ?? [] }) { [weak self, weak p] r in
           guard let self = self, let p = p else { return }
           let picked = ((r["files"] as? [[String: Any]]) ?? []).compactMap { f -> (URL, String)? in
             guard let tok = f["token"] as? String, let u = Picker.shared.url(tok) else { return nil }
             return (u, f["name"] as? String ?? "File")
           }
+          p.dropUploads(early, redraw: picked.isEmpty)
           self.uploadToTask(p, picked)
         }
       }

@@ -143,10 +143,19 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   }
   // sent to the task (waiting for the real ones), or gone (didn't upload / never came)
   func uploadsSent(_ ids: Set<String>) { for i in uploads.indices where ids.contains(uploads[i]["id"] as? String ?? "") { uploads[i]["sent"] = true } }
-  func dropUploads(_ ids: Set<String>) {
+  func dropUploads(_ ids: Set<String>, redraw: Bool = true) {
     let n = uploads.count
     uploads.removeAll { ids.contains($0["id"] as? String ?? "") }
-    if uploads.count != n { built = ""; if let m = model { draw(m) } }
+    // (redraw: false — the real cards take their places at once, in the same drawing)
+    if uploads.count != n, redraw { built = ""; if let m = model { draw(m) } }
+  }
+  // the moment files are picked: their cards in Files at once, "Preparing…", the page down at Files — the real ones take
+  // their places once they're ready (Haris 2026-11-21 17:58, E11 Talk's way)
+  func preparingCards(_ n: Int) -> Set<String> {
+    guard n > 0 else { return [] }
+    let ids = (0..<n).map { _ in "prep-" + UUID().uuidString }
+    addUploads(ids.map { ["id": $0, "name": "Preparing…", "pending": true] })
+    return Set(ids)
   }
   private let filesStrip = FileStrip(side: 100), descStrip = FileStrip(side: 100)
   var descPending: [[String: Any]] = []

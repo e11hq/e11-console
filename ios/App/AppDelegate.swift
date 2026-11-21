@@ -2760,9 +2760,11 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
 
   // (the keyboard isn't put down here: iPhone hides it while a picker covers the screen and brings it back for the
   //  comment box afterwards)
-  func pick(from vc: UIViewController, single: Bool, source: String? = nil, title: String? = nil, small: Bool = false, _ done: @escaping ([String: Any]) -> Void) {
+  // onPicked: told how many the moment they're picked, before they're made ready — the task page shows their cards then
+  // (Haris 2026-11-21 17:58: "the cards appear straight away when you pick", E11 Talk's way)
+  func pick(from vc: UIViewController, single: Bool, source: String? = nil, title: String? = nil, small: Bool = false, onPicked: ((Int) -> Void)? = nil, _ done: @escaping ([String: Any]) -> Void) {
     finish([])   // (a sheet still open from before answers "nothing")
-    self.done = done; self.small = small
+    self.done = done; self.small = small; self.onPicked = onPicked
     let photos = {
       var c = PHPickerConfiguration()
       c.selectionLimit = single ? 1 : 0
@@ -2859,7 +2861,11 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
   }
   // ("Preparing…" on the bar from the moment they're picked until they're handed over — no silent wait)
   private var prepJob: UUID?
-  private func startPrep(_ n: Int) { if let p = prepJob { UploadCenter.shared.end(p) }; prepJob = UploadCenter.shared.preparing(n) }
+  private var onPicked: ((Int) -> Void)?
+  private func startPrep(_ n: Int) {
+    if let p = prepJob { UploadCenter.shared.end(p) }; prepJob = UploadCenter.shared.preparing(n)
+    let f = onPicked; onPicked = nil; DispatchQueue.main.async { f?(n) }
+  }
   private func finish(_ all: [[String: Any]]) {
     guard let d = done else { if let p = prepJob { UploadCenter.shared.end(p); prepJob = nil }; return }
     if small { small = false; return shrink(all) { [weak self] out in self?.finish(out) } }
