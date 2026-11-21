@@ -838,7 +838,7 @@ extension Main {
       //  2026-11-18 21:43; into the description, and from a task card in a list, the bar stays — nothing else shows them)
       Uploader.send(url, name: name, task: p.taskId, bar: toDesc, cookies: serverHome.cookies, progress: { f in UploadRing.post(id, f) }) { [weak self, weak p] path in
         guard let self = self, let p = p else { return }
-        if let path = path { done.append(["name": name, "size": size, "path": path]); sent.insert(id); UploadRing.post(id, 1) }
+        if let path = path { done.append(["name": name, "size": size, "path": path]); sent.insert(id); UploadRing.post(id, 1); FeedLoader.shared.justSent(path, file: url, name: name) }
         else { p.dropUploads([id]) }
         if toDesc { p.descUploaded(id, path: path, size: Int(size)) }
         left -= 1

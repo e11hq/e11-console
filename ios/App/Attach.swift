@@ -361,7 +361,8 @@ enum AttachExport {
         PHImageManager.default().requestImageDataAndOrientation(for: a, options: o) { d, uti, _, _ in
           guard let d = d else { DispatchQueue.main.async { g.leave() }; return }
           let type = uti.flatMap { UTType($0) }
-          let keep = type.map { $0.conforms(to: .jpeg) || $0.conforms(to: .png) || $0.conforms(to: .gif) } ?? false
+          // (HEIC kept as it is too — the server makes the browsers' JPEG; turning it into a JPEG here only slowed it down)
+          let keep = type.map { $0.conforms(to: .jpeg) || $0.conforms(to: .png) || $0.conforms(to: .gif) || $0.conforms(to: .heic) } ?? false
           let data = keep ? d : jpeg(d) ?? d
           let ext = keep ? (type?.preferredFilenameExtension ?? "jpg") : "jpg"
           let u = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + "." + ext)

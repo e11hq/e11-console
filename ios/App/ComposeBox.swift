@@ -14,11 +14,16 @@ final class UploadCenter {
   static let shared = UploadCenter()
   // (bar: false — a comment's files, which show their own progress on their tiles: not on the bar at the bottom too,
   //  Haris 2026-11-16)
-  struct Job { var name: String; var size: Int64; var sent: Int64; var cancelled: Bool; var bar = true }
+  struct Job { var name: String; var size: Int64; var sent: Int64; var cancelled: Bool; var bar = true; var prep = false }
   private(set) var jobs: [UUID: Job] = [:]
   func begin(_ name: String, _ size: Int64, bar: Bool = true) -> UUID { let id = UUID(); jobs[id] = Job(name: name, size: size, sent: 0, cancelled: false, bar: bar); Main.shared.paintUploadHUD(); return id }
   func step(_ id: UUID, _ sent: Int64) { guard jobs[id] != nil else { return }; jobs[id]?.sent = sent; Main.shared.paintUploadHUD() }
   func end(_ id: UUID) { jobs[id] = nil; Main.shared.paintUploadHUD() }
+  // (picked files being made ready — from iCloud, made smaller: the bar shows "Preparing…" from the moment they're picked,
+  //  not nothing until the upload starts — Haris 2026-11-21 17:37 / 17:42 "silent wait")
+  func preparing(_ n: Int) -> UUID { let id = UUID(); jobs[id] = Job(name: n == 1 ? "1 file" : "\(n) files", size: 0, sent: 0, cancelled: false, prep: true); Main.shared.paintUploadHUD(); return id }
+  // (one upload stopped — a comment tile's ✕: its pieces stop at once, what reached the server is taken away)
+  func cancel(_ id: UUID) { jobs[id]?.cancelled = true; running[id]?.forEach { $0.cancel() }; Main.shared.paintUploadHUD() }
   func cancelled(_ id: UUID) -> Bool { jobs[id]?.cancelled ?? true }
   private(set) var cancels = 0   // (how many times Cancel was tapped — a run of uploads stops when it changes)
   func cancelAll() { cancels += 1; for k in jobs.keys { jobs[k]?.cancelled = true }; running.values.joined().forEach { $0.cancel() }; Main.shared.paintUploadHUD() }
@@ -38,9 +43,10 @@ enum Uploader {
   private static let leaving: NSObjectProtocol = NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
     Uploader.fillers.values.forEach { $0() }
   }
-  static func send(_ url: URL, name: String, task: String, dest: String? = nil, bar: Bool = true, cookies: @escaping (@escaping (String) -> Void) -> Void, progress: @escaping (Double) -> Void, done: @escaping (String?) -> Void) {
+  static func send(_ url: URL, name: String, task: String, dest: String? = nil, bar: Bool = true, onJob: ((UUID) -> Void)? = nil, cookies: @escaping (@escaping (String) -> Void) -> Void, progress: @escaping (Double) -> Void, done: @escaping (String?) -> Void) {
     let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
     let job = UploadCenter.shared.begin(name, size, bar: bar)
+    onJob?(job)
     var over = false
     // (a file is 5 GB at most — Haris 2026-11-20 19:53; the server refuses more)
     if size > 5_000_000_000 { UploadCenter.shared.end(job); return done(nil) }
@@ -239,6 +245,8 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
   private var files: [DraftFile] = []
   // uploads finished or failed (by their id) — kept even once the box is cleared, for comments sent before they were up
   private var upDone: [String: String] = [:], upFailed = Set<String>()
+  // (each tile's upload, and the tiles taken off with ✕ — their upload stopped, nothing said or played when it ends)
+  private var upJobs: [String: UUID] = [:], dropped = Set<String>()
   private var outbox: [(pendingId: String, body: [String: Any], files: [(uid: String, name: String, size: Int64)])] = []
   var onPendingFiles: ((String, String?, String, [[String: Any]]) -> Void)?   // a comment sent while its files upload: (id, thread, words, its cards)
   var onPendingShared: ((String, String?, [String: Any]) -> Void)?   // a contact or a place sent: (id, thread, its card — "contact" / "location")
@@ -688,13 +696,18 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     upload(url, name: name, uid: uid)
   }
   private func upload(_ url: URL, name: String, uid: String) {
-    Uploader.send(url, name: name, task: taskId, bar: false, cookies: cookies, progress: { [weak self] p in
+    Uploader.send(url, name: name, task: taskId, bar: false, onJob: { [weak self] j in self?.upJobs[uid] = j }, cookies: cookies, progress: { [weak self] p in
       UploadRing.post(uid, p)
       guard let self = self, let i = self.files.firstIndex(where: { $0.uid == uid }) else { return }
       self.files[i].progress = p; self.paintTiles()
     }) { [weak self] path in
       guard let self = self else { return }
-      if let p = path { self.upDone[uid] = p; UploadRing.post(uid, 1) } else { self.upFailed.insert(uid) }
+      self.upJobs[uid] = nil
+      if self.dropped.contains(uid) {   // (taken off with ✕: gone quietly — what reached the server taken away)
+        if let p = path { self.cookies { c in R2Files.post("/api/host/trashMany", ["paths": [p]], cookie: c) { _, _ in } } }
+        return
+      }
+      if let p = path { self.upDone[uid] = p; UploadRing.post(uid, 1); FeedLoader.shared.justSent(p, file: url, name: name) } else { self.upFailed.insert(uid) }
       let waiting = self.outbox.contains { $0.files.contains { $0.uid == uid } }
       if let i = self.files.firstIndex(where: { $0.uid == uid }) {
         if let p = path { self.files[i].path = p; self.files[i].progress = 1 } else { self.files[i].failed = true }
@@ -765,7 +778,17 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       x.layer.borderWidth = 1.5; x.layer.borderColor = UIColor.white.withAlphaComponent(0.9).cgColor
       x.layer.shadowColor = UIColor.black.cgColor; x.layer.shadowOpacity = 0.25; x.layer.shadowRadius = 2; x.layer.shadowOffset = .zero
       x.frame = CGRect(x: S - 25, y: 3, width: 22, height: 22)   // (inside the tile's corner: nothing of it or its shadow cut off)
-      x.addAction(UIAction { [weak self] _ in self?.files.removeAll { $0.uid == uid }; self?.paintTiles() }, for: .touchUpInside)
+      x.addAction(UIAction { [weak self] _ in
+        guard let self = self else { return }
+        // (its upload stopped too, and what's already on the server taken away — it went on, then played "uploaded":
+        //  Haris 2026-11-21 17:37)
+        self.dropped.insert(uid)
+        if let j = self.upJobs.removeValue(forKey: uid) { UploadCenter.shared.cancel(j) }
+        if let p = self.files.first(where: { $0.uid == uid })?.path ?? self.upDone[uid] {
+          self.cookies { c in R2Files.post("/api/host/trashMany", ["paths": [p]], cookie: c) { _, _ in } }
+        }
+        self.files.removeAll { $0.uid == uid }; self.paintTiles()
+      }, for: .touchUpInside)
       t.addSubview(x)
       return t
     }

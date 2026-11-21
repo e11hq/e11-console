@@ -72,6 +72,25 @@ final class FeedLoader {
   //  one has come: filed as the server's, it was never asked for and stayed blurry — Haris 2026-11-10)
   private var standIns: [String: UIImage] = [:]
   func seed(_ path: String, _ img: UIImage) { standIns[path] = img }
+  // (a file this phone has just sent: its own picture of it, found by the file's place on the server in any card's address —
+  //  a task's Files, Client Assets, a comment — so its card shows at once, not after the server has made its own; E11 Talk
+  //  shows its own copy the same way — Haris 2026-11-21 17:37 / 17:44. Cards only, the newest 60.)
+  private var byPlace: [(place: String, img: UIImage)] = []
+  func justSent(_ place: String, _ img: UIImage) {
+    guard !place.isEmpty else { return }
+    byPlace.removeAll { $0.place == place }; byPlace.append((place, img)); if byPlace.count > 60 { byPlace.removeFirst() }
+  }
+  func justSent(_ place: String, file: URL, name: String) {
+    DispatchQueue.global(qos: .userInitiated).async {
+      guard let t = CommentCell.localThumb(file, name) else { return }
+      DispatchQueue.main.async { self.justSent(place, t) }
+    }
+  }
+  private func sentPicture(_ address: String) -> UIImage? {
+    guard !byPlace.isEmpty else { return nil }
+    let a = address.removingPercentEncoding ?? address
+    return byPlace.last { a.contains("/__file/" + $0.place + "?") || a.contains("path=" + $0.place + "&") || a.hasSuffix("path=" + $0.place) }?.img
+  }
   func standIn(_ path: String) -> UIImage? { cache.object(forKey: path as NSString) == nil ? standIns[path] : nil }
   private var links: [String: [String: Any]] = [:]
   // pictures are kept on the phone too (Haris, 2026-11-02: coming back to the app, the pictures flashed as if it had
@@ -84,7 +103,7 @@ final class FeedLoader {
   func small(_ path: String, px: CGFloat, _ done: @escaping (UIImage?, Bool) -> Void) {
     let key = "\(path)|\(Int(px))" as NSString
     if let i = smalls.object(forKey: key) { return done(i, true) }
-    if let i = locals[path] ?? standIns[path] { return done(i, true) }
+    if let i = locals[path] ?? standIns[path] ?? sentPicture(path) { return done(i, true) }
     let shrink = { (d: Data) -> UIImage? in
       guard let src = CGImageSourceCreateWithData(d as CFData, nil),
             let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,

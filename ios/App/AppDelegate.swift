@@ -414,7 +414,15 @@ final class Main: UIViewController, WKNavigationDelegate, WKUIDelegate, UIGestur
   }
   // the uploads' bar: "Uploading <name>" (or "N files"), how much of how much, its bar, Cancel — gone when nothing's going up
   func paintUploadHUD() {
-    let jobs = UploadCenter.shared.jobs.values.filter { !$0.cancelled && $0.bar }
+    let all = UploadCenter.shared.jobs.values.filter { !$0.cancelled && $0.bar }
+    let jobs = all.filter { !$0.prep }
+    // (only files being made ready: "Preparing …", no figures yet)
+    if jobs.isEmpty, !all.isEmpty {
+      if upHud == nil { let u = DownloadHUD(); u.onCancel = { UIImpactFeedbackGenerator(style: .light).impactOccurred(); UploadCenter.shared.cancelAll() }; hudHost.addSubview(u); upHud = u; view.setNeedsLayout(); view.layoutIfNeeded() }
+      placeHUDs()
+      upHud?.show(title: "Preparing \(all.count == 1 ? all[0].name : "files")", detail: "Getting them ready…", progress: -1)
+      return
+    }
     if jobs.isEmpty { upHud?.removeFromSuperview(); upHud = nil; placeHUDs(); return }
     if upHud == nil {
       let u = DownloadHUD(); u.onCancel = { UIImpactFeedbackGenerator(style: .light).impactOccurred(); UploadCenter.shared.cancelAll() }
@@ -2760,7 +2768,9 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
       c.selectionLimit = single ? 1 : 0
       c.filter = .any(of: [.images, .videos])
       // (JPEG and H.264, like a web page gets; a comment's: the phone's own, at once — made small after, Haris 2026-11-16)
-      c.preferredAssetRepresentationMode = self.small ? .current : .compatible
+      // (as it is, always — iPhone turning a video into H.264 first was the long silent wait before task files and Client
+      //  Assets' uploads; the server makes the browsers' copy of an HEVC video — Haris 2026-11-21 17:37–17:44)
+      c.preferredAssetRepresentationMode = .current
       let p = PHPickerViewController(configuration: c); p.delegate = self
       vc.present(p, animated: true)
     }
@@ -2831,7 +2841,8 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
   // photos ticked in the + sheet's row: as Photos gives them today (Compatible), in the order ticked
   private func keepAssets(_ a: [PHAsset]) {
     // (a comment's video: the phone's own, at once — the comment box makes its 720p copy behind its tile)
-    AttachExport.compatible(a, videoAsIs: small) { [weak self] got in
+    startPrep(a.count)
+    AttachExport.compatible(a, videoAsIs: true) { [weak self] got in
       guard let self = self else { return }
       self.finish(got.compactMap { f in let r = self.keep(f.url, name: f.name); try? FileManager.default.removeItem(at: f.url); return r })
     }
@@ -2846,10 +2857,19 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
     let size = ((try? FileManager.default.attributesOfItem(atPath: dest.path))?[.size] as? NSNumber)?.int64Value ?? 0
     return ["token": tok, "name": name, "size": size]
   }
+  // ("Preparing…" on the bar from the moment they're picked until they're handed over — no silent wait)
+  private var prepJob: UUID?
+  private func startPrep(_ n: Int) { if let p = prepJob { UploadCenter.shared.end(p) }; prepJob = UploadCenter.shared.preparing(n) }
   private func finish(_ all: [[String: Any]]) {
-    guard let d = done else { return }
+    guard let d = done else { if let p = prepJob { UploadCenter.shared.end(p); prepJob = nil }; return }
     if small { small = false; return shrink(all) { [weak self] out in self?.finish(out) } }
     done = nil
+    if let p = prepJob {
+      let stopped = UploadCenter.shared.jobs[p]?.cancelled == true
+      UploadCenter.shared.end(p); prepJob = nil
+      // (Cancel tapped on the bar while they were being made ready: nothing is added)
+      if stopped { all.forEach { f in if let t = f["token"] as? String { lock.lock(); if let u = files[t] { try? FileManager.default.removeItem(at: u) }; files[t] = nil; lock.unlock() } }; DispatchQueue.main.async { d(["ok": true, "files": []]) }; return }
+    }
     // (files up to 1 GB, in the iPhone apps — Haris 2026-11-16; one over it is let go)
     var out = all
     let big = out.filter { (($0["size"] as? NSNumber)?.int64Value ?? 0) > Int64(Attach.maxBytes) }
@@ -2871,6 +2891,7 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
   func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
     picker.dismiss(animated: true)
     if results.isEmpty { return finish([]) }
+    startPrep(results.count)
     var out = [[String: Any]?](repeating: nil, count: results.count)
     let group = DispatchGroup()
     for (i, r) in results.enumerated() {

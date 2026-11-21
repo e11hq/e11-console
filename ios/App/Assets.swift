@@ -1004,7 +1004,7 @@ final class AssetsCtl {
           let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.intValue ?? 0
           // (its progress on the uploads' bar at the bottom, with Cancel — as a download's)
           Uploader.send(url, name: name, task: "", dest: dir, cookies: self.main.serverHome.cookies, progress: { _ in }) { path in
-            if let p = path { sent.append(["name": name, "path": p, "size": size]) }
+            if let p = path { sent.append(["name": name, "path": p, "size": size]); FeedLoader.shared.justSent(p, file: url, name: name) }
             next(i + 1)
           }
         }
