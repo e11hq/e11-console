@@ -58,7 +58,7 @@ export class TalkHub extends DurableObject {
       if (!this.core.meta('dirAt')) await this.askDir();
       const d = this.core.dir.snapshot || {};
       return json({ ok: true, dirAt: Number(this.core.meta('dirAt') || 0) || null, people: (d.users || []).length, clients: (d.projects || []).length,
-        phones: Object.values((d.push) || {}).reduce((a, x) => a + (x || []).length, 0), apple: this.apple.on, copyN: this.core.n, waiting: this.ctx.storage.sql.exec('SELECT COUNT(*) AS c FROM hub_outbox').toArray()[0].c, officeKey: !!this.core.meta('officeKey') });
+        phones: Object.values((d.push) || {}).reduce((a, x) => a + (x || []).length, 0), apple: this.apple.on, copyN: this.core.n, waiting: this.ctx.storage.sql.exec('SELECT COUNT(*) AS c FROM hub_outbox').toArray()[0].c, officeKey: !!this.core.meta('officeKey'), ...(this.dirErr ? { dirErr: this.dirErr } : {}) });
     }
     if (p.startsWith('/office/')) return this.fromOffice(req, p);
     // (the front door's memory of who each sign-in is — a fingerprint and an email; only the Worker reaches this)
@@ -183,9 +183,10 @@ export class TalkHub extends DurableObject {
     try {
       const h = await signHeaders(this.core.meta('key'), 'POST', path, text);
       const r = await fetch(this.office + path, { method: 'POST', body: text, headers: { 'content-type': 'application/json', ...h } });
-      const j = r.ok ? await r.json() : null;
-      if (j && j.ok && j.dir) { this.core.setDir(j.dir); this.core.meta('dir', JSON.stringify(j.dir)); }
-    } catch { /* next time */ }
+      const j = r.ok ? await r.json().catch(() => null) : null;
+      if (j && j.ok && j.dir) { this.core.setDir(j.dir); this.core.meta('dir', JSON.stringify(j.dir)); this.dirErr = null; }
+      else this.dirErr = `the office said ${r.status}${j && j.error ? ' — ' + j.error : ''}`;
+    } catch (e) { this.dirErr = e.message; /* next time */ }
   }
   async alarm() {
     const last = Number(this.core.meta('sweptAt') || 0);
