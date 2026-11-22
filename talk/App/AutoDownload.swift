@@ -271,13 +271,10 @@ enum Thumb {
       cg = CGImageSourceCreateWithURL(url as CFURL, nil).flatMap { CGImageSourceCreateThumbnailAtIndex($0, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 320] as CFDictionary) }
     } else if kind == "video" {
       cg = Thumb.frame(url, side: 320)
-      if cg == nil { Diag.note("Sharp preview: the frame couldn't be taken (file: \(url.lastPathComponent))") }
-      Diag.variants(url)   // (the test page: the same frame four ways)
     }
     guard let c = cg else { return nil }
     let i = UIImage(cgImage: c)
     for q in [0.6, 0.45, 0.3] as [CGFloat] { if let d = i.jpegData(compressionQuality: q), d.count <= 35_000 { return d.base64EncodedString() } }
-    if kind == "video" { Diag.note("Sharp preview: too big even at the lowest quality") }
     return nil
   }
   private static let made = NSCache<NSString, UIImage>()

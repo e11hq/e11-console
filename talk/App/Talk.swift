@@ -486,12 +486,11 @@ final class Talk {
     }
     let answered = { [weak self] (j: [String: Any]?) in
         guard let self = self else { return }
-        if file?.kind == "video" { Diag.mark("The server's answer reached the phone") }
         // (the send sound once the server has it — not while the clock shows it on its way; every kind, Haris 2026-11-12)
         // (…and its tick at the same moment: the server's answer has its id — the clock no longer waits for the next sync,
         //  Haris 2026-11-22 01:30 "the send sound comes first, then the clock changes to a tick, we can see the delay")
         if (j?["ok"] as? Bool) == true {
-          DispatchQueue.main.async { self.sentNow(g, cid, id: j?["id"] as? String, seq: (j?["seq"] as? NSNumber)?.intValue, at: (j?["at"] as? NSNumber)?.doubleValue); ChatSound.send(); if file?.kind == "video" { Diag.mark("Shown as sent (the bubble)") } }
+          DispatchQueue.main.async { self.sentNow(g, cid, id: j?["id"] as? String, seq: (j?["seq"] as? NSNumber)?.intValue, at: (j?["at"] as? NSNumber)?.doubleValue); ChatSound.send() }
           self.syncIfNoLine()
         } else { self.mark(g, cid, failed: true) }
     }
@@ -521,15 +520,7 @@ final class Talk {
       // (the message goes with the file's "it's all there" — one trip; an older server ignores it and it's sent after)
       let message = { (fid: String, key: String) -> [String: Any] in
         fileKey = key
-        if f.kind == "video" { Diag.mark("Upload finished — making the previews"); DispatchQueue.main.async { Diag.videoId = fid } }
-        var b = body(fid); b.removeValue(forKey: "act")
-        if f.kind == "video" {
-          Diag.mark("Previews made — asking the server")
-          let fd = b["file"] as? [String: Any]
-          Diag.picture("Sharp preview sent with it", base64: fd?["prev"] as? String)
-          Diag.picture("Tiny blurred preview sent with it", base64: fd?["thumb"] as? String)
-        }
-        return b
+        var b = body(fid); b.removeValue(forKey: "act"); return b
       }
       let complete = { (fid: String?, key: String?) in
         going = false; Uploads.end(f.id); Uploads.done(f.id)
@@ -541,8 +532,7 @@ final class Talk {
         m.file?.id = fid
         if let s = Net.takeSent(fid) { answered(s) } else { go(fid) }
       }
-      var full = false
-      let ring = { (p: Double) in guard going else { return }; progress?(p); Uploads.set(f.id, p, total: data.count); if f.kind == "video", p >= 0.99, !full { full = true; Diag.mark("All bytes handed over (the ring full)") } }
+      let ring = { (p: Double) in guard going else { return }; progress?(p); Uploads.set(f.id, p, total: data.count) }
       // (a photo already going up from the send screen: carried on from there — once; a try after that, the usual way)
       if !stagedUsed, let s = staged { stagedUsed = true; if s.attach(progress: ring, message: message, done: complete) { return } }
       Net.shared.uploadMsg(data, name: f.name, stop: f.id, message: message, onId: { serverId = $0 }, progress: ring) { fid, key in complete(fid, key) }

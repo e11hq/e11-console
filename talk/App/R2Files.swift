@@ -98,8 +98,9 @@ extension Net {
   private static let sentLock = NSLock()
   static func keepSent(_ id: String, _ j: [String: Any]) { sentLock.lock(); sentWith[id] = j; sentLock.unlock() }
   static func takeSent(_ id: String) -> [String: Any]? { sentLock.lock(); defer { sentLock.unlock() }; return sentWith.removeValue(forKey: id) }
-  /* a message's file: locked, then to R2 — under 8 MB in one go, else in 8 MB parts three side by side; the ring fills as
-     they go. done: the file's id and its key — or, if the server has no R2, the usual way (no key). */
+  /* a message's file: locked, then to R2 — under 8 MB in one go, else in 8 MB parts three side by side; the ring fills only
+     as Cloudflare says a part has arrived — never "full" while bytes are still on their way (Haris 2026-11-22 17:32, "honest
+     everywhere": a file in one go fills at the end). done: the file's id and its key — or, if the server has no R2, the usual way (no key). */
   // (keep: a group's picture — kept in R2 while the group uses it, not under messages' 31-day rule)
   // (back: a file asked for by the group, sent again under its own id — Ask the group, Haris 2026-11-20 21:36; nothing else
   //  happens if it's back already or another phone is sending it)
@@ -142,7 +143,7 @@ extension Net {
       }
       if Uploads.isStopped(stop) { return done(nil, nil) }
       if let put = (j["put"] as? String).flatMap(URL.init(string:)) {
-        self.putR2(put, body, stop: stop) { p in progress(min(0.99, Double(p) / total)) } done: { e in finish(e.map { [$0] }) }
+        self.putR2(put, body, stop: stop) { _ in } done: { e in finish(e.map { [$0] }) }
         return
       }
       guard let urls = (j["urls"] as? [String])?.compactMap(URL.init(string:)), let part = j["part"] as? Int, part > 0, !urls.isEmpty else { return done(nil, nil) }
@@ -158,13 +159,11 @@ extension Net {
         while going < BgUploads.width && next < urls.count {
           let i = next; next += 1; going += 1
           let piece = body.subdata(in: (i * part)..<min(body.count, (i + 1) * part))
-          self.putR2(urls[i], piece, stop: stop) { p in
-            sent[i] = Int(p); progress(min(0.99, Double(sent.reduce(0, +)) / total))
-          } done: { e in
+          self.putR2(urls[i], piece, stop: stop) { _ in } done: { e in
             going -= 1
             guard !over else { return }   // (already ended — another part failed, or ✕: said once)
             guard let e = e else { end(); return done(nil, nil) }
-            etags[i] = e; pump()
+            etags[i] = e; sent[i] = piece.count; progress(min(0.99, Double(sent.reduce(0, +)) / total)); pump()
           }
         }
       }
@@ -212,13 +211,11 @@ extension Net {
           let i = next; next += 1; going += 1
           let lo = i * FileLock.piecePlain, hi = min(data.count, lo + FileLock.piecePlain)
           guard let piece = autoreleasepool(invoking: { FileLock.sealPiece(data.subdata(in: lo..<hi), key: key, index: i, last: i == n - 1) }) else { end(); return done(nil, nil) }
-          self.putR2(urls[i], piece, stop: stop) { p in
-            sent[i] = Int(p); progress(min(0.99, Double(sent.reduce(0, +)) / total))
-          } done: { e in
+          self.putR2(urls[i], piece, stop: stop) { _ in } done: { e in
             going -= 1
             guard !over else { return }   // (already ended — another part failed, or ✕: said once)
             guard let e = e else { end(); return done(nil, nil) }
-            etags[i] = e; pump()
+            etags[i] = e; sent[i] = piece.count; progress(min(0.99, Double(sent.reduce(0, +)) / total)); pump()
           }
         }
       }
@@ -305,7 +302,6 @@ final class BgUploads: NSObject, URLSessionDataDelegate {
     guard let w = waiting.removeValue(forKey: key(s, task)) else { return }   // (from before Talk was closed, or handed over: nothing waits for it here)
     try? FileManager.default.removeItem(at: w.file)
     let h = task.response as? HTTPURLResponse
-    if let st = h?.value(forHTTPHeaderField: "Server-Timing") { Diag.note("Cloudflare for this piece: " + st) }   // (the test page)
     w.done(error == nil && h?.statusCode == 200 ? (h?.value(forHTTPHeaderField: "ETag") ?? "") : nil)
   }
   // woken by iPhone with everything handed over done: told back once the next steps have had their moment

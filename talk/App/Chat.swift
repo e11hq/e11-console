@@ -1271,7 +1271,6 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       } }
     }
     // (the send screen's copy when it was made; it couldn't be — made here, as always)
-    Diag.start()   // (the test page: this video's steps — for now)
     Talk.shared.send(group, text: caption, reply: replying, file: ref, localFile: url, album: album, prepare: { ready in
       if let j = job { j.whenMade { u in if let u = u { ready(u) } else { normal(ready) } } } else { normal(ready) }
     }, staged: job)
@@ -3296,7 +3295,7 @@ final class BubbleCell: UITableViewCell {
         if !FileManager.default.fileExists(atPath: named.path) { try? FileManager.default.copyItem(at: url, to: named) }
         img = Thumb.frame(named, side: 720).map { UIImage(cgImage: $0) }
       }
-      if let i = img { frames.setObject(i, forKey: id as NSString); if id == Diag.videoId { Diag.picture("Frame in your bubble", i.cgImage) } }
+      if let i = img { frames.setObject(i, forKey: id as NSString) }
       DispatchQueue.main.async { done(img) }
     }
   }
