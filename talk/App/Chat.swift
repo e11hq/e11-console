@@ -1218,13 +1218,15 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   // a video from the camera or Photos: shrunk to 720p (Haris 2026-11-05; HD: 1080p); one from Files goes as it is. Its bubble
   // shows at once — the phone's own video in it, its ring at the start — while the copy is made behind it, then sent
   // (Haris 2026-11-16: "it stays for long and nothing happens")
-  fileprivate func sendVideo(_ url: URL, name: String, caption: String = "", hd: Bool = false, album: String? = nil) {
+  fileprivate func sendVideo(_ url: URL, name: String, caption: String = "", hd: Bool = false, album: String? = nil, key: String? = nil) {
+    // (already being made smaller and sent up from the send screen — PreUpload, Haris 2026-11-22 13:35)
+    let job = key.flatMap { PreUpload.take(key: $0, url: url, hd: hd) }
     let asset = AVURLAsset(url: url)
     var w: Double? = nil, h: Double? = nil
     if let t = asset.tracks(withMediaType: .video).first { let sz = t.naturalSize.applying(t.preferredTransform); w = Double(abs(sz.width)); h = Double(abs(sz.height)) }
     let secs = CMTimeGetSeconds(asset.duration)
     let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.intValue ?? 0
-    let tmpId = "local-" + UUID().uuidString
+    let tmpId = job?.tmpId ?? ("local-" + UUID().uuidString)
     if hd { Talk.sentHD.insert(tmpId) }   // (for Send again)
     // (every ProRes made smaller like any video, with its label — "From ProRes 422 HQ · Log"; one Talk can't read (ProRes
     //  RAW on a phone without its decoder) goes as the original: "Original · ProRes RAW" — Haris 2026-11-21 14:00–14:04:
@@ -1232,8 +1234,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let pro = VideoShrink.proRes(asset)
     var ref = Msg.FileRef(id: tmpId, name: (name as NSString).deletingPathExtension + ".mp4", size: size, kind: "video", w: w, h: h, secs: secs.isFinite ? secs : nil)
     ref.orig = pro.map { "From " + $0 }
-    Talk.shared.send(group, text: caption, reply: replying, file: ref,
-                     localFile: url, album: album, prepare: { ready in
+    let normal: (@escaping (URL?) -> Void) -> Void = { ready in
       // (Talk left while it was made smaller: nothing sent — it starts again when Talk is back; never the original instead)
       let left = BgWatch.left
       // (sent as it is after all: its label says so, and why it couldn't be made smaller)
@@ -1268,7 +1269,11 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
           ready(made)
         } }
       } }
-    })
+    }
+    // (the send screen's copy when it was made; it couldn't be — made here, as always)
+    Talk.shared.send(group, text: caption, reply: replying, file: ref, localFile: url, album: album, prepare: { ready in
+      if let j = job { j.whenMade { u in if let u = u { ready(u) } else { normal(ready) } } } else { normal(ready) }
+    }, staged: job)
     replying = nil
     toBottom(true)
   }
@@ -1310,7 +1315,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     return (out, Double(cg.width), Double(cg.height))
   }
   fileprivate func sendFile(_ url: URL, kind: String, name: String, caption: String = "", hd: Bool = false, album: String? = nil, key: String? = nil) {
-    if kind == "video" { sendVideo(url, name: name, caption: caption, hd: hd, album: album); return }
+    if kind == "video" { sendVideo(url, name: name, caption: caption, hd: hd, album: album, key: key); return }
     let reply = replying
     replying = nil
     let go = { [weak self] (r: Ready, staged: PreUpload?) in
