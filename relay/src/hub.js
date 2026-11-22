@@ -62,7 +62,7 @@ export class TalkHub extends DurableObject {
       if (!this.core.meta('dirAt')) await this.askDir();
       const d = this.core.dir.snapshot || {};
       return json({ ok: true, colo: this.colo, dirAt: Number(this.core.meta('dirAt') || 0) || null, people: (d.users || []).length, clients: (d.projects || []).length,
-        phones: Object.values((d.push) || {}).reduce((a, x) => a + (x || []).length, 0), apple: this.apple.on, copyN: this.core.n, waiting: this.ctx.storage.sql.exec('SELECT COUNT(*) AS c FROM hub_outbox').toArray()[0].c, officeKey: !!this.core.meta('officeKey'), tasksMs: this.tasksMs || [], callsMs: this.callsMs || [], ...(this.dirErr ? { dirErr: this.dirErr } : {}) });
+        phones: Object.values((d.push) || {}).reduce((a, x) => a + (x || []).length, 0), apple: this.apple.on, copyN: this.core.n, waiting: this.ctx.storage.sql.exec('SELECT COUNT(*) AS c FROM hub_outbox').toArray()[0].c, officeKey: !!this.core.meta('officeKey'), tasksMs: this.tasksMs || [], callsMs: this.calls(), ...(this.dirErr ? { dirErr: this.dirErr } : {}) });
     }
     if (p.startsWith('/office/')) return this.fromOffice(req, p);
     if (!this.core.meta('dirAt')) await this.askDir();
@@ -207,9 +207,15 @@ export class TalkHub extends DurableObject {
     ws.send(JSON.stringify({ id: m.id, r: r || { ok: false, error: 'Not here' } }));
   }
   // (how long each call takes here, and which way it came — the last 30, no names or words: Haris 2026-11-22 12:17)
+  //  kept in hub_meta while we measure (the hub sleeps between messages and forgot them) — to be taken out after
+  calls() { try { return JSON.parse(this.core.meta('callsMs') || '[]'); } catch { return []; } }
   noteCall(via, call, b, t0) {
-    (this.callsMs = this.callsMs || []).unshift({ via, call, ...(b && b.act ? { act: b.act } : {}), ms: Date.now() - t0, at: new Date(t0).toISOString().slice(11, 19), woke: !!this.fresh });
-    this.fresh = false; this.callsMs.length = Math.min(this.callsMs.length, 30);
+    try {
+      const list = this.calls();
+      list.unshift({ via, call, ...(b && b.act ? { act: b.act } : {}), ms: Date.now() - t0, at: new Date(t0).toISOString().slice(11, 19), woke: !!this.fresh });
+      this.fresh = false; list.length = Math.min(list.length, 30);
+      this.core.meta('callsMs', JSON.stringify(list));
+    } catch { /* never in the way */ }
   }
   webSocketClose(ws) { try { ws.stop && ws.stop(); } catch { /* fine */ } }
   webSocketError(ws) { this.webSocketClose(ws); }
