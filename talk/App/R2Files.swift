@@ -243,7 +243,17 @@ final class BgUploads: NSObject, URLSessionDataDelegate {
   // (three at a time while Talk is open; all the rest once it's left)
   static var width: Int { UIApplication.shared.applicationState == .background ? 1000 : 3 }
   var fillers: [UUID: () -> Void] = [:]
-  private var waiting: [Int: (sent: (Int64) -> Void, done: (String?) -> Void, file: URL)] = [:]
+  // (keyed by the session and the task's number — the two sessions number their tasks each from 1)
+  private var waiting: [String: (sent: (Int64) -> Void, done: (String?) -> Void, file: URL)] = [:]
+  // (while Talk is open: Talk's own connection — it says "done" at once; iPhone's background transfers told Talk a few seconds
+  //  late, and the message waited for it: Haris 2026-11-22 15:38. Talk left mid-way: those parts handed to iPhone's)
+  private var open: [Int: (url: URL, file: URL, stop: String?, task: URLSessionTask)] = [:]
+  private lazy var fg: URLSession = {
+    let c = URLSessionConfiguration.default
+    c.httpCookieStorage = nil; c.httpShouldSetCookies = false; c.timeoutIntervalForRequest = 120
+    return URLSession(configuration: c, delegate: self, delegateQueue: .main)
+  }()
+  private func key(_ s: URLSession, _ t: URLSessionTask) -> String { (s === fg ? "f" : "b") + String(t.taskIdentifier) }
   private var wake: (() -> Void)?
   private lazy var session: URLSession = {
     let c = URLSessionConfiguration.background(withIdentifier: "ae.e11.talk.uploads")
@@ -254,7 +264,19 @@ final class BgUploads: NSObject, URLSessionDataDelegate {
   override init() {
     super.init()
     NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
-      self?.fillers.values.forEach { $0() }
+      guard let self = self else { return }
+      // (parts going on Talk's own connection: stopped and handed to iPhone's, from the start of each part)
+      let moving = self.open; self.open = [:]
+      for (_, o) in moving {
+        guard let w = self.waiting.removeValue(forKey: self.key(self.fg, o.task)) else { continue }
+        o.task.cancel()
+        var r = URLRequest(url: o.url); r.httpMethod = "PUT"
+        let t = self.session.uploadTask(with: r, fromFile: o.file)
+        self.waiting[self.key(self.session, t)] = w
+        Uploads.add(t, to: o.stop)
+        w.sent(0); t.resume()
+      }
+      self.fillers.values.forEach { $0() }
     }
   }
   func start() { _ = session }   // (at launch: reconnects to what iPhone was sending for us)
@@ -263,16 +285,20 @@ final class BgUploads: NSObject, URLSessionDataDelegate {
     let file = FileManager.default.temporaryDirectory.appendingPathComponent("bgup-" + UUID().uuidString)
     guard (try? data.write(to: file)) != nil else { DispatchQueue.main.async { done(nil) }; return }
     var r = URLRequest(url: url); r.httpMethod = "PUT"
-    let t = session.uploadTask(with: r, fromFile: file)
-    waiting[t.taskIdentifier] = (sent, done, file)
+    let here = UIApplication.shared.applicationState != .background
+    let s = here ? fg : session
+    let t = s.uploadTask(with: r, fromFile: file)
+    waiting[key(s, t)] = (sent, done, file)
+    if here { open[t.taskIdentifier] = (url, file, stop, t) }
     Uploads.add(t, to: stop)
     t.resume()
   }
   func urlSession(_ s: URLSession, task: URLSessionTask, didSendBodyData _: Int64, totalBytesSent: Int64, totalBytesExpectedToSend _: Int64) {
-    waiting[task.taskIdentifier]?.sent(totalBytesSent)
+    waiting[key(s, task)]?.sent(totalBytesSent)
   }
   func urlSession(_ s: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-    guard let w = waiting.removeValue(forKey: task.taskIdentifier) else { return }   // (from before Talk was closed: nothing waits for it)
+    if s === fg { open[task.taskIdentifier] = nil }
+    guard let w = waiting.removeValue(forKey: key(s, task)) else { return }   // (from before Talk was closed, or handed over: nothing waits for it here)
     try? FileManager.default.removeItem(at: w.file)
     let h = task.response as? HTTPURLResponse
     w.done(error == nil && h?.statusCode == 200 ? (h?.value(forHTTPHeaderField: "ETag") ?? "") : nil)
