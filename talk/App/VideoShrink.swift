@@ -109,10 +109,13 @@ enum VideoShrink {
       }
       comp.renderSize = nat
     }
-    comp.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2
-    comp.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2
-    comp.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
-    let vOut = AVAssetReaderVideoCompositionOutput(videoTracks: [vt], videoSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange])
+    // (an HDR video stays HDR — 10-bit HEVC in HLG, as the iPhone's camera records it; its whites were turned down to standard
+    //  colour, Haris 2026-11-22 14:21. Same size per second as standard. Apple Log is still turned into standard colour.)
+    let hdr = !isAppleLog(asset) && vt.hasMediaCharacteristic(.containsHDRVideo)
+    comp.colorPrimaries = hdr ? AVVideoColorPrimaries_ITU_R_2020 : AVVideoColorPrimaries_ITU_R_709_2
+    comp.colorTransferFunction = hdr ? AVVideoTransferFunction_ITU_R_2100_HLG : AVVideoTransferFunction_ITU_R_709_2
+    comp.colorYCbCrMatrix = hdr ? AVVideoYCbCrMatrix_ITU_R_2020 : AVVideoYCbCrMatrix_ITU_R_709_2
+    let vOut = AVAssetReaderVideoCompositionOutput(videoTracks: [vt], videoSettings: [kCVPixelBufferPixelFormatTypeKey as String: hdr ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange])
     vOut.videoComposition = comp
     vOut.alwaysCopiesSampleData = false
     guard reader.canAdd(vOut) else { done(false); return }
@@ -122,10 +125,11 @@ enum VideoShrink {
       AVVideoScalingModeKey: AVVideoScalingModeResizeAspectFill,
       AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: rate, AVVideoExpectedSourceFrameRateKey: fps,
                                         AVVideoMaxKeyFrameIntervalDurationKey: 2,
-                                        AVVideoProfileLevelKey: kVTProfileLevel_HEVC_Main_AutoLevel as String],
-      // (standard colour, as every phone shows it — a ProRes Log or HDR video turned into it, not tagged with its own)
-      AVVideoColorPropertiesKey: [AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2, AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
-                                  AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2]])
+                                        AVVideoProfileLevelKey: (hdr ? kVTProfileLevel_HEVC_Main10_AutoLevel : kVTProfileLevel_HEVC_Main_AutoLevel) as String],
+      // (standard colour, as every phone shows it — a ProRes Log turned into it; an HDR video kept HDR, tagged HLG)
+      AVVideoColorPropertiesKey: hdr
+        ? [AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_2020, AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_2100_HLG, AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_2020]
+        : [AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2, AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2, AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2]])
     vIn.expectsMediaDataInRealTime = false   // (already turned the right way up by the composition)
     guard writer.canAdd(vIn) else { done(false); return }
     writer.add(vIn)
