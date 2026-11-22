@@ -1159,7 +1159,11 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       let p = PHPickerViewController(configuration: c); p.delegate = self; present(p, animated: true)
     case "camera":
       guard UIImagePickerController.isSourceTypeAvailable(.camera) else { toast("No camera here"); return }
-      let p = UIImagePickerController(); p.sourceType = .camera; p.mediaTypes = ["public.image", "public.movie"]; p.delegate = self; present(p, animated: true)
+      let p = UIImagePickerController(); p.sourceType = .camera; p.mediaTypes = ["public.image", "public.movie"]; p.delegate = self
+      // (its video at full quality — 9:16 as the Camera app, handed over untouched; Talk makes it smaller as any video. Left
+      //  to itself it recorded "medium": 360 × 480, nearly square — Haris 2026-11-22 20:44)
+      p.videoQuality = .typeHigh; p.videoExportPreset = AVAssetExportPresetPassthrough
+      present(p, animated: true)
     default:
       let p = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true); p.allowsMultipleSelection = true; p.delegate = self; present(p, animated: true)
     }
