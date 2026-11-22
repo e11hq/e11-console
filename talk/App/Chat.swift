@@ -2080,7 +2080,7 @@ final class IntroCell: UITableViewCell {
     card.addSubview(stack); contentView.addSubview(card)
     noteText(); noteL.numberOfLines = 0; noteL.textAlignment = .center
     noteL.accessibilityLabel = "Messages and files are sent encrypted."
-    note.backgroundColor = Look.dyn(0x171717, 0xFDF1D7); note.layer.cornerRadius = 7; note.layer.cornerCurve = .continuous
+    note.backgroundColor = Look.dyn(0x171717, 0xFDF1D7); note.layer.cornerRadius = 8; note.layer.cornerCurve = .continuous   // (the notes' own corners — Haris 2026-11-22 11:03)
     note.addSubview(noteL); contentView.addSubview(note)
     [card, stack, add, note, noteL].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
     NSLayoutConstraint.activate([
