@@ -18,6 +18,9 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # (Talk's R2 key — uploads straight to R2's own addresses, as up to 2026-11-21; added by Haris as repo secrets)
+      TALK_R2_KEY_ID: ${{ secrets.TALK_R2_KEY_ID }}
+      TALK_R2_SECRET: ${{ secrets.TALK_R2_SECRET }}
     defaults:
       run:
         working-directory: relay
@@ -61,3 +64,12 @@ jobs:
           if ! npx --yes wrangler@4 secret list 2>/dev/null | grep -q R2_LINK_SECRET; then
             openssl rand -hex 32 | npx --yes wrangler@4 secret put R2_LINK_SECRET
           fi
+      # (the R2 key for uploads straight to R2, when it's in the repo's secrets: put into the Worker's secrets — nobody sees it)
+      - name: Talk's R2 key, when it's there
+        if: inputs.mode == 'deploy'
+        run: |
+          if [ -n "$TALK_R2_KEY_ID" ] && [ -n "$TALK_R2_SECRET" ]; then
+            printf '%s' "$TALK_R2_KEY_ID" | npx --yes wrangler@4 secret put R2_ACCESS_KEY_ID
+            printf '%s' "$TALK_R2_SECRET" | npx --yes wrangler@4 secret put R2_SECRET_ACCESS_KEY
+            echo "R2 key put into the Worker"
+          else echo "No R2 key in the repo's secrets yet — uploads go through the relay as before"; fi

@@ -23,12 +23,44 @@ export async function readToken(secret, t, now = Date.now()) {
   } catch { return null; }
 }
 
+/* R2's own upload addresses (S3-signed, as the office makes them — server/src/r2.js presign, here with Web Crypto): the phone
+   sends the file straight to Cloudflare's storage over HTTP/2, as it did up to 2026-11-21. Through this relay's /r2/put a
+   single upload went at about a fifth of the connection — 3.6 Mbit/s alone against 18 for three at once on the same
+   connection (Talk's test page, Haris 2026-11-22 21:44–21:55). Used when the R2 key is in the Worker's secrets. */
+const hexOf = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+const sha256 = async (s) => hexOf(await crypto.subtle.digest('SHA-256', enc.encode(s)));
+const hm = async (k, s) => crypto.subtle.sign('HMAC', await crypto.subtle.importKey('raw', typeof k === 'string' ? enc.encode(k) : k, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']), enc.encode(s));
+const uriEnc = (s) => encodeURIComponent(s).replace(/[!'()*]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase());
+export async function presign({ method, host, path, query = {}, keyId, secret, region = 'auto', expires = 900, now = Date.now() }) {
+  const date = new Date(now).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, ''), day = date.slice(0, 8), scope = `${day}/${region}/s3/aws4_request`;
+  const q = { ...query, 'X-Amz-Algorithm': 'AWS4-HMAC-SHA256', 'X-Amz-Credential': `${keyId}/${scope}`, 'X-Amz-Date': date, 'X-Amz-Expires': String(expires), 'X-Amz-SignedHeaders': 'host' };
+  const qs = Object.keys(q).sort().map((k) => `${uriEnc(k)}=${uriEnc(String(q[k]))}`).join('&');
+  const uri = path.split('/').map(uriEnc).join('/');
+  const canonical = [method, uri, qs, `host:${host}\n`, 'host', 'UNSIGNED-PAYLOAD'].join('\n');
+  const toSign = ['AWS4-HMAC-SHA256', date, scope, await sha256(canonical)].join('\n');
+  const k = await hm(await hm(await hm(await hm('AWS4' + secret, day), region), 's3'), 'aws4_request');
+  return `https://${host}${uri}?${qs}&X-Amz-Signature=${hexOf(await hm(k, toSign))}`;
+}
+
 // what Talk's own code calls (talk.js r2Start / r2Done / sweep): bucket = env.TALK_FILES, base = this relay's address
-export function bindingR2({ bucket, secret, base, now = () => Date.now() }) {
+// (s3: { account, keyId, secret, name } — uploads straight to R2's own addresses, see above; without it, through /r2/put)
+export function bindingR2({ bucket, secret, base, s3 = null, now = () => Date.now(), go = (...a) => fetch(...a) }) {
   const put = (o) => token(secret, { ...o, m: 'put', e: now() + 3600_000 });
+  const direct = !!(s3 && s3.account && s3.keyId && s3.secret && s3.name);
+  const host = direct ? `${s3.account}.r2.cloudflarestorage.com` : '';
+  const signed = (method, key, query = {}, expires = 3600) => presign({ method, host, path: `/${s3.name}/${key}`, query, keyId: s3.keyId, secret: s3.secret, expires, now: now() });
   return {
-    on: !!(bucket && secret && base), PART,
+    on: !!(bucket && secret && base), PART, direct,
     async start(key, size) {
+      if (direct) {
+        if (size <= PART) return { put: await signed('PUT', key) };
+        const r = await go(await signed('POST', key, { uploads: '' }, 900), { method: 'POST' });
+        const x = await r.text(), up = /<UploadId>([^<]+)<\/UploadId>/.exec(x);
+        if (!r.ok || !up) throw new Error('R2 didn’t start the upload (' + r.status + ')');
+        const n = Math.ceil(size / PART), urls = [];
+        for (let i = 1; i <= n; i++) urls.push(await signed('PUT', key, { partNumber: String(i), uploadId: up[1] }));
+        return { upload: up[1], part: PART, urls };
+      }
       if (size <= PART) return { put: `${base}/r2/put/${await put({ k: key })}` };
       const up = await bucket.createMultipartUpload(key);
       const n = Math.ceil(size / PART), urls = [];
@@ -36,6 +68,13 @@ export function bindingR2({ bucket, secret, base, now = () => Date.now() }) {
       return { upload: up.uploadId, part: PART, urls };
     },
     async complete(key, upload, etags) {
+      if (direct) {
+        const body = '<CompleteMultipartUpload>' + etags.map((e, i) => `<Part><PartNumber>${i + 1}</PartNumber><ETag>${String(e).replace(/[<>&]/g, '')}</ETag></Part>`).join('') + '</CompleteMultipartUpload>';
+        const r = await go(await signed('POST', key, { uploadId: upload }, 900), { method: 'POST', body, headers: { 'Content-Type': 'application/xml' } });
+        const x = await r.text();
+        if (!r.ok || /<Error>/.test(x)) throw new Error('R2 didn’t put the parts together (' + r.status + ')');
+        return;
+      }
       const up = bucket.resumeMultipartUpload(key, upload);
       await up.complete(etags.map((e, i) => ({ partNumber: i + 1, etag: String(e).replace(/"/g, '') })));
     },

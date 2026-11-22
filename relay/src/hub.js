@@ -30,7 +30,9 @@ export class TalkHub extends DurableObject {
       sql.exec('CREATE TABLE IF NOT EXISTS hub_outbox (n INTEGER PRIMARY KEY, body TEXT NOT NULL)');
       sql.exec('CREATE TABLE IF NOT EXISTS hub_who (fp TEXT PRIMARY KEY, email TEXT NOT NULL, at INTEGER NOT NULL)');
       // (files: Talk's R2 bucket through this Worker's own binding — no R2 keys)
-      const r2 = bindingR2({ bucket: env.TALK_FILES, secret: env.R2_LINK_SECRET, base: String(env.PUBLIC || '').replace(/\/$/, '') });
+      const r2 = bindingR2({ bucket: env.TALK_FILES, secret: env.R2_LINK_SECRET, base: String(env.PUBLIC || '').replace(/\/$/, ''),
+        // (uploads straight to R2's own addresses once its key is here — as up to 2026-11-21; Haris 2026-11-22 22:02)
+        s3: env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY ? { account: env.ACCOUNT_ID, keyId: env.R2_ACCESS_KEY_ID, secret: env.R2_SECRET_ACCESS_KEY, name: env.TALK_BUCKET || 'e11-talk-files' } : null });
       // (notifications: sent by the office for now — the phones' notification tokens are there; once Apple's key is in
       //  Cloudflare, sent from here, office or not. E11 Console's Talk count: the office works it out from its copy)
       // (the office sends them while it can be reached — it also sends again any a phone missed; it can't: Cloudflare sends
