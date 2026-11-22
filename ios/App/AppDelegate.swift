@@ -101,6 +101,9 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
   // while the app is open too: iPhone's own banner, sound and badge, kept in Notification Centre (Haris, 2026-10-30 —
   // the page draws no cards of its own any more)
   func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+    // (a deleted comment's quiet replacement — "This comment was deleted": no banner with the app in front, only in the list
+    //  in place of the old one; Haris 2026-11-22 20:20)
+    if ((notification.request.content.userInfo["e11"] as? [String: Any])?["gone"] != nil) { completionHandler([.list]); return }
     completionHandler([.banner, .list, .sound, .badge])
   }
   // (also a tap on a notification that started the app: with scenes it comes here, not in the launch options)
