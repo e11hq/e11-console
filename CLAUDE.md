@@ -142,6 +142,26 @@ his yes send it with the "Send to TestFlight" workflow (testflight.yml, its buil
 Every time Haris says yes and it's sent, tell him in the same reply what changed since the last TestFlight build, as
 short points (new / better / fixed — from the commits between the two builds) — Haris 2026-11-04.
 
+**Publishing to the App Store — how we do it, every time (Haris, 2026-11-22 22:33: "put this in your system, not to
+forget"):**
+1. **"Mark as RC" / "lock"** — for each app, two branches at the exact commit its build was made from (the build run's own
+   head commit): `candidate/appstore-<ios|talk>-<version>-build-<N>` and `locked/<ios-app|talk>-<N>`. Never moved or
+   deleted. The build number read from its own line ("… build N signed …" / "E11 Talk build N signed and kept"), checked
+   by eye — never pulled out of text (2026-11-22: "11" was taken from "E11").
+2. **Both iPhone apps go to review together** — E11 Console and E11 Talk, the latest RC of each.
+3. **What's New: the one line below** — never a list, never asked about.
+4. **Automatic release** — each version is released as soon as Apple approves it (Haris 2026-11-22 22:33; was manual).
+5. **How it's submitted:**
+   - E11 Console iPhone: the "Submit to App Store" workflow (`appstore-submit.yml`, run with `--ref ios-nav`: version,
+     build, `mode=check` first — it attaches the build, sets What's New and automatic release, says what's missing — then
+     `mode=submit`). It needs `ios/whats-new/<version>.txt` on ios-nav with the one line.
+   - E11 Talk: App Store Connect in Haris's Chrome (he signs in; Claude never types passwords): the new version, build N
+     attached, What's New, automatic release, Add for Review → Submit. (The workflow knows only Console's bundle.)
+6. **A version Apple has approved can't take new builds** (TestFlight refuses: "train is closed") — bump the version on
+   that app's branch and mark the approved build `approved/appstore-<ios|talk>-<version>-build-<N>`.
+7. **Builds: no checks, never asked** (the rule above). TestFlight only on Haris's yes; nothing submitted without his word.
+8. Tell Haris the plan first, wait for his yes, then do it — one step at a time, nothing started early.
+
 **App Store "What's New" — always the same one line (Haris, 2026-11-19 22:10):** "We update E11 Console regularly to make
 it smoother for the team. This version includes improvements and bug fixes." (E11 Talk: the same with "E11 Talk"). Never a
 list of changes.
