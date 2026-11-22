@@ -239,6 +239,14 @@ final class Talk {
     }
     next()
   }
+  // (after something this phone did: the live line brings it — asked again only when the line isn't open)
+  func syncIfNoLine() { if !Net.shared.lineUp { sync() } }
+  // (a group's description, shown at once on this phone — the server's answer then stands)
+  func setAbout(_ g: String, _ about: String?) {
+    guard groups[g] != nil else { return }
+    groups[g]?.about = about
+    NotificationCenter.default.post(name: .talkChanged, object: nil)
+  }
   func sync(_ done: (() -> Void)? = nil) {
     if holdSync { done?(); return }
     if syncing { again = true; done?(); return }
@@ -455,7 +463,8 @@ final class Talk {
     NotificationCenter.default.post(name: .talkGroup, object: g); NotificationCenter.default.post(name: .talkChanged, object: nil)
     var linkBody: [String: Any]? = nil
     var fileKey: String? = nil   // (the file's lock, when it went to R2 — R2Files)
-    let go = { (fileId: String?) in
+    // (the message as the server takes it — sent by itself, or with its file's "it's all there")
+    let body = { (fileId: String?) -> [String: Any] in
       var b: [String: Any] = ["act": "send", "group": g, "text": text, "cid": cid, "mentions": mentions]
       if let lb = linkBody { b["link"] = lb }
       if let a = album { b["album"] = a }
@@ -466,21 +475,24 @@ final class Talk {
       if let r = m.reply { b["reply"] = ["id": r.id, "by": r.by, "text": r.text, "kind": r.kind] }
       if let f = file, let fid = fileId { var fd: [String: Any] = ["id": fid, "kind": f.kind]; fd["w"] = f.w; fd["h"] = f.h; fd["secs"] = f.secs; fd["wave"] = f.wave; fd["thumb"] = thumb; fd["orig"] = Talk.origSaid[f.id] ?? f.orig
         // (the sharp preview, from what was really sent — the photo with its mark, the video made smaller in its colours)
-        if f.kind == "photo" || f.kind == "video" { fd["prev"] = f.prev ?? Thumb.preview(Net.local(fid), kind: f.kind) }
+        // (from the file's own copy once it's here under its new id, else the one it was made from — the same file)
+        if f.kind == "photo" || f.kind == "video" { fd["prev"] = f.prev ?? Thumb.preview(FileManager.default.fileExists(atPath: Net.local(fid).path) ? Net.local(fid) : Net.local(f.id), kind: f.kind) }
         // (locked in pieces — "p:" before its key on the phone: the server's word for it is lock "p")
         if let k = fileKey { if k.hasPrefix("p:") { fd["key"] = String(k.dropFirst(2)); fd["lock"] = "p" } else { fd["key"] = k } }
         b["file"] = fd }
-      Net.shared.act(b) { [weak self] j in
+      return b
+    }
+    let answered = { [weak self] (j: [String: Any]?) in
         guard let self = self else { return }
         // (the send sound once the server has it — not while the clock shows it on its way; every kind, Haris 2026-11-12)
         // (…and its tick at the same moment: the server's answer has its id — the clock no longer waits for the next sync,
         //  Haris 2026-11-22 01:30 "the send sound comes first, then the clock changes to a tick, we can see the delay")
         if (j?["ok"] as? Bool) == true {
           DispatchQueue.main.async { self.sentNow(g, cid, id: j?["id"] as? String, seq: (j?["seq"] as? NSNumber)?.intValue, at: (j?["at"] as? NSNumber)?.doubleValue); ChatSound.send() }
-          self.sync()
+          self.syncIfNoLine()
         } else { self.mark(g, cid, failed: true) }
-      }
     }
+    let go = { (fileId: String?) in Net.shared.act(body(fileId)) { j in answered(j) } }
     // (it didn't go: if Talk was left meanwhile, again when Talk is back — else the red !, a tap: Send again / Delete)
     var again: (() -> Void)?, tries = 0, leftAt = BgWatch.left, attempt = 0, failedAt = -1
     let failed = { [weak self] in
@@ -502,7 +514,12 @@ final class Talk {
     let up = { (data: Data, f: Msg.FileRef, finished: @escaping () -> Void) in
       Uploads.set(f.id, 0, total: data.count)
       var going = true   // (a late word of progress after it's up doesn't bring the ring back)
-      Net.shared.uploadMsg(data, name: f.name, stop: f.id, progress: { p in guard going else { return }; progress?(p); Uploads.set(f.id, p, total: data.count) }) { fid, key in
+      // (the message goes with the file's "it's all there" — one trip; an older server ignores it and it's sent after)
+      let message = { (fid: String, key: String) -> [String: Any] in
+        fileKey = key
+        var b = body(fid); b.removeValue(forKey: "act"); return b
+      }
+      Net.shared.uploadMsg(data, name: f.name, stop: f.id, message: message, progress: { p in guard going else { return }; progress?(p); Uploads.set(f.id, p, total: data.count) }) { fid, key in
         going = false; Uploads.end(f.id); Uploads.done(f.id)
         defer { finished() }
         if Uploads.isStopped(f.id) { return }   // (its ✕: stopped)
@@ -510,7 +527,7 @@ final class Talk {
         guard let fid = fid else { failed(); return }
         try? FileManager.default.copyItem(at: Net.local(f.id), to: Net.local(fid))
         m.file?.id = fid
-        go(fid)
+        if let s = Net.takeSent(fid) { answered(s) } else { go(fid) }
       }
     }
     if let prep = prepare, let f = file {

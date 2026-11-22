@@ -21,7 +21,9 @@ enum Relay {
   static func handles(_ path: String) -> Bool {
     guard live, on else { return false }
     let p = path.split(separator: "?").first.map(String.init) ?? path
-    return paths.contains(p)
+    // (a message's file: the hub sends the phone straight to R2 — one trip, and it works with the office down; Haris
+    //  2026-11-22 11:26 "all together")
+    return paths.contains(p) || p.hasPrefix("/api/talk/file/")
   }
   static func off(_ why: String) {
     guard on else { return }
@@ -63,6 +65,7 @@ final class RelayLine: NSObject, URLSessionWebSocketDelegate {
   private var ping: Timer?
   private let text: (String) -> Void, ended: (Bool) -> Void
   private var opened = false
+  var isOpen: Bool { opened && !done }
   init(text: @escaping (String) -> Void, ended: @escaping (_ opened: Bool) -> Void) { self.text = text; self.ended = ended }
   func open() {
     var r = URLRequest(url: URL(string: Relay.base.replacingOccurrences(of: "https://", with: "wss://") + "/line")!)

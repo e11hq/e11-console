@@ -225,7 +225,7 @@ final class NewGroupVC: UITableViewController, UITextFieldDelegate, UISearchBarD
           try? d.write(to: Net.local(fid))
           if let key = key { FileKeys.set(fid, key) }
           var a: [String: Any] = ["act": "setPic", "group": g, "file": fid]; if let key = key { a["key"] = key }
-          Net.shared.act(a) { _ in Talk.shared.refresh(); Talk.shared.sync() }
+          Net.shared.act(a) { _ in Talk.shared.refresh(); Talk.shared.syncIfNoLine() }
         }
       }
       let host = self.presentingViewController
@@ -585,7 +585,7 @@ final class GroupInfoVC: UITableViewController {
   }
   private func simple(_ b: [String: Any], done: String? = nil) {
     Net.shared.act(b) { j in
-      if (j?["ok"] as? Bool) == true { if let d = done { toast(d) }; Talk.shared.refresh(); Talk.shared.sync() } else { toast(j?["error"] as? String ?? "Couldn’t do that — try again") }
+      if (j?["ok"] as? Bool) == true { if let d = done { toast(d) }; Talk.shared.refresh(); Talk.shared.syncIfNoLine() } else { toast(j?["error"] as? String ?? "Couldn’t do that — try again") }
     }
   }
   private func muteSheet(_ g: Group) {
@@ -742,7 +742,7 @@ final class AddPeopleVC: UITableViewController, UISearchResultsUpdating {
     Net.shared.act(["act": "addPeople", "group": g, "ids": ids]) { [weak self] j in
       if (j?["ok"] as? Bool) == true {
         if days > 0 { ShareHistory.send(g, to: ids, days: days) }
-        Talk.shared.refresh(); Talk.shared.sync(); self?.dismiss(animated: true)
+        Talk.shared.refresh(); Talk.shared.syncIfNoLine(); self?.dismiss(animated: true)
       }
       else { toast(j?["error"] as? String ?? "Couldn’t add them — try again"); self?.counted() }
     }
@@ -848,7 +848,7 @@ final class ContactsVC: UITableViewController {
         // (gone at once, fading out — the server's answer then draws the page as it is; a failure brings it back)
         self?.removing.insert(k.id); self?.reload(animated: true); done(true)
         Net.shared.act(["act": "removeContact", "id": k.id]) { j in
-          if (j?["ok"] as? Bool) == true { toast("\(k.name) removed"); Talk.shared.refresh(); Talk.shared.sync() }
+          if (j?["ok"] as? Bool) == true { toast("\(k.name) removed"); Talk.shared.refresh(); Talk.shared.syncIfNoLine() }
           else { self?.removing.remove(k.id); self?.reload(animated: true); toast(j?["error"] as? String ?? "Couldn’t remove them") }
         }
       })
@@ -1021,7 +1021,7 @@ final class EditGroupVC: UITableViewController, PHPickerViewControllerDelegate, 
     let n = (field.text ?? "").trimmingCharacters(in: .whitespaces)
     if let g = g, !n.isEmpty, n != g.name {
       Net.shared.act(["act": "rename", "group": group, "name": n]) { j in
-        if (j?["ok"] as? Bool) == true { Talk.shared.refresh(); Talk.shared.sync() } else { toast(j?["error"] as? String ?? "Couldn’t do that — try again") }
+        if (j?["ok"] as? Bool) == true { Talk.shared.refresh(); Talk.shared.syncIfNoLine() } else { toast(j?["error"] as? String ?? "Couldn’t do that — try again") }
       }
     }
     dismiss(animated: true)
@@ -1108,7 +1108,7 @@ final class EditGroupVC: UITableViewController, PHPickerViewControllerDelegate, 
     // (gone from the list at once — Apple's own row animation; the server's answer then draws it as it is)
     gone.insert(id); reload(animated: true)
     Net.shared.act(["act": "removePerson", "group": group, "id": id]) { [weak self] j in
-      if (j?["ok"] as? Bool) == true { toast("\(name) removed"); Talk.shared.refresh(); Talk.shared.sync() }
+      if (j?["ok"] as? Bool) == true { toast("\(name) removed"); Talk.shared.refresh(); Talk.shared.syncIfNoLine() }
       else { toast(j?["error"] as? String ?? "Couldn’t do that — try again"); self?.gone.remove(id); self?.reload(animated: true) }
     }
   }
@@ -1153,7 +1153,7 @@ final class EditGroupVC: UITableViewController, PHPickerViewControllerDelegate, 
     var a: [String: Any] = ["act": "setPic", "group": group, "file": fid.map { $0 as Any } ?? NSNull()]
     if let key = key { a["key"] = key }
     Net.shared.act(a) { [weak self] j in
-      if (j?["ok"] as? Bool) == true { Talk.shared.refresh(); Talk.shared.sync() } else { toast(j?["error"] as? String ?? "Couldn’t do that — try again") }
+      if (j?["ok"] as? Bool) == true { Talk.shared.refresh(); Talk.shared.syncIfNoLine() } else { toast(j?["error"] as? String ?? "Couldn’t do that — try again") }
       self?.spin.stopAnimating(); self?.busy(false); if let g = self?.g { self?.pic.set(group: g) }
       if let self = self { (self.tableView.tableHeaderView?.subviews.compactMap { $0 as? UIButton }.first)?.menu = UIMenu(children: self.picMenu()) }
     }

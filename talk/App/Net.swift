@@ -85,9 +85,9 @@ final class Net {
     return !(cookie ?? "").isEmpty
   }
 
-  func request(_ path: String, method: String = "GET", json: [String: Any]? = nil, body: Data? = nil, type: String? = nil) -> URLRequest {
+  func request(_ path: String, method: String = "GET", json: [String: Any]? = nil, body: Data? = nil, type: String? = nil, office: Bool = false) -> URLRequest {
     // (Talk on Cloudflare: the hub's calls to the hub once it has Talk — Relay, TALK-CF-A)
-    var r = URLRequest(url: URL(string: (Relay.handles(path) ? Relay.base : Server.url) + path)!)
+    var r = URLRequest(url: URL(string: (!office && Relay.handles(path) ? Relay.base : Server.url) + path)!)
     r.httpMethod = method
     if let c = cookie { r.setValue(c, forHTTPHeaderField: "Cookie") }
     r.setValue(Net.deviceKey, forHTTPHeaderField: "X-Talk-Device")   // (this phone on its own — per-device delivery, Haris 2026-11-20 18:56)
@@ -230,7 +230,21 @@ final class Net {
   // work) the usual way. The answer as a download task gives it: the file, and the server's answer.
   private func download(_ id: String, _ then: @escaping (URL?, URLResponse?) -> Void) {
     // (?r2=1: a file in R2 — sent straight there, R2Files; the rest as before)
-    let usual = { self.session.downloadTask(with: self.request("/api/talk/file/" + id + "?r2=1&pieces=1")) { tmp, resp, _ in then(tmp, resp) }.resume() }
+    // (Talk on Cloudflare: asked of the hub, which sends it straight to R2; the hub refusing or out of reach — the office)
+    let path = "/api/talk/file/" + id + "?r2=1&pieces=1"
+    let usual = {
+      let viaHub = Relay.handles(path)
+      self.session.downloadTask(with: self.request(path)) { tmp, resp, _ in
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if viaHub, code != 200, code != 404, code != 410 {
+          return self.session.downloadTask(with: self.request(path, office: true)) { t2, r2, _ in then(t2, r2) }.resume()
+        }
+        then(tmp, resp)
+      }.resume()
+    }
+    // (the office's own network: never on mobile data; and with Talk on Cloudflare every file is in R2, which the office's
+    //  network doesn't serve — its answer was always "no", one wasted trip before each file)
+    if Auto.onMobile || Relay.handles(path) { return usual() }
     Office.shared.pass(["kind": "file", "id": id]) { p in
       guard let p = p, let u = URL(string: p.url + "/local/talk/file?t=" + (p.token.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")) else { return usual() }
       Office.shared.session.downloadTask(with: URLRequest(url: u)) { tmp, resp, _ in
@@ -332,6 +346,8 @@ final class Net {
     streamDelegate = d; streamSession = s; stream = t
     t.resume()
   }
+  // (the live line open: it brings every change at once — no asking again after each action; Haris 2026-11-22 11:26)
+  var lineUp: Bool { if let l = line { return l.isOpen }; return stream != nil }
   func stopListening() { let l = line; line = nil; l?.close(); stream?.cancel(); stream = nil; streamSession?.invalidateAndCancel(); streamSession = nil; streamDelegate = nil }
 }
 

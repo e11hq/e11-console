@@ -988,7 +988,7 @@ enum GroupActions {
     a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
     a.addAction(UIAlertAction(title: "Delete", style: .destructive) { _ in
       Net.shared.act(["act": "deleteGroup", "group": g.id]) { j in
-        if (j?["ok"] as? Bool) == true { toast("Group deleted"); Talk.shared.refresh(); Talk.shared.sync() } else { toast(j?["error"] as? String ?? "Couldn’t do that — try again") }
+        if (j?["ok"] as? Bool) == true { toast("Group deleted"); Talk.shared.refresh(); Talk.shared.syncIfNoLine() } else { toast(j?["error"] as? String ?? "Couldn’t do that — try again") }
       }
     })
     vc?.present(a, animated: true)

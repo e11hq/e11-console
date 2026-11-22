@@ -210,7 +210,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         return c
       case .intro:
         let c = tv.dequeueReusableCell(withIdentifier: "i", for: ip) as! IntroCell
-        if let g = Talk.shared.groups[self.group] { c.set(g) }
+        if let g = Talk.shared.groups[self.group] { c.show(g) }
         c.onPic = { [weak self] in self?.editGroup() }
         c.onAdd = { [weak self] in self?.addMembers() }
         c.onDescribe = { [weak self] in self?.describe() }
@@ -685,7 +685,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (shows at once; the server's answer then stands)
     if on { showPin(Group.Pin(id: m.id, by: m.by, text: Talk.preview(m), kind: m.kind, pinnedBy: Talk.shared.me?.id ?? "")) } else { showPin(nil) }
     Net.shared.act(["act": "pinMsg", "msg": m.id, "on": on, "text": Talk.preview(m), "kind": m.kind]) { [weak self] j in
-      if (j?["ok"] as? Bool) == true { Talk.shared.sync() }
+      if (j?["ok"] as? Bool) == true { Talk.shared.syncIfNoLine() }
       else { DispatchQueue.main.async { self?.pinAsked = false; if let g = self?.group { self?.showPin(Talk.shared.groups[g]?.pin) }; toast(j?["error"] as? String ?? "Couldn’t pin it") } }
     }
   }
@@ -880,8 +880,14 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       guard let self = self else { return }
       let t = (a?.textFields?.first?.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
       guard t != (g.about ?? "") else { return }
-      Net.shared.act(["act": "describe", "group": self.group, "about": String(t.prefix(500))]) { j in
-        if (j?["ok"] as? Bool) == true { Talk.shared.refresh(); Talk.shared.sync() } else { toast(j?["error"] as? String ?? "Couldn’t do that — try again") }
+      // (shown on the card at once; put back if the server says no — Haris 2026-11-22 11:26)
+      let was = g.about, gid = self.group
+      Talk.shared.setAbout(gid, t.isEmpty ? nil : String(t.prefix(500)))
+      Net.shared.act(["act": "describe", "group": gid, "about": String(t.prefix(500))]) { j in
+        DispatchQueue.main.async {
+          if (j?["ok"] as? Bool) == true { Talk.shared.syncIfNoLine() }
+          else { Talk.shared.setAbout(gid, was); toast(j?["error"] as? String ?? "Couldn’t do that — try again") }
+        }
       }
     }
     a.addAction(save); a.preferredAction = save
@@ -1124,7 +1130,14 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private func send(_ text: String, mentions: [String] = [], task: Msg.TaskCard? = nil, link: LinkPrevMaker.Pick = .auto) {
     if let e = editingMsg {
       editingMsg = nil; bar.setReply(nil, editing: false)
-      Net.shared.act(["act": "edit", "msg": e.id, "text": text]) { j in if (j?["ok"] as? Bool) == true { Talk.shared.sync() } else { toast(j?["error"] as? String ?? "Couldn’t edit it") } }
+      // (the new words shown at once, marked Edited; put back if the server says no — Haris 2026-11-22 11:26)
+      let g = group, was = Talk.shared.local(g, e.id) { $0.text = text; $0.edited = true }
+      Net.shared.act(["act": "edit", "msg": e.id, "text": text]) { j in
+        DispatchQueue.main.async {
+          if (j?["ok"] as? Bool) == true { Talk.shared.syncIfNoLine() }
+          else { if let w = was { Talk.shared.putBack(g, w) }; toast(j?["error"] as? String ?? "Couldn’t edit it") }
+        }
+      }
       return
     }
     Talk.shared.send(group, text: text, reply: replying, mentions: mentions, task: task, link: link)
@@ -1800,7 +1813,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         guard let g = self?.group else { return }
         for m in ms {
           let was = Talk.shared.local(g, m.id) { $0.deleted = true; $0.text = ""; $0.reply = nil }   // (shows at once; the file goes with the server's answer)
-          Net.shared.act(["act": "del", "msg": m.id]) { j in if (j?["ok"] as? Bool) == true { Talk.shared.sync() } else { if let w = was { Talk.shared.putBack(g, w) }; toast(j?["error"] as? String ?? "Couldn’t delete it") } }
+          Net.shared.act(["act": "del", "msg": m.id]) { j in if (j?["ok"] as? Bool) == true { Talk.shared.syncIfNoLine() } else { if let w = was { Talk.shared.putBack(g, w) }; toast(j?["error"] as? String ?? "Couldn’t delete it") } }
         }
         done?()
       })
@@ -1826,7 +1839,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let was = Talk.shared.local(g, m.id) { $0.reactions[me] = e }   // (shows at once)
     var b: [String: Any] = ["act": "react", "msg": m.id]; if let e = e { b["emoji"] = e }
     Net.shared.act(b) { j in
-      if (j?["ok"] as? Bool) == true { Talk.shared.sync() } else { if let w = was { Talk.shared.putBack(g, w) }; toast(j?["error"] as? String ?? "Couldn’t react — try again") }
+      if (j?["ok"] as? Bool) == true { Talk.shared.syncIfNoLine() } else { if let w = was { Talk.shared.putBack(g, w) }; toast(j?["error"] as? String ?? "Couldn’t react — try again") }
     }
   }
   // + : any emoji, from iPhone's emoji keyboard
@@ -2113,9 +2126,10 @@ final class IntroCell: UITableViewCell {
   }
   override func traitCollectionDidChange(_ p: UITraitCollection?) {
     super.traitCollectionDidChange(p)
-    if p?.userInterfaceStyle != traitCollection.userInterfaceStyle { noteText() }
+    if p?.userInterfaceStyle != traitCollection.userInterfaceStyle { noteText(); if let g = shown { UIView.performWithoutAnimation { set(g) } } }
   }
   func set(_ g: Group) {
+    shown = g
     let T = Talk.shared, can = T.canManage(g), mine = g.creator == T.me?.id
     let who = T.people[g.creator]?.name ?? "Someone"
     pic.set(group: g)
@@ -2124,7 +2138,15 @@ final class IntroCell: UITableViewCell {
     let f = DateFormatter(); f.setLocalizedDateFormatFromTemplate("ddMMyyyy")
     sub.text = "Group created \(f.string(from: Date(timeIntervalSince1970: g.createdAt / 1000))) by \(mine ? "you" : who)"
     let text = (g.about ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-    about.text = text; about.isHidden = text.isEmpty
+    // (its admins: a small pencil after the words, in the link colour — the description can be changed by a tap on it,
+    //  Haris 2026-11-22 11:28 "there is no indicator that you can edit")
+    if can && !text.isEmpty {
+      let a = NSMutableAttributedString(string: text + " ", attributes: [.font: about.font as Any, .foregroundColor: UIColor.label])
+      let pen = NSTextAttachment(image: UIImage(systemName: "pencil", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold))!.withTintColor(Look.linkInk.resolvedColor(with: traitCollection), renderingMode: .alwaysOriginal))
+      a.append(NSAttributedString(attachment: pen))
+      about.attributedText = a; about.accessibilityLabel = text + ", edit"
+    } else { about.text = text; about.accessibilityLabel = nil }
+    about.isHidden = text.isEmpty
     describe.isHidden = !text.isEmpty || !can
     canEdit = can
     // (only its admins can add people — for everyone else the card ends at the last line above)
@@ -2132,6 +2154,17 @@ final class IntroCell: UITableViewCell {
     stack.setCustomSpacing(can ? 14 : 0, after: about)
   }
   @objc private func aboutTap() { if canEdit { onDescribe?() } }
+  // (the card changed while it's on screen — a description added, changed or taken off: set in one go with nothing inside
+  //  it sliding, the old look crossfading away — Haris's recording 2026-11-22 11:26, "Add description" seen sliding down)
+  func show(_ g: Group) {
+    let live = window != nil
+    let shot = live ? card.snapshotView(afterScreenUpdates: false) : nil
+    UIView.performWithoutAnimation { set(g); if live { contentView.layoutIfNeeded() } }
+    guard let s = shot else { return }
+    s.frame = card.frame; contentView.addSubview(s)
+    UIView.animate(withDuration: 0.25, animations: { s.alpha = 0 }) { _ in s.removeFromSuperview() }
+  }
+  private var shown: Group?
 }
 
 /* A message sent and one arriving (Haris 2026-11-11): E11 Console's own comment sounds — iPhone's system sound service,

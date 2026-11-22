@@ -90,13 +90,20 @@ final class CleanRedirect: NSObject, URLSessionTaskDelegate {
 }
 
 extension Net {
+  // (the server's answer to a message sent with its file's "it's all there" — taken once by the sender)
+  private static var sentWith: [String: [String: Any]] = [:]
+  private static let sentLock = NSLock()
+  static func keepSent(_ id: String, _ j: [String: Any]) { sentLock.lock(); sentWith[id] = j; sentLock.unlock() }
+  static func takeSent(_ id: String) -> [String: Any]? { sentLock.lock(); defer { sentLock.unlock() }; return sentWith.removeValue(forKey: id) }
   /* a message's file: locked, then to R2 — under 8 MB in one go, else in 8 MB parts three side by side; the ring fills as
      they go. done: the file's id and its key — or, if the server has no R2, the usual way (no key). */
   // (keep: a group's picture — kept in R2 while the group uses it, not under messages' 31-day rule)
   // (back: a file asked for by the group, sent again under its own id — Ask the group, Haris 2026-11-20 21:36; nothing else
   //  happens if it's back already or another phone is sending it)
   // (stop: the sending bubble's id — its ✕ cancels what's going up, Uploads.stop)
-  func uploadMsg(_ data: Data, name: String, keep: Bool = false, back: String? = nil, stop: String? = nil, progress: @escaping (Double) -> Void, done: @escaping (String?, String?) -> Void) {
+  // (message: the message to send with "it's all there", in the same call — the server sends it and gives its answer as
+  //  "sent", kept for the sender in sentWith; one trip instead of two, Haris 2026-11-22 11:26)
+  func uploadMsg(_ data: Data, name: String, keep: Bool = false, back: String? = nil, stop: String? = nil, message: ((String, String) -> [String: Any])? = nil, progress: @escaping (Double) -> Void, done: @escaping (String?, String?) -> Void) {
     // (over 200 MB: locked in pieces, one at a time as they go up — its key given back as "p:<key>"; Haris 2026-11-21 11:00)
     if data.count > 200 * 1024 * 1024 { return uploadPieces(data, name: name, back: back, stop: stop, progress: progress, done: done) }
     guard let sealed = FileLock.seal(data) else { return back != nil ? done(nil, nil) : upload(data, name: name, progress: progress) { done($0, nil) } }
@@ -114,10 +121,12 @@ extension Net {
         guard let etags = etags else { return done(nil, nil) }
         var b: [String: Any] = ["id": id, "etags": etags]
         if back != nil { b["back"] = true; b["key"] = sealed.key }
+        else if let mk = message { b["send"] = mk(id, sealed.key) }
         let bg = UIApplication.shared.beginBackgroundTask(withName: "talk-r2-done") {}
         self.post("/api/talk/r2/done", b) { d in
           defer { DispatchQueue.main.asyncAfter(deadline: .now() + 20) { UIApplication.shared.endBackgroundTask(bg) } }
           guard (d?["ok"] as? Bool) == true else { return done(nil, nil) }
+          if let s = d?["sent"] as? [String: Any] { Net.keepSent(id, s) }
           progress(1); done(id, sealed.key)
         }
       }
