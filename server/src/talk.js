@@ -15,6 +15,7 @@ import crypto from 'node:crypto';
 import { isAway } from './away.js';
 
 const KEEP_MS = 30 * 86400000;          // never picked up: gone after 30 days
+const UNSENT_MS = 86400000;            // an upload never sent in a message: gone after a day (Haris 2026-11-22 16:02)
 // (a file a phone has downloaded: kept one more day — the server's "sent" isn't the phone's "got": Cloudflare takes the
 //  whole file at once, and a phone that stalled or lost the line asked again for a file already let go — Haris 2026-11-20 16:57)
 const GOT_MS = 86400000;
@@ -498,7 +499,10 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     Q.dropOldGot.run(t - GOT_MS);
     dropFiles(had);
     for (const r of Q.oldSent.all(t - KEEP_MS)) Q.dropSent.run(r.id);
-    // uploads never sent in a message (or long gone)
+    // uploads never sent in any message: let go a day after they began (Haris 2026-11-22 16:02 — was 30 days)
+    const inSent = db.prepare('SELECT 1 FROM sent WHERE files LIKE ? LIMIT 1');
+    dropFiles(Q.oldFiles.all(t - UNSENT_MS).map((r) => r.id).filter((id) => !inSent.get(`%"${id}"%`) && !Q.fileInUse.get(`%"id":"${id}"%`)));
+    // (and anything long gone)
     const stale = Q.oldFiles.all(t - KEEP_MS).map((r) => r.id);
     dropFiles(stale.filter((id) => !Q.fileInUse.get(`%"id":"${id}"%`)));
     // linked Macs: gone when their phone hasn't opened E11 Talk for 30 days, or their person has left the team
@@ -1207,6 +1211,15 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       return { ok: true, id, ...(s.put ? { put: s.put } : { part: s.part, urls: s.urls }) };
     } catch (e) { Q.dropFile.run(id); return bad(e.message, 502); }
   }
+  // the phone let an upload go (the send screen closed, a photo taken out, HD switched, ✕ on its bubble): it goes at once —
+  // only one of this person's own, never in any message (Haris 2026-11-22 16:02)
+  function r2Drop(u, id) {
+    const f = Q.getFile.get(String(id || ''));
+    if (!f || f.by !== u.id) return { ok: true };
+    if (db.prepare('SELECT 1 FROM sent WHERE files LIKE ? LIMIT 1').get(`%"${f.id}"%`)) return { ok: true, kept: true };
+    dropFiles([f.id]);
+    return { ok: true };
+  }
   async function r2Done(u, id, etags, back = null) {
     const f = Q.getFile.get(String(id || ''));
     if (!f || f.by !== u.id || f.store !== 'r2') return bad('Upload not found — please try again', 404);
@@ -1420,6 +1433,6 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   function personByEmail(e) { const u = access.userByEmail(e); if (u) return personOf(u); const k = contactByEmail(e); return k ? { id: k.id, name: k.name, role: 'Client', photo: null, color: null } : null; }
   // (how much Talk keeps in R2 — counted with E11 Console's files under one ceiling, consoler2.js)
   const r2Bytes = () => Number(db.prepare("SELECT COALESCE(SUM(size), 0) AS n FROM files WHERE store = 'r2'").get().n);
-  return { r2Bytes, phoneFor, r2, r2Key, r2Start, r2Done, ask, asksFor, resendStart, shareHistory, state, act, sync, ack, got, unreadFor, reviewDemo, sample, upload, tasksChanged, peopleChanged, linksChanged, contactByEmail, personByEmail, fileFor, filePath, fetched, listen, sweep, isAdminOf,
+  return { r2Bytes, phoneFor, r2, r2Key, r2Start, r2Done, r2Drop, ask, asksFor, resendStart, shareHistory, state, act, sync, ack, got, unreadFor, reviewDemo, sample, upload, tasksChanged, peopleChanged, linksChanged, contactByEmail, personByEmail, fileFor, filePath, fetched, listen, sweep, isAdminOf,
     linkCode, linkStatus, macFor, unlinkMac, macCode, macStatus, macByKey, userById, history, hasFiles, resend, close: () => { clearInterval(sweepTimer); for (const set of listeners.values()) for (const r of set) try { r.end(); } catch { /* fine */ } db.close(); } };
 }

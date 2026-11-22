@@ -896,6 +896,7 @@ export function createServer(cfg) {
         return out({ ok: true, ...office.ticket(dev, { k: 'talkup', ...who }) });
       }
       // a message's file straight to R2 (newer phones): where to put it, then "it's all there"
+      if (p === '/api/talk/r2/drop' && req.method === 'POST') { const b = await readBody(req, 4 * 1024); return out(t.r2Drop(u, b.id)); }
       if (p === '/api/talk/r2/start' && req.method === 'POST') { const b = await readBody(req, 16 * 1024); return out(await t.r2Start(u, b.name, b.size, b.keep === true)); }
       // (…and, from newer phones, the message itself with it — one trip instead of two: Haris 2026-11-22 11:26)
       if (p === '/api/talk/r2/done' && req.method === 'POST') {

@@ -15,7 +15,7 @@ import crypto from 'node:crypto';
 export const TALK_TABLES = ['groups', 'members', 'prefs', 'events', 'waiting', 'sent', 'files', 'contacts', 'macs', 'link_codes', 'phone_seen',
   'phones', 'bare_seen', 'needs', 'opts', 'unread', 'file_kept', 'file_had', 'asks'];
 // what older Talk apps ask the office that the hub answers (the rest — notifications, the live line, Macs — stay here)
-const RELAYED = /^\/api\/talk\/(state|act|sync|ack|got|r2\/start|r2\/done|ask|asks|resend\/start|history\/share|file\/.+)$/;
+const RELAYED = /^\/api\/talk\/(state|act|sync|ack|got|r2\/start|r2\/done|r2\/drop|ask|asks|resend\/start|history\/share|file\/.+)$/;
 const SKEW = 5 * 60_000, BACK_EVERY = 10 * 60_000;
 const SPKI_ED25519 = Buffer.from('302a300506032b6570032100', 'hex');
 const writes = (q) => !/^\s*(SELECT|PRAGMA)\b/i.test(q);

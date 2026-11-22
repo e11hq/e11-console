@@ -68,6 +68,7 @@ export class HubCore {
   got(w, group, msg) { return this.run((t) => t.got(w.dev, group, msg)); }
   sweep() { if (this.sweepFn) this.run(() => this.sweepFn()); }
   // files (R2) — the same calls as the office's
+  r2Drop(w, b) { return this.run((t) => t.r2Drop(w.u, b.id)); }
   r2Start(w, b) { return this.run((t) => t.r2Start(w.u, b.name, b.size, b.keep === true)); }
   // (…and, from newer phones, the message itself with it — one trip instead of two: Haris 2026-11-22 11:26)
   r2Done(w, b) {

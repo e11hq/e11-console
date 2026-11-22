@@ -85,3 +85,24 @@ test('a piece is written into storage as it arrives (a stream of the length the 
     assert.equal(big.status, 413);
   } finally { delete globalThis.FixedLengthStream; }
 });
+
+test('an upload let go by the phone goes at once; one in a message stays; unsent ones go after a day', async () => {
+  let t = Date.parse('2026-11-22T08:00:00Z');
+  const bucket = fakeBucket(), e = env(bucket);
+  const h = new HubCore({ sql: fakeSql(), dir: DIR, now: () => t, r2: bindingR2({ bucket, secret: e.R2_LINK_SECRET, base: e.PUBLIC }) });
+  const a = h.who('haris@e11.test', 'phone-key-aaaaaaaaaaaa'), b = h.who('lana@e11.test', 'phone-key-bbbbbbbbbbbb');
+  const gid = h.act(a, { act: 'newGroup', client: 'p1', name: 'Drop', members: ['u2'] }).group.id;
+  const up = async () => { const s = await h.r2Start(a, { name: 'p.heic', size: 10 }); await serveR2(new Request(s.put, { method: 'PUT', body: new Uint8Array(10) }), e, path(s.put)); await h.r2Done(a, { id: s.id }); return s.id; };
+  const gone = await up();
+  assert.ok(bucket.objs.has('msg/' + gone));
+  assert.equal((await h.r2Drop(b, { id: gone })).ok, true); assert.ok(bucket.objs.has('msg/' + gone), 'not someone else’s to let go');
+  await h.r2Drop(a, { id: gone }); await new Promise((r) => setTimeout(r, 10));
+  assert.ok(!bucket.objs.has('msg/' + gone), 'let go at once');
+  const sent = await up();
+  h.act(a, { act: 'send', group: gid, text: '', file: { id: sent, kind: 'photo', key: 'A'.repeat(43) + '=' } });
+  assert.equal((await h.r2Drop(a, { id: sent })).kept, true); assert.ok(bucket.objs.has('msg/' + sent), 'in a message: stays');
+  const left = await up();
+  t += 25 * 3600_000; h.sweep(); await new Promise((r) => setTimeout(r, 10));
+  assert.ok(!bucket.objs.has('msg/' + left), 'never sent: gone after a day');
+  assert.ok(bucket.objs.has('msg/' + sent), 'the sent one: by its own rules');
+});

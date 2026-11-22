@@ -116,6 +116,7 @@ export class TalkHub extends DurableObject {
       case 'ack': return this.core.ack(w, b.upto);
       case 'got': return this.core.got(w, b.groupId, b.msgId);
       case 'r2/start': return this.core.r2Start(w, b);
+      case 'r2/drop': return this.core.r2Drop(w, b);
       case 'r2/done': return this.core.r2Done(w, b);
       case 'ask': return this.core.ask(w, b);
       case 'asks': return this.core.asks(w);
