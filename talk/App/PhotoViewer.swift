@@ -240,12 +240,14 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     // (under the buttons — it flew over ☺︎ and Reply and cut them, Haris 2026-11-12)
     view.insertSubview(fly, aboveSubview: pager); pager.alpha = 0; back.alpha = 0; top.alpha = 0; foot.alpha = 0
     if whole { src.alpha = 0 }
+    pages[safe: at]?.landed = false
     let to = ZoomPage.fit(img.size, in: view.bounds)
     UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.88, initialSpringVelocity: 0) {
       fly.frame = to; fly.layer.cornerRadius = 0; fly.shades.forEach { $0.alpha = 0 }; self.back.alpha = 1; self.top.alpha = 1; self.foot.alpha = 1
     } completion: { _ in
       // (the page fades in over the landed picture — with it Apple's shade under the status bar, which popped in at once,
       //  Haris 2026-11-12)
+      self.pages.forEach { $0.landed = true }
       UIView.animate(withDuration: 0.18, animations: { self.pager.alpha = 1 }) { _ in fly.removeFromSuperview(); src.alpha = 1 }
     }
   }
@@ -421,6 +423,13 @@ final class ZoomPage: UIScrollView, UIScrollViewDelegate {
   var onPlaying: (() -> Void)?
   var onPlayer: (() -> Void)?   // (its player made — the viewer's seek bar follows it)
   var seconds: Double? { msg.file?.secs }
+  // (sound and picture together — Haris 2026-11-22 18:52: it played under the flying still, heard before it was seen. It
+  //  plays only once the picture has landed and its first frame is ready; the still stays only until then)
+  var landed = true { didSet { go() } }
+  private func go() {
+    guard want, landed, !held, let p = player, playerView?.pl.isReadyForDisplay == true, p.timeControlStatus == .paused else { return }
+    p.play()
+  }
   var chrome = true { didSet { button(animated: true) } }
   init(msg: Msg) {
     self.msg = msg; super.init(frame: .zero)
@@ -469,7 +478,7 @@ final class ZoomPage: UIScrollView, UIScrollViewDelegate {
     guard msg.kind == "video", let f = msg.file else { return }
     want = true
     try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
-    if let p = player { if atEnd { atEnd = false; p.seek(to: .zero) }; if !held { p.play() }; return }
+    if let p = player { if atEnd { atEnd = false; p.seek(to: .zero) }; go(); return }
     load(f)
   }
   // (as the viewer starts opening: the player made and readied, not playing — it plays the moment the picture has landed,
@@ -493,16 +502,16 @@ final class ZoomPage: UIScrollView, UIScrollViewDelegate {
       v.frame = self.image.bounds; v.autoresizingMask = [.flexibleWidth, .flexibleHeight]
       self.image.addSubview(v)   // (inside the picture: it follows the finger when swiped down, and flies back with it)
       self.player = p; self.playerView = v
-      self.ready = v.pl.observe(\.isReadyForDisplay, options: [.initial, .new]) { l, _ in
+      self.ready = v.pl.observe(\.isReadyForDisplay, options: [.initial, .new]) { [weak self] l, _ in
         guard l.isReadyForDisplay else { return }
-        DispatchQueue.main.async { UIView.animate(withDuration: 0.18) { v.alpha = 1 } }
+        DispatchQueue.main.async { v.alpha = 1; self?.go() }   // (its first frame in place of the still at once, then it plays)
       }
       self.rate = p.observe(\.timeControlStatus, options: [.new]) { [weak self] pl, _ in
         DispatchQueue.main.async { guard let self = self else { return }; if pl.timeControlStatus == .playing { self.onPlaying?() }; self.button(animated: true) }
       }
       self.ended = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: p.currentItem, queue: .main) { [weak self] _ in self?.atEnd = true; self?.button(animated: true) }
       self.onPlayer?()
-      if self.want { p.play() }
+      self.go()
     } }
   }
   // the seek bar: dragged — paused while the finger is on it, on from there when it's let go (if it was playing)
