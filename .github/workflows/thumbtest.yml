@@ -1,0 +1,17 @@
+# A one-off test run on Haris's Mac (2026-11-22 16:40): Talk's video-frame code on his HDR video. Branch deleted after.
+name: Talk thumbnail test
+on:
+  push:
+    branches: [thumbtest-tmp]
+jobs:
+  t:
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run
+        run: swift thumbtest/thumbtest.swift thumbtest/in.mp4 "$RUNNER_TEMP/out"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: thumbtest
+          path: ${{ runner.temp }}/out/*.jpg
