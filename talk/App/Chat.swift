@@ -3293,9 +3293,9 @@ final class BubbleCell: UITableViewCell {
       for ext in ["mp4", "mov", "m4v"] where img == nil {
         let named = FileManager.default.temporaryDirectory.appendingPathComponent("v-\(Net.stableKey(id)).\(ext)")
         if !FileManager.default.fileExists(atPath: named.path) { try? FileManager.default.copyItem(at: url, to: named) }
-        let g = AVAssetImageGenerator(asset: AVURLAsset(url: named)); g.appliesPreferredTrackTransform = true; g.maximumSize = CGSize(width: 720, height: 720)
+        let g = Thumb.frames(AVURLAsset(url: named)); g.maximumSize = CGSize(width: 720, height: 720)
         g.requestedTimeToleranceBefore = .positiveInfinity; g.requestedTimeToleranceAfter = .positiveInfinity
-        img = ((try? g.copyCGImage(at: CMTime(seconds: 0.1, preferredTimescale: 600), actualTime: nil)) ?? (try? g.copyCGImage(at: .zero, actualTime: nil))).map { UIImage(cgImage: Thumb.sdr($0)) }
+        img = ((try? g.copyCGImage(at: CMTime(seconds: 0.1, preferredTimescale: 600), actualTime: nil)) ?? (try? g.copyCGImage(at: .zero, actualTime: nil))).map { UIImage(cgImage: $0) }
       }
       if let i = img { frames.setObject(i, forKey: id as NSString) }
       DispatchQueue.main.async { done(img) }

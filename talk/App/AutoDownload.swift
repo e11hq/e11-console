@@ -198,25 +198,25 @@ final class Downloads: NSObject, URLSessionDownloadDelegate {
 
 /* a photo's or video's tiny picture, made on the phone that sends it — shown blurred until the real one is downloaded */
 enum Thumb {
-  // a video's frame as a standard picture — an HDR video's frame comes in HDR and, kept as it was, showed dark; turned into
-  //  standard colour here (toned down to fit first where iPhone can), as Photos' own thumbnails (Haris 2026-11-22 15:34)
-  private static let sdrCtx = CIContext(options: [.workingColorSpace: CGColorSpace(name: CGColorSpace.extendedLinearSRGB)!])
-  static func sdr(_ cg: CGImage) -> CGImage {
-    var img = CIImage(cgImage: cg)
-    if #available(iOS 18.0, *), let f = CIFilter(name: "CIToneMapHeadroom") {
-      f.setValue(img, forKey: kCIInputImageKey); f.setValue(1.0, forKey: "inputTargetHeadroom")
-      if let o = f.outputImage { img = o }
+  // a video's frame taker: an HDR video's frame turned into standard colour by iPhone's own video tools as it's taken — the
+  //  same way as before 236, when thumbnails were right (Haris 2026-11-22 15:56); converting the frame after didn't help
+  static func frames(_ asset: AVAsset) -> AVAssetImageGenerator {
+    let g = AVAssetImageGenerator(asset: asset); g.appliesPreferredTrackTransform = true
+    if let t = asset.tracks(withMediaType: .video).first, t.hasMediaCharacteristic(.containsHDRVideo) {
+      let c = AVMutableVideoComposition(propertiesOf: asset)
+      c.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2; c.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2; c.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
+      g.videoComposition = c
     }
-    return sdrCtx.createCGImage(img, from: img.extent, format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!) ?? cg
+    return g
   }
   static func make(_ url: URL, kind: String) -> String? {
     var img: UIImage?
     if kind == "photo" {
       img = CGImageSourceCreateWithURL(url as CFURL, nil).flatMap { CGImageSourceCreateThumbnailAtIndex($0, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 32] as CFDictionary) }.map { UIImage(cgImage: $0) }
     } else if kind == "video" {
-      let g = AVAssetImageGenerator(asset: AVURLAsset(url: url)); g.appliesPreferredTrackTransform = true; g.maximumSize = CGSize(width: 32, height: 32)
+      let g = Thumb.frames(AVURLAsset(url: url)); g.maximumSize = CGSize(width: 32, height: 32)
       g.requestedTimeToleranceBefore = .positiveInfinity; g.requestedTimeToleranceAfter = .positiveInfinity
-      img = (try? g.copyCGImage(at: CMTime(seconds: 0.1, preferredTimescale: 600), actualTime: nil)).map { UIImage(cgImage: Thumb.sdr($0)) }
+      img = (try? g.copyCGImage(at: CMTime(seconds: 0.1, preferredTimescale: 600), actualTime: nil)).map { UIImage(cgImage: $0) }
     }
     guard let i = img, let d = i.jpegData(compressionQuality: 0.5), d.count < 2900 else { return nil }
     return d.base64EncodedString()
@@ -228,9 +228,9 @@ enum Thumb {
     if kind == "photo" {
       cg = CGImageSourceCreateWithURL(url as CFURL, nil).flatMap { CGImageSourceCreateThumbnailAtIndex($0, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 320] as CFDictionary) }
     } else if kind == "video" {
-      let g = AVAssetImageGenerator(asset: AVURLAsset(url: url)); g.appliesPreferredTrackTransform = true; g.maximumSize = CGSize(width: 320, height: 320)
+      let g = Thumb.frames(AVURLAsset(url: url)); g.maximumSize = CGSize(width: 320, height: 320)
       g.requestedTimeToleranceBefore = .positiveInfinity; g.requestedTimeToleranceAfter = .positiveInfinity
-      cg = (try? g.copyCGImage(at: CMTime(seconds: 0.1, preferredTimescale: 600), actualTime: nil)).map(Thumb.sdr)
+      cg = (try? g.copyCGImage(at: CMTime(seconds: 0.1, preferredTimescale: 600), actualTime: nil))
     }
     guard let c = cg else { return nil }
     let i = UIImage(cgImage: c)

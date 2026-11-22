@@ -236,8 +236,8 @@ final class SendPreviewVC: UIViewController, UIScrollViewDelegate, UITextFieldDe
     switch it.kind {
     case "photo": return UIImage(contentsOfFile: it.url.path)?.preparingThumbnail(of: CGSize(width: 120, height: 120))
     case "video":
-      let g = AVAssetImageGenerator(asset: AVURLAsset(url: it.url)); g.appliesPreferredTrackTransform = true
-      return (try? g.copyCGImage(at: .zero, actualTime: nil)).map { UIImage(cgImage: Thumb.sdr($0)) }
+      let g = Thumb.frames(AVURLAsset(url: it.url))
+      return (try? g.copyCGImage(at: .zero, actualTime: nil)).map { UIImage(cgImage: $0) }
     default: return UIImage(systemName: "doc.fill")
     }
   }
