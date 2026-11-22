@@ -1,4 +1,6 @@
 import UIKit
+import AVFoundation
+import CoreImage
 
 /* A test page for now (Haris 2026-11-22 16:49): the last video sent — how long each step took, and the previews Talk made for
    it with how bright they are — to find out why a video waits after it's up and why an HDR video's previews are dark.
@@ -18,6 +20,43 @@ enum Diag {
     guard let cg = cg else { return }
     let b = brightness(cg)
     DispatchQueue.main.async { if !pictures.contains(where: { $0.0 == what }) { pictures.append((what, UIImage(cgImage: cg), b)) } }
+  }
+  static func note(_ s: String) { DispatchQueue.main.async { guard t0 > 0 else { return }; steps.append(("· " + s, CACurrentMediaTime() - t0)) } }
+  // the same frame of Talk's copy, four ways — to see which is right on the phone itself
+  static func variants(_ url: URL) {
+    guard t0 > 0, !pictures.contains(where: { $0.0.hasPrefix("A ") }) else { return }
+    // (with its name ending in .mp4 — iPhone's video tools may need it)
+    let named = FileManager.default.temporaryDirectory.appendingPathComponent("diag-\(UUID().uuidString).mp4")
+    try? FileManager.default.copyItem(at: url, to: named)
+    let a = AVURLAsset(url: named)
+    let at = CMTime(seconds: 0.1, preferredTimescale: 600)
+    func gen(_ comp: Bool) -> CGImage? {
+      let g = AVAssetImageGenerator(asset: a); g.appliesPreferredTrackTransform = true; g.maximumSize = CGSize(width: 320, height: 320)
+      g.requestedTimeToleranceBefore = .positiveInfinity; g.requestedTimeToleranceAfter = .positiveInfinity
+      if comp { let c = AVMutableVideoComposition(propertiesOf: a); c.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2; c.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2; c.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2; g.videoComposition = c }
+      return try? g.copyCGImage(at: at, actualTime: nil)
+    }
+    picture("A plain frame", gen(false))
+    picture("B standard colour as taken (Talk now)", gen(true))
+    if let p = gen(false) {
+      var img = CIImage(cgImage: p)
+      if #available(iOS 18.0, *), let t = CIFilter(name: "CIToneMapHeadroom") { t.setValue(img, forKey: kCIInputImageKey); t.setValue(1.0, forKey: "inputTargetHeadroom"); if let o = t.outputImage { img = o } }
+      picture("C plain, toned down by Core Image", CIContext().createCGImage(img, from: img.extent, format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!))
+    }
+    // D: the first frame read as the video itself is played, turned to standard colour by Core Image
+    if let r = try? AVAssetReader(asset: a), let t = a.tracks(withMediaType: .video).first {
+      let o = AVAssetReaderTrackOutput(track: t, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange])
+      if r.canAdd(o) { r.add(o); r.startReading()
+        if let sb = o.copyNextSampleBuffer(), let pb = CMSampleBufferGetImageBuffer(sb) {
+          var img = CIImage(cvPixelBuffer: pb)
+          if #available(iOS 18.0, *), let f = CIFilter(name: "CIToneMapHeadroom") { f.setValue(img, forKey: kCIInputImageKey); f.setValue(1.0, forKey: "inputTargetHeadroom"); if let x = f.outputImage { img = x } }
+          img = img.transformed(by: CGAffineTransform(scaleX: 320 / max(img.extent.width, img.extent.height), y: 320 / max(img.extent.width, img.extent.height)))
+          picture("D as played, toned down by Core Image", CIContext().createCGImage(img, from: img.extent, format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!))
+        }
+        r.cancelReading()
+      }
+    }
+    try? FileManager.default.removeItem(at: named)
   }
   static func picture(_ what: String, base64: String?) {
     guard let s = base64, let d = Data(base64Encoded: s), let i = UIImage(data: d), let cg = i.cgImage else { return }

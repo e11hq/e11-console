@@ -305,6 +305,7 @@ final class BgUploads: NSObject, URLSessionDataDelegate {
     guard let w = waiting.removeValue(forKey: key(s, task)) else { return }   // (from before Talk was closed, or handed over: nothing waits for it here)
     try? FileManager.default.removeItem(at: w.file)
     let h = task.response as? HTTPURLResponse
+    if let st = h?.value(forHTTPHeaderField: "Server-Timing") { Diag.note("Cloudflare for this piece: " + st) }   // (the test page)
     w.done(error == nil && h?.statusCode == 200 ? (h?.value(forHTTPHeaderField: "ETag") ?? "") : nil)
   }
   // woken by iPhone with everything handed over done: told back once the next steps have had their moment

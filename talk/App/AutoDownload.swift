@@ -230,11 +230,14 @@ enum Thumb {
     } else if kind == "video" {
       let g = Thumb.frames(AVURLAsset(url: url)); g.maximumSize = CGSize(width: 320, height: 320)
       g.requestedTimeToleranceBefore = .positiveInfinity; g.requestedTimeToleranceAfter = .positiveInfinity
-      cg = (try? g.copyCGImage(at: CMTime(seconds: 0.1, preferredTimescale: 600), actualTime: nil))
+      do { cg = try g.copyCGImage(at: CMTime(seconds: 0.1, preferredTimescale: 600), actualTime: nil) }
+      catch { Diag.note("Sharp preview: the frame couldn't be taken — \((error as NSError).localizedDescription) (file: \(url.lastPathComponent))") }
+      Diag.variants(url)   // (the test page: the same frame four ways)
     }
     guard let c = cg else { return nil }
     let i = UIImage(cgImage: c)
     for q in [0.6, 0.45, 0.3] as [CGFloat] { if let d = i.jpegData(compressionQuality: q), d.count <= 35_000 { return d.base64EncodedString() } }
+    if kind == "video" { Diag.note("Sharp preview: too big even at the lowest quality") }
     return nil
   }
   private static let made = NSCache<NSString, UIImage>()
