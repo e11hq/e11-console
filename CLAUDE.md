@@ -142,6 +142,14 @@ his yes send it with the "Send to TestFlight" workflow (testflight.yml, its buil
 Every time Haris says yes and it's sent, tell him in the same reply what changed since the last TestFlight build, as
 short points (new / better / fixed — from the commits between the two builds) — Haris 2026-11-04.
 
+**The repo's own folder stays still — no surprise commits (Haris, 2026-11-22 22:37: "make it safe and keep it in your
+memory"):** the session's first copy of the repo (`/home/claude/e11-console`) sits on a **detached HEAD**, never on a branch;
+all work happens in separate worktrees (main, ios-nav, macapp-13, talk-chat-1). A worktree's commit to a branch the first copy
+also had checked out moved that copy's pointer while its files stayed old — so it looked like 144 files changed, and the
+end-of-turn hook said "commit and push" (twice: 2026-11-18 and 2026-11-22). **Never commit what that hook lists without
+reading it:** if it's a mass deletion or old versions of files, it's that stale snapshot — bring the copy back to the pushed
+code (`git checkout --detach origin/<branch>`), commit nothing. Only Claude's own deliberate changes are ever committed.
+
 **Publishing to the App Store — how we do it, every time (Haris, 2026-11-22 22:33: "put this in your system, not to
 forget"):**
 1. **"Mark as RC" / "lock"** — for each app, two branches at the exact commit its build was made from (the build run's own
