@@ -1,4 +1,5 @@
 import UIKit
+import Network
 import AVFoundation
 import UniformTypeIdentifiers
 
@@ -40,6 +41,12 @@ enum Uploader {
   //  whole file goes on with the app closed — E11 Talk's way, Haris 2026-11-21 15:50 "same settings as talk")
   static var together: Int { UIApplication.shared.applicationState == .background ? 1000 : 3 }
   static var fillers: [UUID: () -> Void] = [:]
+  // (on mobile data the office network is never there — not asked: one trip less for every upload; Haris 2026-11-22 19:17)
+  private static let net: NWPathMonitor = { let m = NWPathMonitor(); m.start(queue: DispatchQueue(label: "e11.up.net")); return m }()
+  static var onMobile: Bool { let p = net.currentPath; return p.usesInterfaceType(.cellular) && !p.usesInterfaceType(.wifi) && !p.usesInterfaceType(.wiredEthernet) }
+  // (a small file — a voice note — straight to the server in one trip, not Cloudflare R2's three: start, the file, "it's all
+  //  there"; Haris 2026-11-22 19:17)
+  static let small: Int64 = 1024 * 1024
   private static let leaving: NSObjectProtocol = NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
     Uploader.fillers.values.forEach { $0() }
   }
@@ -205,7 +212,9 @@ enum Uploader {
       var body: [String: Any] = ["kind": "up", "name": name, "size": size]
       if let d = dest { body["dest"] = d } else { body["taskId"] = task }
       // (not in the office: straight into Cloudflare R2, the office pulls it in — R2Native; the usual way if that can't)
-      Office.pass(body, cookie: c) { p in if p != nil { attempt(p, c) } else { viaR2(c) } }
+      let away = { size <= Uploader.small ? attempt(nil, c) : viaR2(c) }
+      if Uploader.onMobile { return away() }
+      Office.pass(body, cookie: c) { p in if p != nil { attempt(p, c) } else { away() } }
     } }
 
   }
@@ -1139,9 +1148,23 @@ final class VoiceBubble: UIView, AVAudioPlayerDelegate {
   private var player: AVAudioPlayer?, timer: Timer?
   private let path: String, dur: Int
   private var bars: [UIView] = []
+  // (each voice note fetched as soon as it shows, kept — ▶ plays at once, no wait on the first tap: Haris 2026-11-22 19:17)
+  private static let got = NSCache<NSString, NSData>()
+  private static var asking: [String: [(Data?) -> Void]] = [:]
+  private static func fetch(_ path: String, _ done: @escaping (Data?) -> Void) {
+    if let d = got.object(forKey: path as NSString) { return done(d as Data) }
+    if asking[path] != nil { asking[path]!.append(done); return }
+    asking[path] = [done]
+    FeedLoader.shared.data(path) { d in
+      if let d = d, !d.isEmpty { got.setObject(d as NSData, forKey: path as NSString) }
+      let w = asking.removeValue(forKey: path) ?? []
+      w.forEach { $0(d) }
+    }
+  }
   init(path: String, dur: Int, pending: Bool = false) {
     self.path = path; self.dur = dur
     super.init(frame: .zero)
+    if !pending, !path.isEmpty { VoiceBubble.fetch(path) { _ in } }
     defer {
       // uploading: the same pill (blue ▶, its length) pulsing softly; it can't be played until it's there
       if pending {
@@ -1208,7 +1231,7 @@ final class VoiceBubble: UIView, AVAudioPlayerDelegate {
     if let p = player, p.isPlaying { p.pause(); paint(false); return }
     if let p = player { p.play(); paint(true); return }
     play.isEnabled = false
-    FeedLoader.shared.data(path) { [weak self] d in
+    VoiceBubble.fetch(path) { [weak self] d in
       guard let self = self else { return }
       self.play.isEnabled = true
       guard let d = d, let p = try? AVAudioPlayer(data: d) else { return }
