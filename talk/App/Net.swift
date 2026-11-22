@@ -123,7 +123,7 @@ final class Net {
       }
       if sent { return }
     }
-    session.dataTask(with: request(path, method: method, json: json, body: body)) { [weak self] d, resp, err in
+    let task = session.dataTask(with: request(path, method: method, json: json, body: body)) { [weak self] d, resp, err in
       let http = resp as? HTTPURLResponse
       let j = d.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
       // (the hub says the office has Talk now, refuses, or can't be reached: the same call to the office — nothing lost)
@@ -138,7 +138,10 @@ final class Net {
         if signedOut { self?.onSignedOut?(); done(nil); return }
         done(j)
       }
-    }.resume()
+    }
+    // (the test page, for now: iPhone's own record of the calls waited on — Diag)
+    if waitedOn || path.hasPrefix("/api/talk/r2/start") { task.delegate = DiagMetrics(String(path.dropFirst("/api/talk/".count)).components(separatedBy: "?")[0]) }
+    task.resume()
   }
   func get(_ path: String, _ done: @escaping ([String: Any]?) -> Void) { call(path, done: done) }
   func post(_ path: String, _ json: [String: Any], _ done: @escaping ([String: Any]?) -> Void = { _ in }) { call(path, method: "POST", json: json, done: done) }

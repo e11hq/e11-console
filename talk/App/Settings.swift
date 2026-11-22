@@ -497,4 +497,11 @@ final class AboutVC: UITableViewController {
     c.contentConfiguration = cfg
     return c
   }
+  // (Version tapped five times: the test page — Diag, for now)
+  private var taps = 0
+  override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) {
+    guard ip.row == 0 else { return }
+    taps += 1
+    if taps >= 5 { taps = 0; navigationController?.pushViewController(DiagVC(), animated: true) }
+  }
 }

@@ -319,6 +319,7 @@ final class BgUploads: NSObject, URLSessionDataDelegate {
   func urlSession(_ s: URLSession, task: URLSessionTask, didSendBodyData _: Int64, totalBytesSent: Int64, totalBytesExpectedToSend _: Int64) {
     waiting[key(s, task)]?.sent(totalBytesSent)
   }
+  func urlSession(_ s: URLSession, task: URLSessionTask, didFinishCollecting m: URLSessionTaskMetrics) { Diag.metrics("upload piece", m) }   // (the test page, for now)
   func urlSession(_ s: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
     if s === fg { open[task.taskIdentifier] = nil }
     guard let w = waiting.removeValue(forKey: key(s, task)) else { return }   // (from before Talk was closed, or handed over: nothing waits for it here)
