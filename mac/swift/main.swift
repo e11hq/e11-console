@@ -202,6 +202,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     window.delegate = self
 
     let config = WKWebViewConfiguration()
+    // (minimised or behind other windows, the page keeps running at full speed — macOS held it, and its notifications came
+    //  only once the window was seen again: Haris 2026-11-22 19:58)
+    if #available(macOS 14.0, *) { config.preferences.inactiveSchedulingPolicy = .none }
     config.websiteDataStore = .default()   // stay signed in between launches
     config.userContentController.add(self, name: "e11")
     // the startup screen is the app's own (Haris 2026-11-15 14:43): the page is told before anything runs, so it never draws
@@ -985,6 +988,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   func userNotificationCenter(_ c: UNUserNotificationCenter, willPresent n: UNNotification, withCompletionHandler done: @escaping (UNNotificationPresentationOptions) -> Void) {
     // (Apple's own from the server: also its sound and the Dock badge)
     let remote = n.request.content.userInfo["e11"] != nil
+    // (a deleted comment's quiet replacement, "This comment was deleted": no banner with the app in front — only in the list,
+    //  in place of the old one; Haris 2026-11-22 20:20)
+    if ((n.request.content.userInfo["e11"] as? [String: Any])?["gone"]) != nil { if #available(macOS 11.0, *) { done([.list]) } else { done([]) }; return }
     // (Update Ready: its sound too, with the app in front)
     let update = n.request.content.categoryIdentifier == "e11-update"
     if #available(macOS 11.0, *) { done(remote ? [.banner, .list, .sound, .badge] : update ? [.banner, .list, .sound] : [.banner, .list]) } else { done(update ? [.alert, .sound] : [.alert]) }

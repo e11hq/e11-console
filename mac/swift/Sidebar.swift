@@ -346,7 +346,7 @@ final class SideLine: FlippedView { override func draw(_ r: NSRect) { SIDE_LINE.
 final class SideMe: SideHit {
   let name = sideLabel(13, .semibold), role = sideLabel(11.5, .regular, .secondaryLabelColor)
   let chev = NSImageView()
-  var photo: NSImage?, initials = "", color = NSColor.systemRed
+  var photo: NSImage?, initials = "", color = NSColor.systemGray   // (grey, never red, until there's a picture — Haris 2026-11-22 19:58)
   override init(frame: NSRect) {
     super.init(frame: frame)
     chev.imageScaling = .scaleNone; chev.contentTintColor = .tertiaryLabelColor; chev.image = sideSymbol("chev", 10, .semibold)
@@ -517,9 +517,21 @@ final class Sidebar: NSView {
     let me0 = m["me"] as? [String: Any] ?? [:]
     me.name.stringValue = me0["name"] as? String ?? ""
     me.role.stringValue = me0["role"] as? String ?? ""
-    me.photo = sideImage(me0["photo"])
-    me.initials = me0["initials"] as? String ?? ""
-    me.color = sideColor(me0["color"]) ?? .systemRed
+    // (the last picture shown, kept on this Mac: there from the first moment on open — the page sends it a moment later and a
+    //  red circle showed meanwhile; Haris 2026-11-22 19:58)
+    var photo = sideImage(me0["photo"]), color = sideColor(me0["color"]), ini = me0["initials"] as? String ?? ""
+    let meName = me0["name"] as? String ?? "", kept = UserDefaults.standard.dictionary(forKey: "e11_side_me")
+    if photo == nil && color == nil {
+      if let k = kept, (k["name"] as? String) == meName { photo = sideImage(k["photo"]); color = sideColor(k["color"]); if ini.isEmpty { ini = k["initials"] as? String ?? "" } }
+    } else {
+      var k: [String: Any] = ["name": meName, "initials": ini]
+      if let p = me0["photo"] as? String { k["photo"] = p }
+      if let c = me0["color"] { k["color"] = c }
+      if !NSDictionary(dictionary: k).isEqual(to: kept ?? [:]) { UserDefaults.standard.set(k, forKey: "e11_side_me") }
+    }
+    me.photo = photo
+    me.initials = ini
+    me.color = color ?? .systemGray
     me.toolTip = "Profile, team and sign out"
     me.needsLayout = true; me.needsDisplay = true
     let s = m["sync"] as? [String: Any] ?? [:]
