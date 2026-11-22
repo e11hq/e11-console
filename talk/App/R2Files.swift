@@ -98,9 +98,9 @@ extension Net {
   private static let sentLock = NSLock()
   static func keepSent(_ id: String, _ j: [String: Any]) { sentLock.lock(); sentWith[id] = j; sentLock.unlock() }
   static func takeSent(_ id: String) -> [String: Any]? { sentLock.lock(); defer { sentLock.unlock() }; return sentWith.removeValue(forKey: id) }
-  /* a message's file: locked, then to R2 — under 8 MB in one go, else in 8 MB parts three side by side; the ring fills only
-     as Cloudflare says a part has arrived — never "full" while bytes are still on their way (Haris 2026-11-22 17:32, "honest
-     everywhere": a file in one go fills at the end). done: the file's id and its key — or, if the server has no R2, the usual way (no key). */
+  /* a message's file: locked, then to R2 — under 8 MB in one go, else in 8 MB parts three side by side; the ring moves as the
+     bytes go out but holds at 90% until Cloudflare says they've arrived — never "full" while bytes are still on their way
+     (Haris 2026-11-22 17:56; 17:32's "only on Cloudflare's word" left small files' rings still). done: the file's id and its key — or, if the server has no R2, the usual way (no key). */
   // (keep: a group's picture — kept in R2 while the group uses it, not under messages' 31-day rule)
   // (back: a file asked for by the group, sent again under its own id — Ask the group, Haris 2026-11-20 21:36; nothing else
   //  happens if it's back already or another phone is sending it)
@@ -143,11 +143,13 @@ extension Net {
       }
       if Uploads.isStopped(stop) { return done(nil, nil) }
       if let put = (j["put"] as? String).flatMap(URL.init(string:)) {
-        self.putR2(put, body, stop: stop) { _ in } done: { e in finish(e.map { [$0] }) }
+        self.putR2(put, body, stop: stop) { p in progress(0.9 * Double(p) / total) } done: { e in finish(e.map { [$0] }) }
         return
       }
       guard let urls = (j["urls"] as? [String])?.compactMap(URL.init(string:)), let part = j["part"] as? Int, part > 0, !urls.isEmpty else { return done(nil, nil) }
       var etags = [String?](repeating: nil, count: urls.count), sent = [Int](repeating: 0, count: urls.count)
+      // (a part on its way counts 90% of what's gone out; a part Cloudflare has said arrived counts whole)
+      func ring() -> Double { min(0.99, (0..<sent.count).reduce(0.0) { $0 + (etags[$1] != nil ? Double(sent[$1]) : 0.9 * Double(sent[$1])) } / total) }
       var next = 0, going = 0, over = false
       // (Talk left: every part still to go handed to iPhone at once, so they all go on with Talk closed — Haris 2026-11-21)
       let fill = UUID()
@@ -159,11 +161,13 @@ extension Net {
         while going < BgUploads.width && next < urls.count {
           let i = next; next += 1; going += 1
           let piece = body.subdata(in: (i * part)..<min(body.count, (i + 1) * part))
-          self.putR2(urls[i], piece, stop: stop) { _ in } done: { e in
+          self.putR2(urls[i], piece, stop: stop) { p in
+            sent[i] = Int(p); progress(ring())
+          } done: { e in
             going -= 1
             guard !over else { return }   // (already ended — another part failed, or ✕: said once)
             guard let e = e else { end(); return done(nil, nil) }
-            etags[i] = e; sent[i] = piece.count; progress(min(0.99, Double(sent.reduce(0, +)) / total)); pump()
+            etags[i] = e; sent[i] = piece.count; progress(ring()); pump()
           }
         }
       }
@@ -187,6 +191,8 @@ extension Net {
       }
       let total = Double(max(1, sealedSize))
       var etags = [String?](repeating: nil, count: n), sent = [Int](repeating: 0, count: n)
+      // (a part on its way counts 90% of what's gone out; a part Cloudflare has said arrived counts whole)
+      func ring() -> Double { min(0.99, (0..<sent.count).reduce(0.0) { $0 + (etags[$1] != nil ? Double(sent[$1]) : 0.9 * Double(sent[$1])) } / total) }
       var next = 0, going = 0, over = false
       // (Talk left: every part still to go handed to iPhone at once, so they all go on with Talk closed — Haris 2026-11-21)
       let fill = UUID()
@@ -211,11 +217,13 @@ extension Net {
           let i = next; next += 1; going += 1
           let lo = i * FileLock.piecePlain, hi = min(data.count, lo + FileLock.piecePlain)
           guard let piece = autoreleasepool(invoking: { FileLock.sealPiece(data.subdata(in: lo..<hi), key: key, index: i, last: i == n - 1) }) else { end(); return done(nil, nil) }
-          self.putR2(urls[i], piece, stop: stop) { _ in } done: { e in
+          self.putR2(urls[i], piece, stop: stop) { p in
+            sent[i] = Int(p); progress(ring())
+          } done: { e in
             going -= 1
             guard !over else { return }   // (already ended — another part failed, or ✕: said once)
             guard let e = e else { end(); return done(nil, nil) }
-            etags[i] = e; sent[i] = piece.count; progress(min(0.99, Double(sent.reduce(0, +)) / total)); pump()
+            etags[i] = e; sent[i] = piece.count; progress(ring()); pump()
           }
         }
       }

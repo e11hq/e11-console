@@ -211,7 +211,7 @@ enum Thumb {
   }
   // a video's first picture as the video is played, in standard colour, at most `side` across (Haris 2026-11-22 17:19 — the
   //  test page's D: 140 of 255 where the frame taker gave 97–107): an HDR video's frame read by iPhone's video reader and
-  //  toned down by Core Image, turned the way it's watched; any other video (or if that can't be done): the frame taker as
+  //  put in standard colour with no toning (17:56: "keep it neutral"), turned the way it's watched; any other video (or if that can't be done): the frame taker as
   //  before. A file with no ending (a sent one, kept by its id) is read through a linked copy named .mp4 — without it the
   //  frame couldn't be taken ("Cannot Open"), so the sharp preview was never made.
   static func frame(_ url: URL, side: CGFloat) -> CGImage? {
@@ -238,7 +238,7 @@ enum Thumb {
     defer { r.cancelReading() }
     guard let sb = o.copyNextSampleBuffer(), let pb = CMSampleBufferGetImageBuffer(sb) else { return nil }
     var img = CIImage(cvPixelBuffer: pb)
-    if let f = CIFilter(name: "CIToneMapHeadroom") { f.setValue(img, forKey: kCIInputImageKey); f.setValue(1.0, forKey: "inputTargetHeadroom"); if let x = f.outputImage { img = x } }
+    // (no toning: the picture as it is, only what's brighter than standard white kept at white — Haris 2026-11-22 17:56)
     let k = min(1, side / max(img.extent.width, img.extent.height))
     img = img.transformed(by: CGAffineTransform(scaleX: k, y: k)).oriented(turn(t.preferredTransform))
     img = img.transformed(by: CGAffineTransform(translationX: -img.extent.minX, y: -img.extent.minY))
