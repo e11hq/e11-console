@@ -477,6 +477,24 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       Q.dropFile.run(id);
     }
   }
+  // a group deleted (by its admin, or after 90 days quiet): its files let go at once — on Cloudflare and the office alike —
+  // except one also sent in another group, which still uses it (Haris 2026-11-22 16:13)
+  function dropGroupFiles(g) {
+    const ids = new Set();
+    for (const r of db.prepare('SELECT files FROM sent WHERE grp = ?').all(g.id)) { try { for (const id of JSON.parse(r.files || '[]')) ids.add(String(id)); } catch { /* fine */ } }
+    if (g.pic) ids.add(String(g.pic));
+    const elsewhere = db.prepare('SELECT 1 FROM sent WHERE grp <> ? AND files LIKE ? LIMIT 1');
+    const otherPic = db.prepare('SELECT 1 FROM groups WHERE id <> ? AND pic = ? AND gone = 0 LIMIT 1');
+    for (const id of ids) {
+      if (elsewhere.get(g.id, `%"${id}"%`) || otherPic.get(g.id, id)) continue;
+      db.prepare('DELETE FROM needs WHERE file = ?').run(id);
+      for (const x of ['file_kept WHERE id', 'file_had WHERE file', 'asks WHERE file']) db.prepare(`DELETE FROM ${x} = ?`).run(id);
+      const f = Q.getFile.get(id);
+      if (f && f.store === 'r2') { if (r2 && r2.on) r2.del(r2Key(f)).catch((e) => console.error('talk r2 delete:', e.message)); }
+      else if (f) { try { fs.rmSync(path.join(relay, id), { force: true }); } catch { /* fine */ } }
+      Q.dropFile.run(id);
+    }
+  }
   function sweep() {
     const t = now();
     // (Ask the group: the record of a file and its phones kept 90 days; asks 7 days — Haris 2026-11-20)
@@ -517,6 +535,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       const was = memberIds(g);
       Q.goneGroup.run(g.id);
       if (was.length) emit(g, 'gone', { group: g.id, why: 'inactive' }, null, was);
+      dropGroupFiles(g);
     }
   }
   const sweepTimer = setInterval(() => { try { sweep(); } catch (e) { console.error('talk sweep:', e.message); } }, 3600_000);
@@ -893,6 +912,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         const was = memberIds(g);
         Q.goneGroup.run(g.id);
         emit(g, 'gone', { group: g.id, by: u.id }, u.id, was);
+        dropGroupFiles(g);
         return { ok: true };
       }
       // the creator (or a Super / Office Admin) picks the one second admin — or none

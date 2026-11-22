@@ -106,3 +106,21 @@ test('an upload let go by the phone goes at once; one in a message stays; unsent
   assert.ok(!bucket.objs.has('msg/' + left), 'never sent: gone after a day');
   assert.ok(bucket.objs.has('msg/' + sent), 'the sent one: by its own rules');
 });
+
+test('a group deleted: its files go at once — one also sent in another group stays', async () => {
+  const bucket = fakeBucket(), e = env(bucket);
+  const h = new HubCore({ sql: fakeSql(), dir: DIR, r2: bindingR2({ bucket, secret: e.R2_LINK_SECRET, base: e.PUBLIC }) });
+  const a = h.who('haris@e11.test', 'phone-key-aaaaaaaaaaaa');
+  const g1 = h.act(a, { act: 'newGroup', client: 'p1', name: 'One', members: ['u2'] }).group.id;
+  const g2 = h.act(a, { act: 'newGroup', client: 'p1', name: 'Two', members: ['u2'] }).group.id;
+  const up = async () => { const s = await h.r2Start(a, { name: 'p.heic', size: 10 }); await serveR2(new Request(s.put, { method: 'PUT', body: new Uint8Array(10) }), e, path(s.put)); await h.r2Done(a, { id: s.id }); return s.id; };
+  const only = await up(), both = await up();
+  const key = 'A'.repeat(43) + '=';
+  h.act(a, { act: 'send', group: g1, text: '', file: { id: only, kind: 'photo', key } });
+  h.act(a, { act: 'send', group: g1, text: '', file: { id: both, kind: 'photo', key } });
+  h.act(a, { act: 'send', group: g2, text: '', file: { id: both, kind: 'photo', key } });
+  assert.equal(h.act(a, { act: 'deleteGroup', group: g1 }).ok, true);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.ok(!bucket.objs.has('msg/' + only), 'its own file: gone at once');
+  assert.ok(bucket.objs.has('msg/' + both), 'also in another group: stays');
+});
