@@ -19,8 +19,8 @@ const json = (o, status = 200) => new Response(JSON.stringify(o), { status, head
 
 export class TalkHub extends DurableObject {
   constructor(ctx, env) {
-    this.fresh = true;   // (just woken — the first call after shows it)
     super(ctx, env);
+    this.fresh = true;   // (just woken — the first call after shows it)
     this.env = env;
     // (the office's own public name for what the hub sends it, signed — talklink, let through by Cloudflare like a linked Mac)
     this.office = String(env.OFFICE_LINK || env.OFFICE || '').replace(/\/$/, '');
