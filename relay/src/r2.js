@@ -58,15 +58,18 @@ export async function serveR2(req, env, path) {
     //  stored, longer for a bigger video: Haris 2026-11-22 15:53. Its length must be known: the phone always says it.)
     const len = Number(req.headers.get('content-length') || 0);
     if (len > PART) return new Response('Too big', { status: 413, headers: cors });
+    // (the test page, for now — Haris 2026-11-22 17:03: how long the piece took to arrive, and to be stored after)
+    const t0 = Date.now(); let tIn = 0;
     let body;
     if (len > 0 && req.body && typeof FixedLengthStream === 'function') {
-      const s = new FixedLengthStream(len); req.body.pipeTo(s.writable).catch(() => {}); body = s.readable;
+      const s = new FixedLengthStream(len); req.body.pipeTo(s.writable).then(() => { tIn = Date.now(); }).catch(() => {}); body = s.readable;
     } else {
       body = await req.arrayBuffer();
       if (body.byteLength > PART) return new Response('Too big', { status: 413, headers: cors });
     }
     const etag = o.u ? (await bucket.resumeMultipartUpload(o.k, o.u).uploadPart(o.p, body)).etag : (await bucket.put(o.k, body)).etag;
-    return new Response(null, { status: 200, headers: { ...cors, ETag: `"${etag}"` } });
+    const t1 = Date.now(), inMs = (tIn || t1) - t0;
+    return new Response(null, { status: 200, headers: { ...cors, ETag: `"${etag}"`, 'Server-Timing': `arriving;dur=${inMs}, storing;dur=${t1 - (tIn || t1)}, bytes;desc=${len}` } });
   }
   if (kind === 'get' && (req.method === 'GET' || req.method === 'HEAD')) {
     const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.get('range') || '');
