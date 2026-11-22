@@ -106,7 +106,10 @@ final class Net {
     // (Talk on Cloudflare, the live line open: the call goes down the line itself — Cloudflare counts a message on the line
     //  as a twentieth of a request, and the front door not at all; no answer on the line — the usual way, nothing lost;
     //  Haris 2026-11-22 11:58)
-    if overLine, viaHub, body == nil, !path.hasPrefix("/api/talk/file/"), let l = line, l.isOpen {
+    // (…all but sending a message — the one call you wait on for the tick goes the usual way, as before 230; Haris
+    //  2026-11-22 12:32)
+    let waitedOn = (json?["act"] as? String) == "send" || (path.hasPrefix("/api/talk/r2/done") && json?["send"] != nil)
+    if overLine, viaHub, body == nil, !waitedOn, !path.hasPrefix("/api/talk/file/"), let l = line, l.isOpen {
       let c = URLComponents(string: path)
       let name = String((c?.path ?? path).dropFirst("/api/talk/".count))
       var b = json ?? [:]
