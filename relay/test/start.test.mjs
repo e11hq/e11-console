@@ -28,3 +28,30 @@ test('the hub starts, answers its status, and takes a call down the live line', 
   const st2 = await (await hub.fetch(new Request('https://hub.test/hub/status'))).json();
   assert.equal(st2.callsMs[0].via, 'line');
 });
+
+test('a notification goes from Cloudflare straight to Apple; the office only when Apple can’t be reached', async () => {
+  globalThis.WebSocketRequestResponsePair = class {};
+  const { TalkHub } = await import('../src/hub.js');
+  let ready;
+  const ctx = { storage: { sql: fakeSql(), getAlarm: async () => 1, setAlarm: async () => {} }, blockConcurrencyWhile: (fn) => { ready = fn(); return ready; },
+    getWebSockets: () => [], setWebSocketAutoResponse: () => {}, waitUntil: () => {}, acceptWebSocket: () => {} };
+  const hub = new TalkHub(ctx, { OFFICE: 'https://office.test', OFFICE_LINK: 'https://office.test', PUBLIC: 'https://hub.test', TALK_FILES: fakeBucket(), R2_LINK_SECRET: 'x' });
+  await ready;
+  hub.core.setDir({ users: [{ id: 'u1', name: 'Haris', email: 'haris@e11.test', role: 'admin', active: true }, { id: 'u2', name: 'Lana', email: 'lana@e11.test', role: 'production', active: true }],
+    projects: [{ id: 'p1', name: 'C' }], clients: [], meta: {}, flags: { u1: { super: true } }, see: { u1: ['p1'], u2: ['p1'] } });
+  const toOffice = [], toApple = [];
+  hub.later = async (path, b) => { if (path === '/api/talk/relay/push') toOffice.push(b.uid); return true; };
+  let answer = { status: 200 };
+  hub.apple = { on: true, sendTo: async (uid) => { toApple.push(uid); return { sent: answer.status === 200 ? 1 : 0, results: [answer] }; }, wake: async () => ({ sent: 1, results: [{ status: 200 }] }) };
+  const a = hub.core.who('haris@e11.test', 'phone-key-aaaaaaaaaaaa');
+  const gid = hub.core.act(a, { act: 'newGroup', client: 'p1', name: 'N', members: ['u2'] }).group.id;
+  const settle = () => new Promise((r) => setTimeout(r, 30));
+  hub.core.act(a, { act: 'send', group: gid, text: 'One' }); await settle();
+  assert.ok(toApple.includes('u2'), 'Apple asked: ' + JSON.stringify(toApple)); assert.deepEqual(toOffice, [], 'the office not asked');
+  answer = { status: 0, reason: 'unreachable' };
+  hub.core.act(a, { act: 'send', group: gid, text: 'Two' }); await settle();
+  assert.ok(toOffice.includes('u2'), 'Apple not reached: the office sends it');
+  toOffice.length = 0; answer = { status: 410, reason: 'Unregistered' };
+  hub.core.act(a, { act: 'send', group: gid, text: 'Three' }); await settle();
+  assert.deepEqual(toOffice, [], 'an address Apple says is gone: not sent again by the office');
+});

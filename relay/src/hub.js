@@ -36,10 +36,23 @@ export class TalkHub extends DurableObject {
       // (the office sends them while it can be reached — it also sends again any a phone missed; it can't: Cloudflare sends
       //  them itself, with Apple's key and the phones' addresses — Haris 2026-11-22 01:00 "A")
       this.apple = makeApns({ key: env.APNS_KEY, keyId: env.APNS_KEY_ID, teamId: env.APNS_TEAM_ID, topic: env.APNS_TOPIC || 'ae.e11.talk.ios', subs: () => (this.core && this.core.dir.snapshot.push) || {} });
-      const notify = (uid, p, wake) => this.later('/api/talk/relay/push', { uid, p, ...(wake ? { wake: true } : {}) }).then((ok) => {
-        if (ok || !this.apple.on) return;
-        return wake ? this.apple.wake(uid, p) : this.apple.sendTo(uid, p);
-      }).catch(() => {});
+      // (Cloudflare sends it straight to Apple — one hop, the office's internet not in the way (Haris 2026-11-22 13:07); the
+      //  office only when Apple's key isn't here, no phone of theirs is known here, or Apple couldn't be reached for one)
+      const toOffice = (uid, p, wake) => this.later('/api/talk/relay/push', { uid, p, ...(wake ? { wake: true } : {}) });
+      const notify = async (uid, p, wake) => {
+        try {
+          if (this.apple.on) {
+            const r = await (wake ? this.apple.wake(uid, p) : this.apple.sendTo(uid, p));
+            const rs = (r && r.results) || [];
+            // (a phone of theirs has it — done: the office would send it to every phone again; every address Apple says is
+            //  gone (400 / 410) — done too: the office has the same ones. Anything else (Apple not reached, the key
+            //  refused): the office sends it)
+            if (rs.some((x) => x.status === 200)) return;
+            if (rs.length && rs.every((x) => x.status === 400 || x.status === 410)) return;
+          }
+          await toOffice(uid, p, wake);
+        } catch { /* never in the way */ }
+      };
       const apns = { enabled: () => !!this.office || this.apple.on, sendTo: (uid, p) => { const x = notify(uid, p, false); try { this.ctx.waitUntil(x); } catch { /* fine */ } return x; }, wake: (uid, p) => { const x = notify(uid, p, true); try { this.ctx.waitUntil(x); } catch { /* fine */ } return x; } };
       this.core = new HubCore({ sql, copy: (b) => this.toOffice(b), r2: r2.on ? r2 : null, apns, onUnread: (uids) => { this.later('/api/talk/relay/unread', { uids }); } });
       const d = this.core.meta('dir'); if (d) try { this.core.dir.set(JSON.parse(d)); } catch { /* the office sends it again */ }
