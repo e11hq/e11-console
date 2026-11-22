@@ -61,7 +61,7 @@ export class TalkHub extends DurableObject {
       if (!this.core.meta('dirAt')) await this.askDir();
       const d = this.core.dir.snapshot || {};
       return json({ ok: true, colo: this.colo, dirAt: Number(this.core.meta('dirAt') || 0) || null, people: (d.users || []).length, clients: (d.projects || []).length,
-        phones: Object.values((d.push) || {}).reduce((a, x) => a + (x || []).length, 0), apple: this.apple.on, copyN: this.core.n, waiting: this.ctx.storage.sql.exec('SELECT COUNT(*) AS c FROM hub_outbox').toArray()[0].c, officeKey: !!this.core.meta('officeKey'), ...(this.dirErr ? { dirErr: this.dirErr } : {}) });
+        phones: Object.values((d.push) || {}).reduce((a, x) => a + (x || []).length, 0), apple: this.apple.on, copyN: this.core.n, waiting: this.ctx.storage.sql.exec('SELECT COUNT(*) AS c FROM hub_outbox').toArray()[0].c, officeKey: !!this.core.meta('officeKey'), tasksMs: this.tasksMs || [], ...(this.dirErr ? { dirErr: this.dirErr } : {}) });
     }
     if (p.startsWith('/office/')) return this.fromOffice(req, p);
     if (!this.core.meta('dirAt')) await this.askDir();
@@ -133,10 +133,14 @@ export class TalkHub extends DurableObject {
     if (!this.office) return null;
     const path = '/api/talk/relay/tasks', text = JSON.stringify({ email: w.u.email, act: b.act, group: b.group, q: b.q, ids: b.ids });
     try {
+      const t0 = Date.now();
       const h = await signHeaders(this.core.meta('key'), 'POST', path, text);
       const r = await fetch(this.office + path, { method: 'POST', body: text, headers: { 'content-type': 'application/json', ...h }, signal: AbortSignal.timeout(8000) });
-      if (!r.ok) { try { return await r.json(); } catch { return null; } }
-      return await r.json();
+      let j = null; try { j = await r.json(); } catch { j = null; }
+      // (how long the office takes, for /hub/status — the last 20, no names or words: Haris 2026-11-22 10:38 "time it")
+      (this.tasksMs = this.tasksMs || []).unshift({ act: b.act, ms: Date.now() - t0, n: j ? (j.tasks || j.cards || []).length : null, status: r.status, at: new Date(t0).toISOString().slice(11, 19) });
+      this.tasksMs.length = Math.min(this.tasksMs.length, 20);
+      return j;
     } catch { return null; }
   }
 
