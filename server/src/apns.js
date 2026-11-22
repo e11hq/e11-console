@@ -133,7 +133,7 @@ export function createApns({ store, keyFile = '', keyId = '', teamId = '', topic
   }
   function payloadOf(msg, pid) {
     const data = {};
-    for (const k of ['taskId', 'nid', 'kind', 'clientId', 'folderId', 'commentId', 'threadId', 'planId', 'view', 'groupId', 'msgId']) if (msg[k] != null) data[k] = msg[k];
+    for (const k of ['taskId', 'nid', 'kind', 'clientId', 'folderId', 'commentId', 'threadId', 'planId', 'view', 'groupId', 'msgId', 'gone']) if (msg[k] != null) data[k] = msg[k];
     if (pid) data.pid = pid;
     // (mutable-content: the app's Notification Service Extension sees each one first — it confirms it arrived; E11 Talk's
     //  message ones too: its helper tells the sender's ✓✓ — Haris 2026-11-19 21:42)
@@ -195,7 +195,8 @@ export function createApns({ store, keyFile = '', keyId = '', teamId = '', topic
     for (const k of Object.keys(p)) { const keep = (p[k] || []).filter((x) => !(x.msg && x.msg.collapse === tag)); if (keep.length !== (p[k] || []).length) { p[k] = keep; changed = true; } }
     if (changed) saveP(p);
     let sent = 0;
-    for (const uid of e.to) { const r = await sendTo(uid, { ...msg, collapse: tag, quiet: true, replaceable: false, badge: undefined }); sent += r.sent || 0; }
+    // (gone: an app in front shows no banner for it)
+    for (const uid of e.to) { const r = await sendTo(uid, { ...msg, collapse: tag, quiet: true, replaceable: false, badge: undefined, gone: 1 }); sent += r.sent || 0; }
     return { sent };
   }
   // a quiet note to someone's iPhones (Haris 2026-11-16): something read or unread on the Mac, the website or another phone —

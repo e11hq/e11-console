@@ -142,6 +142,7 @@ test('a deleted comment: its notification replaced quietly on the devices it rea
   assert.ok(rep, 'the replacement went');
   assert.equal(rep.h['apns-collapse-id'], 'c-c-1');
   assert.equal(rep.body.aps.alert.body, 'This comment was deleted');
+  assert.equal(rep.body.e11.gone, 1, 'marked, so an app in front shows no banner');
   assert.equal(rep.body.aps['interruption-level'], 'passive'); assert.equal(rep.body.aps.sound, undefined); assert.equal(rep.body.aps.badge, undefined);
   // only once, and nobody it never reached
   got = [];
