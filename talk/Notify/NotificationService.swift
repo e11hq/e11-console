@@ -16,17 +16,30 @@ final class NotificationService: UNNotificationServiceExtension {
     content = request.content
     let e = request.content.userInfo["e11"] as? [String: Any] ?? [:]
     guard let gid = e["groupId"] as? String, !gid.isEmpty, let mid = e["msgId"] as? String, !mid.isEmpty,
-          let server = Self.keychain("notify-server"), let host = URL(string: server)?.host,
-          let url = URL(string: server + "/api/talk/got") else { return finish() }
-    var r = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
-    r.httpMethod = "POST"
-    r.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    r.setValue("application/json", forHTTPHeaderField: "Accept")
-    if let c = Self.keychain("cookie-" + host) { r.setValue(c, forHTTPHeaderField: "Cookie") }
-    r.httpBody = try? JSONSerialization.data(withJSONObject: ["groupId": gid, "msgId": mid])
-    let cfg = URLSessionConfiguration.ephemeral
-    cfg.httpCookieStorage = nil; cfg.httpShouldSetCookies = false
-    URLSession(configuration: cfg).dataTask(with: r) { [weak self] _, _, _ in self?.finish() }.resume()
+          let server = Self.keychain("notify-server"), let host = URL(string: server)?.host else { return finish() }
+    // (the notification is never held more than about a second — the ✓✓ follows on its own if the answer is slow;
+    //  it waited for it, up to 20 s, and asked the office, which passed it on to Cloudflare: Haris 2026-11-22 13:07)
+    DispatchQueue.global().asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.finish() }
+    let cookie = Self.keychain("cookie-" + host), body = try? JSONSerialization.data(withJSONObject: ["groupId": gid, "msgId": mid])
+    // (Talk on Cloudflare: told there first — one trip; refused there or no answer, the office, as before)
+    let hub: String? = host == "talk.e11hq.com" ? "https://talkline.e11hq.com" : nil
+    let tell = { (base: String, wait: TimeInterval, then: @escaping (Bool) -> Void) in
+      guard let url = URL(string: base + "/api/talk/got") else { return then(false) }
+      var r = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: wait)
+      r.httpMethod = "POST"
+      r.setValue("application/json", forHTTPHeaderField: "Content-Type")
+      r.setValue("application/json", forHTTPHeaderField: "Accept")
+      if let c = cookie { r.setValue(c, forHTTPHeaderField: "Cookie") }
+      r.httpBody = body
+      let cfg = URLSessionConfiguration.ephemeral
+      cfg.httpCookieStorage = nil; cfg.httpShouldSetCookies = false
+      URLSession(configuration: cfg).dataTask(with: r) { d, resp, _ in
+        let ok = (resp as? HTTPURLResponse)?.statusCode == 200 && ((d.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any])?["ok"] as? Bool) == true
+        then(ok)
+      }.resume()
+    }
+    if let h = hub { tell(h, 4) { [weak self] ok in if ok { self?.finish() } else { tell(server, 15) { _ in self?.finish() } } } }
+    else { tell(server, 15) { [weak self] _ in self?.finish() } }
   }
   override func serviceExtensionTimeWillExpire() { finish() }
   // show it (once)
