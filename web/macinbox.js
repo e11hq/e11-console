@@ -84,11 +84,34 @@ const MacInbox = (() => {
   //  The header too (the title, its line and buttons — and a task's "N updates" line) stays above that box, never sprung.
   function paneParts(html) {
     let top = '';
+    // (what it's about deleted since: the rest under a faded cover that can't be clicked, its name in the middle — the header
+    //  above it as it is; Haris 2026-11-22 19:52)
+    const gm = /<!--gone:([^>]*)-->/.exec(html);
+    if (gm) html = html.replace(gm[0], '');
     const b = html.indexOf('<!--body-->'), h = html.indexOf('<!--head-->');
     const cut = b >= 0 ? b + 11 : h >= 0 ? h + 11 : 0;
     if (cut) { top = `<div class="mib-top">${html.slice(0, cut).replace(/<!--(head|body)-->/g, '')}</div>`; html = html.slice(cut).replace(/<!--(head|body)-->/g, ''); }
     const at = html.indexOf('<!--foot-->');
-    return top + (at < 0 ? `<div class="mib-scroll">${html}</div>` : `<div class="mib-scroll">${html.slice(0, at)}</div>${html.slice(at + 11)}`);
+    const rest = at < 0 ? `<div class="mib-scroll">${html}</div>` : `<div class="mib-scroll">${html.slice(0, at)}</div>${html.slice(at + 11)}`;
+    return top + (gm ? `<div class="mib-gonewrap"><div class="mib-goneunder" inert>${rest}</div>${goneCover(gm[1])}</div>` : rest);
+  }
+  const GONE = { task: ['check-circle', 'This task was deleted'], comment: ['chat', 'This comment was deleted'], plan: ['cal', 'This content plan was deleted'],
+    folder: ['folder', 'This folder was deleted'], client: ['assets', 'This client was deleted'] };
+  function goneCover(spec) {
+    const [kind, tid] = String(spec).split('|'), g = GONE[kind] || GONE.task;
+    const trash = kind === 'task' && tid && isManager() && trashList().some((x) => (x.type === 'task' || x.type === 'project') && (x.key === 'tasks:' + tid || ((x.data || {}).tasks || []).some((t) => t.id === tid)));
+    return `<div class="mib-gone"><div class="mib-gone-in"><span class="mib-gone-ic">${icon(g[0])}</span><b>${g[1]}</b>${trash ? btn('Go to Trash', `data-mib="gone-trash" data-id="${esc(tid)}"`, true) : ''}</div></div>`;
+  }
+  // what a row is about, deleted since (null: it's all there): the task, the plan, the client or its folder — or every comment
+  // of a row that's only comments (one gone among others: only its own line says so)
+  function goneOf(g) {
+    const n = ibTarget(g.items), k = n.kind, t = task(n.taskId);
+    if (n.planId) return Plans.canSee() && !Plans.planById(n.planId) ? 'plan' : null;
+    if (k === 'asset') { const c = clientById(n.clientId); return !c ? 'client' : n.folderId && !(c.folders || []).some((f) => f.id === n.folderId) ? 'folder' : null; }
+    if (['birthday', 'daily', 'signin', 'sched-cancel'].includes(k) || /^claim/.test(k)) return null;
+    if (n.taskId && !t) return 'task|' + n.taskId;
+    if (t && g.items.every((x) => COMMENTS.has(x.kind) && x.commentId && !(t.comments || []).some((c) => c.id === x.commentId))) return 'comment';
+    return null;
   }
   // a row: the website's own (its title, who did what, the time, how many), two lines, the unread dot; your answer under it
   function rowHTML(g) {
@@ -184,6 +207,12 @@ const MacInbox = (() => {
 
 
   function paneHTML(g) {
+    const gone = goneOf(g), html = paneHTML1(g);
+    if (!gone) return html;
+    const h = html.indexOf('<!--head-->');
+    return h >= 0 ? html.slice(0, h + 11) + `<!--gone:${gone}-->` + html.slice(h + 11) : `<!--gone:${gone}-->` + html;
+  }
+  function paneHTML1(g) {
     tileSets = [];
     const n = ibTarget(g.items), t = task(n.taskId), k = n.kind;
     if (k === 'birthday') return `<div class="mib-greet">${avatarHTML(n.from, 88)}<span>Today is</span><b>${esc(firstName(n.from))}’s birthday</b><span>Wish them a happy birthday</span></div>`;
@@ -900,7 +929,8 @@ const MacInbox = (() => {
     else if (a === 'send') send(el);
     else if (a === 'react') react(el.dataset.tid, el.dataset.cid, el.dataset.e);
     else if (a === 'react-menu') reactMenuAt(el);
-    else if (a === 'task') { if (task(el.dataset.id)) openTask(el.dataset.id); else toast('That task isn’t there anymore'); }
+    else if (a === 'task') { if (task(el.dataset.id)) openTask(el.dataset.id); else toast('This task was deleted'); }
+    else if (a === 'gone-trash') goTrashFor(el.dataset.id);
     else if (a === 'pv') { const list = tileSets[Number(el.dataset.set)] || []; const f = list[Number(el.dataset.i)]; if (f) previewFile(f, list); }
     else if (a === 'attach') attach(el);
     else if (a === 'rv-ok') { const f = findReview(el.dataset.id); if (f) { decideReview(f.t, f.r, 'approve'); toast(`Approved — ${firstName(f.r.by)} told`); renderContent(); } }

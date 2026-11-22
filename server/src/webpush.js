@@ -110,5 +110,8 @@ export function notifMessage(store, n) {
   // (our own sign-in: an admin's code used — who, for whom, and that the password changed)
   if (n.kind === 'signin') return { title: 'Sign-in code used', body: `${from ? name : 'An admin'} ${strip(n.text)}, and ${strip(n.snippet)}`.slice(0, 300), taskId: null, nid: n.id, tag: n.id, badge: unread, kind: 'signin' };
   if (n.kind === 'birthday') return { title: 'Birthday today', body: strip(n.text).slice(0, 300), taskId: null, nid: n.id, tag: n.id, badge: unread, kind: 'birthday' };
-  return { title: name, body: body.slice(0, 300), taskId: n.taskId || null, nid: n.id, tag: n.taskId || n.id, badge: unread, kind: n.kind || null, clientId: n.clientId || null, folderId: n.folderId || null, commentId: n.commentId || null, planId: n.planId || null };
+  // (a comment's: its own tag on Apple's side — the comment deleted later, the notification is replaced in place, quietly, by
+  //  "This comment was deleted" — Haris 2026-11-22 19:47, as E11 Talk's)
+  const cc = (n.kind === 'comment' || n.kind === 'mention') && n.commentId ? { collapse: 'c-' + n.commentId, replaceable: true } : {};
+  return { title: name, body: body.slice(0, 300), taskId: n.taskId || null, nid: n.id, tag: n.taskId || n.id, badge: unread, kind: n.kind || null, clientId: n.clientId || null, folderId: n.folderId || null, commentId: n.commentId || null, planId: n.planId || null, ...cc };
 }

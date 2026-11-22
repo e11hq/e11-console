@@ -508,12 +508,16 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     if (/^claim/.test(n.kind)) { O.myNotifs().forEach((x) => { if (x.claimId && x.claimId === n.claimId) mark(x); }); return out(O.claim(n)); }
     if (n.planId) {
       O.myNotifs().forEach((x) => { if (notifKeyOf(x) === notifKeyOf(n)) mark(x); });
-      if (!O.canSeePlans() || !O.planById(n.planId)) return out({ toast: 'Content skeleton not found' });
+      // (something deleted since: its name, and nothing opens — Haris 2026-11-22 19:36)
+      if (!O.canSeePlans()) return out({ toast: 'Content skeleton not found' });
+      if (!O.planById(n.planId)) return out({ toast: 'This content plan was deleted' });
       return out({ to: 'plan', id: n.planId });
     }
     if (n.kind === 'asset') {
       O.myNotifs().forEach((x) => { if (notifKeyOf(x) === notifKeyOf(n)) mark(x); });
-      if (!W.clients.some((c) => c.id === n.clientId)) return out({ toast: 'Client Assets not found' });
+      const cl = W.clients.find((c) => c.id === n.clientId);
+      if (!cl) return out({ toast: 'This client was deleted' });
+      if (n.folderId && !(cl.folders || []).some((f) => f.id === n.folderId)) return out({ toast: 'This folder was deleted' });
       return out(O.assets(n.clientId, n.folderId));
     }
     O.myNotifs().forEach((x) => { if (x.taskId === n.taskId) mark(x); });
@@ -521,8 +525,8 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     if (!t) {
       const trash = Array.isArray(data.trash) ? data.trash : [];
       const inTrash = trash.find((x) => (x.type === 'task' || x.type === 'project') && (x.key === 'tasks:' + n.taskId || ((x.data || {}).tasks || []).some((y) => y.id === n.taskId)));
-      if (inTrash && O.isManager()) return out({ to: 'trash', q: O.trashTitle(inTrash), toast: 'That task is in the Trash' });
-      return out({ toast: O.isManager() ? 'That task has been deleted' : 'That task is in the Trash — ask an Account Manager if it should come back' });
+      if (inTrash && O.isManager()) return out({ to: 'trash', q: O.trashTitle(inTrash), toast: 'This task was deleted' });
+      return out({ toast: 'This task was deleted' });
     }
     if ((n.kind === 'review' || n.kind === 'review-wd') && W.isCD()) {
       // the submission this update is about, on Review Requests
@@ -536,6 +540,8 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
       return out({ to: 'review', id: r ? r.id : null, tab });
     }
     const comments = t.comments || [];
+    // (its comment deleted since, the task still here: only its name, nothing opens — Haris 2026-11-22 19:40)
+    if ((n.kind === 'comment' || n.kind === 'mention') && n.commentId && !comments.some((x) => x.id === n.commentId)) return out({ toast: 'This comment was deleted' });
     let c = null;
     if (n.kind === 'review-amend' && n.commentId) c = comments.find((x) => x.id === n.commentId) || null;
     if (n.kind === 'comment' || n.kind === 'mention') {

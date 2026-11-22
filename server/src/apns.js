@@ -170,7 +170,33 @@ export function createApns({ store, keyFile = '', keyId = '', teamId = '', topic
       else log.error('APNs push failed', r.status, r.reason);
     }));
     if (gone.length) { const all = load(); all[userId] = (all[userId] || []).filter((s) => !gone.includes(s.token)); save(all); gone.forEach(dropPending); }
+    if (sent && msg.collapse && msg.replaceable) keepC(msg.collapse, userId);
     return { sent, removed: gone.length, results };
+  }
+  // a notification taken back (Haris 2026-11-22 19:47 — E11 Console's deleted comment, as E11 Talk's deleted message): the
+  // same tag again, quietly — no sound, no banner — with new words, so Apple replaces the one still showing; only to the
+  // people it reached, within 4 days (kv apns-collapse = { tag: { at, to: [userId] } }); the old one never sent again
+  const loadC = () => { try { return JSON.parse(store.kv.get(`${kvPrefix}-collapse`) || '{}'); } catch { return {}; } };
+  const saveC = (v) => store.kv.set(`${kvPrefix}-collapse`, JSON.stringify(v));
+  function keepC(tag, userId) {
+    const c = loadC(), t = now();
+    for (const [k, v] of Object.entries(c)) if (t - Date.parse(v.at) > KEEP) delete c[k];
+    const e = c[tag] || { at: new Date(t).toISOString(), to: [] };
+    if (!e.to.includes(String(userId))) e.to.push(String(userId));
+    c[tag] = e;
+    const keys = Object.keys(c); if (keys.length > 3000) keys.slice(0, keys.length - 3000).forEach((k) => delete c[k]);
+    saveC(c);
+  }
+  async function replace(tag, msg) {
+    const c = loadC(), e = c[tag];
+    if (!e || now() - Date.parse(e.at) > KEEP) return { sent: 0 };
+    delete c[tag]; saveC(c);
+    const p = loadP(); let changed = false;
+    for (const k of Object.keys(p)) { const keep = (p[k] || []).filter((x) => !(x.msg && x.msg.collapse === tag)); if (keep.length !== (p[k] || []).length) { p[k] = keep; changed = true; } }
+    if (changed) saveP(p);
+    let sent = 0;
+    for (const uid of e.to) { const r = await sendTo(uid, { ...msg, collapse: tag, quiet: true, replaceable: false, badge: undefined }); sent += r.sent || 0; }
+    return { sent };
   }
   // a quiet note to someone's iPhones (Haris 2026-11-16): something read or unread on the Mac, the website or another phone —
   // the icon's count set (a count-only notification: no banner, no sound, nothing in Notification Centre), and the app woken
@@ -195,5 +221,5 @@ export function createApns({ store, keyFile = '', keyId = '', teamId = '', topic
     await Promise.all(list.map(async (s) => { const r = await post(s.env, s.token, { aps: { 'content-available': 1 }, e11: { quiet: true, ...e11 } }, 86400, 'background', '5'); if (r.status === 200) sent++; }));
     return { sent };
   }
-  return { enabled, register, unregister, devices, sendTo, quiet, wake, ack, pendingFor, close: () => { for (const s of Object.values(sessions)) try { s.close(); } catch { /* fine */ } } };
+  return { enabled, register, unregister, devices, sendTo, replace, quiet, wake, ack, pendingFor, close: () => { for (const s of Object.values(sessions)) try { s.close(); } catch { /* fine */ } } };
 }

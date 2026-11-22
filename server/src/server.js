@@ -624,6 +624,22 @@ export function createServer(cfg) {
     if (!isNew) return false;
     try { return !!talkNow().contactByEmail(email); } catch { return false; }
   }
+  // a comment deleted (to the Trash — with its replies): its notifications still on people's iPhones and Macs replaced, quietly,
+  // by "This comment was deleted" (Haris 2026-11-22 19:47; apns.js replace)
+  function takeBackDeletedComments(results, tasksBefore) {
+    for (const r of results) {
+      if (r.kind !== 'tasks' || r.refused || r.unchanged || r.deleted || !r.data) continue;
+      const before = tasksBefore.get(String(r.id));
+      if (!before || !Array.isArray(before.comments)) continue;
+      const still = new Set((r.data.comments || []).map((c) => c && c.id));
+      for (const c of before.comments) {
+        if (!c || !c.id || still.has(c.id)) continue;
+        const who = store.get('users', String(c.authorId || ''));
+        const title = who ? (who.name || String(who.email || '').split('@')[0]) : 'E11 Console';
+        apns.replace('c-' + c.id, { title, body: 'This comment was deleted', taskId: r.id, commentId: c.id, kind: 'comment', tag: r.id }).catch((e) => console.error('APNs take back:', e.message));
+      }
+    }
+  }
   function pushAs(u, changes, client) {
       const fresh = new Set(changes.filter((ch) => ch && ch.kind === 'notifications' && !ch.del && !store.get('notifications', String(ch.id))).map((ch) => String(ch.id)));
       const restoring = new Set(changes.filter((ch) => ch && !ch.del && ch.kind !== 'trash').map((ch) => `${ch.kind}:${ch.id}`));
@@ -631,6 +647,7 @@ export function createServer(cfg) {
       const tasksBefore = new Map(changes.filter((ch) => ch && ch.kind === 'tasks').map((ch) => [String(ch.id), store.get('tasks', String(ch.id))]));
       const { rev, results } = store.apply(changes, u.id, (ch, current) => !clashesTalkContact(ch, current) && access.canWrite(u, ch, current, { restoring }));
       broadcast(rev, results, client, u.id);
+      takeBackDeletedComments(results, tasksBefore);
       renameLinkedAssets(results, namesBefore);
       unlinkGoneClients(results);
       // a CD-reviewed task just completed: its final files go into Client Assets › Files

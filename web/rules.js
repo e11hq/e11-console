@@ -374,7 +374,9 @@ var E11Rules = (() => {
       const text = plainOf(n.text);
       const val = plainOf(((String(n.text || '').match(/<b>([^<]*)<\/b>(?![^]*<b>)/) || [])[1]) || '');
       const cm = n.commentId && t ? (t.comments || []).find((x) => x.id === n.commentId) : null;
-      const said = cm ? plainOf(cm.html || cm.text) : plainOf(n.snippet);
+      // (its comment deleted since, the task still here: its words no longer shown — Haris 2026-11-22 19:44)
+      const gone = !!(t && n.commentId && !cm && (n.kind === 'comment' || n.kind === 'mention'));
+      const said = gone ? 'This comment was deleted' : cm ? plainOf(cm.html || cm.text) : plainOf(n.snippet);
       // what it is about: the task — or the morning round-up, a birthday, claims, a plan, a client's assets
       const about = n.kind === 'sched-cancel' ? `Scheduled ${/scheduled reply/.test(n.text || '') ? 'reply' : 'comment'}` : t ? (t.title || 'Untitled task')
         : n.kind === 'birthday' ? 'Birthday' : n.kind === 'signin' ? 'Sign-in' : n.kind === 'daily' ? 'Morning round-up' : /^claim/.test(n.kind) ? 'Expense claims' : n.kind === 'asset' ? 'Client Assets' : n.planId ? 'Content plan' : 'Deleted task';
@@ -400,7 +402,7 @@ var E11Rules = (() => {
       else if (n.kind === 'signin') { head = `${who} made a sign-in code`; desc = `For ${text.replace(/^made a sign-in code for /, '')} · ${plainOf(n.snippet)}`; }
       else if (n.kind === 'sched-cancel') { head = 'Not sent'; desc = text + (n.snippet ? ` · “${plainOf(n.snippet)}”` : ''); }
       else if (/^claim|^plan|^asset/.test(n.kind)) { desc = plainOf(n.snippet) || val; }
-      if (!desc && n.snippet) desc = plainOf(n.snippet);
+      if (!desc && n.snippet && !gone) desc = plainOf(n.snippet);
       return { id: n.id, read: !!n.read, from: n.from || null, head, title: about, desc, at: n.at, mention: n.kind === 'mention' };
     }
     function inbox(tab = 'all') {

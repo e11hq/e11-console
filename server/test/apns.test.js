@@ -124,3 +124,28 @@ test('Out of Office ends at 9:00 AM Dubai on the day back', async () => {
   assert.equal(isAway(u, Date.parse('2026-11-20T09:00:00+04:00')), false);
   assert.equal(isAway({ away: 'soon' }, 0), false); assert.equal(isAway(null), false);
 });
+test('a deleted comment: its notification replaced quietly on the devices it reached, by the same tag (Haris 2026-11-22 19:47)', async () => {
+  const TOK = 'd'.repeat(64);
+  await post(AM, '/api/apns/register', { token: TOK, env: 'production' });
+  app.store.apply([{ kind: 'tasks', id: 't-dc', data: { id: 't-dc', title: 'Banner', projectId: null, assignees: ['u-a'], comments: [{ id: 'c-1', authorId: 'u-h', text: 'Secret words', at: new Date().toISOString() }] } }], 'test');
+  got = [];
+  const r = await app.webPush.sendTo('u-a', { title: 'Haris', body: 'commented — Secret words', taskId: 't-dc', nid: 'n-dc', kind: 'comment', commentId: 'c-1', collapse: 'c-c-1', replaceable: true });
+  assert.equal(r.sent, 1);
+  const first = got.find((x) => x.h[':path'] === '/3/device/' + TOK);
+  assert.equal(first.h['apns-collapse-id'], 'c-c-1');
+  got = [];
+  // the comment deleted (to the Trash), as the website does it
+  const del = await post(OWNER, '/api/push', { changes: [{ kind: 'tasks', id: 't-dc', data: { id: 't-dc', title: 'Banner', projectId: null, assignees: ['u-a'], comments: [] } }] });
+  assert.equal(del.status, 200);
+  await new Promise((res) => setTimeout(res, 300));
+  const rep = got.find((x) => x.h[':path'] === '/3/device/' + TOK && x.body.aps && x.body.aps.alert);   // (not the quiet wake the change brings)
+  assert.ok(rep, 'the replacement went');
+  assert.equal(rep.h['apns-collapse-id'], 'c-c-1');
+  assert.equal(rep.body.aps.alert.body, 'This comment was deleted');
+  assert.equal(rep.body.aps['interruption-level'], 'passive'); assert.equal(rep.body.aps.sound, undefined); assert.equal(rep.body.aps.badge, undefined);
+  // only once, and nobody it never reached
+  got = [];
+  assert.equal((await app.apns.replace('c-c-1', { title: 'x', body: 'y' })).sent, 0);
+  assert.equal(got.length, 0);
+  await post(AM, '/api/apns/unregister', { token: TOK });
+});

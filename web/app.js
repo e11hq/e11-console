@@ -8892,8 +8892,21 @@ function fullComment(n, t) {
   const cm = n.commentId && t && (t.comments || []).find((x) => x.id === n.commentId);
   return cm ? (cm.html ? notifPlainHTML(cm.html) : String(cm.text || '')).replace(/\s+/g, ' ').trim() : '';
 }
+// a deleted task in the Trash, found there (Account Managers and Admins): false when it isn't there or isn't theirs to see
+function goTrashFor(taskId) {
+  const inTrash = trashList().find((x) => (x.type === 'task' || x.type === 'project') && (x.key === 'tasks:' + taskId || ((x.data || {}).tasks || []).some((t) => t.id === taskId)));
+  if (!inTrash || !isManager()) return false;
+  ui.trashQ = trashTitle(inTrash); ui.trashFilter = 'all'; closeDetail(); go('trash');
+  return true;
+}
+// a comment or mention whose comment has been deleted since (its task still here) — its words are no longer shown anywhere
+// (Haris 2026-11-22 19:44: "This comment was deleted" in their place, rows and panes)
+function commentGone(n, t) {
+  return !!(n && t && (n.kind === 'comment' || n.kind === 'mention') && n.commentId && !(t.comments || []).some((c) => c.id === n.commentId));
+}
 function notifMsg(n, t) {
   const who = `<b>${esc(fullName(userById(n.from)))}</b>`;
+  if (commentGone(n, t)) return `${who} <span class="ib-dim">${n.kind === 'mention' ? 'mentioned you:' : String(n.text || '').includes('repl') ? 'replied:' : 'commented:'}</span> <i class="ib-gone">This comment was deleted</i>`;
   const val = ((n.text.match(/<b>([^<]*)<\/b>(?![^]*<b>)/) || [])[1] || '').replace(/&amp;/g, '&');
   if (n.kind === 'status' && val) {
     const st = t ? statusList(t).find((x) => x.name === val) : null;
@@ -9027,25 +9040,30 @@ function openNotif(id) {
   if (/^claim/.test(n.kind)) { myNotifs().forEach((x) => { if (x.claimId && x.claimId === n.claimId) x.read = true; }); persist(); renderSidebar(); return Claims.openNotif(n); }
   if (n.planId) {
     myNotifs().forEach((x) => { if (notifKey(x) === notifKey(n)) x.read = true; }); persist(); renderSidebar();
-    if (!Plans.canSee() || !Plans.planById(n.planId)) { toast('Content skeleton not found'); return renderContent(); }
+    // (something deleted since: its name, and nothing opens — Haris 2026-11-22 19:36)
+    if (!Plans.canSee()) { toast('Content skeleton not found'); return renderContent(); }
+    if (!Plans.planById(n.planId)) { toast('This content plan was deleted'); return renderContent(); }
     if (ui.taskId) closeDetail();
     return Plans.open(n.planId);
   }
   if (n.kind === 'asset') {
     myNotifs().forEach((x) => { if (notifKey(x) === notifKey(n)) x.read = true; }); persist(); renderSidebar();
-    if (!clientById(n.clientId)) { toast('Client Assets not found'); return; }
+    if (!clientById(n.clientId)) { toast('This client was deleted'); return; }
     const c = clientById(n.clientId);
-    return openClient(c.id, c.folders.some((x) => x.id === n.folderId) ? n.folderId : null);
+    if (n.folderId && !c.folders.some((x) => x.id === n.folderId)) { toast('This folder was deleted'); return; }
+    return openClient(c.id, n.folderId || null);
   }
   myNotifs().forEach((x) => { if (x.taskId === n.taskId) x.read = true; });
   persist(); renderSidebar(); renderContent();
   const t = task(n.taskId);
   if (!t) {
     const inTrash = trashList().find((x) => (x.type === 'task' || x.type === 'project') && (x.key === 'tasks:' + n.taskId || ((x.data || {}).tasks || []).some((t) => t.id === n.taskId)));
-    if (inTrash && isManager()) { ui.trashQ = trashTitle(inTrash); ui.trashFilter = 'all'; closeDetail(); go('trash'); toast('That task is in the Trash'); }
-    else toast(isManager() ? 'That task has been deleted' : 'That task is in the Trash — ask an Account Manager if it should come back');
+    if (inTrash && isManager()) goTrashFor(n.taskId);
+    toast('This task was deleted');
     return;
   }
+  // (a comment deleted since — the task still here: only its name, nothing opens; Haris 2026-11-22 19:40)
+  if (commentGone(n, t)) { toast('This comment was deleted'); return; }
   if ((n.kind === 'review' || n.kind === 'review-wd') && isCD()) {
     // the submission this update is about: scroll to it on Review Requests and highlight it briefly
     const rs = (t.reviews || []).filter((r) => r.by === n.from && r.state !== 'withdrawn');

@@ -965,6 +965,16 @@ html[data-theme="light"] .mib-pop { background: rgba(255, 255, 255, .98); box-sh
 .mib-top::after { content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 26px; background: linear-gradient(var(--mc-card), transparent); pointer-events: none; opacity: 0; transition: opacity .2s; }
 .mib-pane[data-live-under] .mib-top::after { opacity: 1; }   /* (what scrolls under the header fades under it, only once something is under it) */
 .mib-top + .mib-scroll { padding-top: 8px; }
+/* something deleted since (Haris 2026-11-22 19:52): what's under the header faded behind a cover that takes every click, its
+   name and icon in the middle (Go to Trash for a task, Account Managers and Admins); the header above it as it is */
+.mib-gonewrap { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
+.mib-goneunder { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.mib-gone { position: absolute; inset: 0; z-index: 3; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--mc-card) 82%, transparent); cursor: default; }
+.mib-gone-in { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 0 24px; }
+.mib-gone-ic { width: 44px; height: 44px; border-radius: 22px; display: grid; place-items: center; background: var(--mc-field); color: var(--mc-dim); }
+.mib-gone-ic .ic, .mib-gone-ic svg { width: 22px; height: 22px; }
+.mib-gone-in > b { font-size: 15px; font-weight: 600; color: var(--mc-fg); }
+.mib-gone-in > .mib-btn { margin-top: 4px; }
 .mib-reply, .mib-pane > .mib-foot { flex: none; position: relative; z-index: 2; margin: 0 20px; padding-bottom: 18px; }
 .mib-reply { margin-top: -26px; padding-top: 26px; background: linear-gradient(to bottom, transparent, var(--mc-card) 26px); pointer-events: none; }
 .mib-reply > * { pointer-events: auto; }   /* (its fade over the end of the updates lets clicks through) */

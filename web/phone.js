@@ -1037,6 +1037,8 @@ const Push = (() => {
       ui.sideTab = 'details';
       if (has()) { openNotif(nid); return; }
       if (taskId && !nid) return TaskLink.open(taskId); // a shared link: may hand over to the Mac app
+      // (its comment deleted since: only its name, nothing opens — Haris 2026-11-22 19:40)
+      if (['comment', 'mention'].includes(hint.kind) && hint.commentId && taskId && task(taskId) && !(task(taskId).comments || []).some((c) => c.id === hint.commentId)) { toast('This comment was deleted'); return; }
       // meanwhile: the right page for its kind, or the task (on Comments for a comment, @mention or amendments)
       if (!byKind() && taskId && task(taskId)) {
         if (['comment', 'mention', 'review-amend'].includes(hint.kind) && hint.commentId) ui.sideTab = ui.forceTab = 'comments';
