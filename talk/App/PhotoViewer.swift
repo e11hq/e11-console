@@ -26,6 +26,9 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
   private let cap = UILabel(), reacts = UIButton(type: .system), smile = UIButton(type: .system), replyB = UIButton(type: .system)
   private let strip = UIScrollView(), stripRow = UIStackView(), tools = UIStackView()
   private var chrome = true
+  // a video's time played · seek bar · its length (Haris 2026-11-22 18:21, WhatsApp's); photos: not there (no height)
+  private let seek = UIView(), played = UILabel(), length = UILabel(), bar = UISlider()
+  private var seekH: NSLayoutConstraint!, ticks: Any?, ticking: AVPlayer?, dragging = false
 
   init(items: [Msg], at: Int) { self.items = items; self.at = at; super.init(nibName: nil, bundle: nil); modalPresentationStyle = .overFullScreen; modalPresentationCapturesStatusBarAppearance = true }
   required init?(coder: NSCoder) { fatalError() }
@@ -137,7 +140,22 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
       [shareT, fwdT, saveT, delT].forEach { tools.addArrangedSubview($0) }
     }
     let row = UIStackView(arrangedSubviews: [reacts, smile, UIView(), replyB]); row.axis = .horizontal; row.spacing = 10; row.alignment = .center
-    [cap, row, strip, tools].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; foot.addSubview($0) }
+    for l in [played, length] { l.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium); l.textColor = .white; l.translatesAutoresizingMaskIntoConstraints = false; seek.addSubview(l) }
+    played.text = "0:00"; length.textAlignment = .right
+    bar.minimumTrackTintColor = .white; bar.maximumTrackTintColor = UIColor(white: 1, alpha: 0.3)
+    let knob = UIGraphicsImageRenderer(size: CGSize(width: 14, height: 14)).image { _ in UIColor.white.setFill(); UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: 14, height: 14)).fill() }
+    bar.setThumbImage(knob, for: .normal); bar.setThumbImage(knob, for: .highlighted)
+    bar.translatesAutoresizingMaskIntoConstraints = false; seek.addSubview(bar); seek.clipsToBounds = true
+    bar.addAction(UIAction { [weak self] _ in guard let self = self else { return }; self.dragging = true; self.pages[safe: self.at]?.scrubBegin() }, for: .touchDown)
+    bar.addAction(UIAction { [weak self] _ in guard let self = self else { return }; self.played.text = PhotoViewerVC.clock(Double(self.bar.value)); self.pages[safe: self.at]?.scrub(to: Double(self.bar.value)) }, for: .valueChanged)
+    bar.addAction(UIAction { [weak self] _ in guard let self = self else { return }; self.dragging = false; self.pages[safe: self.at]?.scrubEnd() }, for: [.touchUpInside, .touchUpOutside, .touchCancel])
+    NSLayoutConstraint.activate([
+      played.leadingAnchor.constraint(equalTo: seek.leadingAnchor, constant: 18), played.centerYAnchor.constraint(equalTo: seek.centerYAnchor), played.widthAnchor.constraint(equalToConstant: 44),
+      length.trailingAnchor.constraint(equalTo: seek.trailingAnchor, constant: -18), length.centerYAnchor.constraint(equalTo: seek.centerYAnchor), length.widthAnchor.constraint(equalToConstant: 44),
+      bar.leadingAnchor.constraint(equalTo: played.trailingAnchor, constant: 8), bar.trailingAnchor.constraint(equalTo: length.leadingAnchor, constant: -8), bar.centerYAnchor.constraint(equalTo: seek.centerYAnchor),
+    ])
+    pages.forEach { pg in pg.onPlayer = { [weak self, weak pg] in guard let self = self, let pg = pg, self.pages[safe: self.at] === pg else { return }; self.follow(pg) } }
+    [cap, row, seek, strip, tools].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; foot.addSubview($0) }
     [top, foot].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; view.addSubview($0) }
     let g0 = topShade.layer as! CAGradientLayer
     g0.colors = [UIColor(white: 0, alpha: 0.5).cgColor, UIColor(white: 0, alpha: 0.18).cgColor, UIColor.clear.cgColor]; g0.locations = [0, 0.55, 1]
@@ -159,13 +177,15 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
       cap.topAnchor.constraint(equalTo: foot.topAnchor), cap.leadingAnchor.constraint(equalTo: foot.leadingAnchor, constant: 18), cap.trailingAnchor.constraint(equalTo: foot.trailingAnchor, constant: -18),
       row.topAnchor.constraint(equalTo: cap.bottomAnchor, constant: 12), row.leadingAnchor.constraint(equalTo: foot.leadingAnchor, constant: 14), row.trailingAnchor.constraint(equalTo: foot.trailingAnchor, constant: -14),
       replyB.heightAnchor.constraint(equalToConstant: 34), reacts.heightAnchor.constraint(equalToConstant: 42),
-      strip.topAnchor.constraint(equalTo: row.bottomAnchor, constant: 12), strip.leadingAnchor.constraint(equalTo: foot.leadingAnchor), strip.trailingAnchor.constraint(equalTo: foot.trailingAnchor), strip.heightAnchor.constraint(equalToConstant: 40),
+      seek.topAnchor.constraint(equalTo: row.bottomAnchor, constant: 0), seek.leadingAnchor.constraint(equalTo: foot.leadingAnchor), seek.trailingAnchor.constraint(equalTo: foot.trailingAnchor),
+      strip.topAnchor.constraint(equalTo: seek.bottomAnchor, constant: 12), strip.leadingAnchor.constraint(equalTo: foot.leadingAnchor), strip.trailingAnchor.constraint(equalTo: foot.trailingAnchor), strip.heightAnchor.constraint(equalToConstant: 40),
       stripRow.centerYAnchor.constraint(equalTo: strip.centerYAnchor), stripRow.leadingAnchor.constraint(equalTo: strip.contentLayoutGuide.leadingAnchor, constant: 14),
       stripRow.trailingAnchor.constraint(equalTo: strip.contentLayoutGuide.trailingAnchor, constant: -14), stripRow.topAnchor.constraint(equalTo: strip.contentLayoutGuide.topAnchor, constant: 2),
       tools.topAnchor.constraint(equalTo: strip.bottomAnchor, constant: 10), tools.leadingAnchor.constraint(equalTo: foot.leadingAnchor, constant: 34), tools.trailingAnchor.constraint(equalTo: foot.trailingAnchor, constant: -34),
       tools.heightAnchor.constraint(equalToConstant: { if #available(iOS 26.0, *) { return 42 } else { return 40 } }()), tools.bottomAnchor.constraint(equalTo: foot.bottomAnchor, constant: -4),
     ])
     strip.isHidden = items.count < 2
+    seekH = seek.heightAnchor.constraint(equalToConstant: 0); seekH.isActive = true
     let tap = UITapGestureRecognizer(target: self, action: #selector(toggleChrome))
     pages.forEach { tap.require(toFail: $0.doubleTap) }
     pager.addGestureRecognizer(tap)
@@ -199,11 +219,12 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
   //  aside once it plays, as Photos; a tap brings them back with ⏸)
   private var opened = false
   override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); opened = true; pages[safe: at]?.start() }
-  override func viewWillDisappear(_ a: Bool) { super.viewWillDisappear(a); pages.forEach { $0.stop() } }
+  override func viewWillDisappear(_ a: Bool) { super.viewWillDisappear(a); pages.forEach { $0.stop() }; follow(nil) }
 
   // opening: out of its bubble (the design's "Opening a photo") — the picture flies from the bubble to its place
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
+    pages[safe: at]?.prepare()
     // (the photo's own picture flies — out of an album, its square, not the whole grid: Haris 2026-11-12)
     guard let m = items[safe: at], let spot = source?(m), let w = spot.0.window else { return }
     let src = spot.0, r = spot.1
@@ -247,6 +268,9 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     let f = DateFormatter(); f.dateStyle = .short; f.timeStyle = .short
     when.text = f.string(from: Date(timeIntervalSince1970: m.at / 1000))
     cap.text = m.text; cap.isHidden = m.text.isEmpty
+    let video = m.kind == "video"
+    seekH.constant = video ? 34 : 0; seek.isHidden = !video
+    if video { follow(pages[at]) } else { follow(nil) }
     let counts = Dictionary(grouping: m.reactions.values, by: { $0 }).map { ($0.key, $0.value.count) }.sorted { $0.1 > $1.1 }
     reacts.isHidden = counts.isEmpty
     reacts.configuration?.attributedTitle = AttributedString(counts.map { $0.0 }.joined() + (m.reactions.count > 1 ? "  \(m.reactions.count)" : ""),
@@ -265,6 +289,29 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     stripPlaced = true
   }
   private var stripPlaced = false
+  // the seek row follows the video on show: its length, and where it is, ten times a second
+  private func follow(_ pg: ZoomPage?) {
+    if let o = ticks, let p = ticking { p.removeTimeObserver(o) }
+    ticks = nil; ticking = nil
+    guard let pg = pg else { return }
+    let p = pg.player
+    var len = pg.seconds ?? 0
+    if let d = p?.currentItem?.duration, d.isNumeric, d.seconds > 0 { len = d.seconds }
+    bar.minimumValue = 0; bar.maximumValue = Float(max(len, 0.1))
+    length.text = PhotoViewerVC.clock(len)
+    let now = p.map { $0.currentTime().seconds } ?? 0
+    if !dragging { bar.value = Float(now.isFinite ? now : 0); played.text = PhotoViewerVC.clock(now.isFinite ? now : 0) }
+    guard let pl = p else { return }
+    ticking = pl
+    ticks = pl.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.1, preferredTimescale: 600), queue: .main) { [weak self] t in
+      guard let self = self, !self.dragging else { return }
+      if let d = pl.currentItem?.duration, d.isNumeric, d.seconds > 0, abs(Double(self.bar.maximumValue) - d.seconds) > 0.05 {
+        self.bar.maximumValue = Float(d.seconds); self.length.text = PhotoViewerVC.clock(d.seconds)
+      }
+      self.bar.value = Float(t.seconds); self.played.text = PhotoViewerVC.clock(t.seconds)
+    }
+  }
+  static func clock(_ s: Double) -> String { let n = Int((s.isFinite ? s : 0).rounded(.down)); return String(format: "%d:%02d", n / 60, n % 60) }
   @objc private func toggleChrome() {
     chrome.toggle()
     pages[safe: at]?.chrome = chrome
@@ -368,9 +415,12 @@ final class ZoomPage: UIScrollView, UIScrollViewDelegate {
   private let msg: Msg
   // a video, playing in place (Apple's player layer over its first picture, fading in once its first frame is there)
   final class PlayerView: UIView { override class var layerClass: AnyClass { AVPlayerLayer.self }; var pl: AVPlayerLayer { layer as! AVPlayerLayer } }
-  private var player: AVPlayer?, playerView: PlayerView?, ready: NSKeyValueObservation?, rate: NSKeyValueObservation?, ended: NSObjectProtocol?
-  private var want = false, atEnd = false
+  private(set) var player: AVPlayer?
+  private var playerView: PlayerView?, ready: NSKeyValueObservation?, rate: NSKeyValueObservation?, ended: NSObjectProtocol?
+  private var want = false, atEnd = false, loading = false
   var onPlaying: (() -> Void)?
+  var onPlayer: (() -> Void)?   // (its player made — the viewer's seek bar follows it)
+  var seconds: Double? { msg.file?.secs }
   var chrome = true { didSet { button(animated: true) } }
   init(msg: Msg) {
     self.msg = msg; super.init(frame: .zero)
@@ -420,8 +470,21 @@ final class ZoomPage: UIScrollView, UIScrollViewDelegate {
     want = true
     try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
     if let p = player { if atEnd { atEnd = false; p.seek(to: .zero) }; if !held { p.play() }; return }
+    load(f)
+  }
+  // (as the viewer starts opening: the player made and readied, not playing — it plays the moment the picture has landed,
+  //  instead of only starting to get ready then: Haris 2026-11-22 18:21)
+  func prepare() {
+    guard msg.kind == "video", let f = msg.file, player == nil else { return }
+    load(f)
+  }
+  private func load(_ f: Msg.FileRef) {
+    guard !loading else { return }
+    loading = true
     Net.shared.file(f.id) { [weak self] url in DispatchQueue.main.async {
-      guard let self = self, let url = url, self.want, self.player == nil else { return }
+      guard let self = self else { return }
+      self.loading = false
+      guard let url = url, self.player == nil else { return }
       // (under its own name, so the player knows its kind — the phone's copy has none)
       let named = FileManager.default.temporaryDirectory.appendingPathComponent(f.id.replacingOccurrences(of: "/", with: "_") + "-" + f.name)
       if !FileManager.default.fileExists(atPath: named.path) { try? FileManager.default.copyItem(at: url, to: named) }
@@ -438,9 +501,19 @@ final class ZoomPage: UIScrollView, UIScrollViewDelegate {
         DispatchQueue.main.async { guard let self = self else { return }; if pl.timeControlStatus == .playing { self.onPlaying?() }; self.button(animated: true) }
       }
       self.ended = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: p.currentItem, queue: .main) { [weak self] _ in self?.atEnd = true; self?.button(animated: true) }
-      p.play()
+      self.onPlayer?()
+      if self.want { p.play() }
     } }
   }
+  // the seek bar: dragged — paused while the finger is on it, on from there when it's let go (if it was playing)
+  private var wasPlaying = false
+  func scrubBegin() { wasPlaying = player?.timeControlStatus != .paused; player?.pause() }
+  func scrub(to t: Double) {
+    atEnd = false
+    player?.seek(to: CMTime(seconds: t, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+    button(animated: true)
+  }
+  func scrubEnd() { if wasPlaying, want, !held { player?.play() } }
   func stop() { want = false; held = false; player?.pause(); button(animated: false) }
   private var held = false   // (paused with ⏸ — its ▶ stays until tapped)
   // ▶ once paused with ⏸ or ended; ⏸ while it plays and the buttons are shown; nothing while it plays on its own or loads
