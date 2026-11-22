@@ -9,9 +9,9 @@ import UIKit
    than the original's), sound as AAC. Every iPhone since 2017 and every Mac plays it. Anything that can't be done this way
    (no video track, the encoder refuses) → nil, and the caller falls back to Apple's preset as before. */
 enum VideoShrink {
-  // (as WhatsApp — Haris 2026-11-22 13:22: standard 480p, HD 720p; HEVC at 1.2 / 2.5 Mbps. Was 720p 4 Mbps / 1080p 8 Mbps)
-  static func bitrate(hd: Bool) -> Int { hd ? 2_500_000 : 1_200_000 }
-  static func longSide(hd: Bool) -> CGFloat { hd ? 1280 : 854 }
+  // (back to 720p 4 Mbps / HD 1080p 8 Mbps — Haris 2026-11-22 16:59, 17:19; WhatsApp's 480p 1.2 / 720p 2.5 tried 13:22–17:19)
+  static func bitrate(hd: Bool) -> Int { hd ? 8_000_000 : 4_000_000 }
+  static func longSide(hd: Bool) -> CGFloat { hd ? 1920 : 1280 }
 
   // (stop: the sending bubble's id — its ✕ stops this; progress: 0…1 as the frames go)
   // ProRes RAW (or RAW HQ): a camera's raw footage — sent as the original, never made smaller (Haris 2026-11-21 13:18)
@@ -69,7 +69,7 @@ enum VideoShrink {
     guard let vt = asset.tracks(withMediaType: .video).first,
           let reader = try? AVAssetReader(asset: asset),
           let writer = try? AVAssetWriter(outputURL: out, fileType: .mp4) else { done(false); return }
-    // the size: the long side at most 854 — 480p (HD 1280 — 720p), the video's own shape (turned the way it's watched), even numbers
+    // the size: the long side at most 1280 — 720p (HD 1920 — 1080p), the video's own shape (turned the way it's watched), even numbers
     let turned = vt.naturalSize.applying(vt.preferredTransform)
     let nat = CGSize(width: abs(turned.width), height: abs(turned.height)), long = max(nat.width, nat.height), cap = longSide(hd: hd)
     let k = long > cap ? cap / long : 1

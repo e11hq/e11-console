@@ -209,14 +209,56 @@ enum Thumb {
     }
     return g
   }
+  // a video's first picture as the video is played, in standard colour, at most `side` across (Haris 2026-11-22 17:19 — the
+  //  test page's D: 140 of 255 where the frame taker gave 97–107): an HDR video's frame read by iPhone's video reader and
+  //  toned down by Core Image, turned the way it's watched; any other video (or if that can't be done): the frame taker as
+  //  before. A file with no ending (a sent one, kept by its id) is read through a linked copy named .mp4 — without it the
+  //  frame couldn't be taken ("Cannot Open"), so the sharp preview was never made.
+  static func frame(_ url: URL, side: CGFloat) -> CGImage? {
+    let fm = FileManager.default
+    var u = url, linked: URL?
+    if url.pathExtension.isEmpty {
+      let n = fm.temporaryDirectory.appendingPathComponent("frame-\(UUID().uuidString).mp4")
+      if (try? fm.linkItem(at: url, to: n)) != nil || (try? fm.copyItem(at: url, to: n)) != nil { u = n; linked = n }
+    }
+    defer { if let l = linked { try? fm.removeItem(at: l) } }
+    let a = AVURLAsset(url: u)
+    if #available(iOS 18.0, *), let t = a.tracks(withMediaType: .video).first, t.hasMediaCharacteristic(.containsHDRVideo), let cg = played(a, t, side: side) { return cg }
+    let g = frames(a); g.maximumSize = CGSize(width: side, height: side)
+    g.requestedTimeToleranceBefore = .positiveInfinity; g.requestedTimeToleranceAfter = .positiveInfinity
+    return (try? g.copyCGImage(at: CMTime(seconds: 0.1, preferredTimescale: 600), actualTime: nil)) ?? (try? g.copyCGImage(at: .zero, actualTime: nil))
+  }
+  @available(iOS 18.0, *)
+  private static func played(_ a: AVAsset, _ t: AVAssetTrack, side: CGFloat) -> CGImage? {
+    guard let r = try? AVAssetReader(asset: a) else { return nil }
+    let o = AVAssetReaderTrackOutput(track: t, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange])
+    guard r.canAdd(o) else { return nil }
+    r.add(o)
+    guard r.startReading() else { return nil }
+    defer { r.cancelReading() }
+    guard let sb = o.copyNextSampleBuffer(), let pb = CMSampleBufferGetImageBuffer(sb) else { return nil }
+    var img = CIImage(cvPixelBuffer: pb)
+    if let f = CIFilter(name: "CIToneMapHeadroom") { f.setValue(img, forKey: kCIInputImageKey); f.setValue(1.0, forKey: "inputTargetHeadroom"); if let x = f.outputImage { img = x } }
+    let k = min(1, side / max(img.extent.width, img.extent.height))
+    img = img.transformed(by: CGAffineTransform(scaleX: k, y: k)).oriented(turn(t.preferredTransform))
+    img = img.transformed(by: CGAffineTransform(translationX: -img.extent.minX, y: -img.extent.minY))
+    return ctx.createCGImage(img, from: img.extent.integral, format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!)
+  }
+  // (the way a video is turned to be watched, as a picture's orientation — iPhone's portrait video: .right)
+  private static func turn(_ t: CGAffineTransform) -> CGImagePropertyOrientation {
+    switch (round(t.a), round(t.b), round(t.c), round(t.d)) {
+    case (0, 1, -1, 0): return .right
+    case (0, -1, 1, 0): return .left
+    case (-1, 0, 0, -1): return .down
+    default: return .up
+    }
+  }
   static func make(_ url: URL, kind: String) -> String? {
     var img: UIImage?
     if kind == "photo" {
       img = CGImageSourceCreateWithURL(url as CFURL, nil).flatMap { CGImageSourceCreateThumbnailAtIndex($0, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 32] as CFDictionary) }.map { UIImage(cgImage: $0) }
     } else if kind == "video" {
-      let g = Thumb.frames(AVURLAsset(url: url)); g.maximumSize = CGSize(width: 32, height: 32)
-      g.requestedTimeToleranceBefore = .positiveInfinity; g.requestedTimeToleranceAfter = .positiveInfinity
-      img = (try? g.copyCGImage(at: CMTime(seconds: 0.1, preferredTimescale: 600), actualTime: nil)).map { UIImage(cgImage: $0) }
+      img = Thumb.frame(url, side: 32).map { UIImage(cgImage: $0) }
     }
     guard let i = img, let d = i.jpegData(compressionQuality: 0.5), d.count < 2900 else { return nil }
     return d.base64EncodedString()
@@ -228,10 +270,8 @@ enum Thumb {
     if kind == "photo" {
       cg = CGImageSourceCreateWithURL(url as CFURL, nil).flatMap { CGImageSourceCreateThumbnailAtIndex($0, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 320] as CFDictionary) }
     } else if kind == "video" {
-      let g = Thumb.frames(AVURLAsset(url: url)); g.maximumSize = CGSize(width: 320, height: 320)
-      g.requestedTimeToleranceBefore = .positiveInfinity; g.requestedTimeToleranceAfter = .positiveInfinity
-      do { cg = try g.copyCGImage(at: CMTime(seconds: 0.1, preferredTimescale: 600), actualTime: nil) }
-      catch { Diag.note("Sharp preview: the frame couldn't be taken — \((error as NSError).localizedDescription) (file: \(url.lastPathComponent))") }
+      cg = Thumb.frame(url, side: 320)
+      if cg == nil { Diag.note("Sharp preview: the frame couldn't be taken (file: \(url.lastPathComponent))") }
       Diag.variants(url)   // (the test page: the same frame four ways)
     }
     guard let c = cg else { return nil }

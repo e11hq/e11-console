@@ -37,7 +37,7 @@ enum Diag {
       return try? g.copyCGImage(at: at, actualTime: nil)
     }
     picture("A plain frame", gen(false))
-    picture("B standard colour as taken (Talk now)", gen(true))
+    picture("B standard colour as taken (Talk up to 247)", gen(true))
     if let p = gen(false) {
       var img = CIImage(cgImage: p)
       if #available(iOS 18.0, *), let t = CIFilter(name: "CIToneMapHeadroom") { t.setValue(img, forKey: kCIInputImageKey); t.setValue(1.0, forKey: "inputTargetHeadroom"); if let o = t.outputImage { img = o } }
@@ -51,7 +51,7 @@ enum Diag {
           var img = CIImage(cvPixelBuffer: pb)
           if #available(iOS 18.0, *), let f = CIFilter(name: "CIToneMapHeadroom") { f.setValue(img, forKey: kCIInputImageKey); f.setValue(1.0, forKey: "inputTargetHeadroom"); if let x = f.outputImage { img = x } }
           img = img.transformed(by: CGAffineTransform(scaleX: 320 / max(img.extent.width, img.extent.height), y: 320 / max(img.extent.width, img.extent.height)))
-          picture("D as played, toned down by Core Image", CIContext().createCGImage(img, from: img.extent, format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!))
+          picture("D as played, toned down by Core Image (Talk now)", CIContext().createCGImage(img, from: img.extent, format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!))
         }
         r.cancelReading()
       }

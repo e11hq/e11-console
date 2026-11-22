@@ -1252,7 +1252,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         }
         try? FileManager.default.removeItem(at: hevc)
         if BgWatch.left != left { ready(nil); return }
-        guard let ex = AVAssetExportSession(asset: asset, presetName: hd ? AVAssetExportPreset1280x720 : AVAssetExportPreset960x540) else {
+        guard let ex = AVAssetExportSession(asset: asset, presetName: hd ? AVAssetExportPreset1920x1080 : AVAssetExportPreset1280x720) else {
           if Attach.tooBig(url) { toast("That video is over 1 GB — send a shorter part"); ready(nil); return }
           asItIs(); ready(url); return
         }
@@ -1302,7 +1302,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   static func photoData(_ d: Data, hd: Bool) -> (data: Data, w: Double, h: Double)? {
     guard let src = CGImageSourceCreateWithData(d as CFData, nil) else { return nil }
     let o: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
-                              kCGImageSourceThumbnailMaxPixelSize: hd ? 4096 : 1600, kCGImageSourceShouldCacheImmediately: true]   // (standard 1600 as WhatsApp — Haris 2026-11-22 13:22; was 2048)
+                              kCGImageSourceThumbnailMaxPixelSize: hd ? 4096 : 2048, kCGImageSourceShouldCacheImmediately: true]   // (2048 again — Haris 2026-11-22 17:19; 1600 as WhatsApp tried 13:22)
     guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, o as CFDictionary) else { return nil }
     let marked = Watermark.onto(cg)
     // (HEIC, as the iPhone's camera: about half a JPEG's size at the same sharpness — Haris 2026-11-21 12:27, 15:18; a
@@ -3294,9 +3294,7 @@ final class BubbleCell: UITableViewCell {
       for ext in ["mp4", "mov", "m4v"] where img == nil {
         let named = FileManager.default.temporaryDirectory.appendingPathComponent("v-\(Net.stableKey(id)).\(ext)")
         if !FileManager.default.fileExists(atPath: named.path) { try? FileManager.default.copyItem(at: url, to: named) }
-        let g = Thumb.frames(AVURLAsset(url: named)); g.maximumSize = CGSize(width: 720, height: 720)
-        g.requestedTimeToleranceBefore = .positiveInfinity; g.requestedTimeToleranceAfter = .positiveInfinity
-        img = ((try? g.copyCGImage(at: CMTime(seconds: 0.1, preferredTimescale: 600), actualTime: nil)) ?? (try? g.copyCGImage(at: .zero, actualTime: nil))).map { UIImage(cgImage: $0) }
+        img = Thumb.frame(named, side: 720).map { UIImage(cgImage: $0) }
       }
       if let i = img { frames.setObject(i, forKey: id as NSString); if id == Diag.videoId { Diag.picture("Frame in your bubble", i.cgImage) } }
       DispatchQueue.main.async { done(img) }
