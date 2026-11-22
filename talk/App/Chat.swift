@@ -4057,12 +4057,8 @@ final class MessageBar: UIView, UITextViewDelegate {
     // a line more or less: the whole bar grows or shrinks upward as one, with the chat above it — the page laid out
     // inside the animation (only the bar's own insides were before, the bar itself snapping to its new height after:
     // the box jumped with each new line — Haris 2026-11-14)
-    // (a new line: the box grows in the same moment as the line — eased, the words and the cursor moved up first and the box
-    //  followed a moment later: Haris 2026-11-22 14:31; a line fewer still eases down)
-    let grows = h > boxH
     boxH = h; invalidateIntrinsicContentSize(); setNeedsLayout()
-    if grows { UIView.performWithoutAnimation { host.layoutIfNeeded() }; box.setContentOffset(.zero, animated: false) }
-    else { UIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { host.layoutIfNeeded() } }
+    UIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { host.layoutIfNeeded() }
   }
   // the link's card above the box: a link in the words (not our own, not closed with ✕) is read a moment after it's typed;
   // the strip comes up from behind the box (as the reply strip) with the link's mark and its site, then fills in
