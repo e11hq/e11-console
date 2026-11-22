@@ -2850,6 +2850,7 @@ final class BubbleCell: UITableViewCell {
       let words = said.isEmpty ? (r.kind == "photo" ? "Photo" : r.kind == "video" ? "Video" : r.kind == "voice" ? "Voice message" : r.kind == "file" ? "File" : "") : said
       qt.append(NSAttributedString(string: words))
       qt.addAttribute(.foregroundColor, value: mine ? UIColor.white.withAlphaComponent(0.8) : UIColor.secondaryLabel, range: NSRange(location: 0, length: qt.length))
+      qt.addAttribute(.font, value: quoteText.font as Any, range: NSRange(location: 0, length: qt.length))
       quoteText.attributedText = qt
       quoteThumb.image = nil; quoteThumbW.constant = 0
       if cam, let o = l.msgs.first(where: { $0.id == r.id }), let f = o.file, !Auto.here(f) && !Auto.now(o.kind) {
@@ -3093,7 +3094,14 @@ final class BubbleCell: UITableViewCell {
         w = ceil(t.boundingRect(with: CGSize(width: inner, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil).width) + 1
       }
       for l in [nameL, roleL, fwdL] where !l.isHidden { w = max(w, ceil(l.intrinsicContentSize.width)) }
-      if !quoteWrap.isHidden { w = max(w, max(quoteName.intrinsicContentSize.width, quoteText.intrinsicContentSize.width) + 26 + quoteThumbW.constant) }
+      // (the quote's words measured from the words themselves, as the message's are — the label's own size depends on how it
+      //  was last laid out, and a reply's bubble drawn again in place came out at the widest: Haris 2026-11-22 11:06)
+      if !quoteWrap.isHidden {
+        let room = max(1, inner - 26 - quoteThumbW.constant)
+        let qw = quoteText.attributedText.map { ceil($0.boundingRect(with: CGSize(width: room, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil).width) + 1 } ?? 0
+        let nw = ceil(((quoteName.text ?? "") as NSString).size(withAttributes: [.font: quoteName.font as Any]).width) + 1
+        w = max(w, max(nw, qw) + 26 + quoteThumbW.constant)
+      }
       if !footL.isHidden { w = max(w, ceil(footL.intrinsicContentSize.width)) }
       tight.constant = min(widest, w + 24)
     }
