@@ -70,3 +70,18 @@ test('a file’s "it’s all there" with its message — one call sends both', a
   assert.ok(h.sync(b, 0).events.some((x) => x.type === 'msg' && x.text === 'Look'), 'Lana has it');
   const plain = await h.r2Done(a, { id: s.id }); assert.equal(plain.sent, undefined, 'without one: as before');
 });
+
+test('a piece is written into storage as it arrives (a stream of the length the phone gave)', async () => {
+  globalThis.FixedLengthStream = class { constructor(n) { const t = new TransformStream(); this.readable = t.readable; this.writable = t.writable; this.n = n; } };
+  try {
+    const bucket = fakeBucket(), e = env(bucket);
+    const h = new HubCore({ sql: fakeSql(), dir: DIR, r2: bindingR2({ bucket, secret: e.R2_LINK_SECRET, base: e.PUBLIC }) });
+    const a = h.who('haris@e11.test', 'phone-key-aaaaaaaaaaaa');
+    const s = await h.r2Start(a, { name: 'v.mp4', size: 700 });
+    const r = await serveR2(new Request(s.put, { method: 'PUT', body: new Uint8Array(700).fill(9), headers: { 'content-length': '700' } }), e, path(s.put));
+    assert.equal(r.status, 200);
+    assert.equal(bucket.objs.get('msg/' + s.id).byteLength, 700);
+    const big = await serveR2(new Request(s.put, { method: 'PUT', body: new Uint8Array(1), headers: { 'content-length': String(PART + 1) } }), e, path(s.put));
+    assert.equal(big.status, 413);
+  } finally { delete globalThis.FixedLengthStream; }
+});

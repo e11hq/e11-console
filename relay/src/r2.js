@@ -54,8 +54,17 @@ export async function serveR2(req, env, path) {
   const cors = { 'access-control-allow-origin': '*', 'access-control-expose-headers': 'ETag, Content-Length, Content-Range' };
   if (!o || o.m !== kind || !bucket) return new Response('This address has run out', { status: 403, headers: cors });
   if (kind === 'put' && req.method === 'PUT') {
-    const body = await req.arrayBuffer();
-    if (body.byteLength > PART) return new Response('Too big', { status: 413, headers: cors });
+    // (written into storage as it arrives — read whole first, the phone showed it all sent and then waited while it was
+    //  stored, longer for a bigger video: Haris 2026-11-22 15:53. Its length must be known: the phone always says it.)
+    const len = Number(req.headers.get('content-length') || 0);
+    if (len > PART) return new Response('Too big', { status: 413, headers: cors });
+    let body;
+    if (len > 0 && req.body && typeof FixedLengthStream === 'function') {
+      const s = new FixedLengthStream(len); req.body.pipeTo(s.writable).catch(() => {}); body = s.readable;
+    } else {
+      body = await req.arrayBuffer();
+      if (body.byteLength > PART) return new Response('Too big', { status: 413, headers: cors });
+    }
     const etag = o.u ? (await bucket.resumeMultipartUpload(o.k, o.u).uploadPart(o.p, body)).etag : (await bucket.put(o.k, body)).etag;
     return new Response(null, { status: 200, headers: { ...cors, ETag: `"${etag}"` } });
   }
