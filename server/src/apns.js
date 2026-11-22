@@ -102,12 +102,14 @@ export function createApns({ store, keyFile = '', keyId = '', teamId = '', topic
     sessions[env] = n;
     return n;
   }
-  function post(env, token, payload, ttl, kind = 'alert', prio = '10') {
+  // (collapse: E11 Talk's message id — a later notification with the same one replaces it in place, Haris 2026-11-22 16:22)
+  function post(env, token, payload, ttl, kind = 'alert', prio = '10', collapse = null) {
     return new Promise((resolve) => {
       let req;
       try {
         req = session(env).request({ ':method': 'POST', ':path': `/3/device/${token}`, authorization: `bearer ${bearer()}`, 'apns-topic': topic,
-          'apns-push-type': kind, 'apns-priority': prio, 'apns-expiration': String(Math.floor(now() / 1000) + ttl), 'content-type': 'application/json' });
+          'apns-push-type': kind, 'apns-priority': prio, 'apns-expiration': String(Math.floor(now() / 1000) + ttl), 'content-type': 'application/json',
+          ...(collapse ? { 'apns-collapse-id': String(collapse).slice(0, 64) } : {}) });
       } catch (e) { return resolve({ status: 0, reason: e.message }); }
       let status = 0, body = '';
       req.on('response', (h) => { status = h[':status']; });
@@ -135,7 +137,8 @@ export function createApns({ store, keyFile = '', keyId = '', teamId = '', topic
     if (pid) data.pid = pid;
     // (mutable-content: the app's Notification Service Extension sees each one first — it confirms it arrived; E11 Talk's
     //  message ones too: its helper tells the sender's ✓✓ — Haris 2026-11-19 21:42)
-    const out = { aps: { alert: { title: String(msg.title || (kvPrefix === 'apns' ? 'E11 Console' : 'E11 Talk')), body: String(msg.body || '') }, sound: 'default', 'thread-id': String(msg.taskId || msg.tag || msg.kind || 'e11'),
+    // (quiet: no sound, no banner — E11 Talk's "This message was deleted" taking the place of the message's own)
+    const out = { aps: { alert: { title: String(msg.title || (kvPrefix === 'apns' ? 'E11 Console' : 'E11 Talk')), body: String(msg.body || '') }, ...(msg.quiet ? { 'interruption-level': 'passive' } : { sound: 'default' }), 'thread-id': String(msg.taskId || msg.tag || msg.kind || 'e11'),
       ...(Number.isInteger(msg.badge) ? { badge: msg.badge } : {}), ...(pid || (msg.kind === 'talk' && msg.msgId) ? { 'mutable-content': 1 } : {}),
       // (E11 Talk's messages also wake the app quietly, so its photos and videos start downloading with Talk closed —
       //  Haris 2026-11-21 15:34 "Yes, include it")
@@ -144,7 +147,7 @@ export function createApns({ store, keyFile = '', keyId = '', teamId = '', topic
     return withMessage(out, msg.m);
   }
   async function push1(s, msg, pid, ttl, tries) {
-    const r = await post(s.env, s.token, payloadOf(msg, s.ack ? pid : null), ttl);
+    const r = await post(s.env, s.token, payloadOf(msg, s.ack ? pid : null), ttl, 'alert', '10', msg.collapse || null);
     if (s.ack && r.status === 200) {
       const p = loadP(), t = now();
       p[s.token] = (p[s.token] || []).filter((x) => t - Date.parse(x.at) < KEEP && x.pid !== pid)

@@ -26,11 +26,12 @@ export function makeApns({ key, keyId, teamId, topic = 'ae.e11.talk.ios', subs =
     jwt = `${head}.${body}.${b64u(sig)}`; jwtAt = now();
     return jwt;
   }
-  async function post(env, token, payload, ttl, kind = 'alert', prio = '10') {
+  async function post(env, token, payload, ttl, kind = 'alert', prio = '10', collapse = null) {
     try {
       const r = await go(`${HOSTS[env] || HOSTS.production}/3/device/${token}`, { method: 'POST', body: JSON.stringify(payload), headers: {
         authorization: `bearer ${await bearer()}`, 'apns-topic': topic, 'apns-push-type': kind, 'apns-priority': prio,
-        'apns-expiration': String(Math.floor(now() / 1000) + ttl), 'content-type': 'application/json' } });
+        'apns-expiration': String(Math.floor(now() / 1000) + ttl), 'content-type': 'application/json',
+        ...(collapse ? { 'apns-collapse-id': String(collapse).slice(0, 64) } : {}) } });
       let reason = ''; try { reason = (await r.json()).reason || ''; } catch { /* 200: empty */ }
       return { status: r.status, reason };
     } catch (e) { return { status: 0, reason: e.message }; }
@@ -51,7 +52,7 @@ export function makeApns({ key, keyId, teamId, topic = 'ae.e11.talk.ios', subs =
     return withMessage(payloadOf0(msg, data), msg.m);
   }
   function payloadOf0(msg, data) {
-    return { aps: { alert: { title: String(msg.title || 'E11 Talk'), body: String(msg.body || '') }, sound: 'default', 'thread-id': String(msg.tag || msg.kind || 'e11'),
+    return { aps: { alert: { title: String(msg.title || 'E11 Talk'), body: String(msg.body || '') }, ...(msg.quiet ? { 'interruption-level': 'passive' } : { sound: 'default' }), 'thread-id': String(msg.tag || msg.kind || 'e11'),
       ...(Number.isInteger(msg.badge) ? { badge: msg.badge } : {}), ...(msg.kind === 'talk' && msg.msgId ? { 'mutable-content': 1, 'content-available': 1 } : {}),
       ...(msg.category ? { category: String(msg.category) } : {}) }, e11: data };
   }
@@ -60,7 +61,7 @@ export function makeApns({ key, keyId, teamId, topic = 'ae.e11.talk.ios', subs =
     on,
     async sendTo(uid, msg, { ttl = 4 * 86400 } = {}) {
       if (!on) return { sent: 0, why: 'no-key' };
-      const rs = await Promise.all(list(uid).map((s) => post(s.env, s.token, payloadOf(msg), ttl)));
+      const rs = await Promise.all(list(uid).map((s) => post(s.env, s.token, payloadOf(msg), ttl, 'alert', '10', msg.collapse || null)));
       return { sent: rs.filter((r) => r.status === 200).length, results: rs };
     },
     async wake(uid, e11 = {}) {

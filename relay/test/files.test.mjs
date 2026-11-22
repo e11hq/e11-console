@@ -124,3 +124,20 @@ test('a group deleted: its files go at once — one also sent in another group s
   assert.ok(!bucket.objs.has('msg/' + only), 'its own file: gone at once');
   assert.ok(bucket.objs.has('msg/' + both), 'also in another group: stays');
 });
+
+test('deleted for everyone: its file goes at once, even before the other phone picked it up; its notification replaced quietly', async () => {
+  const bucket = fakeBucket(), e = env(bucket), sent = [];
+  const apns = { enabled: () => true, sendTo: async (uid, p) => { sent.push([uid, p]); }, wake: async () => {} };
+  const h = new HubCore({ sql: fakeSql(), dir: DIR, apns, r2: bindingR2({ bucket, secret: e.R2_LINK_SECRET, base: e.PUBLIC }) });
+  const a = h.who('haris@e11.test', 'phone-key-aaaaaaaaaaaa');
+  const gid = h.act(a, { act: 'newGroup', client: 'p1', name: 'Del', members: ['u2'] }).group.id;
+  const s = await h.r2Start(a, { name: 'p.heic', size: 10 }); await serveR2(new Request(s.put, { method: 'PUT', body: new Uint8Array(10) }), e, path(s.put)); await h.r2Done(a, { id: s.id });
+  const m = h.act(a, { act: 'send', group: gid, text: '', file: { id: s.id, kind: 'photo', key: 'A'.repeat(43) + '=' } });
+  const first = sent.find(([u, p]) => u === 'u2' && p.kind === 'talk');
+  assert.equal(first[1].collapse, m.id, 'the notification carries its message id to be replaced');
+  assert.equal(h.act(a, { act: 'del', msg: m.id }).ok, true);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.ok(!bucket.objs.has('msg/' + s.id), 'gone at once');
+  const rep = sent.find(([u, p]) => u === 'u2' && p.kind === 'talkdel');
+  assert.ok(rep && rep[1].collapse === m.id && rep[1].quiet === true && rep[1].body === 'This message was deleted');
+});

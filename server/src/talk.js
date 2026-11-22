@@ -479,14 +479,11 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   }
   // a group deleted (by its admin, or after 90 days quiet): its files let go at once — on Cloudflare and the office alike —
   // except one also sent in another group, which still uses it (Haris 2026-11-22 16:13)
-  function dropGroupFiles(g) {
-    const ids = new Set();
-    for (const r of db.prepare('SELECT files FROM sent WHERE grp = ?').all(g.id)) { try { for (const id of JSON.parse(r.files || '[]')) ids.add(String(id)); } catch { /* fine */ } }
-    if (g.pic) ids.add(String(g.pic));
-    const elsewhere = db.prepare('SELECT 1 FROM sent WHERE grp <> ? AND files LIKE ? LIMIT 1');
-    const otherPic = db.prepare('SELECT 1 FROM groups WHERE id <> ? AND pic = ? AND gone = 0 LIMIT 1');
+  // files let go at once, whatever still points at them (a message deleted for everyone, a group deleted) — except where
+  // keep(id) says another message still uses it
+  function dropNow(ids, keep) {
     for (const id of ids) {
-      if (elsewhere.get(g.id, `%"${id}"%`) || otherPic.get(g.id, id)) continue;
+      if (keep(id)) continue;
       db.prepare('DELETE FROM needs WHERE file = ?').run(id);
       for (const x of ['file_kept WHERE id', 'file_had WHERE file', 'asks WHERE file']) db.prepare(`DELETE FROM ${x} = ?`).run(id);
       const f = Q.getFile.get(id);
@@ -494,6 +491,14 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       else if (f) { try { fs.rmSync(path.join(relay, id), { force: true }); } catch { /* fine */ } }
       Q.dropFile.run(id);
     }
+  }
+  function dropGroupFiles(g) {
+    const ids = new Set();
+    for (const r of db.prepare('SELECT files FROM sent WHERE grp = ?').all(g.id)) { try { for (const id of JSON.parse(r.files || '[]')) ids.add(String(id)); } catch { /* fine */ } }
+    if (g.pic) ids.add(String(g.pic));
+    const elsewhere = db.prepare('SELECT 1 FROM sent WHERE grp <> ? AND files LIKE ? LIMIT 1');
+    const otherPic = db.prepare('SELECT 1 FROM groups WHERE id <> ? AND pic = ? AND gone = 0 LIMIT 1');
+    dropNow([...ids], (id) => elsewhere.get(g.id, `%"${id}"%`) || otherPic.get(g.id, id));
   }
   function sweep() {
     const t = now();
@@ -550,15 +555,31 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   function notify(g, from, text, msgId, mentions = [], m = null) {
     if (!apns || !apns.enabled()) return;
     const t = now();
+    for (const uid of notifiedFor(g, from, mentions, t)) {
+      const c = clientById(g.client);
+      apns.sendTo(uid, { title: g.name, body: `${from.name || from.email}: ${text}`, tag: g.id, kind: 'talk', groupId: g.id, msgId, clientId: c ? c.id : null, category: 'talk-msg', collapse: msgId, ...(m ? { m } : {}) }).catch(() => {});
+    }
+  }
+  // deleted for everyone: its notification, where it was shown, replaced in place — quietly — by "This message was deleted"
+  //  (the same message id as its collapse id; kind 'talkdel': no helper, no wake — Haris 2026-11-22 16:22)
+  function unnotify(g, from, msgId, mentions = []) {
+    if (!apns || !apns.enabled()) return;
+    for (const uid of notifiedFor(g, from, mentions, now())) {
+      apns.sendTo(uid, { title: g.name, body: 'This message was deleted', tag: g.id, kind: 'talkdel', groupId: g.id, msgId, collapse: msgId, quiet: true }).catch(() => {});
+    }
+  }
+  // who a message of theirs notifies: the group's others, not on Out of Office, not muted (an @mention still comes)
+  function notifiedFor(g, from, mentions, t) {
+    const out = [];
     for (const uid of memberIds(g)) {
       if (uid === from.id) continue;
       if (isAway(userOf(uid), t)) continue;   // (Out of Office: paused until 9:00 AM the day they're back — Haris 2026-11-13)
       const pref = Q.pref.get(uid, 'group', g.id) || {};
       // (muted — but an @mention still comes, unless they turned that off: Settings › Notifications, Haris 2026-11-13)
       if (pref.muted_until && pref.muted_until > t && !(mentions.includes(uid) && optsOf(uid).mutedMentions)) continue;
-      const c = clientById(g.client);
-      apns.sendTo(uid, { title: g.name, body: `${from.name || from.email}: ${text}`, tag: g.id, kind: 'talk', groupId: g.id, msgId, clientId: c ? c.id : null, category: 'talk-msg', ...(m ? { m } : {}) }).catch(() => {});
+      out.push(uid);
     }
+    return out;
   }
 
   // ---------- the App Review copy: made-up chats (review.js; Haris 2026-11-13: "Both ways") ----------
@@ -1069,7 +1090,12 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
           const fl = JSON.parse(s.files || '[]');
           for (const id of fl) db.prepare('DELETE FROM needs WHERE file = ?').run(id);   // (deleted for everyone: nobody downloads it any more)
           for (const id of fl) { for (const x of ['file_kept WHERE id', 'file_had WHERE file', 'asks WHERE file']) db.prepare(`DELETE FROM ${x} = ?`).run(id); }   // (and never asked back)
-          dropFiles(fl);
+          // (its files go at once — even while a phone hasn't picked the message up: it gets the delete with it; one also sent
+          //  in another message stays — Haris 2026-11-22 16:22)
+          dropNow(fl, (id) => db.prepare('SELECT 1 FROM sent WHERE id <> ? AND files LIKE ? LIMIT 1').get(s.id, `%"${id}"%`));
+          // (its notification, where it was shown: replaced quietly by "This message was deleted")
+          let ment = []; try { const ev = db.prepare("SELECT data FROM events WHERE grp = ? AND type = 'msg' AND data LIKE ? LIMIT 1").get(g.id, `%"id":"${s.id}"%`); if (ev) ment = JSON.parse(ev.data).mentions || []; } catch { /* fine */ }
+          unnotify(g, u, s.id, ment);
           if ((pinOf(g) || {}).id === s.id) { db.prepare('UPDATE groups SET pin = NULL WHERE id = ?').run(g.id); changed(g, u.id); }
         } else {
           const emoji = b.emoji ? clip(b.emoji, 16) : null;
