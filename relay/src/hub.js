@@ -198,7 +198,8 @@ export class TalkHub extends DurableObject {
     const a = ws.deserializeAttachment() || {};
     const w = this.core.who(a.email, a.device);
     if (!w) { ws.close(4003, 'Signed out'); return; }
-    const r = await this.call(w, String(m.call || ''), m.body || {});
+    // (something went wrong here: no answer (null) — the phone sends the same call the usual way)
+    let r; try { r = await this.call(w, String(m.call || ''), m.body || {}); } catch (e) { ws.send(JSON.stringify({ id: m.id, r: null, err: String(e && e.message || e).slice(0, 200) })); return; }
     ws.send(JSON.stringify({ id: m.id, r: r || { ok: false, error: 'Not here' } }));
   }
   webSocketClose(ws) { try { ws.stop && ws.stop(); } catch { /* fine */ } }

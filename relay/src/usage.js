@@ -30,7 +30,9 @@ export async function usage({ token, account, now = Date.now(), go = (...a) => f
   }));
   if (Object.keys(got).length === 0) return { ok: false, error: 'Cloudflare didn’t answer', errors };
   // (requests: the front door's and the hub's, a WebSocket message counting as 1/20 of one; running time: 128 MB while active)
-  const requests = (got.workerRequests || 0) + (got.hubRequests || 0) + (got.wsIn || 0) / 20;
+  // (two separate limits of 100,000 — the front door's and the hub's; the hub's counting a line message as 1/20 — the higher)
+  const hubReq = (got.hubRequests || 0) + (got.wsIn || 0) / 20;
+  const requests = Math.max(got.workerRequests || 0, hubReq);
   const gbs = ((got.activeUs || 0) / 1e6) * 0.125;
   const pct = {
     requests: requests / FREE.requests * 100, time: gbs / FREE.gbs * 100,
