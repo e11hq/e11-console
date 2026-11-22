@@ -1251,7 +1251,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
         }
         try? FileManager.default.removeItem(at: hevc)
         if BgWatch.left != left { ready(nil); return }
-        guard let ex = AVAssetExportSession(asset: asset, presetName: hd ? AVAssetExportPreset1920x1080 : AVAssetExportPreset1280x720) else {
+        guard let ex = AVAssetExportSession(asset: asset, presetName: hd ? AVAssetExportPreset1280x720 : AVAssetExportPreset960x540) else {
           if Attach.tooBig(url) { toast("That video is over 1 GB — send a shorter part"); ready(nil); return }
           asItIs(); ready(url); return
         }
@@ -1281,7 +1281,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   static func photoData(_ d: Data, hd: Bool) -> (data: Data, w: Double, h: Double)? {
     guard let src = CGImageSourceCreateWithData(d as CFData, nil) else { return nil }
     let o: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
-                              kCGImageSourceThumbnailMaxPixelSize: hd ? 4096 : 2048, kCGImageSourceShouldCacheImmediately: true]
+                              kCGImageSourceThumbnailMaxPixelSize: hd ? 4096 : 1600, kCGImageSourceShouldCacheImmediately: true]   // (standard 1600 as WhatsApp — Haris 2026-11-22 13:22; was 2048)
     guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, o as CFDictionary) else { return nil }
     let marked = Watermark.onto(cg)
     // (HEIC, as the iPhone's camera: about half a JPEG's size at the same sharpness — Haris 2026-11-21 12:27, 15:18; a
