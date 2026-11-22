@@ -20,6 +20,17 @@ export default {
     if (!(p === '/line' || p.startsWith('/api/talk/'))) return json({ ok: false, error: 'Not here' }, 404);
     // (who this phone is: the hub works it out itself — one trip to the hub, not two; the sign-in's fingerprint only)
     const h = new Headers(req.headers); h.delete('x-hub-email'); h.set('x-hub-fp', await fingerprint(req.headers));
-    return hub.fetch(new Request(req, { headers: h }));
+    const r = await hub.fetch(new Request(req, { headers: h }));
+    // (a message's file: the hub answers with its R2 address — fetched here at once and handed over, one trip for the phone
+    //  instead of two: Haris 2026-11-22 19:06; the address is this relay's own, signed, as before)
+    const loc = r.status === 302 && p.startsWith('/api/talk/file/') ? r.headers.get('location') : null;
+    if (loc) {
+      const to = new URL(loc, url);
+      if (to.origin === url.origin && to.pathname.startsWith('/r2/get/')) {
+        const rh = new Headers(); const range = req.headers.get('range'); if (range) rh.set('range', range);
+        return serveR2(new Request(to.toString(), { method: req.method, headers: rh }), env, to.pathname);
+      }
+    }
+    return r;
   },
 };

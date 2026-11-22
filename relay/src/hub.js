@@ -17,6 +17,7 @@ const TALK_TABLES = ['groups', 'members', 'prefs', 'events', 'waiting', 'sent', 
 const HOUR = 3600_000, RETRY = 30_000;
 const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 
+const ONE_MAX = 1024 * 1024;   // (r2/one: a voice note's size at most, locked)
 export class TalkHub extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
@@ -118,12 +119,29 @@ export class TalkHub extends DurableObject {
       case 'r2/start': return this.core.r2Start(w, b);
       case 'r2/drop': return this.core.r2Drop(w, b);
       case 'r2/done': return this.core.r2Done(w, b);
+      case 'r2/one': return this.r2One(w, b);
       case 'ask': return this.core.ask(w, b);
       case 'asks': return this.core.asks(w);
       case 'resend/start': return this.core.resendStart(w, b);
       case 'history/share': return this.core.shareHistory(w, b);
       default: return null;   // (Macs, sign-in… the office's for now)
     }
+  }
+
+  // a small file (a voice note) and its message in one call — the phone sends the locked bytes with the message, the hub puts
+  // them in R2 itself: one trip instead of three (start, the file, "it's all there"); Haris 2026-11-22 19:06. The same records
+  // as the three calls make (the office's copy sees nothing new). Anything wrong: the phone goes the usual way.
+  async r2One(w, b) {
+    let bytes;
+    try { bytes = Uint8Array.from(atob(String(b.data || '')), (c) => c.charCodeAt(0)); } catch { return { ok: false, error: 'Bad file', status: 400 }; }
+    if (!bytes.length || bytes.length > ONE_MAX || !this.env.TALK_FILES || !b.send || typeof b.send !== 'object') return { ok: false, error: 'Not this way', status: 400 };
+    const s = await this.core.r2Start(w, { name: b.name, size: bytes.length });
+    if (!s || !s.ok || !s.put) return s && s.ok ? { ok: false, error: 'Not this way', status: 400 } : s;
+    try { await this.env.TALK_FILES.put(this.core.talk.r2Key({ id: s.id }), bytes); }
+    catch (e) { this.core.r2Drop(w, { id: s.id }); return { ok: false, error: String(e.message || e), status: 502 }; }
+    const send = { ...b.send, file: { ...(b.send.file || {}), id: s.id } };
+    const r = await this.core.r2Done(w, { id: s.id, etags: [], send });
+    return r && r.ok ? { ...r, id: s.id } : r;
   }
 
   // E11 Console's tasks stay in the office (Haris 2026-11-22 02:58 "keep it only local"): # — finding tasks, and a chat's task
