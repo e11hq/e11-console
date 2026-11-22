@@ -66,6 +66,29 @@ final class RelayLine: NSObject, URLSessionWebSocketDelegate {
   private let text: (String) -> Void, ended: (Bool) -> Void
   private var opened = false
   var isOpen: Bool { opened && !done }
+  // (calls down the line: each with its number, answered with it — none within 15 s, or the line gone: nil)
+  private var waiting: [Int: ([String: Any]?) -> Void] = [:], lastId = 0
+  private let lock = NSLock()
+  func call(_ name: String, _ body: [String: Any], done: @escaping ([String: Any]?) -> Void) -> Bool {
+    guard isOpen, let t = task else { return false }
+    lock.lock(); lastId += 1; let id = lastId; waiting[id] = done; lock.unlock()
+    guard let d = try? JSONSerialization.data(withJSONObject: ["id": id, "call": name, "body": body]), d.count < 900_000,
+          let s = String(data: d, encoding: .utf8) else { lock.lock(); waiting[id] = nil; lock.unlock(); return false }
+    t.send(.string(s)) { [weak self] e in if e != nil { self?.answer(id, nil) } }
+    DispatchQueue.global().asyncAfter(deadline: .now() + 15) { [weak self] in self?.answer(id, nil) }
+    return true
+  }
+  private func answer(_ id: Int, _ r: [String: Any]?) {
+    lock.lock(); let d = waiting.removeValue(forKey: id); lock.unlock()
+    d?(r)
+  }
+  // (a line's message: an answer to a call — {"id": n, "r": {...}} — or the news, as the office's line gives it)
+  private func got(_ s: String) {
+    if s.hasPrefix("{\"id\":"), let j = try? JSONSerialization.jsonObject(with: Data(s.utf8)) as? [String: Any], let id = (j["id"] as? NSNumber)?.intValue {
+      answer(id, j["r"] as? [String: Any]); return
+    }
+    text(s)
+  }
   init(text: @escaping (String) -> Void, ended: @escaping (_ opened: Bool) -> Void) { self.text = text; self.ended = ended }
   func open() {
     var r = URLRequest(url: URL(string: Relay.base.replacingOccurrences(of: "https://", with: "wss://") + "/line")!)
@@ -81,8 +104,8 @@ final class RelayLine: NSObject, URLSessionWebSocketDelegate {
     task?.receive { [weak self] r in
       guard let self = self else { return }
       switch r {
-      case .success(.string(let s)): if s != "pong" { self.text(s) }; self.receive()
-      case .success(.data(let d)): self.text(String(decoding: d, as: UTF8.self)); self.receive()
+      case .success(.string(let s)): if s != "pong" { self.got(s) }; self.receive()
+      case .success(.data(let d)): self.got(String(decoding: d, as: UTF8.self)); self.receive()
       case .failure: self.finish()
       @unknown default: self.receive()
       }
@@ -99,6 +122,9 @@ final class RelayLine: NSObject, URLSessionWebSocketDelegate {
     guard !done else { return }
     done = true
     DispatchQueue.main.async { self.ping?.invalidate(); self.ping = nil }
+    // (calls still waiting: the usual way)
+    lock.lock(); let all = waiting; waiting = [:]; lock.unlock()
+    all.values.forEach { $0(nil) }
     ended(opened)
   }
 }

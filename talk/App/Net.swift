@@ -100,9 +100,26 @@ final class Net {
     return r
   }
   // a JSON answer on the main thread (nil: no answer — offline, or signed out: onSignedOut is told)
-  func call(_ path: String, method: String = "GET", json: [String: Any]? = nil, body: Data? = nil, done: @escaping ([String: Any]?) -> Void) {
+  func call(_ path: String, method: String = "GET", json: [String: Any]? = nil, body: Data? = nil, done: @escaping ([String: Any]?) -> Void, overLine: Bool = true) {
     let viaHub = Relay.handles(path)
     if Relay.live && !Relay.on { Relay.check() }   // (the office has Talk: asked every 2 minutes whether the hub has it again)
+    // (Talk on Cloudflare, the live line open: the call goes down the line itself — Cloudflare counts a message on the line
+    //  as a twentieth of a request, and the front door not at all; no answer on the line — the usual way, nothing lost;
+    //  Haris 2026-11-22 11:58)
+    if overLine, viaHub, body == nil, !path.hasPrefix("/api/talk/file/"), let l = line, l.isOpen {
+      let c = URLComponents(string: path)
+      let name = String((c?.path ?? path).dropFirst("/api/talk/".count))
+      var b = json ?? [:]
+      if json == nil { for q in c?.queryItems ?? [] { b[q.name] = q.value ?? "" } }
+      let sent = l.call(name, b) { [weak self] r in
+        DispatchQueue.main.async {
+          guard let r = r else { self?.call(path, method: method, json: json, body: body, done: done, overLine: false); return }
+          if (r["office"] as? Bool) == true { Relay.off("409"); self?.call(path, method: method, json: json, body: body, done: done, overLine: false); return }
+          done(r)
+        }
+      }
+      if sent { return }
+    }
     session.dataTask(with: request(path, method: method, json: json, body: body)) { [weak self] d, resp, err in
       let http = resp as? HTTPURLResponse
       let j = d.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
