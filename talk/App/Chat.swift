@@ -252,16 +252,27 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     // (step 5: the others see "… is typing"; # finds E11 Console's tasks for a staff group)
     bar.onTyping = { [weak self] in guard let self = self else { return }; Net.shared.act(["act": "typing", "group": self.group]) }
     bar.onText = { [weak self] t in guard let self = self else { return }; Talk.shared.peekE11(t, group: self.group) }
+    // (# — the tasks this person sees, asked once for this chat and filtered here as it's typed, like @; Haris 2026-11-22
+    //  10:53: it waited on the server for every letter)
     bar.onFindTasks = { [weak self] q, done in
       guard let self = self else { return }
-      Net.shared.act(["act": "tasks", "group": self.group, "q": q]) { j in
-        let ts = ((j?["tasks"] as? [[String: Any]]) ?? []).compactMap { Msg.TaskCard($0) }
-        DispatchQueue.main.async { done(ts) }
+      if self.taskRows != nil { done(self.taskMatches(q)); return }
+      self.taskWait.append((q, done))
+      guard !self.taskLoading else { return }
+      self.taskLoading = true
+      Net.shared.act(["act": "tasks", "group": self.group, "all": true]) { [weak self] j in
+        DispatchQueue.main.async {
+          guard let self = self else { return }
+          self.taskLoading = false
+          if (j?["ok"] as? Bool) == true { self.taskRows = ((j?["tasks"] as? [[String: Any]]) ?? []).compactMap(ChatVC.taskRow) }
+          let wait = self.taskWait; self.taskWait = []
+          for (q, d) in wait { d(self.taskRows == nil ? [] : self.taskMatches(q)) }
+        }
       }
     }
     bar.onPickTask = { [weak self] _ in self?.editingMsg = nil; self?.replying = nil }
     NotificationCenter.default.addObserver(self, selector: #selector(typingChanged(_:)), name: .talkTyping, object: nil)
-    NotificationCenter.default.addObserver(self, selector: #selector(tasksChanged), name: .talkTasks, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(tasksChanged(_:)), name: .talkTasks, object: nil)
     bar.onPlus = { [weak self] k in self?.attach(k) }
     bar.onCancelReply = { [weak self] in self?.editingMsg = nil; self?.replying = nil; self?.bar.setTask(nil); self?.bar.setReply(nil, editing: false) }
     bar.onVoice = { [weak self] url, secs, wave in self?.sendVoice(url, secs: secs, wave: wave) }
@@ -594,7 +605,39 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   // the people, crossfading; the dots bubble at the end of the chat ----------
   private var membersLine = ""
   // (a task changed in E11 Console: this chat's task cards asked for again, if it's on screen)
-  @objc private func tasksChanged() { if view.window != nil { Talk.shared.refreshTasks(group); Talk.shared.refreshLinks(group) } }
+  @objc private func tasksChanged(_ n: Notification) {
+    let ids = n.userInfo?["ids"] as? [String] ?? []
+    // (the # list: just the changed tasks asked again — new ones come in, gone or no longer seen ones leave; a chat not on
+    //  screen lets its list go and asks for it whole next time)
+    if taskRows != nil, !ids.isEmpty {
+      if view.window == nil { taskRows = nil }
+      else {
+        Net.shared.act(["act": "tasksById", "group": group, "ids": ids]) { [weak self] j in
+          DispatchQueue.main.async {
+            guard let self = self, var rows = self.taskRows else { return }
+            guard (j?["ok"] as? Bool) == true else { self.taskRows = nil; return }
+            rows.removeAll { ids.contains($0.card.id) }
+            rows += ((j?["tasks"] as? [[String: Any]]) ?? []).compactMap(ChatVC.taskRow)
+            self.taskRows = rows; self.bar.tasksUpdated()
+          }
+        }
+      }
+    }
+    if view.window != nil { Talk.shared.refreshTasks(group); Talk.shared.refreshLinks(group) }
+  }
+  private var taskRows: [(card: Msg.TaskCard, pid: String, at: Double)]?
+  private var taskWait: [(String, ([Msg.TaskCard]) -> Void)] = []
+  private var taskLoading = false
+  private static func taskRow(_ j: [String: Any]) -> (card: Msg.TaskCard, pid: String, at: Double)? {
+    guard let c = Msg.TaskCard(j) else { return nil }
+    return (c, j["pid"] as? String ?? "", (j["at"] as? NSNumber)?.doubleValue ?? 0)
+  }
+  // (as the server sorts them: open first, this group's client first among them, the latest changed first)
+  private func taskMatches(_ q: String) -> [Msg.TaskCard] {
+    let w = q.lowercased().trimmingCharacters(in: .whitespaces), client = Talk.shared.groups[group]?.client ?? ""
+    let key = { (r: (card: Msg.TaskCard, pid: String, at: Double)) in (r.card.done ? 1 : 0, r.pid == client ? 0 : 1, -r.at) }
+    return (taskRows ?? []).filter { w.isEmpty || $0.card.title.lowercased().contains(w) }.sorted { key($0) < key($1) }.prefix(20).map { $0.card }
+  }
   @objc private func typingChanged(_ n: Notification) { if (n.object as? String) == group { showTyping(animated: true) } }
   private func showTyping(animated: Bool) {
     let line = Talk.shared.typingLine(group)
@@ -3844,16 +3887,15 @@ final class MessageBar: UIView, UITextViewDelegate {
   private func findTasks(_ q: String) {
     guard q != taskQ else { return }
     taskQ = q
-    // (asked a moment after the last letter — not for every one)
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+    // (at once — the list is on the phone, filtered here; only the chat's first # waits for it)
+    onFindTasks?(q) { [weak self] ts in
       guard let self = self, self.taskQ == q else { return }
-      self.onFindTasks?(q) { [weak self] ts in
-        guard let self = self, self.taskQ == q else { return }
-        self.taskList = ts
-        self.showMentions(ts.prefix(5).map { ("#" + $0.id, $0.title) })
-      }
+      self.taskList = ts
+      self.showMentions(ts.prefix(5).map { ("#" + $0.id, $0.title) })
     }
   }
+  // (tasks changed in E11 Console while # is showing: the list shown again from the phone's list)
+  func tasksUpdated() { if let q = taskQ { taskQ = nil; findTasks(q) } }
   private func showMentions(_ list: [(String, String)]) {
     // (the same people: nothing touched — rows made again only when who's in the list changes, without animation)
     let ids = list.map { $0.0 }

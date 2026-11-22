@@ -347,7 +347,16 @@ private final class StreamDelegate: NSObject, URLSessionDataDelegate {
     // (someone typing: passed straight on by the server, nothing kept — step 5)
     // (tasks changed in E11 Console: the chat that's open asks for its cards again)
     // (…and a link turned off or on, or Client Assets changed: its cards too — Haris 2026-11-16)
-    if text.contains("event: tasks") || text.contains("event: links") { DispatchQueue.main.async { NotificationCenter.default.post(name: .talkTasks, object: nil) } }
+    // (tasks: with their ids — the # list asks for just those, Haris 2026-11-22 10:53)
+    if text.contains("event: tasks") || text.contains("event: links") {
+      var ids: [String] = []
+      for block in text.components(separatedBy: "\n\n") where block.contains("event: tasks") {
+        for line in block.split(separator: "\n") where line.hasPrefix("data:") {
+          if let d = line.dropFirst(5).trimmingCharacters(in: .whitespaces).data(using: .utf8), let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] { ids += (j["ids"] as? [String]) ?? [] }
+        }
+      }
+      DispatchQueue.main.async { NotificationCenter.default.post(name: .talkTasks, object: nil, userInfo: ids.isEmpty ? nil : ["ids": ids]) }
+    }
     // (E11 Console's people or clients changed — a name, a photo, a role, a client renamed or gone: read again while Talk is
     //  open, not only when it comes back; only what changed is drawn again — Haris 2026-11-16)
     if text.contains("event: people") { DispatchQueue.main.async { Talk.shared.refresh() } }
