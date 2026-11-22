@@ -25,8 +25,6 @@ test('the hub starts, answers its status, and takes a call down the live line', 
   hub.officeHas = async () => false;
   await hub.webSocketMessage(ws, JSON.stringify({ id: 7, call: 'state', body: {} }));
   assert.equal(sent[0].id, 7); assert.equal(sent[0].r.ok, true, JSON.stringify(sent[0]));
-  const st2 = await (await hub.fetch(new Request('https://hub.test/hub/status'))).json();
-  assert.equal(st2.callsMs[0].via, 'line');
 });
 
 test('a notification goes from Cloudflare straight to Apple; the office only when Apple can’t be reached', async () => {

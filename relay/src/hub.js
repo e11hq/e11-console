@@ -20,7 +20,6 @@ const json = (o, status = 200) => new Response(JSON.stringify(o), { status, head
 export class TalkHub extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
-    this.fresh = true;   // (just woken — the first call after shows it)
     this.env = env;
     // (the office's own public name for what the hub sends it, signed — talklink, let through by Cloudflare like a linked Mac)
     this.office = String(env.OFFICE_LINK || env.OFFICE || '').replace(/\/$/, '');
@@ -55,6 +54,7 @@ export class TalkHub extends DurableObject {
       };
       const apns = { enabled: () => !!this.office || this.apple.on, sendTo: (uid, p) => { const x = notify(uid, p, false); try { this.ctx.waitUntil(x); } catch { /* fine */ } return x; }, wake: (uid, p) => { const x = notify(uid, p, true); try { this.ctx.waitUntil(x); } catch { /* fine */ } return x; } };
       this.core = new HubCore({ sql, copy: (b) => this.toOffice(b), r2: r2.on ? r2 : null, apns, onUnread: (uids) => { this.later('/api/talk/relay/unread', { uids }); } });
+      sql.exec("DELETE FROM hub_meta WHERE k = 'callsMs'");   // (the call timer's list, 2026-11-22 — taken out)
       const d = this.core.meta('dir'); if (d) try { this.core.dir.set(JSON.parse(d)); } catch { /* the office sends it again */ }
       if (!this.core.meta('key')) { const k = await newKey(); this.core.meta('key', k.priv); this.core.meta('pub', k.pub); }
       // (lines kept open while the hub slept: listening again)
@@ -75,7 +75,7 @@ export class TalkHub extends DurableObject {
       if (!this.core.meta('dirAt')) await this.askDir();
       const d = this.core.dir.snapshot || {};
       return json({ ok: true, colo: this.colo, dirAt: Number(this.core.meta('dirAt') || 0) || null, people: (d.users || []).length, clients: (d.projects || []).length,
-        phones: Object.values((d.push) || {}).reduce((a, x) => a + (x || []).length, 0), apple: this.apple.on, copyN: this.core.n, waiting: this.ctx.storage.sql.exec('SELECT COUNT(*) AS c FROM hub_outbox').toArray()[0].c, officeKey: !!this.core.meta('officeKey'), tasksMs: this.tasksMs || [], callsMs: this.calls(), ...(this.dirErr ? { dirErr: this.dirErr } : {}) });
+        phones: Object.values((d.push) || {}).reduce((a, x) => a + (x || []).length, 0), apple: this.apple.on, copyN: this.core.n, waiting: this.ctx.storage.sql.exec('SELECT COUNT(*) AS c FROM hub_outbox').toArray()[0].c, officeKey: !!this.core.meta('officeKey'), tasksMs: this.tasksMs || [], ...(this.dirErr ? { dirErr: this.dirErr } : {}) });
     }
     if (p.startsWith('/office/')) return this.fromOffice(req, p);
     if (!this.core.meta('dirAt')) await this.askDir();
@@ -104,9 +104,7 @@ export class TalkHub extends DurableObject {
       this.core.fetched(w, f.id);
       return new Response(null, { status: 302, headers: { Location: await this.core.talk.r2.getUrl(this.core.talk.r2Key(f)), 'cache-control': 'no-store' } });
     }
-    const t0 = Date.now(), name = p.replace('/api/talk/', ''), body = req.method === 'POST' ? await req.json().catch(() => ({})) : Object.fromEntries(url.searchParams);
-    const r = await this.call(w, name, body);
-    this.noteCall('http', name, body, t0);
+    const r = await this.call(w, p.replace('/api/talk/', ''), req.method === 'POST' ? await req.json().catch(() => ({})) : Object.fromEntries(url.searchParams));
     return r ? json(r, r.status || (r.ok === false ? 400 : 200)) : json({ ok: false, error: 'Not here' }, 404);
   }
   // the calls a phone makes — the same as the office's /api/talk/…, the same answers
@@ -215,20 +213,8 @@ export class TalkHub extends DurableObject {
     const w = this.core.who(a.email, a.device);
     if (!w) { ws.close(4003, 'Signed out'); return; }
     // (something went wrong here: no answer (null) — the phone sends the same call the usual way)
-    const t0 = Date.now();
-    let r; try { r = await this.call(w, String(m.call || ''), m.body || {}); this.noteCall('line', String(m.call || ''), m.body || {}, t0); } catch (e) { ws.send(JSON.stringify({ id: m.id, r: null, err: String(e && e.message || e).slice(0, 200) })); return; }
+    let r; try { r = await this.call(w, String(m.call || ''), m.body || {}); } catch (e) { ws.send(JSON.stringify({ id: m.id, r: null, err: String(e && e.message || e).slice(0, 200) })); return; }
     ws.send(JSON.stringify({ id: m.id, r: r || { ok: false, error: 'Not here' } }));
-  }
-  // (how long each call takes here, and which way it came — the last 30, no names or words: Haris 2026-11-22 12:17)
-  //  kept in hub_meta while we measure (the hub sleeps between messages and forgot them) — to be taken out after
-  calls() { try { return JSON.parse(this.core.meta('callsMs') || '[]'); } catch { return []; } }
-  noteCall(via, call, b, t0) {
-    try {
-      const list = this.calls();
-      list.unshift({ via, call, ...(b && b.act ? { act: b.act } : {}), ms: Date.now() - t0, at: new Date(t0).toISOString().slice(11, 19), woke: !!this.fresh });
-      this.fresh = false; list.length = Math.min(list.length, 30);
-      this.core.meta('callsMs', JSON.stringify(list));
-    } catch { /* never in the way */ }
   }
   webSocketClose(ws) { try { ws.stop && ws.stop(); } catch { /* fine */ } }
   webSocketError(ws) { this.webSocketClose(ws); }
