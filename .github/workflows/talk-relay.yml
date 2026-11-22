@@ -5,10 +5,10 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "check = the token works, nothing published · deploy = publish relay/"
+        description: "check = the token works, nothing published · deploy = publish relay/ · watch = Cloudflare's live log for 5 minutes (each request: path, status, time taken — nothing else)"
         default: check
         type: choice
-        options: [check, deploy]
+        options: [check, deploy, watch]
 concurrency:
   group: talk-relay
   cancel-in-progress: false
@@ -31,13 +31,25 @@ jobs:
           [ -n "$CLOUDFLARE_API_TOKEN" ] || { echo "CLOUDFLARE_API_TOKEN missing"; exit 1; }
           [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || { echo "CLOUDFLARE_ACCOUNT_ID missing"; exit 1; }
           echo "Both secrets present"
+      # (Haris 2026-11-22 21:25: where the wait after an upload goes — Cloudflare's own time for each of Talk's requests, while
+      #  he sends a few files. Only the path (file addresses cut short), the status and the times are printed: no headers,
+      #  no sign-ins, no contents)
+      - name: Cloudflare's live log, 5 minutes
+        if: inputs.mode == 'watch'
+        run: |
+          (timeout 300 npx --yes wrangler@4 tail --format json || true) > tail.json
+          jq -r 'select(.event != null) | [ (.eventTimestamp/1000 | strftime("%H:%M:%S")), ((.eventTimestamp % 1000)|tostring), (.event.request.method // "-"), ((.event.request.url // .event.type // "-") | sub("^https?://[^/]+"; "") | sub("/r2/(?<k>put|get)/.*"; "/r2/\(.k)/…") | sub("\\?.*"; "")), ((.event.response.status // "-")|tostring), ("wall " + ((.wallTime // 0)|tostring) + "ms"), ("cpu " + ((.cpuTime // 0)|tostring) + "ms"), (.outcome // "-")] | @tsv' tail.json || echo "The log couldn't be read ($(wc -c < tail.json) bytes)"
       - name: Tests (E11 Talk's own code over the hub's database)
+        if: inputs.mode != 'watch'
         run: node --import ./test/register.mjs --test test/*.test.mjs
       - name: The token works (who it is, which account)
+        if: inputs.mode != 'watch'
         run: npx --yes wrangler@4 whoami
       - name: R2 buckets on the account (names only)
+        if: inputs.mode != 'watch'
         run: npx --yes wrangler@4 r2 bucket list
       - name: The Worker builds (nothing published)
+        if: inputs.mode != 'watch'
         run: npx --yes wrangler@4 deploy --dry-run --outdir dist
       - name: Publish
         if: inputs.mode == 'deploy'
