@@ -108,7 +108,10 @@ final class Net {
     //  Haris 2026-11-22 11:58)
     // (…all but sending a message — the one call you wait on for the tick goes the usual way, as before 230; Haris
     //  2026-11-22 12:32)
-    let waitedOn = (json?["act"] as? String) == "send" || (path.hasPrefix("/api/talk/r2/done") && json?["send"] != nil)
+    // (…and "typing", the usual way too: it goes out just before you send, so the send finds its connection already open —
+    //  with everything else on the line, that connection had gone cold and each send waited to open it again: Haris
+    //  2026-11-22 14:31 "clock to tick feels slower again")
+    let waitedOn = ["send", "typing"].contains(json?["act"] as? String ?? "") || (path.hasPrefix("/api/talk/r2/done") && json?["send"] != nil)
     if overLine, viaHub, body == nil, !waitedOn, !path.hasPrefix("/api/talk/file/"), let l = line, l.isOpen {
       let c = URLComponents(string: path)
       let name = String((c?.path ?? path).dropFirst("/api/talk/".count))
