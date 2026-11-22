@@ -523,7 +523,8 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   // ---------- notifications (E11 Talk's own phones) ----------
   // a person's own notification choices (Settings › Notifications): mutedMentions — an @mention in a muted group still comes (on unless turned off)
   const optsOf = (uid) => { const r = Q.opt.get(uid, 'mutedMentions'); return { mutedMentions: r ? r.val === 1 : true }; };
-  function notify(g, from, text, msgId, mentions = []) {
+  // (m: the message as the phone gets it from a sync — rides in the notification when it fits, Haris 2026-11-22 13:35)
+  function notify(g, from, text, msgId, mentions = [], m = null) {
     if (!apns || !apns.enabled()) return;
     const t = now();
     for (const uid of memberIds(g)) {
@@ -533,7 +534,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       // (muted — but an @mention still comes, unless they turned that off: Settings › Notifications, Haris 2026-11-13)
       if (pref.muted_until && pref.muted_until > t && !(mentions.includes(uid) && optsOf(uid).mutedMentions)) continue;
       const c = clientById(g.client);
-      apns.sendTo(uid, { title: g.name, body: `${from.name || from.email}: ${text}`, tag: g.id, kind: 'talk', groupId: g.id, msgId, clientId: c ? c.id : null, category: 'talk-msg' }).catch(() => {});
+      apns.sendTo(uid, { title: g.name, body: `${from.name || from.email}: ${text}`, tag: g.id, kind: 'talk', groupId: g.id, msgId, clientId: c ? c.id : null, category: 'talk-msg', ...(m ? { m } : {}) }).catch(() => {});
     }
   }
 
@@ -1010,9 +1011,10 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
             video: b.link.video === true, img: own(b.link.img), icon: own(b.link.icon) };
         }
         Q.putSent.run(id, g.id, u.id, t, JSON.stringify([file && file.id, link && link.img && link.img.id, link && link.icon && link.icon.id].filter(Boolean)));
-        const seq = emit(g, 'msg', { id, cid: clip(b.cid, 60), kind: file ? file.kind : contact ? 'contact' : place ? 'location' : 'text', text, file, reply, mentions, ...(b.fwd === true ? { fwd: true } : {}), ...(link ? { link } : {}), ...(task ? { task } : {}),
+        const mdata = { id, cid: clip(b.cid, 60), kind: file ? file.kind : contact ? 'contact' : place ? 'location' : 'text', text, file, reply, mentions, ...(b.fwd === true ? { fwd: true } : {}), ...(link ? { link } : {}), ...(task ? { task } : {}),
           ...(contact ? { contact } : {}), ...(place ? { location: place } : {}),
-          ...(file && typeof b.album === 'string' && /^[A-Za-z0-9-]{6,40}$/.test(b.album) ? { album: b.album } : {}) }, u.id);   // (album: photos and videos sent together — one album in the chat, Haris 2026-11-12)   // (fwd: forwarded from another chat — "Forwarded" over it)
+          ...(file && typeof b.album === 'string' && /^[A-Za-z0-9-]{6,40}$/.test(b.album) ? { album: b.album } : {}) };
+        const mAt = now(), seq = emit(g, 'msg', mdata, u.id);   // (album: photos and videos sent together — one album in the chat, Haris 2026-11-12)   // (fwd: forwarded from another chat — "Forwarded" over it)
         // (Ask the group: what the file was, and that the sending phone has it — 90 days)
         if (file) {
           db.prepare('INSERT OR REPLACE INTO file_kept (id, grp, msg, by, name, size, kind, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(file.id, g.id, id, u.id, file.name, file.size || 0, file.kind, t);
@@ -1022,7 +1024,9 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         if (file) for (const d of devicesFor(memberIds(g), u.id)) if (d !== u.id && d !== dev.id) Q.addNeed.run(file.id, d, g.id, t);   // (the sending phone has its own copy)   // (linked Macs too — their own Auto-download)
         Q.touch.run(t, g.id);
         notify(g, u, file && !text.trim() ? ({ photo: '📷 Photo', video: '🎥 Video', voice: '🎤 Voice message' }[file.kind] || `📄 ${file.name}`) : task && !text.trim() ? `☑️ ${task.title}`
-          : contact ? `👤 ${contact.name}` : place ? `📍 ${place.name || 'Location'}` : text, id, mentions);
+          : contact ? `👤 ${contact.name}` : place ? `📍 ${place.name || 'Location'}` : text, id, mentions,
+          // (without the sharp preview — far too big for a notification; the phone gets it with the next sync)
+          { seq, group: g.id, type: 'msg', at: mAt, by: u.id, ...mdata, ...(file ? { file: { ...file, prev: undefined } } : {}) });
         return { ok: true, id, seq, at: t };
       }
       case 'edit': case 'del': case 'react': {

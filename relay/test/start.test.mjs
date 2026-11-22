@@ -40,12 +40,14 @@ test('a notification goes from Cloudflare straight to Apple; the office only whe
   const toOffice = [], toApple = [];
   hub.later = async (path, b) => { if (path === '/api/talk/relay/push') toOffice.push(b.uid); return true; };
   let answer = { status: 200 };
-  hub.apple = { on: true, sendTo: async (uid) => { toApple.push(uid); return { sent: answer.status === 200 ? 1 : 0, results: [answer] }; }, wake: async () => ({ sent: 1, results: [{ status: 200 }] }) };
+  let lastMsg = null;
+  hub.apple = { on: true, sendTo: async (uid, p) => { toApple.push(uid); lastMsg = p; return { sent: answer.status === 200 ? 1 : 0, results: [answer] }; }, wake: async () => ({ sent: 1, results: [{ status: 200 }] }) };
   const a = hub.core.who('haris@e11.test', 'phone-key-aaaaaaaaaaaa');
   const gid = hub.core.act(a, { act: 'newGroup', client: 'p1', name: 'N', members: ['u2'] }).group.id;
   const settle = () => new Promise((r) => setTimeout(r, 30));
   hub.core.act(a, { act: 'send', group: gid, text: 'One' }); await settle();
-  assert.ok(toApple.includes('u2'), 'Apple asked: ' + JSON.stringify(toApple)); assert.deepEqual(toOffice, [], 'the office not asked');
+  assert.ok(toApple.includes('u2'), 'Apple asked: ' + JSON.stringify(toApple));
+  assert.ok(lastMsg.m && lastMsg.m.type === 'msg' && lastMsg.m.text === 'One' && lastMsg.m.group === gid && lastMsg.m.seq > 0, 'the message rides along: ' + JSON.stringify(lastMsg.m)); assert.deepEqual(toOffice, [], 'the office not asked');
   answer = { status: 0, reason: 'unreachable' };
   hub.core.act(a, { act: 'send', group: gid, text: 'Two' }); await settle();
   assert.ok(toOffice.includes('u2'), 'Apple not reached: the office sends it');

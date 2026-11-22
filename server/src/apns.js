@@ -119,18 +119,29 @@ export function createApns({ store, keyFile = '', keyId = '', teamId = '', topic
     });
   }
   // msg: { title, body, taskId, nid, tag, badge, kind, clientId, folderId, commentId, planId, view } (webpush.js notifMessage)
+  // (E11 Talk: the message itself rides along — its notification helper keeps it, so Talk opens with it already there;
+  //  only when it fits Apple's 4 KB: else without its small picture, else without it — as before. Haris 2026-11-22 13:35)
+  function withMessage(out, m) {
+    if (!m || typeof m !== 'object') return out;
+    const fits = (x) => Buffer.byteLength(JSON.stringify(x)) <= 3900;
+    const a = { ...out, e11: { ...out.e11, m } };
+    if (fits(a)) return a;
+    if (m.file && m.file.thumb) { const b = { ...out, e11: { ...out.e11, m: { ...m, file: { ...m.file, thumb: undefined } } } }; if (fits(b)) return b; }
+    return out;
+  }
   function payloadOf(msg, pid) {
     const data = {};
     for (const k of ['taskId', 'nid', 'kind', 'clientId', 'folderId', 'commentId', 'threadId', 'planId', 'view', 'groupId', 'msgId']) if (msg[k] != null) data[k] = msg[k];
     if (pid) data.pid = pid;
     // (mutable-content: the app's Notification Service Extension sees each one first — it confirms it arrived; E11 Talk's
     //  message ones too: its helper tells the sender's ✓✓ — Haris 2026-11-19 21:42)
-    return { aps: { alert: { title: String(msg.title || (kvPrefix === 'apns' ? 'E11 Console' : 'E11 Talk')), body: String(msg.body || '') }, sound: 'default', 'thread-id': String(msg.taskId || msg.tag || msg.kind || 'e11'),
+    const out = { aps: { alert: { title: String(msg.title || (kvPrefix === 'apns' ? 'E11 Console' : 'E11 Talk')), body: String(msg.body || '') }, sound: 'default', 'thread-id': String(msg.taskId || msg.tag || msg.kind || 'e11'),
       ...(Number.isInteger(msg.badge) ? { badge: msg.badge } : {}), ...(pid || (msg.kind === 'talk' && msg.msgId) ? { 'mutable-content': 1 } : {}),
       // (E11 Talk's messages also wake the app quietly, so its photos and videos start downloading with Talk closed —
       //  Haris 2026-11-21 15:34 "Yes, include it")
       ...(msg.kind === 'talk' && msg.msgId ? { 'content-available': 1 } : {}),
       ...(msg.category ? { category: String(msg.category) } : {}) }, e11: data };   // (E11 Talk's and E11 Console's: reply from the banner)
+    return withMessage(out, msg.m);
   }
   async function push1(s, msg, pid, ttl, tries) {
     const r = await post(s.env, s.token, payloadOf(msg, s.ack ? pid : null), ttl);

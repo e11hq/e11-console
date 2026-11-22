@@ -36,9 +36,21 @@ export function makeApns({ key, keyId, teamId, topic = 'ae.e11.talk.ios', subs =
     } catch (e) { return { status: 0, reason: e.message }; }
   }
   // the same notification as the office's (apns.js payloadOf)
+  // (the message itself rides along when it fits Apple's 4 KB — as the office's, server/src/apns.js withMessage)
+  function withMessage(out, m) {
+    if (!m || typeof m !== 'object') return out;
+    const fits = (x) => enc.encode(JSON.stringify(x)).length <= 3900;
+    const a = { ...out, e11: { ...out.e11, m } };
+    if (fits(a)) return a;
+    if (m.file && m.file.thumb) { const b = { ...out, e11: { ...out.e11, m: { ...m, file: { ...m.file, thumb: undefined } } } }; if (fits(b)) return b; }
+    return out;
+  }
   function payloadOf(msg) {
     const data = {};
     for (const k of ['kind', 'clientId', 'groupId', 'msgId', 'tag']) if (msg[k] != null) data[k] = msg[k];
+    return withMessage(payloadOf0(msg, data), msg.m);
+  }
+  function payloadOf0(msg, data) {
     return { aps: { alert: { title: String(msg.title || 'E11 Talk'), body: String(msg.body || '') }, sound: 'default', 'thread-id': String(msg.tag || msg.kind || 'e11'),
       ...(Number.isInteger(msg.badge) ? { badge: msg.badge } : {}), ...(msg.kind === 'talk' && msg.msgId ? { 'mutable-content': 1, 'content-available': 1 } : {}),
       ...(msg.category ? { category: String(msg.category) } : {}) }, e11: data };

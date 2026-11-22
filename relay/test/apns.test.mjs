@@ -23,3 +23,19 @@ test('Cloudflare’s own notification: Apple’s token signed right, the same no
   assert.ok(crypto.verify('sha256', Buffer.from(hd + '.' + pl), { key: k.publicKey, dsaEncoding: 'ieee-p1363' }, Buffer.from(sig, 'base64url')), 'Apple can check it');
   assert.equal((await makeApns({ subs: () => ({}) }).sendTo('u2', {})).sent, 0, 'no key: nothing');
 });
+
+test('the message rides in the notification when it fits Apple’s 4 KB — else without it, as before', async () => {
+  const { makeApns } = await import('../src/apns.js');
+  const { generateKeyPairSync } = await import('node:crypto');
+  const pem = generateKeyPairSync('ec', { namedCurve: 'P-256' }).privateKey.export({ type: 'pkcs8', format: 'pem' });
+  const calls = [];
+  const a = makeApns({ key: pem, keyId: 'K', teamId: 'T', subs: () => ({ u2: [{ token: 'a'.repeat(64), env: 'production' }] }), go: async (u, o) => { calls.push(JSON.parse(o.body)); return { status: 200, json: async () => ({}) }; } });
+  const m = { seq: 5, group: 'g1', type: 'msg', at: 1, by: 'u1', id: 'm1', kind: 'text', text: 'Hello' };
+  await a.sendTo('u2', { title: 'G', body: 'Haris: Hello', kind: 'talk', groupId: 'g1', msgId: 'm1', m });
+  assert.deepEqual(calls[0].e11.m, m, 'small: it rides along');
+  await a.sendTo('u2', { title: 'G', body: 'x', kind: 'talk', groupId: 'g1', msgId: 'm2', m: { ...m, text: 'y'.repeat(5000) } });
+  assert.equal(calls[1].e11.m, undefined, 'too big: left out');
+  assert.ok(JSON.stringify(calls[1]).length < 4096);
+  await a.sendTo('u2', { title: 'G', body: 'x', kind: 'talk', groupId: 'g1', msgId: 'm3', m: { ...m, kind: 'photo', file: { id: 'f', kind: 'photo', thumb: 'z'.repeat(3850) } } });
+  assert.ok(calls[2].e11.m && calls[2].e11.m.file && calls[2].e11.m.file.thumb === undefined, 'its small picture dropped to fit');
+});
