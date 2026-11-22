@@ -116,7 +116,7 @@ export class TalkHub extends DurableObject {
   // for this one call
   async act(w, b) {
     b = b || {};
-    if (b.act === 'tasks' || b.act === 'taskCards') {
+    if (b.act === 'tasks' || b.act === 'taskCards' || b.act === 'tasksById') {
       const r = await this.officeTasks(w, b);
       return r || (b.act === 'tasks' ? { ok: false, error: 'Tasks can’t be reached right now', status: 503 } : { ok: true, cards: [] });
     }
@@ -131,14 +131,14 @@ export class TalkHub extends DurableObject {
   }
   async officeTasks(w, b) {
     if (!this.office) return null;
-    const path = '/api/talk/relay/tasks', text = JSON.stringify({ email: w.u.email, act: b.act, group: b.group, q: b.q, ids: b.ids });
+    const path = '/api/talk/relay/tasks', text = JSON.stringify({ email: w.u.email, act: b.act, group: b.group, q: b.q, ids: b.ids, all: b.all === true });
     try {
       const t0 = Date.now();
       const h = await signHeaders(this.core.meta('key'), 'POST', path, text);
       const r = await fetch(this.office + path, { method: 'POST', body: text, headers: { 'content-type': 'application/json', ...h }, signal: AbortSignal.timeout(8000) });
       let j = null; try { j = await r.json(); } catch { j = null; }
       // (how long the office takes, for /hub/status — the last 20, no names or words: Haris 2026-11-22 10:38 "time it")
-      (this.tasksMs = this.tasksMs || []).unshift({ act: b.act, ms: Date.now() - t0, n: j ? (j.tasks || j.cards || []).length : null, status: r.status, at: new Date(t0).toISOString().slice(11, 19) });
+      (this.tasksMs = this.tasksMs || []).unshift({ act: b.act, ms: Date.now() - t0, n: j ? (j.tasks || j.cards || []).length : null, ...(b.all === true ? { all: true } : {}), status: r.status, at: new Date(t0).toISOString().slice(11, 19) });
       this.tasksMs.length = Math.min(this.tasksMs.length, 20);
       return j;
     } catch { return null; }

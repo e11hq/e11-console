@@ -727,7 +727,7 @@ export function createServer(cfg) {
         return json(res, 200, { ok: true, tasks, projects });
       }
       const t = talkNow(); if (!t) return json(res, 404, { ok: false, error: 'Not here' });
-      const x = await t.act(u, { act: b.act === 'taskCards' ? 'taskCards' : 'tasks', group: String(b.group || ''), q: b.q, ids: b.ids });
+      const x = await t.act(u, { act: ['taskCards', 'tasksById'].includes(b.act) ? b.act : 'tasks', group: String(b.group || ''), q: b.q, ids: b.ids, all: b.all === true });
       return json(res, x && x.status || 200, x);
     }
     return json(res, 404, { ok: false, error: 'Not here' });

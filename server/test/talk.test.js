@@ -426,6 +426,13 @@ test('step 5: typing passed on to members only; # tasks in a staff group — the
   assert.ok(r.ok && r.tasks.length === 1 && r.tasks[0].id === 't-a' && r.tasks[0].client === 'Northline' && r.tasks[0].due === '2026-11-13', 'found by its words');
   const all = (await act('adm', { act: 'tasks', group: g })).tasks.map((t) => t.id);
   assert.deepEqual(all.slice(0, 2), ['t-a', 't-b'], 'open ones first');
+  // the whole list once for the phone (it filters as it's typed), and just the changed ones after
+  const whole = await act('adm', { act: 'tasks', group: g, q: 'hero', all: true });
+  assert.deepEqual(whole.tasks.map((t) => t.id).slice(0, 2), ['t-a', 't-b'], 'all, whatever the words');
+  assert.ok(whole.tasks[0].pid === 'p1' && whole.tasks[0].at === Date.parse('2026-11-12T08:00:00Z'), 'with what it is sorted by');
+  const some = await act('adm', { act: 'tasksById', group: g, ids: ['t-b', 'gone'] });
+  assert.deepEqual(some.tasks.map((t) => t.id), ['t-b'], 'only the ones there');
+
   // the card is the server's, whatever the phone says
   const s = await act('adm', { act: 'send', group: g, text: 'Round 3 is on the task', task: { id: 't-a', title: 'Something else' } });
   const ev = (await sync('des')).events.find((e) => e.type === 'msg' && e.id === s.id);

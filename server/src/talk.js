@@ -698,13 +698,16 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       due: t.due || null, done: !!t.done, people: (t.assignees || []).map(String).slice(0, 8) };
   }
   const seeTask = (u, t) => !!t && !t.trashed && access.canSee(u, 'tasks', t);
-  function tasksFor(u, g, q) {
+  // (# in the app: the whole list once — the phone filters it as it's typed, like @; each row with what it's sorted by —
+  //  Haris 2026-11-22 10:53)
+  const pickRow = (t) => ({ ...taskCard(t), pid: String(t.projectId || ''), at: Date.parse(t.updatedAt || t.createdAt || 0) || 0 });
+  function tasksFor(u, g, q, everything = false) {
     const words = String(q || '').toLowerCase().trim();
     const all = store.list('tasks').filter((t) => !t.parentId && seeTask(u, t) && (!words || String(t.title || '').toLowerCase().includes(words)));
     // (open ones first, the group's own client first among them, the latest changed first)
     const key = (t) => [t.done ? 1 : 0, t.projectId === g.client ? 0 : 1, -(Date.parse(t.updatedAt || t.createdAt || 0) || 0)];
     all.sort((a, b2) => { const x = key(a), y = key(b2); return x[0] - y[0] || x[1] - y[1] || x[2] - y[2]; });
-    return all.slice(0, 20).map(taskCard);
+    return everything ? all.slice(0, 5000).map(pickRow) : all.slice(0, 20).map(taskCard);
   }
 
   // ---------- our own E11 links in a message (Haris 2026-11-12): a task's link becomes its card (staff groups only); a file's
@@ -1112,7 +1115,14 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       case 'tasks': {
         const [g, e] = needGroup(u, b.group); if (e) return e;
         if (withClient(g)) return bad('Tasks aren’t shared in a group with a client', 403);
-        return { ok: true, tasks: tasksFor(u, g, b.q) };
+        return { ok: true, tasks: tasksFor(u, g, b.all === true ? '' : b.q, b.all === true) };
+      }
+      // (tasks changed in E11 Console: just those, for the phone's # list — one not here any more, or not seen: left out)
+      case 'tasksById': {
+        const [g, e] = needGroup(u, b.group); if (e) return e;
+        if (withClient(g)) return bad('Tasks aren’t shared in a group with a client', 403);
+        const ids = (Array.isArray(b.ids) ? b.ids : []).slice(0, 200).map(String);
+        return { ok: true, tasks: ids.map((id) => store.get('tasks', id)).filter((t) => t && !t.parentId && seeTask(u, t)).map(pickRow) };
       }
       case 'read': {
         const [g, e] = needGroup(u, b.group); if (e) return e;
