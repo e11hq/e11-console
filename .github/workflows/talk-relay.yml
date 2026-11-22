@@ -8,7 +8,7 @@ on:
         description: "check = the token works, nothing published · deploy = publish relay/ · watch = Cloudflare's live log for 5 minutes (each request: path, status, time taken — nothing else)"
         default: check
         type: choice
-        options: [check, deploy, watch]
+        options: [check, deploy, watch, r2check]
 concurrency:
   group: talk-relay
   cancel-in-progress: false
@@ -42,17 +42,35 @@ jobs:
         run: |
           (timeout 300 npx --yes wrangler@4 tail --format json || true) > tail.json
           jq -r 'select(.event != null) | [ (.eventTimestamp/1000 | strftime("%H:%M:%S")), ((.eventTimestamp % 1000)|tostring), (.event.request.method // "-"), ((.event.request.url // .event.type // "-") | sub("^https?://[^/]+"; "") | sub("/r2/(?<k>put|get)/.*"; "/r2/\(.k)/…") | sub("\\?.*"; "")), ((.event.response.status // "-")|tostring), ("wall " + ((.wallTime // 0)|tostring) + "ms"), ("cpu " + ((.cpuTime // 0)|tostring) + "ms"), (.outcome // "-")] | @tsv' tail.json || echo "The log couldn't be read ($(wc -c < tail.json) bytes)"
+      # (Haris 2026-11-22 22:11: uploads straight to R2 failed — the key tried with the office's own signing: a tiny file put,
+      #  read, deleted; only R2's status and error code are printed, never the key)
+      - name: R2 key check
+        if: inputs.mode == 'r2check'
+        working-directory: server
+        run: |
+          echo "key id length: ${#TALK_R2_KEY_ID} (an R2 Access Key ID is 32), secret length: ${#TALK_R2_SECRET} (an R2 Secret Access Key is 64)"
+          node --input-type=module -e "
+          import { createR2 } from './src/r2.js';
+          const r2 = createR2({ account: process.env.CLOUDFLARE_ACCOUNT_ID, keyId: process.env.TALK_R2_KEY_ID, secret: process.env.TALK_R2_SECRET, bucket: 'e11-talk-files' });
+          const key = 'msg/zz-keycheck-' + Date.now();
+          const s = await r2.start(key, 10);
+          const put = await fetch(s.put, { method: 'PUT', body: 'keycheck!!' });
+          const pt = await put.text();
+          console.log('PUT', put.status, (pt.match(/<Code>([^<]+)/) || [])[1] || '', (pt.match(/<Message>([^<]+)/) || [])[1] || '');
+          console.log('size', await r2.size(key));
+          console.log('delete', await r2.del(key));
+          "
       - name: Tests (E11 Talk's own code over the hub's database)
-        if: inputs.mode != 'watch'
+        if: inputs.mode != 'watch' && inputs.mode != 'r2check'
         run: node --import ./test/register.mjs --test test/*.test.mjs
       - name: The token works (who it is, which account)
-        if: inputs.mode != 'watch'
+        if: inputs.mode != 'watch' && inputs.mode != 'r2check'
         run: npx --yes wrangler@4 whoami
       - name: R2 buckets on the account (names only)
-        if: inputs.mode != 'watch'
+        if: inputs.mode != 'watch' && inputs.mode != 'r2check'
         run: npx --yes wrangler@4 r2 bucket list
       - name: The Worker builds (nothing published)
-        if: inputs.mode != 'watch'
+        if: inputs.mode != 'watch' && inputs.mode != 'r2check'
         run: npx --yes wrangler@4 deploy --dry-run --outdir dist
       - name: Publish
         if: inputs.mode == 'deploy'
