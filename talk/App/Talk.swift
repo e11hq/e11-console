@@ -1,4 +1,5 @@
 import UIKit
+import Security
 import LinkPresentation
 import SafariServices
 
@@ -830,6 +831,7 @@ final class Talk {
   // another account signing in on this phone: the last one's chats, files and place in the server's history gone
   func wipe() {
     Talk.keptFor = nil
+    SecItemDelete([kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "ae.e11.talk.inbox"] as CFDictionary)   // (Inbox: another account's kept messages)
     logs = [:]; groups = [:]; me = nil
     try? FileManager.default.removeItem(at: dir); try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     try? FileManager.default.removeItem(at: Net.filesDir)

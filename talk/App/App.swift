@@ -138,6 +138,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
     }
     Talk.shared.loadLocal()
     Talk.shared.prune()
+    Inbox.apply()   // (messages that came with notifications while Talk was closed — shown at once)
     let main = mainTabs()
     w.rootViewController = main
     // the startup screen over it until the chats are ready
@@ -270,6 +271,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
     OccasionIcon.apply()   // (the app's icon on occasions — today's, Dubai)
     BgWatch.back()   // (sends stopped by leaving Talk: on again)
     guard Net.shared.signedIn, tabs != nil else { return }
+    Inbox.apply()   // (messages that came with notifications while Talk was away — shown at once)
     Net.shared.listen()
     // (signed in through E11 Console, and Console signed out since — its key gone: Talk signs out too, the plan)
     if UserDefaults.standard.bool(forKey: "talk_via_console"), SignInKeys.consoleKey == nil, !Talk.shared.isContact { signOutNow(); return }

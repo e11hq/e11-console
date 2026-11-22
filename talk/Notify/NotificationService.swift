@@ -15,8 +15,11 @@ final class NotificationService: UNNotificationServiceExtension {
     handler = contentHandler
     content = request.content
     let e = request.content.userInfo["e11"] as? [String: Any] ?? [:]
-    guard let gid = e["groupId"] as? String, !gid.isEmpty, let mid = e["msgId"] as? String, !mid.isEmpty,
-          let server = Self.keychain("notify-server"), let host = URL(string: server)?.host else { return finish() }
+    guard let gid = e["groupId"] as? String, !gid.isEmpty, let mid = e["msgId"] as? String, !mid.isEmpty else { return finish() }
+    // (the message itself, when it came with the notification: kept for E11 Talk, which shows it the moment it opens —
+    //  Haris 2026-11-22 13:35; in Talk's own Keychain, which this helper already shares)
+    if let m = e["m"] as? [String: Any], (m["id"] as? String) == mid, let d = try? JSONSerialization.data(withJSONObject: m), d.count < 16_000 { Self.keep(mid, d) }
+    guard let server = Self.keychain("notify-server"), let host = URL(string: server)?.host else { return finish() }
     // (the notification is never held more than about a second — the ✓✓ follows on its own if the answer is slow;
     //  it waited for it, up to 20 s, and asked the office, which passed it on to Cloudflare: Haris 2026-11-22 13:07)
     DispatchQueue.global().asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.finish() }
@@ -49,6 +52,12 @@ final class NotificationService: UNNotificationServiceExtension {
     handler = nil
     lock.unlock()
     if let h, let c { h(c) }
+  }
+  private static func keep(_ id: String, _ d: Data) {
+    let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "ae.e11.talk.inbox", kSecAttrAccount as String: id]
+    SecItemDelete(q as CFDictionary)
+    var add = q; add[kSecValueData as String] = d; add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+    SecItemAdd(add as CFDictionary, nil)
   }
   // (E11 Talk's own Keychain items — the same service the app writes them with, Net.swift's Keychain)
   private static func keychain(_ key: String) -> String? {
