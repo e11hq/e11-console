@@ -280,6 +280,8 @@ export class TalkHub extends DurableObject {
     } catch (e) { this.dirErr = e.message; /* next time */ }
   }
   async alarm() {
+    // (Talk's R2 key tried again, hourly — uploads straight to R2 while it works, through this relay while it doesn't)
+    try { const r2 = this.core && this.core.talk && this.core.talk.r2; if (r2 && r2.probe) await r2.probe(); } catch { /* next hour */ }
     const last = Number(this.core.meta('sweptAt') || 0);
     // (only while the hub has Talk)
     if (Date.now() - last >= HOUR - 60_000 && !(await this.officeHas())) { this.core.sweep(); this.core.meta('sweptAt', Date.now()); }

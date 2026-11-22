@@ -24,3 +24,19 @@ test('with the R2 key: uploads go straight to R2 (one address, or parts), and ar
   const old = bindingR2({ bucket: {}, secret: 's', base: 'https://talkline.test' });
   assert.ok((await old.start('msg/f-3', 10)).put.startsWith('https://talkline.test/r2/put/'));
 });
+
+test('the key refused (deleted, rolled, read-only): uploads go through the relay instead — and straight again once it works', async () => {
+  let works = false;
+  const go = async (u, o) => ({ ok: works, status: works ? 200 : 403, text: async () => '<UploadId>UP2</UploadId>' });
+  const made = [];
+  const bucket = { createMultipartUpload: async (k) => { made.push(k); return { uploadId: 'BIND1' }; }, resumeMultipartUpload: (k, id) => ({ complete: async () => { made.push('done ' + id); } }), delete: async () => {} };
+  const r2 = bindingR2({ bucket, secret: 's', base: 'https://talkline.test', s3: { account: 'acc', keyId: 'K', secret: 'S', name: 'e11-talk-files' }, go });
+  const a = await r2.start('msg/f-1', 1000);
+  assert.ok(a.put.startsWith('https://talkline.test/r2/put/'), 'refused key: through the relay — ' + a.put);
+  const big = await r2.start('msg/f-2', PART + 1);
+  assert.equal(big.upload, 'b:BIND1'); assert.ok(big.urls[0].startsWith('https://talkline.test/r2/put/'));
+  await r2.complete('msg/f-2', big.upload, ['"a"', '"b"']);
+  assert.deepEqual(made, ['msg/f-2', 'done BIND1'], 'put together through the relay, by its own id');
+  works = true; await r2.probe();
+  assert.ok((await r2.start('msg/f-3', 10)).put.startsWith('https://acc.r2.cloudflarestorage.com/'), 'the key works again: straight to R2');
+});

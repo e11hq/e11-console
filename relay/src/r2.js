@@ -49,10 +49,29 @@ export function bindingR2({ bucket, secret, base, s3 = null, now = () => Date.no
   const direct = !!(s3 && s3.account && s3.keyId && s3.secret && s3.name);
   const host = direct ? `${s3.account}.r2.cloudflarestorage.com` : '';
   const signed = (method, key, query = {}, expires = 3600) => presign({ method, host, path: `/${s3.name}/${key}`, query, keyId: s3.keyId, secret: s3.secret, expires, now: now() });
+  // (the key tried with a tiny file — at the hub's start, then hourly: if R2 refuses it (deleted, rolled, made read-only),
+  //  uploads go through this relay's own addresses instead, as before 2026-11-22 22:08 — slower, never refused; back to
+  //  straight to R2 as soon as it works again. Haris 2026-11-22 22:26 "do it then for safety")
+  let keyOk = null, trying = null;
+  async function probe() {
+    if (!direct) return false;
+    const k = 'msg/zz-keycheck';
+    try {
+      const r = await go(await signed('PUT', k, {}, 300), { method: 'PUT', body: 'ok' });
+      keyOk = r.ok;
+      if (r.ok && bucket && bucket.delete) await bucket.delete(k).catch(() => {});
+    } catch { keyOk = false; }
+    return keyOk;
+  }
+  const straight = async () => {
+    if (!direct) return false;
+    if (keyOk === null) { trying = trying || probe(); await trying; trying = null; }
+    return keyOk === true;
+  };
   return {
-    on: !!(bucket && secret && base), PART, direct,
+    on: !!(bucket && secret && base), PART, direct, probe, keyOk: () => keyOk,
     async start(key, size) {
-      if (direct) {
+      if (await straight()) {
         if (size <= PART) return { put: await signed('PUT', key) };
         const r = await go(await signed('POST', key, { uploads: '' }, 900), { method: 'POST' });
         const x = await r.text(), up = /<UploadId>([^<]+)<\/UploadId>/.exec(x);
@@ -65,17 +84,17 @@ export function bindingR2({ bucket, secret, base, s3 = null, now = () => Date.no
       const up = await bucket.createMultipartUpload(key);
       const n = Math.ceil(size / PART), urls = [];
       for (let i = 1; i <= n; i++) urls.push(`${base}/r2/put/${await put({ k: key, u: up.uploadId, p: i })}`);
-      return { upload: up.uploadId, part: PART, urls };
+      return { upload: 'b:' + up.uploadId, part: PART, urls };   // (b: started through this relay — put together through it too)
     },
     async complete(key, upload, etags) {
-      if (direct) {
+      if (direct && upload && !String(upload).startsWith('b:') && keyOk !== false) {
         const body = '<CompleteMultipartUpload>' + etags.map((e, i) => `<Part><PartNumber>${i + 1}</PartNumber><ETag>${String(e).replace(/[<>&]/g, '')}</ETag></Part>`).join('') + '</CompleteMultipartUpload>';
         const r = await go(await signed('POST', key, { uploadId: upload }, 900), { method: 'POST', body, headers: { 'Content-Type': 'application/xml' } });
         const x = await r.text();
         if (!r.ok || /<Error>/.test(x)) throw new Error('R2 didn’t put the parts together (' + r.status + ')');
         return;
       }
-      const up = bucket.resumeMultipartUpload(key, upload);
+      const up = bucket.resumeMultipartUpload(key, String(upload).replace(/^b:/, ''));
       await up.complete(etags.map((e, i) => ({ partNumber: i + 1, etag: String(e).replace(/"/g, '') })));
     },
     async size(key) { const h = await bucket.head(key); return h ? h.size : null; },
