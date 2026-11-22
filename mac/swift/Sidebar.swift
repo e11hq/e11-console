@@ -526,7 +526,7 @@ final class Sidebar: NSView {
     } else {
       var k: [String: Any] = ["name": meName, "initials": ini]
       if let p = me0["photo"] as? String { k["photo"] = p }
-      if let c = me0["color"] { k["color"] = c }
+      if let c = me0["color"] as? [NSNumber], c.count >= 3 { k["color"] = c }   // (only a real colour — an empty one (null) can't be saved and crashed the app: 2062, Haris 2026-11-22 21:04)
       if !NSDictionary(dictionary: k).isEqual(to: kept ?? [:]) { UserDefaults.standard.set(k, forKey: "e11_side_me") }
     }
     me.photo = photo
