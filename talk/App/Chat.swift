@@ -1274,7 +1274,22 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
   // (photos made ready off the screen's own thread, one after another in the order chosen — ten photos at once had the
   //  screen wait for each to be read and shrunk; Haris 2026-11-20 17:08)
-  private static let readyQ = DispatchQueue(label: "talk.send.ready", qos: .userInitiated)
+  static let readyQ = DispatchQueue(label: "talk.send.ready", qos: .userInitiated)
+  // a photo or file made ready to send — what Send does, and what the send screen does ahead of it (PreUpload)
+  struct Ready { let id: String; let data: Data; let w: Double?; let h: Double?; let kind: String; let name: String; let local: URL }
+  static func ready(_ url: URL, kind: String, name: String, hd: Bool, id: String) -> Ready? {
+    guard let d = try? Data(contentsOf: url) else { return nil }
+    var w: Double? = nil, h: Double? = nil, data = d
+    var kind = kind
+    if kind == "photo", let p = ChatVC.photoData(d, hd: hd) { data = p.data; w = p.w; h = p.h }
+    else if kind == "photo" { kind = "file" }
+    let local = FileManager.default.temporaryDirectory.appendingPathComponent(id)
+    try? data.write(to: local)
+    // (its name as what it is now: .heic, or .jpg where HEIC couldn't be made)
+    let isHeic = data.count > 12 && String(decoding: data.subdata(in: 4..<12), as: UTF8.self).hasPrefix("ftyphei")
+    let fname = kind == "photo" ? (name as NSString).deletingPathExtension + (isHeic ? ".heic" : ".jpg") : name
+    return Ready(id: id, data: data, w: w, h: h, kind: kind, name: fname, local: local)
+  }
   // a photo as WhatsApp sends one (Haris 2026-11-20 17:08: "lets use the whatsapp's strategy"): 2048 across, or HD 4096
   // across — never the camera's full original (that's a file) — read straight down to that size by iPhone's own ImageIO,
   // turned the right way up. (Before: drawn at the screen's 3× — a "2048" photo went at 6144 across, an HD one whole.)
@@ -1294,28 +1309,21 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     guard let out = UIImage(cgImage: marked).jpegData(compressionQuality: 0.8) else { return nil }
     return (out, Double(cg.width), Double(cg.height))
   }
-  fileprivate func sendFile(_ url: URL, kind: String, name: String, caption: String = "", hd: Bool = false, album: String? = nil) {
+  fileprivate func sendFile(_ url: URL, kind: String, name: String, caption: String = "", hd: Bool = false, album: String? = nil, key: String? = nil) {
     if kind == "video" { sendVideo(url, name: name, caption: caption, hd: hd, album: album); return }
     let reply = replying
     replying = nil
-    ChatVC.readyQ.async { [weak self] in
-      guard let d = try? Data(contentsOf: url) else { DispatchQueue.main.async { toast("Couldn’t read that file") }; return }
-      var w: Double? = nil, h: Double? = nil, data = d
-      var kind = kind
-      if kind == "photo", let p = ChatVC.photoData(d, hd: hd) { data = p.data; w = p.w; h = p.h }
-      else if kind == "photo" { kind = "file" }
-      let tmpId = "local-" + UUID().uuidString
-      if hd { DispatchQueue.main.async { Talk.sentHD.insert(tmpId) } }   // (for Send again)
-      let local = FileManager.default.temporaryDirectory.appendingPathComponent(tmpId)
-      try? data.write(to: local)
-      // (its name as what it is now: .heic, or .jpg where HEIC couldn't be made)
-      let isHeic = data.count > 12 && String(decoding: data.subdata(in: 4..<12), as: UTF8.self).hasPrefix("ftyphei")
-      let fname = kind == "photo" ? (name as NSString).deletingPathExtension + (isHeic ? ".heic" : ".jpg") : name
-      DispatchQueue.main.async {
-        guard let self = self else { return }
-        Talk.shared.send(self.group, text: caption, reply: reply, file: Msg.FileRef(id: tmpId, name: fname, size: data.count, kind: kind, w: w, h: h, secs: nil), localFile: local, upload: data, album: kind == "photo" ? album : nil)
-        self.toBottom(true)
-      }
+    let go = { [weak self] (r: Ready, staged: PreUpload?) in
+      guard let self = self else { return }
+      if hd { Talk.sentHD.insert(r.id) }   // (for Send again)
+      Talk.shared.send(self.group, text: caption, reply: reply, file: Msg.FileRef(id: r.id, name: r.name, size: r.data.count, kind: r.kind, w: r.w, h: r.h, secs: nil), localFile: r.local, upload: r.data, album: r.kind == "photo" ? album : nil, staged: staged)
+      self.toBottom(true)
+    }
+    // (already made ready and going up from the send screen — PreUpload, Haris 2026-11-22 13:22)
+    if let k = key, let job = PreUpload.take(key: k, url: url, hd: hd), let r = job.ready { go(r, job); return }
+    ChatVC.readyQ.async {
+      guard let r = ChatVC.ready(url, kind: kind, name: name, hd: hd, id: "local-" + UUID().uuidString) else { DispatchQueue.main.async { toast("Couldn’t read that file") }; return }
+      DispatchQueue.main.async { go(r, nil) }
     }
   }
 
@@ -1991,9 +1999,14 @@ extension ChatVC: PHPickerViewControllerDelegate, UIImagePickerControllerDelegat
       for it in all {
         let al = it.kind == "file" ? nil : album
         if it.coming != nil { self.sendWhenIn[it.key] = (it, al); continue }
-        self.sendFile(it.url, kind: it.kind, name: it.name, caption: it.caption.trimmingCharacters(in: .whitespacesAndNewlines), hd: it.hd, album: al)
+        self.sendFile(it.url, kind: it.kind, name: it.name, caption: it.caption.trimmingCharacters(in: .whitespacesAndNewlines), hd: it.hd, album: al, key: it.key)
       }
+      PreUpload.dropAll()   // (any left over — not sent)
     }
+    // (photos start going up while still on this screen; closed without sending — let go)
+    v.onItems = { PreUpload.sync($0) }
+    v.onCancel = { PreUpload.dropAll() }
+    PreUpload.sync(items)
     v.onAddMore = { [weak self, weak v] in
       guard let v = v else { return }
       var c = PHPickerConfiguration(); c.selectionLimit = 10; c.filter = .any(of: [.images, .videos])

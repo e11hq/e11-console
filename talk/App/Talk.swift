@@ -422,7 +422,7 @@ final class Talk {
 
   // ---------- sending from here: shown at once, then the server's copy takes its place ----------
   func send(_ g: String, text: String, reply: Msg? = nil, mentions: [String] = [], file: Msg.FileRef? = nil, localFile: URL? = nil, upload: Data? = nil, fwd: Bool = false, album: String? = nil, task: Msg.TaskCard? = nil, link: LinkPrevMaker.Pick = .auto, contact: SharedContact? = nil, place: SharedPlace? = nil, progress: ((Double) -> Void)? = nil,
-            prepare: ((@escaping (URL?) -> Void) -> Void)? = nil) {
+            prepare: ((@escaping (URL?) -> Void) -> Void)? = nil, staged: PreUpload? = nil) {
     // (prepare: the file made ready behind its bubble — a video's 720p / 1080p copy — the bubble shown at once with its ring
     //  at the start, then sent up: Haris 2026-11-16, "it stays for long and nothing happens")
     guard let me = me else { return }
@@ -511,6 +511,7 @@ final class Talk {
       id = UIApplication.shared.beginBackgroundTask(withName: "talk-send") { UIApplication.shared.endBackgroundTask(id); id = .invalid }
       return { if id != .invalid { UIApplication.shared.endBackgroundTask(id); id = .invalid } }
     }
+    var stagedUsed = false
     let up = { (data: Data, f: Msg.FileRef, finished: @escaping () -> Void) in
       Uploads.set(f.id, 0, total: data.count)
       var going = true   // (a late word of progress after it's up doesn't bring the ring back)
@@ -519,7 +520,7 @@ final class Talk {
         fileKey = key
         var b = body(fid); b.removeValue(forKey: "act"); return b
       }
-      Net.shared.uploadMsg(data, name: f.name, stop: f.id, message: message, progress: { p in guard going else { return }; progress?(p); Uploads.set(f.id, p, total: data.count) }) { fid, key in
+      let complete = { (fid: String?, key: String?) in
         going = false; Uploads.end(f.id); Uploads.done(f.id)
         defer { finished() }
         if Uploads.isStopped(f.id) { return }   // (its ✕: stopped)
@@ -529,6 +530,10 @@ final class Talk {
         m.file?.id = fid
         if let s = Net.takeSent(fid) { answered(s) } else { go(fid) }
       }
+      let ring = { (p: Double) in guard going else { return }; progress?(p); Uploads.set(f.id, p, total: data.count) }
+      // (a photo already going up from the send screen: carried on from there — once; a try after that, the usual way)
+      if !stagedUsed, let s = staged { stagedUsed = true; if s.attach(progress: ring, message: message, done: complete) { return } }
+      Net.shared.uploadMsg(data, name: f.name, stop: f.id, message: message, progress: ring) { fid, key in complete(fid, key) }
     }
     if let prep = prepare, let f = file {
       // (started over if Talk was left while it was made smaller: made smaller again from the picked original, which prep

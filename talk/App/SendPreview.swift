@@ -12,7 +12,12 @@ final class SendPreviewVC: UIViewController, UIScrollViewDelegate, UITextFieldDe
   // (coming: still on its way from Photos / iCloud — the screen opens at once and its page shows a ring until it's in;
   //  Haris 2026-11-21 11:59: "the send screen comes straight away", as WhatsApp)
   struct Item { var url: URL; var kind: String; var name: String; var caption = ""; var hd = false; var key = UUID().uuidString; var coming: Progress? = nil }
-  private(set) var items: [Item]
+  private(set) var items: [Item] { didSet { onItems?(items) } }
+  // (the screen's photos as they change — PreUpload starts each going up; closed without Send: onCancel)
+  var onItems: (([Item]) -> Void)?
+  var onCancel: (() -> Void)?
+  private var sent = false
+  override func viewDidDisappear(_ a: Bool) { super.viewDidDisappear(a); if isBeingDismissed && !sent { onCancel?() } }
   private var at = 0
   private let to: String
   var onSend: (([Item]) -> Void)?
@@ -325,6 +330,7 @@ final class SendPreviewVC: UIViewController, UIScrollViewDelegate, UITextFieldDe
     if items.indices.contains(at) { items[at].caption = caption.text ?? "" }
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     let all = items
+    sent = true
     dismiss(animated: true) { [weak self] in self?.onSend?(all) }
   }
 }

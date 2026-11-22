@@ -103,7 +103,8 @@ extension Net {
   // (stop: the sending bubble's id — its ✕ cancels what's going up, Uploads.stop)
   // (message: the message to send with "it's all there", in the same call — the server sends it and gives its answer as
   //  "sent", kept for the sender in sentWith; one trip instead of two, Haris 2026-11-22 11:26)
-  func uploadMsg(_ data: Data, name: String, keep: Bool = false, back: String? = nil, stop: String? = nil, message: ((String, String) -> [String: Any])? = nil, progress: @escaping (Double) -> Void, done: @escaping (String?, String?) -> Void) {
+  func uploadMsg(_ data: Data, name: String, keep: Bool = false, back: String? = nil, stop: String? = nil, message: ((String, String) -> [String: Any])? = nil, gate: ((@escaping () -> Void) -> Void)? = nil, progress: @escaping (Double) -> Void, done: @escaping (String?, String?) -> Void) {
+    // (gate: "it's all there" held until it's opened — a photo sent up while still on the send screen, PreUpload)
     // (over 200 MB: locked in pieces, one at a time as they go up — its key given back as "p:<key>"; Haris 2026-11-21 11:00)
     if data.count > 200 * 1024 * 1024 { return uploadPieces(data, name: name, back: back, stop: stop, progress: progress, done: done) }
     guard let sealed = FileLock.seal(data) else { return back != nil ? done(nil, nil) : upload(data, name: name, progress: progress) { done($0, nil) } }
@@ -121,14 +122,19 @@ extension Net {
         guard let etags = etags else { return done(nil, nil) }
         var b: [String: Any] = ["id": id, "etags": etags]
         if back != nil { b["back"] = true; b["key"] = sealed.key }
-        else if let mk = message { b["send"] = mk(id, sealed.key) }
-        let bg = UIApplication.shared.beginBackgroundTask(withName: "talk-r2-done") {}
-        self.post("/api/talk/r2/done", b) { d in
-          defer { DispatchQueue.main.asyncAfter(deadline: .now() + 20) { UIApplication.shared.endBackgroundTask(bg) } }
-          guard (d?["ok"] as? Bool) == true else { return done(nil, nil) }
-          if let s = d?["sent"] as? [String: Any] { Net.keepSent(id, s) }
-          progress(1); done(id, sealed.key)
+        else if gate == nil, let mk = message { b["send"] = mk(id, sealed.key) }
+        let say = {
+          var b = b
+          if back == nil, gate != nil, let mk = message { let m = mk(id, sealed.key); if !m.isEmpty { b["send"] = m } }   // (the message as it is at Send)
+          let bg = UIApplication.shared.beginBackgroundTask(withName: "talk-r2-done") {}
+          self.post("/api/talk/r2/done", b) { d in
+            defer { DispatchQueue.main.asyncAfter(deadline: .now() + 20) { UIApplication.shared.endBackgroundTask(bg) } }
+            guard (d?["ok"] as? Bool) == true else { return done(nil, nil) }
+            if let s = d?["sent"] as? [String: Any] { Net.keepSent(id, s) }
+            progress(1); done(id, sealed.key)
+          }
         }
+        if let g = gate { g(say) } else { say() }
       }
       if Uploads.isStopped(stop) { return done(nil, nil) }
       if let put = (j["put"] as? String).flatMap(URL.init(string:)) {
