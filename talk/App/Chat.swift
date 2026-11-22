@@ -1271,6 +1271,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       } }
     }
     // (the send screen's copy when it was made; it couldn't be — made here, as always)
+    Diag.start()   // (the test page: this video's steps — for now)
     Talk.shared.send(group, text: caption, reply: replying, file: ref, localFile: url, album: album, prepare: { ready in
       if let j = job { j.whenMade { u in if let u = u { ready(u) } else { normal(ready) } } } else { normal(ready) }
     }, staged: job)
@@ -3297,7 +3298,7 @@ final class BubbleCell: UITableViewCell {
         g.requestedTimeToleranceBefore = .positiveInfinity; g.requestedTimeToleranceAfter = .positiveInfinity
         img = ((try? g.copyCGImage(at: CMTime(seconds: 0.1, preferredTimescale: 600), actualTime: nil)) ?? (try? g.copyCGImage(at: .zero, actualTime: nil))).map { UIImage(cgImage: $0) }
       }
-      if let i = img { frames.setObject(i, forKey: id as NSString) }
+      if let i = img { frames.setObject(i, forKey: id as NSString); if id == Diag.videoId { Diag.picture("Frame in your bubble", i.cgImage) } }
       DispatchQueue.main.async { done(img) }
     }
   }
