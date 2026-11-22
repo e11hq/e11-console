@@ -108,7 +108,7 @@ final class Net {
     //  Haris 2026-11-22 11:58)
     // (…all but sending a message — the one call you wait on for the tick goes the usual way, as before 230; Haris
     //  2026-11-22 12:32)
-    let waitedOn = (json?["act"] as? String) == "send" || (path.hasPrefix("/api/talk/r2/done") && json?["send"] != nil)
+    let waitedOn = (json?["act"] as? String) == "send" || (path.hasPrefix("/api/talk/r2/done") && json?["send"] != nil) || path.hasPrefix("/api/talk/r2/one")
     if overLine, viaHub, body == nil, !waitedOn, !path.hasPrefix("/api/talk/file/"), let l = line, l.isOpen {
       let c = URLComponents(string: path)
       let name = String((c?.path ?? path).dropFirst("/api/talk/".count))

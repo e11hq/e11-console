@@ -535,7 +535,7 @@ final class Talk {
       let ring = { (p: Double) in guard going else { return }; progress?(p); Uploads.set(f.id, p, total: data.count) }
       // (a photo already going up from the send screen: carried on from there — once; a try after that, the usual way)
       if !stagedUsed, let s = staged { stagedUsed = true; if s.attach(progress: ring, message: message, done: complete) { return } }
-      Net.shared.uploadMsg(data, name: f.name, stop: f.id, message: message, onId: { serverId = $0 }, progress: ring) { fid, key in complete(fid, key) }
+      Net.shared.uploadMsg(data, name: f.name, stop: f.id, one: f.kind == "voice", message: message, onId: { serverId = $0 }, progress: ring) { fid, key in complete(fid, key) }
     }
     if let prep = prepare, let f = file {
       // (started over if Talk was left while it was made smaller: made smaller again from the picked original, which prep

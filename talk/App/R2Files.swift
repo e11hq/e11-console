@@ -107,11 +107,25 @@ extension Net {
   // (stop: the sending bubble's id — its ✕ cancels what's going up, Uploads.stop)
   // (message: the message to send with "it's all there", in the same call — the server sends it and gives its answer as
   //  "sent", kept for the sender in sentWith; one trip instead of two, Haris 2026-11-22 11:26)
-  func uploadMsg(_ data: Data, name: String, keep: Bool = false, back: String? = nil, stop: String? = nil, message: ((String, String) -> [String: Any])? = nil, gate: ((@escaping () -> Void) -> Void)? = nil, onId: ((String) -> Void)? = nil, progress: @escaping (Double) -> Void, done: @escaping (String?, String?) -> Void) {
+  func uploadMsg(_ data: Data, name: String, keep: Bool = false, back: String? = nil, stop: String? = nil, one: Bool = false, message: ((String, String) -> [String: Any])? = nil, gate: ((@escaping () -> Void) -> Void)? = nil, onId: ((String) -> Void)? = nil, progress: @escaping (Double) -> Void, done: @escaping (String?, String?) -> Void) {
     // (gate: "it's all there" held until it's opened — a photo sent up while still on the send screen, PreUpload)
     // (over 200 MB: locked in pieces, one at a time as they go up — its key given back as "p:<key>"; Haris 2026-11-21 11:00)
     if data.count > 200 * 1024 * 1024 { return uploadPieces(data, name: name, back: back, stop: stop, progress: progress, done: done) }
     guard let sealed = FileLock.seal(data) else { return back != nil ? done(nil, nil) : upload(data, name: name, progress: progress) { done($0, nil) } }
+    // (a voice note: its locked bytes and its message in one call to the hub — one trip instead of three, Haris 2026-11-22
+    //  19:06; the hub puts it in R2 and gives the file its id in the message. Anything wrong: the usual way below)
+    if one, back == nil, !keep, gate == nil, let mk = message, sealed.data.count <= 1024 * 1024, Relay.handles("/api/talk/r2/one") {
+      post("/api/talk/r2/one", ["name": name, "data": sealed.data.base64EncodedString(), "send": mk("", sealed.key)]) { [weak self] j in
+        if Uploads.isStopped(stop) { return done(nil, nil) }
+        if let j = j, (j["ok"] as? Bool) == true, let id = j["id"] as? String {
+          if let s = j["sent"] as? [String: Any] { Net.keepSent(id, s) }
+          progress(1); return done(id, sealed.key)
+        }
+        guard let self = self else { return done(nil, nil) }
+        self.uploadMsg(data, name: name, keep: keep, back: back, stop: stop, message: message, gate: gate, onId: onId, progress: progress, done: done)
+      }
+      return
+    }
     let start: (String, [String: Any]) = back.map { ("/api/talk/resend/start", ["file": $0, "size": sealed.data.count] as [String: Any]) } ?? ("/api/talk/r2/start", ["name": name, "size": sealed.data.count, "keep": keep] as [String: Any])
     post(start.0, start.1) { [weak self] j in
       guard let self = self else { return done(nil, nil) }
