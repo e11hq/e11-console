@@ -75,7 +75,7 @@ export class TalkHub extends DurableObject {
       if (!this.core.meta('dirAt')) await this.askDir();
       const d = this.core.dir.snapshot || {};
       return json({ ok: true, colo: this.colo, dirAt: Number(this.core.meta('dirAt') || 0) || null, people: (d.users || []).length, clients: (d.projects || []).length,
-        phones: Object.values((d.push) || {}).reduce((a, x) => a + (x || []).length, 0), apple: this.apple.on, copyN: this.core.n, waiting: this.ctx.storage.sql.exec('SELECT COUNT(*) AS c FROM hub_outbox').toArray()[0].c, officeKey: !!this.core.meta('officeKey'), tasksMs: this.tasksMs || [], ...(this.dirErr ? { dirErr: this.dirErr } : {}) });
+        phones: Object.values((d.push) || {}).reduce((a, x) => a + (x || []).length, 0), apple: this.apple.on, copyN: this.core.n, waiting: this.ctx.storage.sql.exec('SELECT COUNT(*) AS c FROM hub_outbox').toArray()[0].c, officeKey: !!this.core.meta('officeKey'), tasksMs: this.tasksMs || [], callsMs: this.callsMs || [], ...(this.dirErr ? { dirErr: this.dirErr } : {}) });
     }
     if (p.startsWith('/office/')) return this.fromOffice(req, p);
     if (!this.core.meta('dirAt')) await this.askDir();
@@ -104,7 +104,9 @@ export class TalkHub extends DurableObject {
       this.core.fetched(w, f.id);
       return new Response(null, { status: 302, headers: { Location: await this.core.talk.r2.getUrl(this.core.talk.r2Key(f)), 'cache-control': 'no-store' } });
     }
-    const r = await this.call(w, p.replace('/api/talk/', ''), req.method === 'POST' ? await req.json().catch(() => ({})) : Object.fromEntries(url.searchParams));
+    const t0 = Date.now(), name = p.replace('/api/talk/', ''), body = req.method === 'POST' ? await req.json().catch(() => ({})) : Object.fromEntries(url.searchParams);
+    const r = await this.call(w, name, body);
+    this.noteCall('http', name, body, t0);
     return r ? json(r, r.status || (r.ok === false ? 400 : 200)) : json({ ok: false, error: 'Not here' }, 404);
   }
   // the calls a phone makes — the same as the office's /api/talk/…, the same answers
@@ -213,8 +215,15 @@ export class TalkHub extends DurableObject {
     const w = this.core.who(a.email, a.device);
     if (!w) { ws.close(4003, 'Signed out'); return; }
     // (something went wrong here: no answer (null) — the phone sends the same call the usual way)
-    let r; try { r = await this.call(w, String(m.call || ''), m.body || {}); } catch (e) { ws.send(JSON.stringify({ id: m.id, r: null, err: String(e && e.message || e).slice(0, 200) })); return; }
+    const t0 = Date.now();
+    let r; try { r = await this.call(w, String(m.call || ''), m.body || {}); this.noteCall('line', String(m.call || ''), m.body || {}, t0); } catch (e) { ws.send(JSON.stringify({ id: m.id, r: null, err: String(e && e.message || e).slice(0, 200) })); return; }
     ws.send(JSON.stringify({ id: m.id, r: r || { ok: false, error: 'Not here' } }));
+  }
+  // (how long each call takes here, and which way it came — the last 30, in memory only (nothing written), no names or words;
+  //  to be taken out again once measured — Haris 2026-11-22 14:53)
+  noteCall(via, call, b, t0) {
+    (this.callsMs = this.callsMs || []).unshift({ via, call, ...(b && b.act ? { act: b.act } : {}), ms: Date.now() - t0, at: new Date(t0).toISOString().slice(11, 19) });
+    this.callsMs.length = Math.min(this.callsMs.length, 30);
   }
   webSocketClose(ws) { try { ws.stop && ws.stop(); } catch { /* fine */ } }
   webSocketError(ws) { this.webSocketClose(ws); }
