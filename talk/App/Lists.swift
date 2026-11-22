@@ -260,7 +260,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating, UI
         let idx = l.msgs.firstIndex { $0.id == m.id } ?? 0
         let seen = !T.isContact && !others.isEmpty && others.allSatisfy { p in l.readBy[p].flatMap { r in l.msgs.firstIndex { $0.id == r } }.map { $0 >= idx } ?? false }
         let got = !others.isEmpty && others.allSatisfy { p in l.read(p, m.id) || l.time(l.gotAt, p, m.id) != nil }
-        ticks = m.pending ? 0 : seen ? 3 : got ? 2 : 1
+        ticks = m.pending ? (m.failed ? 0 : -1) : seen ? 3 : got ? 2 : 1   // (-1: the clock while it's going, as WhatsApp)
       }
     }
     let pinned = (g.withClient ? T.pinnedClientGroups : T.pinnedGroups).contains(id)
@@ -944,10 +944,15 @@ final class GroupCell: UITableViewCell {
     }
     cfg.attributedText = title
     let line = NSMutableAttributedString()
+    if m.ticks == -1 {
+      let t = NSTextAttachment(image: Ticks.symbol("clock", .black).withRenderingMode(.alwaysTemplate)); t.bounds = CGRect(x: 0, y: 0, width: Ticks.size.width, height: Ticks.size.height)
+      let tick = NSMutableAttributedString(attachment: t); tick.addAttribute(.foregroundColor, value: UIColor.secondaryLabel, range: NSRange(location: 0, length: tick.length))
+      line.append(tick); line.append(NSAttributedString(string: " "))
+    }
     if m.ticks > 0 {
       let c: UIColor = m.ticks == 3 ? Look.dyn(0x5AA9FF, 0x2F7BFF) : .secondaryLabel
       // (a template picture in the line's own colour — light and dark switch it with nothing drawn again)
-      let t = NSTextAttachment(image: Ticks.image(.black, double: m.ticks > 1).withRenderingMode(.alwaysTemplate)); t.bounds = CGRect(x: 0, y: 0, width: 16, height: 10)
+      let t = NSTextAttachment(image: Ticks.image(.black, double: m.ticks > 1).withRenderingMode(.alwaysTemplate)); t.bounds = CGRect(x: 0, y: 0, width: Ticks.size.width, height: Ticks.size.height)
       let tick = NSMutableAttributedString(attachment: t); tick.addAttribute(.foregroundColor, value: c, range: NSRange(location: 0, length: tick.length))
       line.append(tick); line.append(NSAttributedString(string: " "))
     }

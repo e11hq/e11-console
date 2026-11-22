@@ -2303,23 +2303,36 @@ final class InsetLabel: UILabel {
 }
 
 enum Ticks {
-  // ✓ sent · ✓✓ delivered to everyone · ✓✓ in aqua read by everyone (16 × 10, as the design draws it)
+  /* ✓ sent · ✓✓ delivered to everyone · ✓✓ in Talk's blue read by everyone · the clock while it's going — drawn as WhatsApp's
+     (Haris 2026-11-22 20:24: the rounded-square clock, the single tick, the double tick with its second one leaning in),
+     in Talk's own colours. All in one 17 × 11 space, so the bubble never moves as one turns into the next. */
+  static let size = CGSize(width: 17, height: 11)
   static func image(_ c: UIColor, double: Bool = true) -> UIImage {
-    UIGraphicsImageRenderer(size: CGSize(width: 16, height: 10)).image { _ in
+    UIGraphicsImageRenderer(size: size).image { _ in
       let p = UIBezierPath()
       if double {
-        p.move(to: CGPoint(x: 1, y: 5)); p.addLine(to: CGPoint(x: 4, y: 8)); p.addLine(to: CGPoint(x: 10, y: 2))
-        p.move(to: CGPoint(x: 6, y: 8)); p.addLine(to: CGPoint(x: 7, y: 9)); p.addLine(to: CGPoint(x: 13, y: 2))
-      } else { p.move(to: CGPoint(x: 4, y: 5)); p.addLine(to: CGPoint(x: 7, y: 8)); p.addLine(to: CGPoint(x: 13, y: 2)) }
-      p.lineWidth = 1.6; p.lineCapStyle = .round; p.lineJoinStyle = .round
+        p.move(to: CGPoint(x: 1.6, y: 6.1)); p.addLine(to: CGPoint(x: 4.6, y: 9.1)); p.addLine(to: CGPoint(x: 11.2, y: 1.7))
+        p.move(to: CGPoint(x: 7.4, y: 8.3)); p.addLine(to: CGPoint(x: 8.2, y: 9.1)); p.addLine(to: CGPoint(x: 15.4, y: 1.7))
+      } else {
+        p.move(to: CGPoint(x: 3.9, y: 6.1)); p.addLine(to: CGPoint(x: 6.9, y: 9.1)); p.addLine(to: CGPoint(x: 13.5, y: 1.7))
+      }
+      p.lineWidth = 1.35; p.lineCapStyle = .round; p.lineJoinStyle = .round
       c.setStroke(); p.stroke()
     }
   }
-  // the clock (sending) or ! (not sent): the symbol drawn in the middle of the same 16 × 10 space as the tick
+  // the clock while it's going (a rounded square with its hands, as WhatsApp's), or ! (not sent) — in the same 17 × 11 space
   static func symbol(_ name: String, _ c: UIColor) -> UIImage {
+    if name == "clock" {
+      return UIGraphicsImageRenderer(size: size).image { _ in
+        let box = UIBezierPath(roundedRect: CGRect(x: 3.6, y: 0.6, width: 9.8, height: 9.8), cornerRadius: 2.8)
+        box.lineWidth = 1.2; c.setStroke(); box.stroke()
+        let h = UIBezierPath(); h.move(to: CGPoint(x: 8.5, y: 2.9)); h.addLine(to: CGPoint(x: 8.5, y: 5.5)); h.addLine(to: CGPoint(x: 10.6, y: 5.5))
+        h.lineWidth = 1.2; h.lineCapStyle = .round; h.lineJoinStyle = .round; h.stroke()
+      }
+    }
     let s = UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 10, weight: .bold))!.withTintColor(c)
-    let k = min(1, 10 / max(s.size.height, 1), 16 / max(s.size.width, 1)), w = s.size.width * k, h = s.size.height * k
-    return UIGraphicsImageRenderer(size: CGSize(width: 16, height: 10)).image { _ in s.draw(in: CGRect(x: (16 - w) / 2, y: (10 - h) / 2, width: w, height: h)) }
+    let k = min(1, size.height / max(s.size.height, 1), size.width / max(s.size.width, 1)), w = s.size.width * k, h = s.size.height * k
+    return UIGraphicsImageRenderer(size: size).image { _ in s.draw(in: CGRect(x: (size.width - w) / 2, y: (size.height - h) / 2, width: w, height: h)) }
   }
 }
 
@@ -2484,7 +2497,7 @@ final class BubbleCell: UITableViewCell {
   private let reacts = InsetLabel(dx: 8, dy: 0), sysL = InsetLabel(dx: 12, dy: 3), retryB = UIButton(type: .system)
   private let face = Avatar(frame: CGRect(x: 0, y: 0, width: 27, height: 27))
   private var lead: NSLayoutConstraint!, trail: NSLayoutConstraint!, photoH: NSLayoutConstraint!, mediaW: NSLayoutConstraint!
-  private var wMine: NSLayoutConstraint!, wTheirs: NSLayoutConstraint!, top: NSLayoutConstraint!, stackTrail: NSLayoutConstraint!
+  private var wMine: NSLayoutConstraint!, wTheirs: NSLayoutConstraint!, wGone: NSLayoutConstraint!, top: NSLayoutConstraint!, stackTrail: NSLayoutConstraint!
   private var reactsLead: NSLayoutConstraint!, reactsTrail: NSLayoutConstraint!, bubbleBottom: NSLayoutConstraint!, reactsBottom: NSLayoutConstraint!
   private var msg: Msg?
   private var media = false, caption = false, tailOn = false, isMine = false, framed = false, overPhoto = false, headed = false, shownFile: String?
@@ -2663,6 +2676,9 @@ final class BubbleCell: UITableViewCell {
     trail = bubble.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -17)
     wMine = bubble.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 281 / 393)
     wTheirs = bubble.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 250 / 393)
+    // ("This message was deleted": wide enough for its one line with the time beside it, as WhatsApp — it wrapped onto two in
+    //  the narrower bubble of someone else's message: Haris 2026-11-22 20:24)
+    wGone = bubble.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: BubbleCell.goneWide / 393)
     mediaW = bubble.widthAnchor.constraint(equalToConstant: 262); mediaW.priority = .init(999)
     top = bubble.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 10)
     stackTrail = stack.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -11)
@@ -2713,6 +2729,7 @@ final class BubbleCell: UITableViewCell {
     return cs.count
   }
   static let clear = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1)).image { _ in }
+  static let goneWide: CGFloat = 300   // (a deleted message's widest, of 393 — its one line and the time)
   required init?(coder: NSCoder) { fatalError() }
   // ---------- the swipe (the design, board 26): the bubble follows the finger; to the right the grey circle with the
   // white arrow comes in beside it and pops once it's far enough; let go — it all springs back ----------
@@ -2840,7 +2857,7 @@ final class BubbleCell: UITableViewCell {
     // (the words measured at exactly the width they're laid out at: 12 in from the bubble's left, 11 from its right on yours,
     //  12 on theirs — yours were measured 1 narrower, wrapped onto a line more than they showed, and the room for it sat
     //  above the words: Haris 2026-11-14)
-    textL.preferredMaxLayoutWidth = UIScreen.main.bounds.width * (mine ? 281 : 250) / 393 - (mine ? 23 : 24)
+    textL.preferredMaxLayoutWidth = UIScreen.main.bounds.width * (m.deleted ? BubbleCell.goneWide : mine ? 281 : 250) / 393 - (mine ? 23 : 24)
     // (a forwarded photo sits inside the bubble under "Forwarded", rounded 14, the bubble's colour round it)
     framed = isPhoto && m.fwd == true
     media = isPhoto && !framed; caption = isPhoto && !m.text.isEmpty; overPhoto = isPhoto && !caption
@@ -2857,7 +2874,7 @@ final class BubbleCell: UITableViewCell {
     lead.isActive = !mine; trail.isActive = mine
     // (a file's card as wide as a photo — left to itself it shrank to its time, the name cut to a letter: Haris 2026-11-16)
     mediaW.constant = isVoice ? 292 : mine ? 236 : 262; mediaW.isActive = isPhoto || isVoice || isDoc
-    wMine.isActive = mine && !isPhoto && !isVoice; wTheirs.isActive = !mine && !isPhoto && !isVoice
+    wMine.isActive = mine && !isPhoto && !isVoice && !m.deleted; wTheirs.isActive = !mine && !isPhoto && !isVoice && !m.deleted; wGone.isActive = m.deleted
     stackTrail.constant = mine ? -11 : -12
     bubble.fill = mine ? Look.mine : Look.theirs
     // (someone else's photo, first of their run: their name and role on the bubble above it, WhatsApp's way — not over
@@ -3143,7 +3160,7 @@ final class BubbleCell: UITableViewCell {
     //  room, the name, "Forwarded", a quote — never wider than the design's widest; the label's own size grew to that widest)
     if tight.isActive && wideCard { tight.constant = UIScreen.main.bounds.width * (mine ? 281 : 250) / 393 }   // (a preview's picture: the widest)
     else if tight.isActive {
-      let widest = UIScreen.main.bounds.width * (mine ? 281 : 250) / 393, inner = widest - 24
+      let widest = UIScreen.main.bounds.width * (m.deleted ? BubbleCell.goneWide : mine ? 281 : 250) / 393, inner = widest - 24
       var w: CGFloat = 0
       if !textL.isHidden, let t = textL.attributedText {
         // (measured as left-to-right — the same letters, the same width; measured right-to-left (Arabic, Urdu), a line is
@@ -3182,6 +3199,7 @@ final class BubbleCell: UITableViewCell {
     reactsFor = m.id; reactsShown = showsReacts
     setNeedsLayout()
   }
+  private var tickFor = "", tickKey = ""
   // the time inside — "Edited" before it, ✓✓ after it on yours; over a photo with no words: white, on its shadow
   private func foot(_ m: Msg) {
     guard let g = group, let l = log else { return }
@@ -3195,6 +3213,7 @@ final class BubbleCell: UITableViewCell {
       f.append(NSAttributedString(string: " "))
     }
     f.append(NSAttributedString(string: (m.edited && !m.deleted ? "Edited " : "") + Look.clock(m.at), attributes: [.foregroundColor: dim, .font: UIFont.systemFont(ofSize: 12)]))
+    var key = ""   // (which tick it shows — a change on the same message fades across, never snaps: Haris 2026-11-22 20:24)
     if mine && !m.deleted {
       let others = g.members.filter { $0 != m.by }
       let idx = l.msgs.firstIndex { $0.id == m.id } ?? 0
@@ -3202,19 +3221,25 @@ final class BubbleCell: UITableViewCell {
       // (delivered: every other phone has it — read counts as had; a client sees only this, never read)
       let allGot = !others.isEmpty && others.allSatisfy { p in l.read(p, m.id) || l.time(l.gotAt, p, m.id) != nil }
       f.append(NSAttributedString(string: " "))
+      key = m.pending ? (m.failed ? "!" : "clock") : allSeen ? "read" : allGot ? "got" : "sent"
       if m.pending {
         // (the clock, or !, in the tick's own 16 × 10 space — so the bubble doesn't move when it turns into the tick, Haris 2026-11-22)
         let t = NSTextAttachment(image: Ticks.symbol(m.failed ? "exclamationmark.circle" : "clock", dim.resolvedColor(with: traitCollection)))
-        t.bounds = CGRect(x: 0, y: -1, width: 16, height: 10)
+        t.bounds = CGRect(x: 0, y: -1, width: Ticks.size.width, height: Ticks.size.height)
         f.append(NSAttributedString(attachment: t))
       } else {
         let c: UIColor = allSeen ? Look.readTick : over ? .white : Look.mineTime
         let t = NSTextAttachment(image: Ticks.image(c.resolvedColor(with: traitCollection), double: allSeen || allGot))
-        t.bounds = CGRect(x: 0, y: -1, width: 16, height: 10)
+        t.bounds = CGRect(x: 0, y: -1, width: Ticks.size.width, height: Ticks.size.height)
         f.append(NSAttributedString(attachment: t))
       }
     }
-    footL.attributedText = f; stamp.attributedText = f
+    let fade = tickFor == m.id && !tickKey.isEmpty && !key.isEmpty && tickKey != key && window != nil
+    tickFor = m.id; tickKey = key
+    if fade {
+      // (the clock into ✓, ✓ into ✓✓ — the second tick coming in — and grey into blue: the same width, so nothing else moves)
+      for l in [footL, stamp] { UIView.transition(with: l, duration: 0.25, options: [.transitionCrossDissolve, .allowUserInteraction, .beginFromCurrentState]) { l.attributedText = f } }
+    } else { footL.attributedText = f; stamp.attributedText = f }
     stamp.layer.shadowColor = UIColor.black.cgColor; stamp.layer.shadowOpacity = over ? 0.6 : 0; stamp.layer.shadowRadius = 2; stamp.layer.shadowOffset = CGSize(width: 0, height: 1)
   }
   static let links = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
