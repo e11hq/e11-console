@@ -391,6 +391,7 @@ final class Talk {
       }
     case "edit": if let i = l.msgs.firstIndex(where: { $0.id == id }) { l.msgs[i].text = e["text"] as? String ?? l.msgs[i].text; l.msgs[i].edited = true }
     case "del":
+      Notified.clear(id)   // (its notification, if it's still shown: taken away — Haris 2026-11-22 16:22)
       if let i = l.msgs.firstIndex(where: { $0.id == id }) {
         if let f = l.msgs[i].file { try? FileManager.default.removeItem(at: Net.local(f.id)) }
         l.msgs[i].deleted = true; l.msgs[i].text = ""; l.msgs[i].file = nil; l.msgs[i].reply = nil

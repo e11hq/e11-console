@@ -48,6 +48,11 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
   }
   // a notification while E11 Talk is open: shown, unless its group is open on the screen
   func userNotificationCenter(_ c: UNUserNotificationCenter, willPresent n: UNNotification, withCompletionHandler done: @escaping (UNNotificationPresentationOptions) -> Void) {
+    // ("This message was deleted" while Talk is open: nothing shown — the message's own notification taken away instead)
+    if let e = n.request.content.userInfo["e11"] as? [String: Any], (e["kind"] as? String) == "talkdel" {
+      if let id = e["msgId"] as? String { Notified.clear(id) }
+      Talk.shared.sync(); done([]); return
+    }
     Talk.shared.sync()
     let g = (n.request.content.userInfo["e11"] as? [String: Any])?["groupId"] as? String
     // (Settings › Notifications: In-App Banners and In-App Sounds)
@@ -271,6 +276,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
     OccasionIcon.apply()   // (the app's icon on occasions — today's, Dubai)
     BgWatch.back()   // (sends stopped by leaving Talk: on again)
     guard Net.shared.signedIn, tabs != nil else { return }
+    Notified.clearDeleted()   // (the quiet "This message was deleted" ones: their job is done once Talk is open)
     Inbox.apply()   // (messages that came with notifications while Talk was away — shown at once)
     Net.shared.listen()
     // (signed in through E11 Console, and Console signed out since — its key gone: Talk signs out too, the plan)
