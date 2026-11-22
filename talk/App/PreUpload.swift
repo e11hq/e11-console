@@ -87,8 +87,8 @@ final class PreUpload {
   }
   private func upload(_ data: Data, name: String) {
         Net.shared.uploadMsg(data, name: name, stop: self.tmpId, message: { [weak self] fid, key in self?.message?(fid, key) ?? [:] },
-                             onId: { [weak self] id in DispatchQueue.main.async { guard let self = self else { return }; self.serverId = id; if self.cancelled { Net.shared.dropUpload(id) } } },
                              gate: { [weak self] open in DispatchQueue.main.async { guard let self = self, !self.cancelled else { return }; if self.attached { open() } else { self.gate = open } } },
+                             onId: { [weak self] id in DispatchQueue.main.async { guard let self = self else { return }; self.serverId = id; if self.cancelled { Net.shared.dropUpload(id) } } },
                              progress: { [weak self] p in DispatchQueue.main.async { self?.lastProgress = p; self?.onProgress?(p) } }) { [weak self] fid, key in
           DispatchQueue.main.async {
             guard let self = self, !self.cancelled else { return }
