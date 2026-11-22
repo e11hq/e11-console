@@ -90,6 +90,9 @@ final class CleanRedirect: NSObject, URLSessionTaskDelegate {
 }
 
 extension Net {
+  // an upload given up on this phone (the send screen closed, a photo taken out, HD switched, ✕ on its bubble): the server
+  //  lets it go at once — never one already in a message (Haris 2026-11-22 16:02)
+  func dropUpload(_ id: String?) { if let id = id { post("/api/talk/r2/drop", ["id": id]) } }
   // (the server's answer to a message sent with its file's "it's all there" — taken once by the sender)
   private static var sentWith: [String: [String: Any]] = [:]
   private static let sentLock = NSLock()
@@ -103,7 +106,7 @@ extension Net {
   // (stop: the sending bubble's id — its ✕ cancels what's going up, Uploads.stop)
   // (message: the message to send with "it's all there", in the same call — the server sends it and gives its answer as
   //  "sent", kept for the sender in sentWith; one trip instead of two, Haris 2026-11-22 11:26)
-  func uploadMsg(_ data: Data, name: String, keep: Bool = false, back: String? = nil, stop: String? = nil, message: ((String, String) -> [String: Any])? = nil, gate: ((@escaping () -> Void) -> Void)? = nil, progress: @escaping (Double) -> Void, done: @escaping (String?, String?) -> Void) {
+  func uploadMsg(_ data: Data, name: String, keep: Bool = false, back: String? = nil, stop: String? = nil, message: ((String, String) -> [String: Any])? = nil, gate: ((@escaping () -> Void) -> Void)? = nil, onId: ((String) -> Void)? = nil, progress: @escaping (Double) -> Void, done: @escaping (String?, String?) -> Void) {
     // (gate: "it's all there" held until it's opened — a photo sent up while still on the send screen, PreUpload)
     // (over 200 MB: locked in pieces, one at a time as they go up — its key given back as "p:<key>"; Haris 2026-11-21 11:00)
     if data.count > 200 * 1024 * 1024 { return uploadPieces(data, name: name, back: back, stop: stop, progress: progress, done: done) }
@@ -117,6 +120,7 @@ extension Net {
         // (no R2 on this server, or it couldn't start: the usual way)
         return self.upload(data, name: name, progress: progress) { done($0, nil) }
       }
+      onId?(id)   // (its id on the server — to let it go at once if it's given up)
       let body = sealed.data, total = Double(max(1, body.count))
       let finish = { (etags: [String]?) in
         guard let etags = etags else { return done(nil, nil) }

@@ -13,7 +13,7 @@ enum Relay {
   static let base = "https://talkline.e11hq.com"
   // (the calls the hub answers — everything else stays the office's: notifications, Macs, the office network…)
   private static let paths = ["/api/talk/state", "/api/talk/act", "/api/talk/sync", "/api/talk/ack", "/api/talk/got",
-                              "/api/talk/r2/start", "/api/talk/r2/done", "/api/talk/ask", "/api/talk/asks", "/api/talk/resend/start", "/api/talk/history/share"]
+                              "/api/talk/r2/start", "/api/talk/r2/done", "/api/talk/r2/drop", "/api/talk/ask", "/api/talk/asks", "/api/talk/resend/start", "/api/talk/history/share"]
   static var live: Bool { Server.url == "https://talk.e11hq.com" }
   // in use now (false: the office — until it says the hub has Talk)
   private(set) static var on = UserDefaults.standard.object(forKey: "relay-on") as? Bool ?? false

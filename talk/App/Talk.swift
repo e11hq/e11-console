@@ -512,7 +512,7 @@ final class Talk {
       id = UIApplication.shared.beginBackgroundTask(withName: "talk-send") { UIApplication.shared.endBackgroundTask(id); id = .invalid }
       return { if id != .invalid { UIApplication.shared.endBackgroundTask(id); id = .invalid } }
     }
-    var stagedUsed = false
+    var stagedUsed = false, serverId: String? = nil
     let up = { (data: Data, f: Msg.FileRef, finished: @escaping () -> Void) in
       Uploads.set(f.id, 0, total: data.count)
       var going = true   // (a late word of progress after it's up doesn't bring the ring back)
@@ -524,7 +524,7 @@ final class Talk {
       let complete = { (fid: String?, key: String?) in
         going = false; Uploads.end(f.id); Uploads.done(f.id)
         defer { finished() }
-        if Uploads.isStopped(f.id) { return }   // (its ✕: stopped)
+        if Uploads.isStopped(f.id) { Net.shared.dropUpload(fid ?? serverId); return }   // (its ✕: stopped — what had gone up let go now)
         if let fid = fid, let key = key { FileKeys.set(fid, key); fileKey = key }
         guard let fid = fid else { failed(); return }
         try? FileManager.default.copyItem(at: Net.local(f.id), to: Net.local(fid))
@@ -534,7 +534,7 @@ final class Talk {
       let ring = { (p: Double) in guard going else { return }; progress?(p); Uploads.set(f.id, p, total: data.count) }
       // (a photo already going up from the send screen: carried on from there — once; a try after that, the usual way)
       if !stagedUsed, let s = staged { stagedUsed = true; if s.attach(progress: ring, message: message, done: complete) { return } }
-      Net.shared.uploadMsg(data, name: f.name, stop: f.id, message: message, progress: ring) { fid, key in complete(fid, key) }
+      Net.shared.uploadMsg(data, name: f.name, stop: f.id, message: message, onId: { serverId = $0 }, progress: ring) { fid, key in complete(fid, key) }
     }
     if let prep = prepare, let f = file {
       // (started over if Talk was left while it was made smaller: made smaller again from the picked original, which prep
