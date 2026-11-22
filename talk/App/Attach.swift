@@ -106,7 +106,14 @@ final class AttachSheet: UIViewController, UICollectionViewDataSource, UICollect
     rightB.addAction(UIAction { [weak self] _ in self?.right() }, for: .touchUpInside)
     rightB.setContentHuggingPriority(.required, for: .horizontal); rightB.setContentCompressionResistancePriority(.required, for: .horizontal)
     setRight(animated: false)
-    let head = UIStackView(arrangedSubviews: [closeB, titleL, rightB]); head.alignment = .center; head.spacing = 10
+    // (the title held in the middle on its own — between the buttons in a row, it slid aside as "All Photos" became
+    //  "Next (1)": Haris 2026-11-22 14:09)
+    let gap = UIView(); gap.setContentHuggingPriority(.defaultLow, for: .horizontal)
+    let head = UIStackView(arrangedSubviews: [closeB, gap, rightB]); head.alignment = .center; head.spacing = 10
+    titleL.translatesAutoresizingMaskIntoConstraints = false; head.addSubview(titleL)
+    NSLayoutConstraint.activate([titleL.centerXAnchor.constraint(equalTo: head.centerXAnchor), titleL.centerYAnchor.constraint(equalTo: head.centerYAnchor),
+                                 titleL.leadingAnchor.constraint(greaterThanOrEqualTo: closeB.trailingAnchor, constant: 8),
+                                 titleL.trailingAnchor.constraint(lessThanOrEqualTo: rightB.leadingAnchor, constant: -8)])
 
     let lay = UICollectionViewFlowLayout(); lay.scrollDirection = .horizontal; lay.itemSize = CGSize(width: AttachSheet.tileW, height: AttachSheet.tileH)
     lay.minimumLineSpacing = 4
@@ -201,8 +208,8 @@ final class AttachSheet: UIViewController, UICollectionViewDataSource, UICollect
     else { c = .filled(); c.title = "\(nextWord) (\(picked.count))"; c.baseBackgroundColor = tint; c.baseForegroundColor = .white; c.cornerStyle = .capsule }
     let weight: UIFont.Weight = picked.isEmpty ? .regular : .semibold
     c.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { var a = $0; a.font = .systemFont(ofSize: 16, weight: weight); return a }
-    if animated { UIView.transition(with: rightB, duration: 0.2, options: .transitionCrossDissolve) { self.rightB.configuration = c } }
-    else { rightB.configuration = c }
+    // (set at once — crossfaded, its words passed through the tint colour on the first pick: Haris 2026-11-22 14:09)
+    UIView.performWithoutAnimation { rightB.configuration = c; rightB.layoutIfNeeded() }
   }
   private func right() {
     if picked.isEmpty { finish(.allPhotos); return }

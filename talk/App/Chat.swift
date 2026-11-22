@@ -1586,7 +1586,16 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     if animated { UIView.animate(withDuration: 0.25) { self.view.layoutIfNeeded(); self.fitBottom() } }
     else { UIView.performWithoutAnimation { view.layoutIfNeeded(); fitBottom() } }
   }
-  func startReply(_ m: Msg) { editingMsg = nil; bar.setTask(nil); replying = m; UIImpactFeedbackGenerator(style: .light).impactOccurred(); bar.box.becomeFirstResponder() }
+  // (from the hold menu: once the menu has gone and the bubble has landed back — begun while it was still going, the reply
+  //  bar and the keyboard moved the chat under it and it jumped; the swipe was smooth: Haris 2026-11-22 14:09)
+  func startReply(_ m: Msg) {
+    if holding { afterHold = { [weak self] in self?.startReply(m) }; return }
+    editingMsg = nil; bar.setTask(nil); replying = m; UIImpactFeedbackGenerator(style: .light).impactOccurred(); bar.box.becomeFirstResponder()
+  }
+  private func startEdit(_ m: Msg) {
+    if holding { afterHold = { [weak self] in self?.startEdit(m) }; return }
+    bar.setTask(nil); replying = nil; editingMsg = m; bar.setReply(("Edit message", m.text), editing: true); bar.box.text = m.text; bar.textChanged(); bar.box.becomeFirstResponder()
+  }
 
   // ---------- hold: reactions and the menu ----------
   func tableView(_ tv: UITableView, contextMenuConfigurationForRowAt ip: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
@@ -1670,9 +1679,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       })
       if mine { more.append(UIAction(title: "Info", image: UIImage(systemName: "info.circle")) { [weak self] _ in self?.openInfo(m) }) }
       if mine && m.file == nil && now - m.at < 15 * 60000 {
-        more.append(UIAction(title: "Edit", image: UIImage(systemName: "pencil")) { [weak self] _ in
-          self?.bar.setTask(nil); self?.replying = nil; self?.editingMsg = m; self?.bar.setReply(("Edit message", m.text), editing: true); self?.bar.box.text = m.text; self?.bar.textChanged(); self?.bar.box.becomeFirstResponder()
-        })
+        more.append(UIAction(title: "Edit", image: UIImage(systemName: "pencil")) { [weak self] _ in self?.startEdit(m) })
       }
       if let f = m.file {
         more.append(UIAction(title: "Save / Share", image: UIImage(systemName: "square.and.arrow.up")) { [weak self] _ in
@@ -2174,13 +2181,10 @@ final class IntroCell: UITableViewCell {
   @objc private func aboutTap() { if canEdit { onDescribe?() } }
   // (the card changed while it's on screen — a description added, changed or taken off: set in one go with nothing inside
   //  it sliding, the old look crossfading away — Haris's recording 2026-11-22 11:26, "Add description" seen sliding down)
+  //  (no picture of its own crossfading over it — the list already crossfades a changed row; two of them, one left
+  //  where the card had been while the row grew, looked like the card flying: Haris 2026-11-22 14:09)
   func show(_ g: Group) {
-    let live = window != nil
-    let shot = live ? card.snapshotView(afterScreenUpdates: false) : nil
-    UIView.performWithoutAnimation { set(g); if live { contentView.layoutIfNeeded() } }
-    guard let s = shot else { return }
-    s.frame = card.frame; contentView.addSubview(s)
-    UIView.animate(withDuration: 0.25, animations: { s.alpha = 0 }) { _ in s.removeFromSuperview() }
+    UIView.performWithoutAnimation { set(g); if window != nil { contentView.layoutIfNeeded() } }
   }
   private var shown: Group?
 }
@@ -3142,7 +3146,16 @@ final class BubbleCell: UITableViewCell {
       let widest = UIScreen.main.bounds.width * (mine ? 281 : 250) / 393, inner = widest - 24
       var w: CGFloat = 0
       if !textL.isHidden, let t = textL.attributedText {
-        w = ceil(t.boundingRect(with: CGSize(width: inner, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil).width) + 1
+        // (measured as left-to-right — the same letters, the same width; measured right-to-left (Arabic, Urdu), a line is
+        //  counted from the far left, and the bubble came out at its widest: Haris 2026-11-22 14:09)
+        let ltr = NSMutableAttributedString(attributedString: t)
+        let ps = NSMutableParagraphStyle(); ps.baseWritingDirection = .leftToRight; ps.alignment = .left
+        ltr.enumerateAttribute(.paragraphStyle, in: NSRange(location: 0, length: ltr.length)) { v, r, _ in
+          let p = ((v as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
+          p.baseWritingDirection = .leftToRight; p.alignment = .left
+          ltr.addAttribute(.paragraphStyle, value: p, range: r)
+        }
+        w = ceil(ltr.boundingRect(with: CGSize(width: inner, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil).width) + 1
       }
       for l in [nameL, roleL, fwdL] where !l.isHidden { w = max(w, ceil(l.intrinsicContentSize.width)) }
       // (the quote's words measured from the words themselves, as the message's are — the label's own size depends on how it
@@ -4021,6 +4034,16 @@ final class MessageBar: UIView, UITextViewDelegate {
   }
   func textChanged() {
     place.isHidden = !box.text.isEmpty
+    // (the box turns right-to-left when what's typed starts in Arabic, Urdu, Persian or Hebrew — as other apps and iPhone's
+    //  own; back to left-to-right otherwise: Haris 2026-11-22 14:09)
+    let rtl = ComposeDir.rightToLeft(box.text)
+    if (box.textAlignment == .right) != rtl {
+      box.textAlignment = rtl ? .right : .natural
+      var ta = box.typingAttributes
+      let ps = ((ta[.paragraphStyle] as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
+      ps.baseWritingDirection = rtl ? .rightToLeft : .natural; ps.alignment = rtl ? .right : .natural
+      ta[.paragraphStyle] = ps; box.typingAttributes = ta
+    }
     paintMentions()
     linkCheck()
     let h = min(130, max(30, ceil(box.sizeThatFits(CGSize(width: max(100, box.bounds.width), height: 400)).height)))
@@ -4669,4 +4692,16 @@ private final class StarSource: UITableViewDiffableDataSource<Int, String> {
   var onDelete: ((IndexPath) -> Void)?
   override func tableView(_ tv: UITableView, canEditRowAt ip: IndexPath) -> Bool { true }
   override func tableView(_ tv: UITableView, commit s: UITableViewCell.EditingStyle, forRowAt ip: IndexPath) { if s == .delete { onDelete?(ip) } }
+}
+
+// the direction of what's typed: its first letter that has one (Arabic, Urdu, Persian, Hebrew → right-to-left)
+enum ComposeDir {
+  static func rightToLeft(_ s: String) -> Bool {
+    for u in s.unicodeScalars {
+      let v = u.value
+      if (0x0590...0x08FF).contains(v) || (0xFB1D...0xFDFF).contains(v) || (0xFE70...0xFEFF).contains(v) { return true }
+      if u.properties.isAlphabetic { return false }
+    }
+    return false
+  }
 }
