@@ -55,3 +55,18 @@ test('an address can’t be changed, reused for something else, or used late', a
   const late = await old.getUrl('msg/f-1');
   assert.equal((await serveR2(new Request(late), e, path(late))).status, 403);
 });
+
+test('a file’s "it’s all there" with its message — one call sends both', async () => {
+  const bucket = fakeBucket(), e = env(bucket);
+  const h = new HubCore({ sql: fakeSql(), dir: DIR, r2: bindingR2({ bucket, secret: e.R2_LINK_SECRET, base: e.PUBLIC }) });
+  const a = h.who('haris@e11.test', 'phone-key-aaaaaaaaaaaa'), b = h.who('lana@e11.test', 'phone-key-bbbbbbbbbbbb');
+  const gid = h.act(a, { act: 'newGroup', client: 'p1', name: 'One call', members: ['u2'] }).group.id;
+  const bytes = new Uint8Array(500).fill(3);
+  const s = await h.r2Start(a, { name: 'p.heic', size: bytes.byteLength });
+  await serveR2(new Request(s.put, { method: 'PUT', body: bytes }), e, path(s.put));
+  const d = await h.r2Done(a, { id: s.id, send: { group: gid, text: 'Look', cid: 'c-1', file: { id: s.id, kind: 'photo', key: 'A'.repeat(43) + '=' } } });
+  assert.equal(d.ok, true, JSON.stringify(d));
+  assert.ok(d.sent && d.sent.ok && d.sent.id, 'the message too: ' + JSON.stringify(d.sent));
+  assert.ok(h.sync(b, 0).events.some((x) => x.type === 'msg' && x.text === 'Look'), 'Lana has it');
+  const plain = await h.r2Done(a, { id: s.id }); assert.equal(plain.sent, undefined, 'without one: as before');
+});

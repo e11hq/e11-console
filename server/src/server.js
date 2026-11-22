@@ -897,7 +897,13 @@ export function createServer(cfg) {
       }
       // a message's file straight to R2 (newer phones): where to put it, then "it's all there"
       if (p === '/api/talk/r2/start' && req.method === 'POST') { const b = await readBody(req, 16 * 1024); return out(await t.r2Start(u, b.name, b.size, b.keep === true)); }
-      if (p === '/api/talk/r2/done' && req.method === 'POST') { const b = await readBody(req, 64 * 1024); return out(await t.r2Done(u, b.id, b.etags, b.back ? { key: b.key, lock: b.lock } : null)); }
+      // (…and, from newer phones, the message itself with it — one trip instead of two: Haris 2026-11-22 11:26)
+      if (p === '/api/talk/r2/done' && req.method === 'POST') {
+        const b = await readBody(req, 256 * 1024);
+        const r = await t.r2Done(u, b.id, b.etags, b.back ? { key: b.key, lock: b.lock } : null);
+        if (r && r.ok && b.send && typeof b.send === 'object' && !req.talkMac) r.sent = await t.act(u, { ...b.send, act: 'send' }, dev);
+        return out(r);
+      }
       // (Ask the group — Haris 2026-11-20 21:36: ask for a gone file; the asks this phone can answer; send one again)
       if (p === '/api/talk/ask' && req.method === 'POST') { const b = await readBody(req, 16 * 1024); return out(await t.ask(u, dev, b.group, b.file)); }
       if (p === '/api/talk/asks' && req.method === 'GET') return out(t.asksFor(u, dev));

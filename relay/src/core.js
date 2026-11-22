@@ -69,7 +69,14 @@ export class HubCore {
   sweep() { if (this.sweepFn) this.run(() => this.sweepFn()); }
   // files (R2) — the same calls as the office's
   r2Start(w, b) { return this.run((t) => t.r2Start(w.u, b.name, b.size, b.keep === true)); }
-  r2Done(w, b) { return this.run((t) => t.r2Done(w.u, b.id, b.etags, b.back ? { key: b.key, lock: b.lock } : null)); }
+  // (…and, from newer phones, the message itself with it — one trip instead of two: Haris 2026-11-22 11:26)
+  r2Done(w, b) {
+    return this.run(async (t) => {
+      const r = await t.r2Done(w.u, b.id, b.etags, b.back ? { key: b.key, lock: b.lock } : null);
+      if (r && r.ok && b.send && typeof b.send === 'object') r.sent = await t.act(w.u, { ...b.send, act: 'send' }, w.dev);
+      return r;
+    });
+  }
   ask(w, b) { return this.run((t) => t.ask(w.u, w.dev, b.group, b.file)); }
   asks(w) { return this.run((t) => t.asksFor(w.u, w.dev)); }
   resendStart(w, b) { return this.run((t) => t.resendStart(w.u, w.dev, b.file, b.size)); }
