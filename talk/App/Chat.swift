@@ -3056,14 +3056,17 @@ final class BubbleCell: UITableViewCell {
         let lf = NSMutableAttributedString(attachment: mark)
         lf.append(NSAttributedString(string: "  " + site, attributes: [.foregroundColor: sub])); self.linkFoot.attributedText = lf
       }
-      if let ic = pv?.icon, let i = BubbleCell.cached(ic) { foot(i) }
+      if let ic = pv?.icon, let i = BubbleCell.siteIcons[ic] ?? BubbleCell.cached(ic) { BubbleCell.keepIcon(ic, i); foot(i) }
       else {
         foot(nil)
         if let ic = pv?.icon {
           let url = Net.local(ic)
           DispatchQueue.global(qos: .userInitiated).async {
             let i = BubbleCell.picture(url, ic, max: 48)
-            DispatchQueue.main.async { [weak self] in if i != nil, self?.msg?.id == m.id { foot(i) } }
+            DispatchQueue.main.async { [weak self] in
+              if let i = i { BubbleCell.keepIcon(ic, i) }
+              if i != nil, self?.msg?.id == m.id { foot(i) }
+            }
           }
         }
       }
@@ -3280,6 +3283,16 @@ final class BubbleCell: UITableViewCell {
   // a photo, shrunk once to the bubble's size and kept
   private static let pictures = NSCache<NSString, UIImage>()
   static func cached(_ id: String) -> UIImage? { pictures.object(forKey: id as NSString) ?? frames.object(forKey: id as NSString) }
+  // (link cards' site icons, kept apart from the pictures — iPhone empties those while Talk is in the background, and back
+  //  from the app switcher a card showed its 🔗 stand-in instead of the site's icon: Haris 2026-11-23 23:25. Tiny — 14 pt,
+  //  at most 400 kept, the oldest let go first. Main thread only)
+  private(set) static var siteIcons: [String: UIImage] = [:]
+  private static var iconOrder: [String] = []
+  static func keepIcon(_ id: String, _ i: UIImage) {
+    if siteIcons[id] != nil { return }
+    siteIcons[id] = i; iconOrder.append(id)
+    if iconOrder.count > 400 { siteIcons[iconOrder.removeFirst()] = nil }
+  }
   // (a picture sent up from here: kept under the server's name too, so the card doesn't fetch and fade it in again)
   static func alias(_ from: String, _ to: String) { if let i = pictures.object(forKey: from as NSString) { pictures.setObject(i, forKey: to as NSString) } }
   static func picture(_ url: URL, _ id: String, max: Int = 800) -> UIImage? {
