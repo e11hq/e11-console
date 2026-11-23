@@ -93,6 +93,15 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
   private var player: AVPlayer?, playerView: PlayerView?, ready: NSKeyValueObservation?, rateObs: NSKeyValueObservation?, ended: NSObjectProtocol?
   private var want = false, atEnd = false, held = false
   var onPlaying: (() -> Void)?
+  var onPlayer: (() -> Void)?   // (its player made — the preview's seek bar follows it)
+  var avPlayer: AVPlayer? { player }
+  // (sound and picture together, as E11 Talk's — Haris 2026-11-23: it plays only once the picture has landed and its first
+  //  frame is ready; the still stays only until then, the frame taking its place at once — no fade)
+  var landed = true { didSet { go() } }
+  private func go() {
+    guard want, landed, !held, let p = player, playerView?.pl.isReadyForDisplay == true, p.timeControlStatus == .paused else { return }
+    p.play()
+  }
   var chrome = true { didSet { button(animated: true) } }
   // (the preview's own buttons, asked each time: ⏸ shows only while they show — never out of step with them, Haris 2026-11-21)
   var barsShown: (() -> Bool)?
@@ -154,10 +163,17 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
 
   // on show: it plays (from the phone's copy when it's kept — MediaKeep — else streamed, signed in); off show: it pauses
   func start() {
-    guard isVideo, let s = file["src"] as? String, let url0 = URL(string: s) else { return }
+    guard isVideo else { return }
     want = true
     try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
-    if let p = player { if atEnd { atEnd = false; p.seek(to: .zero) }; if !held { p.play() }; return }
+    if let p = player { if atEnd { atEnd = false; p.seek(to: .zero) }; go(); return }
+    load()
+  }
+  // (as the preview starts opening: the player made and readied, not playing — it plays the moment the picture has landed,
+  //  as E11 Talk's)
+  func prepare() { guard isVideo, player == nil else { return }; load() }
+  private func load() {
+    guard let s = file["src"] as? String, let url0 = URL(string: s) else { return }
     let kept = MediaKeep.local(s)
     if kept == nil { MediaKeep.fetch(s) }
     let url = kept ?? url0
@@ -172,14 +188,24 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
     player = p; playerView = v
     ready = v.pl.observe(\.isReadyForDisplay, options: [.initial, .new]) { [weak self] l, _ in
       guard l.isReadyForDisplay else { return }
-      DispatchQueue.main.async { self?.spinner.stopAnimating(); UIView.animate(withDuration: 0.18) { v.alpha = 1 } }
+      DispatchQueue.main.async { self?.spinner.stopAnimating(); v.alpha = 1; self?.go() }   // (its first frame in place of the still at once, then it plays)
     }
     rateObs = p.observe(\.timeControlStatus, options: [.new]) { [weak self] pl, _ in
       DispatchQueue.main.async { guard let self = self else { return }; if pl.timeControlStatus == .playing { self.onPlaying?() }; self.button(animated: true) }
     }
     ended = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: p.currentItem, queue: .main) { [weak self] _ in self?.atEnd = true; self?.button(animated: true) }
-    p.play()
+    onPlayer?()
+    go()
   }
+  // the seek bar (E11 Talk's): dragged — paused while the finger is on it, on from there when it's let go (if it was playing)
+  private var wasPlaying = false
+  func scrubBegin() { wasPlaying = player?.timeControlStatus != .paused; player?.pause() }
+  func scrub(to t: Double) {
+    atEnd = false
+    player?.seek(to: CMTime(seconds: t, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+    button(animated: true)
+  }
+  func scrubEnd() { if wasPlaying, want, !held { player?.play() } }
   func stop() { want = false; held = false; player?.pause(); button(animated: false) }
   private func stopVideo() {
     player?.pause(); playerView?.removeFromSuperview()
@@ -380,6 +406,11 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
   private let closeB = UIButton(type: .system), moreB = UIButton(type: .system)
   private let name = UILabel(), details = UILabel()
   private let copyB = UIButton(type: .system), dlB = UIButton(type: .system)
+  // a video's time played · seek bar · its length, above the strip (E11 Talk's, as it is — Haris 2026-11-23); others: not there
+  private let seek = UIView(), played = UILabel(), length = UILabel(), bar = UISlider()
+  private var seekH: NSLayoutConstraint!, ticks: Any?, ticking: AVPlayer?, dragging = false
+  // (false while the picture flies out — a video waits for it to land before it plays)
+  private var landed = true
   final class Shade: UIView { override class var layerClass: AnyClass { CAGradientLayer.self } }
   // the picture the file was opened from (its own small picture on the page): the preview flies out of it and back into it
   weak var source: UIImageView?
@@ -459,7 +490,22 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     copyB.addAction(UIAction { [weak self] _ in self?.send("copy") }, for: .touchUpInside)   // (its words when the link is on the clipboard)
     dlB.addAction(UIAction { [weak self] _ in self?.send("dl") }, for: .touchUpInside)
     let tools = UIStackView(arrangedSubviews: [copyB, dlB]); tools.axis = .horizontal; tools.distribution = .equalSpacing; tools.alignment = .center
-    [strip, tools].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; bottomBar.addSubview($0) }
+    for l in [played, length] { l.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium); l.textColor = .white; l.translatesAutoresizingMaskIntoConstraints = false; seek.addSubview(l) }
+    played.text = "0:00"; length.textAlignment = .right
+    bar.minimumTrackTintColor = .white; bar.maximumTrackTintColor = UIColor(white: 1, alpha: 0.3)
+    let knob = UIGraphicsImageRenderer(size: CGSize(width: 14, height: 14)).image { _ in UIColor.white.setFill(); UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: 14, height: 14)).fill() }
+    bar.setThumbImage(knob, for: .normal); bar.setThumbImage(knob, for: .highlighted)
+    bar.translatesAutoresizingMaskIntoConstraints = false; seek.addSubview(bar); seek.clipsToBounds = true
+    bar.addAction(UIAction { [weak self] _ in guard let self else { return }; self.dragging = true; self.current?.scrubBegin() }, for: .touchDown)
+    bar.addAction(UIAction { [weak self] _ in guard let self else { return }; self.played.text = PreviewVC.clock(Double(self.bar.value)); self.current?.scrub(to: Double(self.bar.value)) }, for: .valueChanged)
+    bar.addAction(UIAction { [weak self] _ in guard let self else { return }; self.dragging = false; self.current?.scrubEnd() }, for: [.touchUpInside, .touchUpOutside, .touchCancel])
+    NSLayoutConstraint.activate([
+      played.leadingAnchor.constraint(equalTo: seek.leadingAnchor, constant: 18), played.centerYAnchor.constraint(equalTo: seek.centerYAnchor), played.widthAnchor.constraint(equalToConstant: 44),
+      length.trailingAnchor.constraint(equalTo: seek.trailingAnchor, constant: -18), length.centerYAnchor.constraint(equalTo: seek.centerYAnchor), length.widthAnchor.constraint(equalToConstant: 44),
+      bar.leadingAnchor.constraint(equalTo: played.trailingAnchor, constant: 8), bar.trailingAnchor.constraint(equalTo: length.leadingAnchor, constant: -8), bar.centerYAnchor.constraint(equalTo: seek.centerYAnchor),
+    ])
+    seek.isHidden = true
+    [seek, strip, tools].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; bottomBar.addSubview($0) }
     for bar in [topBar, bottomBar] { bar.translatesAutoresizingMaskIntoConstraints = false; bar.clipsToBounds = false; view.addSubview(bar) }
     // (the soft shades under the buttons, Talk's: coming and going with them)
     let g0 = topShade.layer as! CAGradientLayer
@@ -481,7 +527,8 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
       names.centerXAnchor.constraint(equalTo: topBar.centerXAnchor), names.centerYAnchor.constraint(equalTo: topBar.centerYAnchor),
       names.leadingAnchor.constraint(greaterThanOrEqualTo: closeB.trailingAnchor, constant: 8), names.trailingAnchor.constraint(lessThanOrEqualTo: moreB.leadingAnchor, constant: -8),
       bottomBar.leadingAnchor.constraint(equalTo: view.leadingAnchor), bottomBar.trailingAnchor.constraint(equalTo: view.trailingAnchor), bottomBar.bottomAnchor.constraint(equalTo: g.bottomAnchor),
-      strip.topAnchor.constraint(equalTo: bottomBar.topAnchor), strip.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor), strip.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor), strip.heightAnchor.constraint(equalToConstant: 40),
+      seek.topAnchor.constraint(equalTo: bottomBar.topAnchor), seek.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor), seek.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor),
+      strip.topAnchor.constraint(equalTo: seek.bottomAnchor), strip.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor), strip.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor), strip.heightAnchor.constraint(equalToConstant: 40),
       stripRow.centerYAnchor.constraint(equalTo: strip.centerYAnchor), stripRow.leadingAnchor.constraint(equalTo: strip.contentLayoutGuide.leadingAnchor, constant: 14),
       stripRow.trailingAnchor.constraint(equalTo: strip.contentLayoutGuide.trailingAnchor, constant: -14), stripRow.topAnchor.constraint(equalTo: strip.contentLayoutGuide.topAnchor, constant: 2),
       tools.topAnchor.constraint(equalTo: strip.bottomAnchor, constant: 10), tools.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor, constant: 34), tools.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor, constant: -34),
@@ -489,6 +536,7 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
       toast.centerXAnchor.constraint(equalTo: view.centerXAnchor), toast.bottomAnchor.constraint(equalTo: bottomBar.topAnchor, constant: -14),
       toast.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, constant: -48), toast.heightAnchor.constraint(greaterThanOrEqualToConstant: 36),
     ])
+    seekH = seek.heightAnchor.constraint(equalToConstant: 0); seekH.isActive = true
     // tap: hide / show the bars; pull down: close
     let tap = UITapGestureRecognizer(target: self, action: #selector(toggleBars))
     tap.delegate = self
@@ -538,13 +586,16 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     fly.frame = src.convert(src.bounds, to: nil)
     view.insertSubview(fly, aboveSubview: pager)
     pager.alpha = 0; topBar.alpha = 0; bottomBar.alpha = 0; view.backgroundColor = .clear; src.alpha = 0
+    setLanded(false)
     let to = AVMakeRect(aspectRatio: img.size, insideRect: view.bounds)
     UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.88, initialSpringVelocity: 0) {
       fly.frame = to; fly.layer.cornerRadius = 0; self.view.backgroundColor = .black; self.topBar.alpha = 1; self.bottomBar.alpha = 1
     } completion: { _ in
+      self.setLanded(true)
       UIView.animate(withDuration: 0.18, animations: { self.pager.alpha = 1 }) { _ in fly.removeFromSuperview(); src.alpha = 1 }
     }
   }
+  private func setLanded(_ on: Bool) { landed = on; for c in pager.visibleCells { (c as? PreviewCell)?.landed = on } }
   private var placed = false
   override func viewWillLayoutSubviews() {
     super.viewWillLayoutSubviews()
@@ -552,6 +603,7 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
       placed = true
       pager.layoutIfNeeded()
       pager.scrollToItem(at: IndexPath(item: at, section: 0), at: .left, animated: false)
+      pager.layoutIfNeeded()   // (the cell on show made now — a video readied while the preview opens)
       refreshBars()
     }
   }
@@ -583,13 +635,47 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
   }
   // the one on show plays (a video), the others pause
   private func playCurrent() {
-    for c in pager.visibleCells { guard let pc = c as? PreviewCell, let ip = pager.indexPath(for: pc) else { continue }; if ip.item == at && appeared { pc.start() } else { pc.stop() } }
+    for c in pager.visibleCells {
+      guard let pc = c as? PreviewCell, let ip = pager.indexPath(for: pc) else { continue }
+      if ip.item == at { if appeared { pc.start() } else { pc.prepare() } } else { pc.stop() }
+    }
+    let video = at < files.count && (files[at]["kind"] as? String) == "video"
+    let h: CGFloat = video ? 34 : 0
+    if let sh = seekH, sh.constant != h {
+      sh.constant = h
+      // (the foot grew or shrank: the downloads' bar above it placed again)
+      if appeared { DispatchQueue.main.async { self.view.layoutIfNeeded(); NotificationCenter.default.post(name: PreviewVC.cameOrWent, object: nil) } }
+    }
+    seek.isHidden = !video
+    follow(video ? current : nil)
   }
+  // the seek row follows the video on show: its length, and where it is, ten times a second (E11 Talk's)
+  private func follow(_ pc: PreviewCell?) {
+    if let o = ticks, let p = ticking { p.removeTimeObserver(o) }
+    ticks = nil; ticking = nil
+    let p = pc?.avPlayer
+    var len = 0.0
+    if let d = p?.currentItem?.duration, d.isNumeric, d.seconds > 0 { len = d.seconds }
+    bar.minimumValue = 0; bar.maximumValue = Float(max(len, 0.1))
+    length.text = PreviewVC.clock(len)
+    let now = p.map { $0.currentTime().seconds } ?? 0
+    if !dragging { bar.value = Float(now.isFinite ? now : 0); played.text = PreviewVC.clock(now.isFinite ? now : 0) }
+    guard let pl = p else { return }
+    ticking = pl
+    ticks = pl.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.1, preferredTimescale: 600), queue: .main) { [weak self] t in
+      guard let self, !self.dragging else { return }
+      if let d = pl.currentItem?.duration, d.isNumeric, d.seconds > 0, abs(Double(self.bar.maximumValue) - d.seconds) > 0.05 {
+        self.bar.maximumValue = Float(d.seconds); self.length.text = PreviewVC.clock(d.seconds)
+      }
+      self.bar.value = Float(t.seconds); self.played.text = PreviewVC.clock(t.seconds)
+    }
+  }
+  static func clock(_ s: Double) -> String { let n = Int((s.isFinite ? s : 0).rounded(.down)); return String(format: "%d:%02d", n / 60, n % 60) }
   private var appeared = false
   override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); appeared = true; playCurrent(); NotificationCenter.default.post(name: PreviewVC.cameOrWent, object: nil) }
   override func viewDidDisappear(_ a: Bool) { super.viewDidDisappear(a); NotificationCenter.default.post(name: PreviewVC.cameOrWent, object: nil) }
   static let cameOrWent = Notification.Name("PreviewVC.cameOrWent")
-  override func viewWillDisappear(_ a: Bool) { super.viewWillDisappear(a); for c in pager.visibleCells { (c as? PreviewCell)?.stop() } }
+  override func viewWillDisappear(_ a: Bool) { super.viewWillDisappear(a); for c in pager.visibleCells { (c as? PreviewCell)?.stop() }; follow(nil) }
   private func refreshBars() {
     guard at < files.count else { return }
     playCurrent()
@@ -686,6 +772,8 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     c.onPlay = { [weak self] f in self?.playMedia(f) }
     c.onPlaying = { [weak self] in if self?.barsHidden == false { self?.toggleBars() } }
     c.chrome = !barsHidden
+    c.landed = landed
+    c.onPlayer = { [weak self, weak c] in guard let self, let c, self.current === c else { return }; self.follow(c) }
     c.barsShown = { [weak self] in self.map { !$0.barsHidden && !$0.closed } ?? false }
     c.onPages = { [weak self, weak c] id in
       guard let self else { return }
