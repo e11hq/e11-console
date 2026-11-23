@@ -375,7 +375,23 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     super.viewWillAppear(a)
     if peek { bar.isHidden = true; return }
     infoHoldEnd(animated: false)   // (back from Message info: fitted to the keyboard down before it shows)
+    if isMovingToParent { placeBarBeforeSlide() }
     if isMovingToParent { coverTitle() }
+  }
+  // (the message box at its full size and place before the chat slides in, with no animation — it got its first size inside
+  //  the slide and grew from narrow as it came in: Haris 2026-11-23. Only the box: its place is the one its constraints give
+  //  with the keyboard down (fitBottom's own reckoning), its insides laid out, and the list isn't told — onLayout held, so
+  //  nothing of the messages or their scrolling moves; the list lays out as before, after)
+  private func placeBarBeforeSlide() {
+    let W = view.bounds.width
+    guard W > 0, abs(bar.frame.width - W) > 0.5 else { return }
+    let h = bar.intrinsicContentSize.height
+    let tell = bar.onLayout; bar.onLayout = nil
+    UIView.performWithoutAnimation {
+      bar.frame = CGRect(x: 0, y: view.bounds.maxY - home - h, width: W, height: h)
+      bar.layoutIfNeeded()
+    }
+    bar.onLayout = tell
   }
   /* The list's big title folding into its bar as the chat comes in (Apple's, with the tab bar hidden as it's pushed —
      kept, Haris 2026-11-12): WhatsApp's way of not seeing it — for the slide, the chat's frost reaches down over the big
