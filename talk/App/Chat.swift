@@ -375,6 +375,9 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     super.viewWillAppear(a)
     if peek { bar.isHidden = true; return }
     infoHoldEnd(animated: false)   // (back from Message info: fitted to the keyboard down before it shows)
+    // (the message box laid out at its full size before the slide, with no animation — it got its first size inside the
+    //  push and grew from a third of its width as it slid in: Haris 2026-11-23 08:11)
+    if isMovingToParent { UIView.performWithoutAnimation { view.layoutIfNeeded(); bar.layoutIfNeeded() } }
     if isMovingToParent { coverTitle() }
   }
   /* The list's big title folding into its bar as the chat comes in (Apple's, with the tab bar hidden as it's pushed —
