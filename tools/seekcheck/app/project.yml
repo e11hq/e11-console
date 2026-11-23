@@ -22,3 +22,21 @@ targets:
     settings:
       CODE_SIGNING_ALLOWED: NO
       SWIFT_VERSION: "5.0"
+  SeekCheckUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources: [UITests]
+    dependencies:
+      - target: SeekCheck
+    settings:
+      CODE_SIGNING_ALLOWED: NO
+      GENERATE_INFOPLIST_FILE: YES
+schemes:
+  SeekCheck:
+    build:
+      targets:
+        SeekCheck: all
+        SeekCheckUITests: [test]
+    test:
+      targets: [SeekCheckUITests]

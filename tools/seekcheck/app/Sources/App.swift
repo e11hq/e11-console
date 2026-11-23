@@ -16,7 +16,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
   var window: UIWindow?
   func scene(_ s: UIScene, willConnectTo c: UISceneSession, options o: UIScene.ConnectionOptions) {
     guard let ws = s as? UIWindowScene else { return }
-    window = UIWindow(windowScene: ws); window?.rootViewController = VC(); window?.makeKeyAndVisible()
+    window = UIWindow(windowScene: ws); window?.rootViewController = ProcessInfo.processInfo.arguments.contains("bar") ? BarVC() : VC(); window?.makeKeyAndVisible()
   }
 }
 

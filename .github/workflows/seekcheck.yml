@@ -7,7 +7,7 @@ on:
         description: "Which ways to measure (as final chase cancel)"
         default: "as"
       film:
-        description: "yes: the iPhone simulator, Apple's player filmed (tools/seekcheck/app) instead of the Mac measurement"
+        description: "yes: the iPhone simulator, Apple's player filmed; drag: the apps' seek bar dragged by a finger (UI test), filmed (tools/seekcheck/app)"
         default: "no"
 permissions:
   contents: write
@@ -30,6 +30,36 @@ jobs:
           fi
           ffmpeg -v error -y -f lavfi -i testsrc2=s=1080x1920:r=30:d=3 -c:v libx264 -profile:v high -bf 2 -pix_fmt yuv420p h264.mp4
           ls -la *.mp4
+      - name: The apps' seek bar, dragged by a finger, filmed
+        if: inputs.film == 'drag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -x
+          brew install xcodegen >/dev/null 2>&1 || true
+          A="$GITHUB_WORKSPACE/tools/seekcheck/app"; mkdir -p "$A/Resources"; cp "$RUNNER_TEMP/app.mp4" "$A/Resources/test.mp4"
+          cd "$A" && xcodegen generate >/dev/null
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys,re; d=json.load(sys.stdin)['devices']; p=[x for k,v in d.items() if 'iOS' in k for x in v if re.match(r'iPhone \\d', x['name']) and 'Max' not in x['name']]; print(p[-1]['udid'])")
+          xcrun simctl boot $UDID || true; xcrun simctl bootstatus $UDID -b
+          xcrun simctl uninstall $UDID ae.e11.SeekCheck || true
+          xcodebuild -project SeekCheck.xcodeproj -scheme SeekCheck -destination "id=$UDID" -derivedDataPath "$RUNNER_TEMP/sct" CODE_SIGNING_ALLOWED=NO build-for-testing > "$RUNNER_TEMP/sctbuild.log" 2>&1 || true
+          grep -E "error:" "$RUNNER_TEMP/sctbuild.log" | sort -u | head -20; tail -3 "$RUNNER_TEMP/sctbuild.log"
+          pkill -INT -f recordVideo || true; sleep 1
+          SIMCTL=$(xcrun -f simctl)
+          python3 - "$SIMCTL" "$UDID" "$RUNNER_TEMP" <<'PY'
+          import subprocess, sys, time, os, signal
+          simctl, udid, tmp = sys.argv[1:4]
+          rec = subprocess.Popen([simctl, 'io', udid, 'recordVideo', '--codec=h264', '--force', os.path.join(tmp, 'seekdrag.mp4')], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+          time.sleep(2)
+          r = subprocess.run(['xcodebuild', '-project', 'SeekCheck.xcodeproj', '-scheme', 'SeekCheck', '-destination', 'id=' + udid, '-derivedDataPath', os.path.join(tmp, 'sct'), 'CODE_SIGNING_ALLOWED=NO', 'test-without-building'], capture_output=True, text=True)
+          open(os.path.join(tmp, 'seekdrag-test.txt'), 'w').write(r.stdout[-6000:] + r.stderr[-3000:])
+          time.sleep(1)
+          os.killpg(rec.pid, signal.SIGINT); rec.wait(timeout=60)
+          PY
+          tail -30 "$RUNNER_TEMP/seekdrag-test.txt"
+          cp "$(xcrun simctl get_app_container $UDID ae.e11.SeekCheck data)/Documents/seek.txt" "$RUNNER_TEMP/seekdrag.txt" || echo none > "$RUNNER_TEMP/seekdrag.txt"
+          cat "$RUNNER_TEMP/seekdrag.txt"
+          cd "$RUNNER_TEMP" && gh release upload -R "$GITHUB_REPOSITORY" ios-selftest seekdrag.mp4 seekdrag.txt seekdrag-test.txt --clobber
       - name: Film in the iPhone simulator
         if: inputs.film == 'yes'
         env:
@@ -66,7 +96,7 @@ jobs:
           ls -la "$RUNNER_TEMP"/seekfilm.*; cat "$RUNNER_TEMP/seekfilm.txt" | head -80
           cd "$RUNNER_TEMP" && cp "$(xcrun simctl get_app_container $UDID ae.e11.SeekCheck data 2>/dev/null)/Documents/seek.txt" seekfilm-doc.txt 2>/dev/null || echo none > seekfilm-doc.txt; ls -la seekfilm*; xcrun simctl spawn $UDID log show --last 3m --predicate 'process == "SeekCheck"' --style compact 2>/dev/null | tail -40 > seekfilm-sys.txt || true; gh release upload -R "$GITHUB_REPOSITORY" ios-selftest seekfilm.mp4 seekfilm-doc.txt seekfilm-sys.txt --clobber
       - name: Measure
-        if: inputs.film != 'yes'
+        if: inputs.film != 'yes' && inputs.film != 'drag'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
