@@ -532,6 +532,18 @@ export function createServer(cfg) {
     }
   }
   if (cfg.warmReviews !== false) setTimeout(() => warmReviews(store.list('tasks')), 30_000).unref?.();
+  // (videos' pictures from their first frame — Haris 2026-11-23 10:30: the ones the apps already keep the place of (a task's
+  //  or a comment's files, a.thumb) are made again once, one after another, so the website and the Mac show the new one too;
+  //  any other is made again the next time it's asked for)
+  function firstFrames(tasks) {
+    let chain = Promise.resolve();
+    for (const t of tasks) for (const a of (t && t.attachments) || []) {
+      if (!a || !a.path || !a.thumb || !/\.(mp4|mov|m4v|webm|avi|mkv)$/i.test(a.name || a.path)) continue;
+      chain = chain.then(() => files.commands.thumb({ id: a.id, path: a.path }).catch(() => null));
+    }
+    return chain.then(() => store.kv.set('video-first-frames', '1'));
+  }
+  if (cfg.warmReviews !== false && store.kv.get('video-first-frames') !== '1') setTimeout(() => { firstFrames(store.list('tasks')).catch((e) => console.error('First frames:', e.message)); }, 45_000).unref?.();
   // (Talk's hub on Cloudflare: E11 Console's people and clients sent once after starting — live only; nothing if it isn't there)
   if (!cfg.dev && cfg.talkRelayStart !== false) setTimeout(() => { try { if (talkRelayUrl()) talkRelayNow()?.sendDir(); } catch (e) { console.error('talk relay:', e.message); } }, 20_000).unref?.();
   function broadcast(rev, results, fromClient, byUser) {

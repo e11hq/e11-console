@@ -293,7 +293,10 @@ export function createFiles(root) {
       //  the words in Korean-ordered fonts — Kia's — so they're made again once — Haris 2026-11-17)
       const paged = (ext === 'pdf' || OFFICE.includes(ext)) && CJK, stem = paged ? 'page1' : 'thumb';
       const out = path.join(dir, stem + '.png');
-      if (fs.existsSync(out)) return { ok: true, thumb: rel(out) };
+      // (a video's picture is its very first frame, as E11 Talk's — the one it starts on, so nothing jumps as it plays: Haris
+      //  2026-11-23 10:30. It was taken 1 second in; one made that way — no ".first" beside it — is made again once, in place)
+      const video = ['mp4', 'mov', 'm4v', 'webm', 'avi', 'mkv'].includes(ext), first = path.join(dir, '.first');
+      if (fs.existsSync(out) && !(video && !fs.existsSync(first))) return { ok: true, thumb: rel(out) };
       fs.mkdirSync(dir, { recursive: true });
       let ok = false;
       if (ext === 'pdf') {
@@ -301,9 +304,9 @@ export function createFiles(root) {
       } else if (OFFICE.includes(ext)) {
         const r = await commands.docPreview(a);
         if (r.pdf) ok = await run('pdftoppm', ['-png', '-singlefile', '-f', '1', '-l', '1', '-scale-to', '640', resolve(r.pdf), path.join(dir, stem)]);
-      } else if (['mp4', 'mov', 'm4v', 'webm', 'avi', 'mkv'].includes(ext)) {
-        ok = await run('ffmpeg', ['-y', '-v', 'error', '-ss', '1', '-i', src, '-frames:v', '1', '-vf', 'scale=640:-2', out]);
-        if (!ok) ok = await run('ffmpeg', ['-y', '-v', 'error', '-i', src, '-frames:v', '1', '-vf', 'scale=640:-2', out]);
+      } else if (video) {
+        ok = await run('ffmpeg', ['-y', '-v', 'error', '-i', src, '-frames:v', '1', '-vf', 'scale=640:-2', out]);
+        if (ok && fs.existsSync(out)) { try { fs.writeFileSync(first, ''); } catch { /* made again next time */ } }
       } else if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tif', 'tiff', 'heic'].includes(ext)) {
         ok = await run('ffmpeg', ['-y', '-v', 'error', '-i', src, '-frames:v', '1', '-vf', "scale='min(640,iw)':-2", out]);
       }
