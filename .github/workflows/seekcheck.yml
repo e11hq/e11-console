@@ -3,9 +3,9 @@ name: Seek bar check
 on:
   workflow_dispatch:
     inputs:
-      video:
-        description: "A video from a release asset name on ios-selftest (empty: test videos made here)"
-        default: ""
+      ways:
+        description: "Which ways to measure (as final chase cancel)"
+        default: "as"
 permissions:
   contents: write
 jobs:
@@ -16,10 +16,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: Homebrew's tools
         run: for d in /opt/homebrew/bin /usr/local/bin; do [ -d "$d" ] && echo "$d" >> "$GITHUB_PATH"; done; true
-      - name: Test videos (iPhone-like — HEVC and H.264 with B-frames, 1080 × 1920, 30 fps, 3 s)
+      - name: Test videos
         run: |
           cd "$RUNNER_TEMP"
-          ffmpeg -v error -y -f lavfi -i testsrc2=s=1080x1920:r=30:d=3 -c:v libx265 -tag:v hvc1 -pix_fmt yuv420p hevc.mp4 || true
+          if git -C "$GITHUB_WORKSPACE" fetch -q --depth=1 origin seekcheck-data 2>/dev/null; then
+            git -C "$GITHUB_WORKSPACE" show FETCH_HEAD:src4819.mp4 > src.mp4
+            # (as the apps make a camera video smaller: HEVC by iPhone's own encoder, the long side 1280, 4 Mbit/s, AAC 128k stereo)
+            ffmpeg -v error -y -i src.mp4 -vf scale=720:1280 -c:v hevc_videotoolbox -b:v 4M -tag:v hvc1 -c:a aac -b:a 128k -ar 44100 -ac 2 -movflags +faststart app.mp4
+            ffmpeg -v error -y -i app.mp4 -c copy -an app-nosound.mp4
+          fi
           ffmpeg -v error -y -f lavfi -i testsrc2=s=1080x1920:r=30:d=3 -c:v libx264 -profile:v high -bf 2 -pix_fmt yuv420p h264.mp4
           ls -la *.mp4
       - name: Measure
@@ -27,10 +32,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd "$RUNNER_TEMP"; out=seekcheck.txt; : > $out
-          for v in hevc.mp4 h264.mp4; do [ -f $v ] || continue
-            for way in as final chase cancel; do for to in 0 1.0; do
-              echo "===== $v · $way · to $to" | tee -a $out
+          for v in app.mp4 app-nosound.mp4 src.mp4 h264.mp4; do [ -f $v ] || continue
+            for way in ${{ inputs.ways || 'as' }}; do for to in 0 1.0; do for n in 1 2 3; do
+              echo "===== $v · $way · to $to · run $n" | tee -a $out
               swift "$GITHUB_WORKSPACE/tools/seekcheck/seek.swift" "$RUNNER_TEMP/$v" $way $to 2>&1 | tee -a $out
-            done; done
+            done; done; done
           done
-          gh release view ios-selftest >/dev/null 2>&1 && gh release upload ios-selftest $out --clobber
