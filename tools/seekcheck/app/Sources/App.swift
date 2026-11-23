@@ -12,12 +12,13 @@ final class PlayerView: UIView { override class var layerClass: AnyClass { AVPla
 final class AppDelegate: UIResponder, UIApplicationDelegate {
   var window: UIWindow?
   func application(_ a: UIApplication, didFinishLaunchingWithOptions o: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+    setvbuf(stdout, nil, _IOLBF, 0)
     window = UIWindow(frame: UIScreen.main.bounds); window?.rootViewController = VC(); window?.makeKeyAndVisible(); return true
   }
 }
 
 final class VC: UIViewController {
-  let file = Bundle.main.url(forResource: "test", withExtension: "mp4")!
+  let file = Bundle.main.url(forResource: "test", withExtension: "mp4") ?? URL(fileURLWithPath: "/missing.mp4")
   let still = UIImageView(), pv = PlayerView(), line = UILabel()
   var p: AVPlayer!, t0 = Date(), phase = "", logText = ""
   func ms() -> Double { Date().timeIntervalSince(t0) * 1000 }
