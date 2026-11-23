@@ -39,10 +39,10 @@ final class VC: UIViewController {
       let ci = CIImage(cgImage: cg).applyingFilter("CIColorInvert")
       if let out = CIContext().createCGImage(ci, from: ci.extent) { still.image = UIImage(cgImage: out) }
     }
-    let tick = CADisplayLink(target: self, selector: #selector(show)); tick.add(to: .main, forMode: .common)
+    let tick = CADisplayLink(target: self, selector: #selector(drawLine)); tick.add(to: .main, forMode: .common)
     after(1.5) { self.run(["bare 0", "bare 1", "under 0", "under 1", "bare 0", "under 0"]) }
   }
-  @objc func show() { line.text = String(format: "%@  t=%.3f", phase, p?.currentTime().seconds ?? 0) }
+  @objc func drawLine() { line.text = String(format: "%@  t=%.3f", phase, p?.currentTime().seconds ?? 0) }
 
   func run(_ list: [String]) {
     guard let s = list.first else { phase = "DONE"; log("DONE"); return }
