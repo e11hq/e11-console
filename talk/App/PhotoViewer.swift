@@ -147,7 +147,10 @@ final class PhotoViewerVC: UIViewController, UIScrollViewDelegate, UIGestureReco
     bar.setThumbImage(knob, for: .normal); bar.setThumbImage(knob, for: .highlighted)
     bar.translatesAutoresizingMaskIntoConstraints = false; seek.addSubview(bar); seek.clipsToBounds = true
     bar.addAction(UIAction { [weak self] _ in guard let self = self else { return }; self.dragging = true; self.pages[safe: self.at]?.scrubBegin() }, for: .touchDown)
-    bar.addAction(UIAction { [weak self] _ in guard let self = self else { return }; self.played.text = PhotoViewerVC.clock(Double(self.bar.value)); self.pages[safe: self.at]?.scrub(to: Double(self.bar.value)) }, for: .valueChanged)
+    // (only while the finger is on the bar: iPhone's slider sends "value changed" again after the finger is lifted, and each one
+    //  jumped the video back to where the knob sat — the first frames twice after dragging to the start; measured in the
+    //  simulator with the same slider, Haris 2026-11-23 13:25)
+    bar.addAction(UIAction { [weak self] _ in guard let self = self, self.dragging else { return }; self.played.text = PhotoViewerVC.clock(Double(self.bar.value)); self.pages[safe: self.at]?.scrub(to: Double(self.bar.value)) }, for: .valueChanged)
     bar.addAction(UIAction { [weak self] _ in guard let self = self else { return }; self.dragging = false; self.pages[safe: self.at]?.scrubEnd() }, for: [.touchUpInside, .touchUpOutside, .touchCancel])
     NSLayoutConstraint.activate([
       played.leadingAnchor.constraint(equalTo: seek.leadingAnchor, constant: 18), played.centerYAnchor.constraint(equalTo: seek.centerYAnchor), played.widthAnchor.constraint(equalToConstant: 44),
