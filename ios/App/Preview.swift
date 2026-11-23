@@ -511,7 +511,10 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     bar.setThumbImage(knob, for: .normal); bar.setThumbImage(knob, for: .highlighted)
     bar.translatesAutoresizingMaskIntoConstraints = false; seek.addSubview(bar); seek.clipsToBounds = true
     bar.addAction(UIAction { [weak self] _ in guard let self else { return }; self.dragging = true; self.current?.scrubBegin() }, for: .touchDown)
-    bar.addAction(UIAction { [weak self] _ in guard let self else { return }; self.played.text = PreviewVC.clock(Double(self.bar.value)); self.current?.scrub(to: Double(self.bar.value)) }, for: .valueChanged)
+    // (only while the finger is on the bar: iPhone's slider sends "value changed" again after the finger is lifted, and each one
+    //  jumped the video back to where the knob sat — the first frames twice after dragging to the start; measured in the
+    //  simulator with the same slider, Haris 2026-11-23 13:25)
+    bar.addAction(UIAction { [weak self] _ in guard let self, self.dragging else { return }; self.played.text = PreviewVC.clock(Double(self.bar.value)); self.current?.scrub(to: Double(self.bar.value)) }, for: .valueChanged)
     bar.addAction(UIAction { [weak self] _ in guard let self else { return }; self.dragging = false; self.current?.scrubEnd() }, for: [.touchUpInside, .touchUpOutside, .touchCancel])
     NSLayoutConstraint.activate([
       played.leadingAnchor.constraint(equalTo: seek.leadingAnchor, constant: 18), played.centerYAnchor.constraint(equalTo: seek.centerYAnchor), played.widthAnchor.constraint(equalToConstant: 44),
