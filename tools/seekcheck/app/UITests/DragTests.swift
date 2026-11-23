@@ -15,5 +15,6 @@ final class DragTests: XCTestCase {
     app.terminate()
   }
   func test1AsTheAppsAre() { drag(["bar"]) }
-  func test2WithTheFix() { drag(["bar", "fix"]) }
+  func test2AsTheAppsAreAgain() { drag(["bar"]) }
+  func test3WithTheFix() { drag(["bar", "fix"]) }
 }
