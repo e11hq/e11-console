@@ -39,7 +39,7 @@ jobs:
           brew install xcodegen >/dev/null 2>&1 || true
           A="$GITHUB_WORKSPACE/tools/seekcheck/app"; mkdir -p "$A/Resources"; cp "$RUNNER_TEMP/app.mp4" "$A/Resources/test.mp4"
           cd "$A" && xcodegen generate >/dev/null
-          xcodebuild -project SeekCheck.xcodeproj -scheme SeekCheck -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/sc" CODE_SIGNING_ALLOWED=NO build 2>&1 | tail -5
+          xcodebuild -project SeekCheck.xcodeproj -scheme SeekCheck -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/sc" CODE_SIGNING_ALLOWED=NO build > "$RUNNER_TEMP/scbuild.log" 2>&1; grep -E "error:" "$RUNNER_TEMP/scbuild.log" | sort -u | head -20; tail -3 "$RUNNER_TEMP/scbuild.log"
           APP=$(ls -d "$RUNNER_TEMP"/sc/Build/Products/Debug-iphonesimulator/SeekCheck.app)
           UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys,re; d=json.load(sys.stdin)['devices']; p=[x for k,v in d.items() if 'iOS' in k for x in v if re.match(r'iPhone \d', x['name']) and 'Max' not in x['name']]; print(p[-1]['udid'])")
           xcrun simctl boot $UDID || true; xcrun simctl bootstatus $UDID -b

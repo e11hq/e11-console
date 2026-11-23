@@ -4,6 +4,7 @@
 // through it can be told from the video itself). A line at the top says what's happening, read from the film.
 import UIKit
 import AVFoundation
+import CoreImage
 
 final class PlayerView: UIView { override class var layerClass: AnyClass { AVPlayerLayer.self }; var pl: AVPlayerLayer { layer as! AVPlayerLayer } }
 
