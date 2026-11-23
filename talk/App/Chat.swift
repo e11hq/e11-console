@@ -375,23 +375,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     super.viewWillAppear(a)
     if peek { bar.isHidden = true; return }
     infoHoldEnd(animated: false)   // (back from Message info: fitted to the keyboard down before it shows)
-    if isMovingToParent { placeBarBeforeSlide() }
     if isMovingToParent { coverTitle() }
-  }
-  // (the message box at its full size and place before the chat slides in, with no animation — it got its first size inside
-  //  the slide and grew from narrow as it came in: Haris 2026-11-23. Only the box: its place is the one its constraints give
-  //  with the keyboard down (fitBottom's own reckoning), its insides laid out, and the list isn't told — onLayout held, so
-  //  nothing of the messages or their scrolling moves; the list lays out as before, after)
-  private func placeBarBeforeSlide() {
-    let W = view.bounds.width
-    guard W > 0, abs(bar.frame.width - W) > 0.5 else { return }
-    let h = bar.intrinsicContentSize.height
-    let tell = bar.onLayout; bar.onLayout = nil
-    UIView.performWithoutAnimation {
-      bar.frame = CGRect(x: 0, y: view.bounds.maxY - home - h, width: W, height: h)
-      bar.layoutIfNeeded()
-    }
-    bar.onLayout = tell
   }
   /* The list's big title folding into its bar as the chat comes in (Apple's, with the tab bar hidden as it's pushed —
      kept, Haris 2026-11-12): WhatsApp's way of not seeing it — for the slide, the chat's frost reaches down over the big
@@ -3722,9 +3706,16 @@ final class MessageBar: UIView, UITextViewDelegate {
   private var mentionH: CGFloat { mentionBox.isHidden ? 0 : CGFloat(mentionV.arrangedSubviews.count) * 52 }
   override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: (locked ? 83 : boxH + 13) + (replyOn ? 52 : 0) + (linkOn ? 60 : 0)) }
   private var replyOn = false   // (the reply / edit strip's room — the strip slides up into it from behind the box, and back)
+  // (a new width — the first one, given inside the chat's slide in — is taken at once, never animated: the box, its buttons
+  //  and its words were drawn growing from a third of the width as the chat came in, filmed by Haris 2026-11-23 10:27. Only
+  //  a change of width; the bar's other changes — growing with lines, the reply strip — animate as before)
+  private var laidW: CGFloat = -1
   override func layoutSubviews() {
     super.layoutSubviews()
     defer { onLayout?() }
+    if abs(bounds.width - laidW) > 0.5 { laidW = bounds.width; UIView.performWithoutAnimation { place() } } else { place() }
+  }
+  private func place() {
     let W = bounds.width, mh = mentionH, lh: CGFloat = linkOn ? 60 : 0, top: CGFloat = (replyOn ? 52 : 0) + lh
     blur.frame = CGRect(x: 0, y: 0, width: W, height: bounds.height + 420)   // (down behind the home line and the keyboard)
     mentionBox.frame = CGRect(x: 0, y: -mh, width: W, height: mh); mentionV.frame = mentionBox.bounds
