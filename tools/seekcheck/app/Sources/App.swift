@@ -10,10 +10,13 @@ final class PlayerView: UIView { override class var layerClass: AnyClass { AVPla
 
 @main
 final class AppDelegate: UIResponder, UIApplicationDelegate {
+  func application(_ a: UIApplication, didFinishLaunchingWithOptions o: [UIApplication.LaunchOptionsKey: Any]?) -> Bool { setvbuf(stdout, nil, _IOLBF, 0); return true }
+}
+final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
   var window: UIWindow?
-  func application(_ a: UIApplication, didFinishLaunchingWithOptions o: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-    setvbuf(stdout, nil, _IOLBF, 0)
-    window = UIWindow(frame: UIScreen.main.bounds); window?.rootViewController = VC(); window?.makeKeyAndVisible(); return true
+  func scene(_ s: UIScene, willConnectTo c: UISceneSession, options o: UIScene.ConnectionOptions) {
+    guard let ws = s as? UIWindowScene else { return }
+    window = UIWindow(windowScene: ws); window?.rootViewController = VC(); window?.makeKeyAndVisible()
   }
 }
 

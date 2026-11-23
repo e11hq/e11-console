@@ -64,7 +64,7 @@ jobs:
           os.killpg(rec.pid, signal.SIGINT); rec.wait(timeout=60)
           PY
           ls -la "$RUNNER_TEMP"/seekfilm.*; cat "$RUNNER_TEMP/seekfilm.txt" | head -80
-          cd "$RUNNER_TEMP" && cp "$(xcrun simctl get_app_container $UDID ae.e11.SeekCheck data 2>/dev/null)/Documents/seek.txt" seekfilm-doc.txt 2>/dev/null || echo none > seekfilm-doc.txt; ls -la seekfilm*; xcrun simctl spawn $UDID log show --last 3m --predicate 'process == "SeekCheck"' --style compact 2>/dev/null | tail -40 > seekfilm-sys.txt || true; gh release upload -R "$GITHUB_REPOSITORY" ios-selftest seekfilm.mp4 seekfilm.txt seekfilm-doc.txt seekfilm-sys.txt --clobber
+          cd "$RUNNER_TEMP" && cp "$(xcrun simctl get_app_container $UDID ae.e11.SeekCheck data 2>/dev/null)/Documents/seek.txt" seekfilm-doc.txt 2>/dev/null || echo none > seekfilm-doc.txt; ls -la seekfilm*; xcrun simctl spawn $UDID log show --last 3m --predicate 'process == "SeekCheck"' --style compact 2>/dev/null | tail -40 > seekfilm-sys.txt || true; gh release upload -R "$GITHUB_REPOSITORY" ios-selftest seekfilm.mp4 seekfilm-doc.txt seekfilm-sys.txt --clobber
       - name: Measure
         if: inputs.film != 'yes'
         env:
