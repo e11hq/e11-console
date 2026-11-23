@@ -489,10 +489,14 @@ final class GroupInfoVC: UITableViewController {
       c.selectionStyle = id == me ? .none : .default
     case .addMembers:
       cfg = UIListContentConfiguration.cell(); cfg.text = "Add Members"; cfg.textProperties.color = Look.accent
-      cfg.image = UIImage(systemName: "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
-      cfg.imageProperties.tintColor = Look.accent; cfg.imageProperties.reservedLayoutSize = CGSize(width: 40, height: 40); cfg.imageToTextPadding = 14
+      // (the + drawn inside its circle, centred — iPhone's row put it at its margin, a few points right of the circle:
+      //  Haris 2026-11-23 23:03. The row keeps an empty 40-pt place, so "Add Members" lines up with the names as before)
+      cfg.image = UIImage(); cfg.imageProperties.reservedLayoutSize = CGSize(width: 40, height: 40); cfg.imageToTextPadding = 14
       let ring = UIView(frame: CGRect(x: 16, y: 0, width: 40, height: 40)); ring.tag = 77; ring.isUserInteractionEnabled = false
       ring.backgroundColor = Look.accent.withAlphaComponent(0.16); ring.layer.cornerRadius = 20
+      let plus = UIImageView(image: UIImage(systemName: "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)))
+      plus.tintColor = Look.accent; plus.contentMode = .center; plus.frame = ring.bounds; plus.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+      ring.addSubview(plus)
       c.contentView.insertSubview(ring, at: 0)
       ring.translatesAutoresizingMaskIntoConstraints = false
       NSLayoutConstraint.activate([ring.leadingAnchor.constraint(equalTo: c.contentView.leadingAnchor, constant: 16), ring.centerYAnchor.constraint(equalTo: c.contentView.centerYAnchor),
