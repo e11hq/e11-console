@@ -112,7 +112,8 @@ export function createServer(cfg) {
     const file = cfg.talkDbFile || path.join(dataDir, 'db', 'talk.sqlite');
     if (file === ':memory:') return null;
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    talkRelay = createTalkRelay({ dbFile: file, relayUrl: talkRelayUrl(), store, access, apns: talkApns, unreadTell: talkUnreadTell, fetchImpl: cfg.talkRelayFetch || null, now: cfg.now || (() => Date.now()) });
+    talkRelay = createTalkRelay({ dbFile: file, relayUrl: talkRelayUrl(), store, access, apns: talkApns, unreadTell: talkUnreadTell, fetchImpl: cfg.talkRelayFetch || null, now: cfg.now || (() => Date.now()),
+      icons: () => appStart.icons(store.get('meta', 'main') || {}, (cfg.now || Date.now)(), appIcon.info()) });
     return talkRelay;
   };
   // (E11 Talk's unread count on E11 Console's Talk button: to that person's open apps, as it changes)

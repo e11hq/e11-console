@@ -106,6 +106,7 @@ test('what the hub is told: E11 Console’s people and clients, as Talk needs th
   assert.ok(d.flags['u-adm'].super);
   assert.deepEqual(d.see['u-fr'], ['p1'], 'a freelancer sees only their own client');
   assert.ok(d.clients.some((c) => c.id === 'c1' && c.logo));
+  assert.ok('icons' in d, 'the occasion icons go to the hub too, as Talk had them from the office');
 });
 
 test('the hub asks for E11 Console’s people and clients itself', async () => {

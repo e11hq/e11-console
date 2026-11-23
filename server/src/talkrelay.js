@@ -22,7 +22,7 @@ const writes = (q) => !/^\s*(SELECT|PRAGMA)\b/i.test(q);
 // the hub saying it can't take more today (Cloudflare's free limit) — or not answering at all
 const refused = (status, text) => status === 429 || status === 503 || /\b1027\b|exceeded|limit/i.test(String(text || '').slice(0, 400));
 
-export function createTalkRelay({ dbFile, relayUrl = '', store, access, apns = null, unreadTell = null, fetchImpl = null, now = () => Date.now() }) {
+export function createTalkRelay({ dbFile, relayUrl = '', store, access, apns = null, unreadTell = null, fetchImpl = null, now = () => Date.now(), icons = null }) {
   const go = fetchImpl || ((...a) => fetch(...a));
   const base = String(relayUrl || '').replace(/\/$/, '');
   const raw = new DatabaseSync(dbFile);
@@ -215,7 +215,10 @@ export function createTalkRelay({ dbFile, relayUrl = '', store, access, apns = n
     // (E11 Talk's phones' notification addresses — the hub notifies them itself when the office can't be reached)
     let push = {};
     try { const subs = JSON.parse((store.kv && store.kv.get('talk-apns-subs')) || '{}'); for (const [uid, list] of Object.entries(subs)) push[uid] = (list || []).map((x) => ({ token: x.token, env: x.env || 'production', ...(x.platform ? { platform: x.platform } : {}) })); } catch { push = {}; }
-    return { users, projects, clients, meta: { cdUserId: m.cdUserId || null, socialMgrIds: m.socialMgrIds || [] }, flags, see, push };
+    // (the app's icon on occasions — the same days E11 Console gets; the hub hands them to Talk: Haris 2026-11-23 09:19)
+    let occ = null;
+    try { occ = icons ? icons() : null; } catch { occ = null; }
+    return { users, projects, clients, meta: { cdUserId: m.cdUserId || null, socialMgrIds: m.socialMgrIds || [] }, flags, see, push, icons: occ };
   }
   let dirTimer = null;
   const sendDir = () => toHub('/office/dir', { dir: dir() }).catch(() => null);

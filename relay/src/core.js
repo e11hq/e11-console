@@ -21,7 +21,8 @@ export class HubCore {
     globalThis.setInterval = (fn) => { sweep = fn; return { unref() {} }; };
     globalThis.setTimeout = (fn, ms) => (ms === 60_000 ? { unref() {} } : ST(fn, ms));
     try {
-      this.talk = createTalk({ dataDir: '/hub', dbFile: ':memory:', store: this.dir.store, access: this.dir.access, now, r2, apns, onUnread });
+      this.talk = createTalk({ dataDir: '/hub', dbFile: ':memory:', store: this.dir.store, access: this.dir.access, now, r2, apns, onUnread,
+        icons: () => (this.dir.snapshot && this.dir.snapshot.icons) || null });   // (the occasion icons' days, from the office's people list)
     } finally { globalThis.setInterval = SI; globalThis.setTimeout = ST; }
     this.sweepFn = sweep;
     this.n = Number(this.meta('copyN') || 0);

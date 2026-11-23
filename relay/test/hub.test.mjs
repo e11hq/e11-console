@@ -96,3 +96,12 @@ test('a task shared from the office: lent for one call, its card made here, then
   assert.equal(h.dir.store.get('tasks', 't9'), null, 'let go after the call');
   assert.equal(h.dir.store.get('projects', 'p1').sections, undefined);
 });
+
+test('the occasion icons the office sent reach Talk (and none means none)', () => {
+  const icons = { list: [{ id: 'eid', from: '2026-03-30', to: '2026-04-01' }] };
+  const h = new HubCore({ sql: fakeSql(), dir: { ...DIR, icons }, copy: () => {}, now });
+  const a = h.who('haris@e11.test', 'phone-key-aaaaaaaaaaaa');
+  assert.deepEqual(h.state(a).icons, icons);
+  const { h: h2 } = hub();
+  assert.equal(h2.state(h2.who('haris@e11.test', 'phone-key-aaaaaaaaaaaa')).icons, null);
+});
