@@ -146,3 +146,17 @@ test('device keys: kept while good, a new one otherwise; stop when the password 
   assert.equal(s.useDevice(c.key).ok, false, 'left the team');
   delete users['sara@e11.test'].removed;
 });
+
+test('a password set with a code: the sign-in made with it counts (Cloudflare stamps whole seconds); older ones end', () => {
+  const { s, tick, now } = make(1_800_000_000_700);   // (the change lands 0.7 s into a second)
+  const r = s.useCode('sara@e11.test', s.makeCode('sara@e11.test', 'admin@e11.test').code);
+  const before = Math.floor(now() / 1000) - 3600;     // a sign-in from an hour earlier
+  assert.equal(s.setPassword(r.ticket, 'a good long password').ok, true);
+  tick(200);
+  const cf = Math.floor(now() / 1000);            // Cloudflare's token for the new sign-in: same second, fraction dropped
+  assert.ok(cf * 1000 < s.revokedBefore('sara@e11.test'), 'it does look older than the change');
+  assert.equal(s.stillSignedIn('sara@e11.test', cf), true, 'the new sign-in counts — no going round');
+  assert.equal(s.stillSignedIn('sara@e11.test', cf - 20), true, 'a clock a little behind: still counts');
+  assert.equal(s.stillSignedIn('sara@e11.test', before), false, 'an hour older: ended, as before');
+  assert.equal(s.stillSignedIn('owner@e11.test', before), true, 'no change for someone else');
+});

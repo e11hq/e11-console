@@ -370,7 +370,7 @@ export function createServer(cfg) {
       return null;
     }
     // (a password set with a sign-in code ends every sign-in made before it — silently: signin.js)
-    if (signin && id.iat && id.iat * 1000 < signin.revokedBefore(id.email)) {
+    if (signin && id.iat && !signin.stillSignedIn(id.email, id.iat)) {
       if (wantsHtml(req)) page(res, 401, 'Please sign in again', 'Your password was changed. Sign in again with the new one.');
       else json(res, 401, { ok: false, error: 'Please sign in again' });
       return null;

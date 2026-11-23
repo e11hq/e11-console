@@ -160,6 +160,12 @@ export function createSignin({ db, now = () => Date.now(), ownerEmail = '', owne
   }
   // (a token made before this moment no longer counts — Cloudflare's or ours)
   const revokedBefore = (email) => Number(st.get('revoked:' + norm(email)) || 0);
+  // (a sign-in token — Cloudflare's, stamped in whole seconds — still counts after a password was set with a code, if it was
+  //  made no more than 30 s before: the sign-in made with the new password came in the same second, its fraction dropped,
+  //  looked older than the change and was refused, again and again — the app went round between the sign-in and the
+  //  start for good, Haris 2026-11-23 11:27. Anything older is still ended)
+  const SIGNED_GRACE = 30_000;
+  const stillSignedIn = (email, iatSeconds) => !iatSeconds || Number(iatSeconds) * 1000 >= revokedBefore(email) - SIGNED_GRACE;
   function codesRecord({ owner: ownerView = false, limit = 200 } = {}) {
     return q.codesFor.all(limit).filter((c) => ownerView || !c.by_owner).map((c) => ({ email: c.email, madeBy: c.made_by, byOwner: !!c.by_owner, madeAt: c.made_at, expires: c.expires, used: c.used_at, cancelled: !!c.cancelled }));
   }
@@ -253,5 +259,5 @@ export function createSignin({ db, now = () => Date.now(), ownerEmail = '', owne
     return u ? { sub: a.email, email: a.email, email_verified: true, name: u.name || a.email } : null;
   }
 
-  return { start, signInPassword, makeCode, keyEmail, useCode, useOwnerCode, setPassword, revokedBefore, codesRecord, endAll, deviceKey, useDevice, dropDevice, discovery, jwks, client, redirectOk, authCode, exchange, userinfo, readTicket };
+  return { start, signInPassword, makeCode, keyEmail, useCode, useOwnerCode, setPassword, revokedBefore, stillSignedIn, codesRecord, endAll, deviceKey, useDevice, dropDevice, discovery, jwks, client, redirectOk, authCode, exchange, userinfo, readTicket };
 }
