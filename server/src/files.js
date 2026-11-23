@@ -70,6 +70,7 @@ export function jpegPdf(images, full) {
 
 export function createFiles(root) {
   const FILES = path.join(root, 'files');
+  const thumbMaking = new Map();   // (a picture being made: its promise, by where it goes)
   const TRASH = path.join(root, 'trash');
   fs.mkdirSync(FILES, { recursive: true });
 
@@ -297,21 +298,36 @@ export function createFiles(root) {
       //  2026-11-23 10:30. It was taken 1 second in; one made that way — no ".first" beside it — is made again once, in place)
       const video = ['mp4', 'mov', 'm4v', 'webm', 'avi', 'mkv'].includes(ext), first = path.join(dir, '.first');
       if (fs.existsSync(out) && !(video && !fs.existsSync(first))) return { ok: true, thumb: rel(out) };
-      fs.mkdirSync(dir, { recursive: true });
-      let ok = false;
-      if (ext === 'pdf') {
-        ok = await run('pdftoppm', ['-png', '-singlefile', '-f', '1', '-l', '1', '-scale-to', '640', src, path.join(dir, stem)]);
-      } else if (OFFICE.includes(ext)) {
-        const r = await commands.docPreview(a);
-        if (r.pdf) ok = await run('pdftoppm', ['-png', '-singlefile', '-f', '1', '-l', '1', '-scale-to', '640', resolve(r.pdf), path.join(dir, stem)]);
-      } else if (video) {
-        ok = await run('ffmpeg', ['-y', '-v', 'error', '-i', src, '-frames:v', '1', '-vf', 'scale=640:-2', out]);
-        if (ok && fs.existsSync(out)) { try { fs.writeFileSync(first, ''); } catch { /* made again next time */ } }
-      } else if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tif', 'tiff', 'heic'].includes(ext)) {
-        ok = await run('ffmpeg', ['-y', '-v', 'error', '-i', src, '-frames:v', '1', '-vf', "scale='min(640,iw)':-2", out]);
-      }
-      if (!ok || !fs.existsSync(out)) { fs.rmSync(dir, { recursive: true, force: true }); return { ok: true, thumb: null }; }
-      return { ok: true, thumb: rel(out) };
+      // (made once at a time, into a file of its own, put in place only once it's whole — every open app asks for a new
+      //  file's picture at once, and one asking while it was being written got it cut off part way: a strip at the top,
+      //  black below, Haris 2026-11-23 10:45. One asking meanwhile waits for the one being made)
+      if (!thumbMaking.has(out)) thumbMaking.set(out, (async () => {
+        fs.mkdirSync(dir, { recursive: true });
+        const part = stem + '.part-' + crypto.randomBytes(4).toString('hex'), tmp = path.join(dir, part + '.png');
+        let ok = false;
+        try {
+          if (ext === 'pdf') {
+            ok = await run('pdftoppm', ['-png', '-singlefile', '-f', '1', '-l', '1', '-scale-to', '640', src, path.join(dir, part)]);
+          } else if (OFFICE.includes(ext)) {
+            const r = await commands.docPreview(a);
+            if (r.pdf) ok = await run('pdftoppm', ['-png', '-singlefile', '-f', '1', '-l', '1', '-scale-to', '640', resolve(r.pdf), path.join(dir, part)]);
+          } else if (video) {
+            ok = await run('ffmpeg', ['-y', '-v', 'error', '-i', src, '-frames:v', '1', '-vf', 'scale=640:-2', tmp]);
+          } else if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tif', 'tiff', 'heic'].includes(ext)) {
+            ok = await run('ffmpeg', ['-y', '-v', 'error', '-i', src, '-frames:v', '1', '-vf', "scale='min(640,iw)':-2", tmp]);
+          }
+          if (ok && fs.existsSync(tmp)) {
+            fs.renameSync(tmp, out);
+            if (video) { try { fs.writeFileSync(first, ''); } catch { /* made again next time */ } }
+            return true;
+          }
+        } catch { /* none */ }
+        fs.rmSync(tmp, { force: true });
+        if (!fs.existsSync(out)) fs.rmSync(dir, { recursive: true, force: true });
+        return false;
+      })().finally(() => thumbMaking.delete(out)));
+      await thumbMaking.get(out);
+      return { ok: true, thumb: fs.existsSync(out) ? rel(out) : null };
     },
     // Profile photos (400px JPEG) and client logos (600px PNG) from an uploaded image
     async processImage(a) {

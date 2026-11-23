@@ -29,3 +29,20 @@ test('a video’s picture: its first frame; an old one (no .first) made again on
   await files.commands.thumb({ id: 'v1', path: 'attachments/clip.mp4' });
   assert.equal(fs.statSync(path.join(dir, 'thumb.png')).mtimeMs, t0, 'made once, then kept');
 });
+
+test('a picture asked for many times at once: made once, never seen half-made', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'e11ff-'));
+  fs.mkdirSync(path.join(root, 'files', 'a'), { recursive: true });
+  execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=1080x1920:d=2', '-pix_fmt', 'yuv420p', path.join(root, 'files', 'a', 'v.mp4')]);
+  const files = createFiles(root);
+  const out = path.join(root, 'files', '.thumbs', 'v', 'thumb.png');
+  const seen = new Set();
+  const t = setInterval(() => { try { seen.add(fs.statSync(out).size); } catch { /* not yet */ } }, 1);
+  const rs = await Promise.all([0, 5, 10, 20].map((ms) => new Promise((ok) => setTimeout(() => ok(files.commands.thumb({ id: 'v', path: 'a/v.mp4' })), ms))));
+  clearInterval(t);
+  const size = fs.statSync(out).size;
+  assert.ok(rs.every((r) => r.thumb === '.thumbs/v/thumb.png'));
+  assert.deepEqual([...seen].filter((n) => n !== size), [], 'only ever the whole picture');
+  assert.deepEqual(fs.readdirSync(path.dirname(out)).filter((n) => n.includes('.part-')), [], 'no part left');
+  const png = fs.readFileSync(out); assert.equal(png.subarray(-8, -4).toString(), 'IEND');
+});
