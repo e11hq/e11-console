@@ -212,35 +212,14 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
     go()
   }
   // the seek bar (E11 Talk's): dragged — paused while the finger is on it, on from there when it's let go (if it was playing)
-  // (one exact jump on its way at a time — when it lands, the next goes to where the finger is now: Apple's smooth scrubbing.
-  //  Let go: it plays once the last jump has landed, whether iPhone says it finished or not, and after half a second anyway.
-  //  It played at once while jumps were still on their way, and the last one took it back: the first frames twice after
-  //  dragging to the start — Haris 2026-11-23 12:04)
-  private var wasPlaying = false, chasing = false, chaseTo: Double?, letGo = false, scrubN = 0
-  func scrubBegin() { wasPlaying = player?.timeControlStatus != .paused; player?.pause(); letGo = false; scrubN += 1 }
+  private var wasPlaying = false
+  func scrubBegin() { wasPlaying = player?.timeControlStatus != .paused; player?.pause() }
   func scrub(to t: Double) {
-    atEnd = false; chaseTo = t
-    if !chasing { chase() }
+    atEnd = false
+    player?.seek(to: CMTime(seconds: t, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
     button(animated: true)
   }
-  private func chase() {
-    guard let p = player, let t = chaseTo else { chasing = false; if letGo { playLetGo() }; return }
-    chasing = true; chaseTo = nil
-    p.seek(to: CMTime(seconds: t, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-      DispatchQueue.main.async { self?.chase() }
-    }
-  }
-  func scrubEnd() {
-    guard wasPlaying, want, !held else { return }
-    letGo = true
-    guard chasing else { return playLetGo() }
-    let n = scrubN
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-      guard let self = self, self.scrubN == n, self.letGo else { return }
-      self.playLetGo()
-    }
-  }
-  private func playLetGo() { guard letGo else { return }; letGo = false; if want, !held { player?.play() } }
+  func scrubEnd() { if wasPlaying, want, !held { player?.play() } }
   func stop() { want = false; held = false; player?.pause(); button(animated: false) }
   private func stopVideo() {
     player?.pause(); playerView?.removeFromSuperview()
