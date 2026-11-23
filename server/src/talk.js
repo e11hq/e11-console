@@ -944,6 +944,8 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         if (id && !member(g, id)) return bad('Pick someone in the group');
         Q.setGroup.run(g.name, id, g.extra, g.pic, g.creator, g.last_at, g.id);
         if (id) sys(Q.group.get(g.id), u.id, `${nameOf(id)} is now an admin`);
+        // (the one who was second admin, and isn't an admin any more: said, as being made one is — Haris 2026-11-23 23:03)
+        if (g.second && g.second !== id && !adminsOf(Q.group.get(g.id)).includes(g.second)) sys(Q.group.get(g.id), u.id, `${nameOf(g.second)} is no longer an admin`);
         changed(Q.group.get(g.id), u.id);
         return { ok: true, group: groupView(Q.group.get(g.id), u.id) };
       }
@@ -965,7 +967,10 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         const may = isBoss(u) || (u.id === g.creator && !g.creator_off && id === g.second);
         if (!may) return bad('Not allowed', 403);
         // (re-adding a creator's admin: makeMeAdmin's way — or setting creator_off back by a Super / Office Admin)
+        const was = adminsOf(g).includes(id);
         if (b.restore && isBoss(u) && id === g.creator) db.prepare('UPDATE groups SET creator_off = 0 WHERE id = ?').run(g.id); else dropAdmin(g, id);
+        // (admin taken away: said, as being made one is — Haris 2026-11-23 23:03)
+        if (was && !adminsOf(Q.group.get(g.id)).includes(id)) sys(Q.group.get(g.id), u.id, `${nameOf(id)} is no longer an admin`);
         changed(Q.group.get(g.id), u.id);
         return { ok: true, group: groupView(Q.group.get(g.id), u.id) };
       }

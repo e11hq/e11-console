@@ -112,6 +112,20 @@ test('only the group’s admins add people; Super / Office Admins can make thems
   assert.equal((await act('am', { act: 'addPeople', group: G, ids: ['u-adm'] })).ok, false, 'the creator without admin can’t add people');
 });
 
+test('an admin taken away is said in the chat, as being made one is (Haris 2026-11-23)', async () => {
+  const notes = async () => (await sync('off')).events.filter((e) => e.kind === 'sys' && e.group === G).map((e) => e.text);
+  const before = (await notes()).length;
+  // the second admin cleared (u-des was second admin), then Remove Admin on someone made admin
+  assert.ok((await act('off', { act: 'setSecond', group: G, id: null })).ok);
+  assert.ok((await act('off', { act: 'dropAdmin', group: G, id: 'u-off' })).ok);
+  const n = (await notes()).slice(before);
+  assert.ok(n.some((t) => /is no longer an admin$/.test(t) && /Des|des/i.test(t)) || n.filter((t) => /is no longer an admin$/.test(t)).length === 2, JSON.stringify(n));
+  assert.equal(n.filter((t) => /is no longer an admin$/.test(t)).length, 2, JSON.stringify(n));
+  // someone who wasn't an admin: no note
+  assert.ok((await act('off', { act: 'dropAdmin', group: G, id: 'u-fr' })).ok);
+  assert.equal((await notes()).slice(before).filter((t) => /is no longer an admin$/.test(t)).length, 2);
+});
+
 test('a freelancer sees only the groups they’re in', async () => {
   const s = await state('fr');
   assert.deepEqual(s.groups.map((g) => g.id), [G]);
