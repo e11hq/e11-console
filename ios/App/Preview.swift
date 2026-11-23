@@ -198,14 +198,23 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
     go()
   }
   // the seek bar (E11 Talk's): dragged — paused while the finger is on it, on from there when it's let go (if it was playing)
-  private var wasPlaying = false
-  func scrubBegin() { wasPlaying = player?.timeControlStatus != .paused; player?.pause() }
+  private var wasPlaying = false, scrubTo: Double?, scrubN = 0
+  func scrubBegin() { wasPlaying = player?.timeControlStatus != .paused; player?.pause(); scrubTo = nil; scrubN += 1 }
   func scrub(to t: Double) {
-    atEnd = false
+    atEnd = false; scrubTo = t
     player?.seek(to: CMTime(seconds: t, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
     button(animated: true)
   }
-  func scrubEnd() { if wasPlaying, want, !held { player?.play() } }
+  // (let go: it plays only once it's at the spot let go of — it played at once while the last move was still on its way,
+  //  then that move landed and took it back: the first frames twice after dragging to the start, Haris 2026-11-23 10:56)
+  func scrubEnd() {
+    guard wasPlaying, want, !held, let p = player else { return }
+    guard let t = scrubTo else { p.play(); return }
+    let n = scrubN
+    p.seek(to: CMTime(seconds: t, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] done in
+      DispatchQueue.main.async { guard let self = self, done, self.scrubN == n, self.want, !self.held else { return }; self.player?.play() }
+    }
+  }
   func stop() { want = false; held = false; player?.pause(); button(animated: false) }
   private func stopVideo() {
     player?.pause(); playerView?.removeFromSuperview()
