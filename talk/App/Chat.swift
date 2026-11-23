@@ -3713,9 +3713,9 @@ final class MessageBar: UIView, UITextViewDelegate {
   override func layoutSubviews() {
     super.layoutSubviews()
     defer { onLayout?() }
-    if abs(bounds.width - laidW) > 0.5 { laidW = bounds.width; UIView.performWithoutAnimation { place() } } else { place() }
+    if abs(bounds.width - laidW) > 0.5 { laidW = bounds.width; UIView.performWithoutAnimation { placeAll() } } else { placeAll() }
   }
-  private func place() {
+  private func placeAll() {
     let W = bounds.width, mh = mentionH, lh: CGFloat = linkOn ? 60 : 0, top: CGFloat = (replyOn ? 52 : 0) + lh
     blur.frame = CGRect(x: 0, y: 0, width: W, height: bounds.height + 420)   // (down behind the home line and the keyboard)
     mentionBox.frame = CGRect(x: 0, y: -mh, width: W, height: mh); mentionV.frame = mentionBox.bounds
