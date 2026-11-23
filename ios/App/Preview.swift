@@ -23,6 +23,20 @@ enum PreviewLoad {
     let mine = cookies.filter { c in let d = c.domain.hasPrefix(".") ? String(c.domain.dropFirst()) : c.domain; return host == d || host.hasSuffix("." + d) }
     return HTTPCookie.requestHeaderFields(with: mine)
   }
+  // (only what arrived whole is kept — Haris 2026-11-23 11:18: a picture cut off part way, a strip at the top and black below,
+  //  was kept on the phone and shown that way from then on. Whole: no error, all the bytes the server said, and a PNG (the
+  //  server's own pictures) that reaches its own end — JPEGs aren't read for it: a camera's can carry more after their end — a server can send a file that was still being written, complete as far as it knows)
+  static func whole(_ d: Data, _ res: URLResponse?, _ err: Error?) -> Bool {
+    if err != nil { return false }
+    // (the length is the one sent — compressed, it isn't the picture's own, so it isn't compared then)
+    let packed = ((res as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Encoding") ?? "identity").lowercased() != "identity"
+    if !packed, let n = res?.expectedContentLength, n > 0, Int64(d.count) != n { return false }
+    let b = [UInt8](d.prefix(8))
+    if b.count >= 8, b[0] == 0x89, b[1] == 0x50, b[2] == 0x4E, b[3] == 0x47 {   // PNG: ends with its IEND mark
+      return d.count >= 12 && d.suffix(12).prefix(8).elementsEqual([0, 0, 0, 0, 0x49, 0x45, 0x4E, 0x44])
+    }
+    return true
+  }
   static func data(_ s: String, _ done: @escaping (Data?) -> Void) {
     guard let url = URL(string: s) else { return done(nil) }
     if let d = cache.object(forKey: s as NSString) { return done(d as Data) }
@@ -31,10 +45,10 @@ enum PreviewLoad {
     if let d = DiskPics.get("pv:" + s) { cache.setObject(d as NSData, forKey: s as NSString); return done(d) }
     var r = URLRequest(url: url)
     r.allHTTPHeaderFields = headers(url)
-    URLSession.shared.dataTask(with: r) { data, resp, _ in
+    URLSession.shared.dataTask(with: r) { data, resp, err in
       let ok = ((resp as? HTTPURLResponse)?.statusCode ?? 0) / 100 == 2
       let d = ok ? data : nil
-      if let d { cache.setObject(d as NSData, forKey: s as NSString); if d.count <= 25_000_000 { DiskPics.put("pv:" + s, d) } }
+      if let d, whole(d, resp, err) { cache.setObject(d as NSData, forKey: s as NSString); if d.count <= 25_000_000 { DiskPics.put("pv:" + s, d) } }
       DispatchQueue.main.async { done(d) }
     }.resume()
   }
@@ -896,10 +910,11 @@ enum MediaKeep {
     guard let url = URL(string: s), !busy.contains(s) else { return }
     busy.insert(s)
     var r = URLRequest(url: url); r.allHTTPHeaderFields = PreviewLoad.headers(url)
-    URLSession.shared.downloadTask(with: r) { tmp, resp, _ in
+    URLSession.shared.downloadTask(with: r) { tmp, resp, err in
       defer { DispatchQueue.main.async { busy.remove(s) } }
-      guard let tmp = tmp, ((resp as? HTTPURLResponse)?.statusCode ?? 0) / 100 == 2,
-            let size = (try? FileManager.default.attributesOfItem(atPath: tmp.path)[.size] as? NSNumber)?.intValue, size > 0, size <= 300_000_000 else { return }
+      guard err == nil, let tmp = tmp, ((resp as? HTTPURLResponse)?.statusCode ?? 0) / 100 == 2,
+            let size = (try? FileManager.default.attributesOfItem(atPath: tmp.path)[.size] as? NSNumber)?.intValue, size > 0, size <= 300_000_000,
+            (resp?.expectedContentLength ?? -1) <= 0 || Int64(size) == resp?.expectedContentLength || ((resp as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Encoding") ?? "identity").lowercased() != "identity" else { return }   // (kept only whole)
       let f = file(s)
       try? FileManager.default.removeItem(at: f)
       try? FileManager.default.moveItem(at: tmp, to: f)

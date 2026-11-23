@@ -139,8 +139,8 @@ final class FeedLoader {
       guard let url = URL(string: path.hasPrefix("http") ? path : serverURL() + path) else { return done(nil) }
       var r = URLRequest(url: url); if !c.isEmpty { r.setValue(c, forHTTPHeaderField: "Cookie") }
       // (from R2 when it has a fast copy, the sign-in left behind — R2Native; else the office, as before)
-      R2Files.dataTask(r) { d, res, _ in
-        let ok = ((res as? HTTPURLResponse)?.statusCode ?? 200) == 200
+      R2Files.dataTask(r) { d, res, err in
+        let ok = ((res as? HTTPURLResponse)?.statusCode ?? 200) == 200 && (d.map { PreviewLoad.whole($0, res, err) } ?? true)   // (kept only whole)
         // (an SVG: drawn on the phone and kept as a PNG — SVGRaster)
         if ok, let d = d, UIImage(data: d) == nil, SVGRaster.looksLikeSVG(d, path: path) {
           DispatchQueue.main.async {
@@ -152,7 +152,7 @@ final class FeedLoader {
           return
         }
         let img = d.flatMap { UIImage(data: $0) }
-        if let img = img { self.cache.setObject(img, forKey: path as NSString) }
+        if let img = img, ok { self.cache.setObject(img, forKey: path as NSString) }
         if img != nil { DispatchQueue.main.async { self.standIns[path] = nil } }
         if img != nil, let d = d, ok { DiskPics.put(path, d) }
         DispatchQueue.main.async { done(img) }
