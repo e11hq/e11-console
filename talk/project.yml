@@ -39,6 +39,7 @@ targets:
         CFBundleDisplayName: E11 Talk
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSUserActivityTypes: [INSendMessageIntent]   # (iPhone's chat style for message notifications — Haris 2026-11-24)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.usernotifications.service
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
@@ -110,6 +111,9 @@ targets:
       path: App/E11Talk.entitlements
       properties:
         aps-environment: development
+        # (Communication Notifications: message notifications in iPhone's chat style — the group's picture with the small
+        #  Talk icon, its name and the person — Haris 2026-11-24 21:28; Notify/NotificationService.swift)
+        com.apple.developer.usernotifications.communication: true
         # (the chat backup: E11 Talk's own hidden folder in the person's iCloud Drive)
         com.apple.developer.icloud-container-identifiers: [iCloud.ae.e11.talk]
         com.apple.developer.ubiquity-container-identifiers: [iCloud.ae.e11.talk]
@@ -125,6 +129,7 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSRequiresIPhoneOS: true
+        NSUserActivityTypes: [INSendMessageIntent]   # (iPhone's chat style for message notifications)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIRequiresFullScreen: true

@@ -1,11 +1,14 @@
 // E11 Talk's notification helper (Haris 2026-11-19 21:42): sees each message notification just before it shows, and
 // tells the server this phone has the message (/api/talk/got) — so the sender's ✓ turns into ✓✓, and Message info lists
-// this person under Delivered to, while E11 Talk is still closed (WhatsApp's way). The notification itself is shown
+// this person under Delivered to, while E11 Talk is still closed (WhatsApp's way). A message's notification is shown in
+// iPhone's chat style — the group's picture with the small Talk icon, its name, the person (Haris 2026-11-24); its words
 // unchanged. Asks with E11 Talk's own sign-in: the server and its cookie the app keeps in the Keychain (Net.swift).
 import Foundation
 import Security
 import UserNotifications
 import WidgetKit
+import Intents
+import UIKit
 
 final class NotificationService: UNNotificationServiceExtension {
   private var handler: ((UNNotificationContent) -> Void)?
@@ -26,6 +29,11 @@ final class NotificationService: UNNotificationServiceExtension {
       let at = (e["m"] as? [String: Any])?["at"] as? Double ?? Date().timeIntervalSince1970 * 1000
       WidgetStore.keepNew(WidgetStore.New(g: gid, id: mid, at: at, title: request.content.title, line: WidgetStore.shortLine(request.content.body)))
       WidgetCenter.shared.reloadTimelines(ofKind: WidgetStore.kind)
+      // (shown in iPhone's own chat style: the group's picture with the small Talk icon on it, the group's name, and the
+      //  person with their message — Haris 2026-11-24 21:28; what's shown said by the server, as before)
+      if let dressed = Self.dress(request.content, gid: gid, by: (e["m"] as? [String: Any])?["by"] as? String) {
+        lock.lock(); content = dressed; lock.unlock()
+      }
     }
     guard let server = Self.keychain("notify-server"), let host = URL(string: server)?.host else { return finish() }
     // (the notification is never held more than about a second — the ✓✓ follows on its own if the answer is slow;
@@ -60,6 +68,46 @@ final class NotificationService: UNNotificationServiceExtension {
     handler = nil
     lock.unlock()
     if let h, let c { h(c) }
+  }
+  // iPhone's chat style (a communication notification): a message to a group — its name and picture — from the person
+  private static func dress(_ c: UNNotificationContent, gid: String, by: String?) -> UNNotificationContent? {
+    let body = c.body
+    let who = body.range(of: ": ").map { String(body[..<$0.lowerBound]) } ?? ""
+    let key = by ?? (who.isEmpty ? c.title : who)
+    let sender = INPerson(personHandle: INPersonHandle(value: key, type: .unknown), nameComponents: nil, displayName: who.isEmpty ? c.title : who,
+                          image: nil, contactIdentifier: nil, customIdentifier: key)
+    let me = INPerson(personHandle: INPersonHandle(value: "me", type: .unknown), nameComponents: nil, displayName: nil, image: nil,
+                      contactIdentifier: nil, customIdentifier: "me", isMe: true)
+    let intent = INSendMessageIntent(recipients: [me, sender], outgoingMessageType: .outgoingMessageText, content: body,
+                                     speakableGroupName: INSpeakableString(spokenPhrase: c.title), conversationIdentifier: gid,
+                                     serviceName: nil, sender: sender, attachments: nil)
+    if let i = groupPicture(gid, title: c.title) { intent.setImage(i, forParameterNamed: \.speakableGroupName) }
+    let it = INInteraction(intent: intent, response: nil)
+    it.direction = .incoming
+    it.donate(completion: nil)
+    return try? c.updating(from: intent)
+  }
+  // the group's picture, as the widget keeps it (Shared/WidgetStore.swift); else drawn as the app draws it — its letters on
+  // its colour, or "E11." on black for a client contact
+  private static func groupPicture(_ gid: String, title: String) -> INImage? {
+    let s = WidgetStore.summary, g = s?.groups.first { $0.id == gid }
+    if s?.contact != true, let d = WidgetStore.get(WidgetStore.picService, gid) { return INImage(imageData: d) }
+    let e11 = s?.contact == true
+    let text = e11 ? "E11." : (g?.letters ?? WidgetStore.initials(title))
+    var h = (g?.color ?? "#2F6FE4").trimmingCharacters(in: .whitespaces)
+    if h.hasPrefix("#") { h.removeFirst() }
+    if h.count == 3 { h = h.map { "\($0)\($0)" }.joined() }
+    let v = UInt32(h, radix: 16) ?? 0x2F6FE4
+    let bg = e11 ? UIColor.black : UIColor(red: CGFloat((v >> 16) & 0xff) / 255, green: CGFloat((v >> 8) & 0xff) / 255, blue: CGFloat(v & 0xff) / 255, alpha: 1)
+    let side: CGFloat = 120
+    let f = UIGraphicsImageRendererFormat(); f.scale = 1; f.opaque = true
+    let img = UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: f).image { _ in
+      bg.setFill(); UIRectFill(CGRect(x: 0, y: 0, width: side, height: side))
+      let a: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: side * (e11 ? 0.3 : 0.4), weight: .semibold), .foregroundColor: UIColor.white]
+      let t = NSAttributedString(string: text, attributes: a), ts = t.size()
+      t.draw(at: CGPoint(x: (side - ts.width) / 2, y: (side - ts.height) / 2))
+    }
+    return img.pngData().map { INImage(imageData: $0) }
   }
   private static func keep(_ id: String, _ d: Data) {
     let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "ae.e11.talk.inbox", kSecAttrAccount as String: id]

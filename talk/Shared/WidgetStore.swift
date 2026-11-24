@@ -80,6 +80,13 @@ enum WidgetStore {
   static func dropNew(_ id: String) { drop(newService, id) }
   static func clearAll() { drop(summaryService); drop(newService); drop(picService) }
 
+  // a name's letters, as the app's (a middle "Al" skipped — Haris 2026-11-08)
+  static func initials(_ s: String) -> String {
+    let all = s.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+    guard let first = all.first else { return "" }
+    let next = all.dropFirst().first { $0.lowercased() != "al" } ?? all.dropFirst().first
+    return (String(first.prefix(1)) + (next.map { String($0.prefix(1)) } ?? "")).uppercased()
+  }
   // "Yousef Al Hwij: the message" (the notification's words) → "Yousef: the message" (the group row's)
   static func shortLine(_ body: String) -> String {
     guard let r = body.range(of: ": ") else { return body }
