@@ -103,6 +103,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
     NotificationCenter.default.addObserver(self, selector: #selector(refused), name: .talkRefused, object: nil)
     Net.shared.onNews = { Talk.shared.sync() }
     if let r = options.notificationResponse, let g = (r.notification.request.content.userInfo["e11"] as? [String: Any])?["groupId"] as? String { wantGroup = g }
+    if let u = options.urlContexts.first?.url, let g = SceneDelegate.widgetGroup(u) { wantGroup = g }   // (a group tapped on the widget)
     #if DEBUG
     // (the build's own check in the simulator, no account needed: the tabs, a chat opened on them — is the tab bar gone?)
     if ProcessInfo.processInfo.arguments.contains("-chatcheck") { chatCheck(); return }
@@ -144,6 +145,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
     Talk.shared.loadLocal()
     Talk.shared.prune()
     Inbox.apply()   // (messages that came with notifications while Talk was closed — shown at once)
+    WidgetFeed.start()   // (the unread widget's summary, kept up to date from here — WidgetFeed)
     let main = mainTabs()
     w.rootViewController = main
     // the startup screen over it until the chats are ready
@@ -289,7 +291,18 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UITabBarControlle
     AskGroup.check()   // (files the group asked for, that this phone has — AskGroup)
     ShareHistory.retry()   // (a chat history that couldn't be shared — ShareHistory)
   }
-  func sceneDidEnterBackground(_ s: UIScene) { BgWatch.left += 1; Net.shared.stopListening(); Talk.shared.flush(); Talk.shared.badge(); Backup.shared.backUpIfDue() }
+  func sceneDidEnterBackground(_ s: UIScene) { BgWatch.left += 1; Net.shared.stopListening(); Talk.shared.flush(); Talk.shared.badge(); WidgetFeed.write(); Backup.shared.backUpIfDue() }
+  // a group tapped on the unread widget (e11talk://group/<id>): its chat, as a notification's; the widget tapped elsewhere
+  // (e11talk://) just opens Talk
+  func scene(_ s: UIScene, openURLContexts c: Set<UIOpenURLContext>) {
+    guard let u = c.first?.url, let g = SceneDelegate.widgetGroup(u) else { return }
+    if tabs != nil, Net.shared.signedIn { SceneDelegate.openGroup(g) } else { wantGroup = g }
+  }
+  static func widgetGroup(_ u: URL) -> String? {
+    guard u.scheme == "e11talk", u.host == "group" else { return nil }
+    let id = u.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")).removingPercentEncoding ?? ""
+    return id.isEmpty ? nil : id
+  }
 }
 
 // ---------- Settings ----------

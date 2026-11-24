@@ -19,6 +19,7 @@ targets:
     platform: iOS
     sources:
       - path: Notify
+      - path: Shared   # (the unread widget's store — Shared/WidgetStore.swift)
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ae.e11.talk.ios.notify
@@ -41,6 +42,35 @@ targets:
         NSExtension:
           NSExtensionPointIdentifier: com.apple.usernotifications.service
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
+  # The unread widget (home screen — Haris 2026-11-24): Widget/, reading only what the app and E11TalkNotify keep for it in
+  # Talk's own Keychain (Shared/WidgetStore.swift); never the server
+  E11TalkWidget:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Widget
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ae.e11.talk.ios.widget
+        PRODUCT_NAME: E11TalkWidget
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: Widget/E11TalkWidget.entitlements
+        SKIP_INSTALL: YES
+    entitlements:
+      path: Widget/E11TalkWidget.entitlements
+      properties:
+        keychain-access-groups: ["$(AppIdentifierPrefix)ae.e11.talk.ios"]
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: E11 Talk
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
   # (the App Store screenshots' UI test — never part of the app itself)
   E11TalkUITests:
     type: bundle.ui-testing
@@ -60,11 +90,13 @@ targets:
     platform: iOS
     dependencies:
       - target: E11TalkNotify
+      - target: E11TalkWidget
     # (the scheme with the App Store screenshots' UI test — talk/UITests, talk.yml mode=shots)
     scheme:
       testTargets: [E11TalkUITests]
     sources:
       - path: App
+      - path: Shared
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ae.e11.talk.ios

@@ -827,12 +827,14 @@ final class Talk {
     Net.shared.stopListening(); Net.shared.cookie = nil
     flush()
     if let id = me?.id ?? Talk.keptFor { Talk.keptFor = id } else { wipe() }   // (nobody known: nothing kept)
+    WidgetFeed.clear()   // (the unread widget: nothing of the chats while signed out)
     logs = [:]; groups = [:]; me = nil; Talk.cards = Cards()   // (starred kept with the chats: read again only when wiped)
   }
   // another account signing in on this phone: the last one's chats, files and place in the server's history gone
   func wipe() {
     Talk.keptFor = nil
     SecItemDelete([kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "ae.e11.talk.inbox"] as CFDictionary)   // (Inbox: another account's kept messages)
+    WidgetFeed.clear()   // (and the unread widget's)
     logs = [:]; groups = [:]; me = nil
     try? FileManager.default.removeItem(at: dir); try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     try? FileManager.default.removeItem(at: Net.filesDir)

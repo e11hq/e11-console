@@ -5,6 +5,7 @@
 import Foundation
 import Security
 import UserNotifications
+import WidgetKit
 
 final class NotificationService: UNNotificationServiceExtension {
   private var handler: ((UNNotificationContent) -> Void)?
@@ -19,6 +20,13 @@ final class NotificationService: UNNotificationServiceExtension {
     // (the message itself, when it came with the notification: kept for E11 Talk, which shows it the moment it opens —
     //  Haris 2026-11-22 13:35; in Talk's own Keychain, which this helper already shares)
     if let m = e["m"] as? [String: Any], (m["id"] as? String) == mid, let d = try? JSONSerialization.data(withJSONObject: m), d.count < 16_000 { Self.keep(mid, d) }
+    // (the unread widget: this message counted there at once, while Talk is closed — Shared/WidgetStore.swift, Haris
+    //  2026-11-24; the app lets it go once it has the message itself. Only a group message's own notification.)
+    if request.content.categoryIdentifier == "talk-msg" {
+      let at = (e["m"] as? [String: Any])?["at"] as? Double ?? Date().timeIntervalSince1970 * 1000
+      WidgetStore.keepNew(WidgetStore.New(g: gid, id: mid, at: at, title: request.content.title, line: WidgetStore.shortLine(request.content.body)))
+      WidgetCenter.shared.reloadTimelines(ofKind: WidgetStore.kind)
+    }
     guard let server = Self.keychain("notify-server"), let host = URL(string: server)?.host else { return finish() }
     // (the notification is never held more than about a second — the ✓✓ follows on its own if the answer is slow;
     //  it waited for it, up to 20 s, and asked the office, which passed it on to Cloudflare: Haris 2026-11-22 13:07)
