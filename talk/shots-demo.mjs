@@ -48,7 +48,7 @@ if (process.env.E11_BUBBLE === '1') {
   const bg = talk.act(me, { act: 'newGroup', client: g.client, name: 'Bubble check', members: others2.slice(0, 1) }).group;
   for (const text of ['Blue or red? Check again', 'Red or blue? Check again']) for (let mi = 30; mi < 60; mi++) {
     const d = new Date(); d.setHours(20, mi, 0, 0); clock = d.getTime() - (text.startsWith('Blue') ? 86400_000 : 0)
-    talk.act(me, { act: 'send', group: bg.id, text });
+    talk.act(me, { act: 'send', group: bg.id, text, cid: 'bubble-' + text.slice(0, 4) + '-' + mi });
   }
   clock = null;
   extra.bubble = bg && bg.id;
