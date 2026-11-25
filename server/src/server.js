@@ -1819,7 +1819,9 @@ export function createServer(cfg) {
     //  live stream — Yousef stayed "Hasn't signed in yet" (Haris 2026-11-25 22:51). E11 Talk uses neither)
     if ((p === '/api/snapshot' || p === '/api/events') && req.method === 'GET') {
       const cur = store.get('users', String((req.realUser || u).id));
-      if (cur && !cur.setup && !cur.signedInAt && cur.active !== false) store.apply([{ kind: 'users', id: cur.id, data: { ...cur, signedInAt: new Date().toISOString() } }], cur.id);
+      // (…and told to every open app: the iPhone and Mac apps keep their copy and only hear changes — saved without
+      //  telling, Haris's Team members kept showing Yousef "Hasn't signed in yet" — Haris 2026-11-25 22:59)
+      if (cur && !cur.setup && !cur.signedInAt && cur.active !== false) { const out = store.apply([{ kind: 'users', id: cur.id, data: { ...cur, signedInAt: new Date().toISOString() } }], cur.id); broadcast(out.rev, out.results, null, cur.id); }
     }
     if (p === '/api/snapshot' && req.method === 'GET') return sendText(req, res, 200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, Buffer.from(JSON.stringify({ ok: true, version, ...visibleSnapshot(u) })));
 

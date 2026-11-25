@@ -42,3 +42,17 @@ test('the live stream alone marks it — the iPhone app with its copy kept opens
   ac.abort(); await r.body?.cancel().catch(() => {});
   assert.ok(app.store.get('users', 'u-k').signedInAt, 'noted from the live stream');
 });
+
+test('the mark reaches the apps already open — Haris’s phone keeps its copy and only hears changes (Haris 2026-11-25 22:59)', async () => {
+  app.store.apply([{ kind: 'users', id: 'u-n', data: { id: 'u-n', email: 'newone@e11-digital.com', role: 'production', active: true, setup: false } }], 'test');
+  const ac = new AbortController();
+  const r = await fetch(base + '/api/events?since=' + app.store.rev() + '&client=ios-u-own', { headers: { 'X-Dev-Email': OWNER }, signal: ac.signal });
+  const rd = r.body.getReader(), dec = new TextDecoder();
+  let seen = '';
+  const heard = (async () => { while (!/"u-n"[^\n]*signedInAt|signedInAt[^\n]*"u-n"/.test(seen)) { const { value, done } = await rd.read(); if (done) break; seen += dec.decode(value); } return true; })();
+  await new Promise((ok) => setTimeout(ok, 200));
+  await call('newone@e11-digital.com', '/api/snapshot');
+  const got = await Promise.race([heard, new Promise((ok) => setTimeout(() => ok(false), 3000))]);
+  ac.abort();
+  assert.ok(got, 'the owner’s open app heard it');
+});
