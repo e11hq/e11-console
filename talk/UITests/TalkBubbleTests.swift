@@ -21,8 +21,14 @@ final class TalkBubbleTests: XCTestCase {
     for l in ["Allow", "Don’t Allow", "Don't Allow"] { let b = sb.buttons[l]; if b.waitForExistence(timeout: 2) { b.tap(); break } }
     // the group: on the E11 Agency list or under its client
     func find() -> Bool {
-      let c = app.tables.firstMatch.cells.containing(NSPredicate(format: "label CONTAINS %@", "Bubble check")).firstMatch
-      if c.waitForExistence(timeout: 3) { c.tap(); return true }
+      let t = app.staticTexts["Bubble check"].firstMatch
+      if t.waitForExistence(timeout: 3) {
+        Thread.sleep(forTimeInterval: 1)
+        t.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap(); Thread.sleep(forTimeInterval: 3)
+        if app.textViews.firstMatch.waitForExistence(timeout: 5) { return true }
+        t.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap(); Thread.sleep(forTimeInterval: 3)
+        return app.textViews.firstMatch.waitForExistence(timeout: 5)
+      }
       return false
     }
     var ok = false
