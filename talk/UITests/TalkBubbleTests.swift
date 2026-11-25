@@ -63,6 +63,29 @@ final class TalkBubbleTests: XCTestCase {
     serverSend("Blue or red? Check again"); serverSend("ok"); Thread.sleep(forTimeInterval: 3)
     app.activate(); Thread.sleep(forTimeInterval: 5); shot("server-background")
     for i in 0..<12 { app.swipeDown(velocity: .slow); Thread.sleep(forTimeInterval: 1.2); shot("up\(i)") }
+    // (the real thing — Haris 2026-11-25 21:23: a notification, held, replied to "Blue or red? Check again" — the chat left
+    //  open behind, Talk in the background; the Mac pushes the notification (talk/shots.py) while this waits for it)
+    for i in 0..<14 { app.swipeUp(velocity: .fast); _ = i }
+    XCUIDevice.shared.press(.home); Thread.sleep(forTimeInterval: 1)
+    try? "1".write(to: URL(fileURLWithPath: (env["E11_SHOTS_OUT"] ?? NSTemporaryDirectory()) + "/push-now"), atomically: true, encoding: .utf8)
+    let banner = sb.otherElements["Notification"].firstMatch
+    let bn = banner.waitForExistence(timeout: 25) ? banner : sb.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Bubble check")).firstMatch
+    shot("notif")
+    if bn.waitForExistence(timeout: 5) {
+      bn.press(forDuration: 1.2); Thread.sleep(forTimeInterval: 1.5); shot("notif-held")
+      let r = sb.buttons["Reply"].firstMatch
+      if r.waitForExistence(timeout: 3) { r.tap(); Thread.sleep(forTimeInterval: 1) }
+      let field = sb.textViews.firstMatch.exists ? sb.textViews.firstMatch : sb.textFields.firstMatch
+      if field.waitForExistence(timeout: 4) {
+        field.typeText("Blue or red? Check again"); Thread.sleep(forTimeInterval: 0.5); shot("notif-typed")
+        let send = sb.buttons["Send"].firstMatch
+        if send.exists { send.tap() } else { field.typeText("\n") }
+        Thread.sleep(forTimeInterval: 8)
+      }
+    }
+    app.activate(); Thread.sleep(forTimeInterval: 5); shot("after-reply")
+    for i in 0..<14 { app.swipeUp(velocity: .fast); _ = i }
+    Thread.sleep(forTimeInterval: 1); shot("after-reply-end")
     // the same words typed and sent
     for i in 0..<14 { app.swipeUp(velocity: .fast); _ = i }
     Thread.sleep(forTimeInterval: 1)

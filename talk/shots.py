@@ -43,6 +43,22 @@ try:
     renv = dict(os.environ, TEST_RUNNER_E11_EMAIL=EMAIL, TEST_RUNNER_E11_SERVER=BASE, TEST_RUNNER_E11_SHOTS_OUT=OUT)
     args = ['xcodebuild', 'test-without-building', '-destination', f'id={udid}', '-only-testing:E11TalkUITests/' + ('TalkBubbleTests' if BUBBLE else 'TalkShotsTests'), '-resultBundlePath', os.path.join(TMP, 'talkshots.xcresult')]
     args += ['-xctestrun', xctr[0]] if xctr else ['-project', os.path.join(ROOT, 'talk/E11Talk.xcodeproj'), '-scheme', 'E11Talk', '-derivedDataPath', DD]
+    pusher = None
+    if BUBBLE:
+        # (the notification the test replies to: pushed into the simulator once the test asks — talk/UITests/TalkBubbleTests)
+        import threading
+        def push():
+            try:
+                req = urllib.request.Request(BASE + '/api/talk/state', headers={'X-Dev-Email': EMAIL})
+                gid = next((g['id'] for g in json.loads(urllib.request.urlopen(req, timeout=20).read()).get('groups', []) if g.get('name') == 'Bubble check'), '')
+            except Exception as e: gid = ''; print('push state', e, flush=True)
+            for _ in range(900):
+                if os.path.exists(os.path.join(OUT, 'push-now')): break
+                time.sleep(1)
+            pl = {'aps': {'alert': {'title': 'Bubble check', 'body': 'Lena Farouk: Blue or red?'}, 'category': 'talk-msg', 'sound': 'default'}, 'e11': {'kind': 'talk', 'groupId': gid}}
+            f = os.path.join(TMP, 'push.apns'); open(f, 'w').write(json.dumps(pl))
+            print('push', sh('xcrun', 'simctl', 'push', udid, 'ae.e11.talk.ios', f).stdout, flush=True)
+        pusher = threading.Thread(target=push, daemon=True); pusher.start()
     r = subprocess.run(args, env=renv, capture_output=True, text=True, timeout=1800)
     print('exit', r.returncode, r.stdout[-3000:], r.stderr[-1500:], flush=True)
     if BUBBLE: open(os.path.join(OUT, 'test-output.txt'), 'w').write(r.stdout + '\n' + r.stderr)
