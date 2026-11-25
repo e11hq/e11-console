@@ -45,6 +45,7 @@ try:
     args += ['-xctestrun', xctr[0]] if xctr else ['-project', os.path.join(ROOT, 'talk/E11Talk.xcodeproj'), '-scheme', 'E11Talk', '-derivedDataPath', DD]
     r = subprocess.run(args, env=renv, capture_output=True, text=True, timeout=1800)
     print('exit', r.returncode, r.stdout[-3000:], r.stderr[-1500:], flush=True)
+    if BUBBLE: open(os.path.join(OUT, 'test-output.txt'), 'w').write(r.stdout + '\n' + r.stderr)
     sh('xcrun', 'simctl', 'status_bar', udid, 'clear')
 finally:
     srv.terminate()

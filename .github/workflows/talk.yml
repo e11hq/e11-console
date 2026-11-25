@@ -63,7 +63,10 @@ jobs:
           # (bubble: the pictures kept on the branch seekcheck-data, bubble/ — measuring only)
           if [ "${{ inputs.mode }}" = bubble ]; then
             cd "$RUNNER_TEMP" && rm -rf sd && git clone -q --depth 1 -b seekcheck-data "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" sd && cd sd && rm -rf bubble && mkdir bubble
-            cp "$RUNNER_TEMP"/talk-shots-out/*.png bubble/ 2>/dev/null; cp "$RUNNER_TEMP/talk-shots.log" bubble/ 2>/dev/null; git add -A bubble
+            cp "$RUNNER_TEMP"/talk-shots-out/*.png "$RUNNER_TEMP"/talk-shots-out/*.txt bubble/ 2>/dev/null; cp "$RUNNER_TEMP/talk-shots.log" bubble/ 2>/dev/null
+            # (Talk's crash reports from this run, if it crashed)
+            find ~/Library/Logs/DiagnosticReports -name 'E11Talk*' -newer "$RUNNER_TEMP/talk-shots.log" -o -name 'E11Talk*' -mmin -15 2>/dev/null | head -3 | while read f; do cp "$f" bubble/; done
+            git add -A bubble
             git -c user.name=bubblecheck -c user.email=bubblecheck@e11.invalid commit -qm "Talk bubble check $(date -u +%FT%TZ)" && git push -q origin HEAD:seekcheck-data; true
           fi
       - name: Build for the simulator
