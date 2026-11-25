@@ -69,23 +69,28 @@ final class NotificationService: UNNotificationServiceExtension {
     lock.unlock()
     if let h, let c { h(c) }
   }
-  // iPhone's chat style (a communication notification): a message to a group — its name and picture — from the person
+  // iPhone's chat style (a communication notification), laid out as Haris asked (2026-11-25 13:45): the group's picture,
+  // big, with the small Talk icon at its bottom-right (iPhone's own); then the group's name, the person's name, and the
+  // message alone. (iPhone's group style put the person first and the app's icon in the picture's place — so the
+  // conversation is told to iPhone as the group itself, the person's name as the subtitle.)
   private static func dress(_ c: UNNotificationContent, gid: String, by: String?) -> UNNotificationContent? {
     let body = c.body
-    let who = body.range(of: ": ").map { String(body[..<$0.lowerBound]) } ?? ""
-    let key = by ?? (who.isEmpty ? c.title : who)
-    let sender = INPerson(personHandle: INPersonHandle(value: key, type: .unknown), nameComponents: nil, displayName: who.isEmpty ? c.title : who,
-                          image: nil, contactIdentifier: nil, customIdentifier: key)
+    let cut = body.range(of: ": ")
+    let who = cut.map { String(body[..<$0.lowerBound]) } ?? ""
+    let text = cut.map { String(body[$0.upperBound...]) } ?? body
+    let group = INPerson(personHandle: INPersonHandle(value: gid, type: .unknown), nameComponents: nil, displayName: c.title,
+                         image: groupPicture(gid, title: c.title), contactIdentifier: nil, customIdentifier: gid)
     let me = INPerson(personHandle: INPersonHandle(value: "me", type: .unknown), nameComponents: nil, displayName: nil, image: nil,
                       contactIdentifier: nil, customIdentifier: "me", isMe: true)
-    let intent = INSendMessageIntent(recipients: [me, sender], outgoingMessageType: .outgoingMessageText, content: body,
-                                     speakableGroupName: INSpeakableString(spokenPhrase: c.title), conversationIdentifier: gid,
-                                     serviceName: nil, sender: sender, attachments: nil)
-    if let i = groupPicture(gid, title: c.title) { intent.setImage(i, forParameterNamed: \.speakableGroupName) }
+    let intent = INSendMessageIntent(recipients: [me], outgoingMessageType: .outgoingMessageText, content: text,
+                                     speakableGroupName: nil, conversationIdentifier: gid, serviceName: nil, sender: group, attachments: nil)
     let it = INInteraction(intent: intent, response: nil)
     it.direction = .incoming
     it.donate(completion: nil)
-    return try? c.updating(from: intent)
+    guard let m = c.mutableCopy() as? UNMutableNotificationContent else { return nil }
+    if !who.isEmpty { m.subtitle = who; m.body = text }
+    _ = by
+    return try? m.updating(from: intent)
   }
   // the group's picture, as the widget keeps it (Shared/WidgetStore.swift); else drawn as the app draws it — its letters on
   // its colour, or "E11." on black for a client contact
