@@ -82,13 +82,17 @@ final class NotificationService: UNNotificationServiceExtension {
                          image: groupPicture(gid, title: c.title), contactIdentifier: nil, customIdentifier: gid)
     let me = INPerson(personHandle: INPersonHandle(value: "me", type: .unknown), nameComponents: nil, displayName: nil, image: nil,
                       contactIdentifier: nil, customIdentifier: "me", isMe: true)
-    let intent = INSendMessageIntent(recipients: [me], outgoingMessageType: .outgoingMessageText, content: text,
-                                     speakableGroupName: nil, conversationIdentifier: gid, serviceName: nil, sender: group, attachments: nil)
+    // (iPhone's group style, roles swapped — Haris 2026-11-25 15:14: its first bold line, the "sender", is the group
+    //  with its picture; its second, the "group's name", is the person. 269's one-to-one style dropped the person.)
+    let intent = INSendMessageIntent(recipients: [me, group], outgoingMessageType: .outgoingMessageText, content: text,
+                                     speakableGroupName: who.isEmpty ? nil : INSpeakableString(spokenPhrase: who), conversationIdentifier: gid,
+                                     serviceName: nil, sender: group, attachments: nil)
+    if !who.isEmpty, let i = group.image { intent.setImage(i, forParameterNamed: \.speakableGroupName) }
     let it = INInteraction(intent: intent, response: nil)
     it.direction = .incoming
     it.donate(completion: nil)
     guard let m = c.mutableCopy() as? UNMutableNotificationContent else { return nil }
-    if !who.isEmpty { m.subtitle = who; m.body = text }
+    if !who.isEmpty { m.body = text }
     _ = by
     return try? m.updating(from: intent)
   }
