@@ -1,0 +1,72 @@
+console demo {"reviewer":"review@e11hq.com","birthday":{"id":"u-d02","email":"lena.farouk@example.com","name":"Lena Farouk"},"tasks":79,"plans":4}
+ (node:88995) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+talk demo {"talk":{"ok":true,"made":["Northline Motors · Launch campaign","Northline Motors · Shoot day","Kestrel Auto · Social","Voltra EV · Website"]},"group":"Kestrel Auto · Social","extra":{"voice":{"ok":true,"id":"m-7a92e367395192ff","seq":44,"at":1795627603087},"reply":{"ok":true,"id":"m-09d326b430230c66","seq":47,"at":1795627603089},"bubble":"g-8765d0fcb4e9d175"}}
+ (node:88998) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+talk state groups 5
+simulator iPhone 18 Pro Max
+simulator iPhone 17
+exit 0 34s     Check for interrupting elements affecting "E11 Talk" Application
+    t =    88.38s     Synthesize event
+    t =    88.77s     Wait for ae.e11.talk.ios to idle
+    t =    89.28s Swipe up Target Application 'ae.e11.talk.ios'
+    t =    89.28s     Wait for ae.e11.talk.ios to idle
+    t =    89.28s     Find the Target Application 'ae.e11.talk.ios'
+    t =    89.31s     Check for interrupting elements affecting "E11 Talk" Application
+    t =    89.36s     Synthesize event
+    t =    89.74s     Wait for ae.e11.talk.ios to idle
+    t =    90.24s Swipe up Target Application 'ae.e11.talk.ios'
+    t =    90.24s     Wait for ae.e11.talk.ios to idle
+    t =    90.25s     Find the Target Application 'ae.e11.talk.ios'
+    t =    90.29s     Check for interrupting elements affecting "E11 Talk" Application
+    t =    90.33s     Synthesize event
+    t =    90.72s     Wait for ae.e11.talk.ios to idle
+    t =    91.23s Swipe up Target Application 'ae.e11.talk.ios'
+    t =    91.23s     Wait for ae.e11.talk.ios to idle
+    t =    91.23s     Find the Target Application 'ae.e11.talk.ios'
+    t =    91.26s     Check for interrupting elements affecting "E11 Talk" Application
+    t =    91.30s     Synthesize event
+    t =    91.69s     Wait for ae.e11.talk.ios to idle
+    t =    93.20s Waiting 3.0s for TextView (First Match) to exist
+    t =    94.28s     Checking `Expect predicate `existsNoRetry == 1` for object TextView (First Match)`
+    t =    94.28s         Checking existence of `TextView (First Match)`
+    t =    94.35s         Capturing element debug description
+    t =    95.30s     Checking `Expect predicate `existsNoRetry == 1` for object TextView (First Match)`
+    t =    95.30s         Checking existence of `TextView (First Match)`
+    t =    95.38s         Capturing element debug description
+    t =    96.21s     Checking `Expect predicate `existsNoRetry == 1` for object TextView (First Match)`
+    t =    96.21s         Checking existence of `TextView (First Match)`
+    t =    96.28s         Capturing element debug description
+    t =    96.28s     Checking existence of `TextView (First Match)`
+    t =    96.34s Collecting debug information to assist test failure triage
+    t =    96.34s     Requesting snapshot of accessibility hierarchy for app with pid 89167
+    t =    96.45s Tear Down
+Test Case '-[E11TalkUITests.TalkBubbleTests testBubbles]' passed (96.743 seconds).
+Test Suite 'TalkBubbleTests' passed at 2026-11-25 21:28:27.778.
+	 Executed 1 test, with 0 failures (0 unexpected) in 96.743 (96.751) seconds
+Test Suite 'E11TalkUITests.xctest' passed at 2026-11-25 21:28:27.779.
+	 Executed 1 test, with 0 failures (0 unexpected) in 96.743 (96.752) seconds
+Test Suite 'Selected tests' passed at 2026-11-25 21:28:27.780.
+	 Executed 1 test, with 0 failures (0 unexpected) in 96.743 (96.754) seconds
+
+Test session results, code coverage, and logs:
+	/Users/harise11digital/actions-runner/_work/_temp/talkshots.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started
+ 361971] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-25 21:28:27.813 xcodebuild[89121:44361971] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-25 21:28:27.813 xcodebuild[89121:44361971] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-25 21:28:27.814 xcodebuild[89121:44361971] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-25 21:28:27.830 xcodebuild[89121:44361971] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-25 21:28:27.831 xcodebuild[89121:44361971] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-25 21:28:27.831 xcodebuild[89121:44361971] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-25 21:28:28.249 xcodebuild[89121:44361971] [MT] IDETestOperationsObserverDebug: 102.374 elapsed -- Testing started completed.
+2026-11-25 21:28:28.249 xcodebuild[89121:44361971] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-11-25 21:28:28.249 xcodebuild[89121:44361971] [MT] IDETestOperationsObserverDebug: 102.374 sec, +102.374 sec -- end
+
+shots 16
