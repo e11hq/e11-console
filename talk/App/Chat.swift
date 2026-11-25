@@ -2802,6 +2802,34 @@ final class BubbleCell: UITableViewCell {
     super.layoutSubviews()
     pickTint.frame = bounds
     pickDot.bounds = CGRect(x: 0, y: 0, width: 26, height: 26); pickDot.center = CGPoint(x: 25, y: bounds.midY)
+    keepTimeClear()
+  }
+  // (the time never on the words — Haris 2026-11-25 21:54: a reply sent from a notification showed its time on the end of
+  //  its words, the room kept for it gone to a line the bubble didn't have. Checked as it's laid out, whatever the cause:
+  //  words on one line that, with the time's room, can't fit the width they're drawn at, yet the words are one line
+  //  tall — the time is put on its own line under them, as a long message's is)
+  private var roomW: CGFloat = 0, roomInline = false, timeOwnLine = false
+  private func keepTimeClear() {
+    guard roomInline, !timeOwnLine, !textL.isHidden, !stamp.isHidden, let a = textL.attributedText, a.length > 1 else { return }
+    contentView.layoutIfNeeded()   // (the words at the width they're drawn at, not one from before)
+    let w = textL.bounds.width
+    guard w > 0, textL.bounds.height < 34 else { return }   // (one line of words only)
+    let words = a.attributedSubstring(from: NSRange(location: 0, length: a.length - 1))
+    let need = ceil(words.boundingRect(with: CGSize(width: .greatestFiniteMagnitude, height: 100), options: [.usesLineFragmentOrigin], context: nil).width) + roomW
+    guard need > w - 0.5 else { return }
+    timeOwnLine = true
+    let m = NSMutableAttributedString(attributedString: a)
+    let room = NSTextAttachment(image: BubbleCell.clear); room.bounds = CGRect(x: 0, y: 0, width: roomW, height: 16)
+    let attrs = a.attributes(at: a.length - 1, effectiveRange: nil)
+    m.replaceCharacters(in: NSRange(location: a.length - 1, length: 1), with: NSAttributedString(string: "\n", attributes: attrs))
+    m.append(NSAttributedString(attachment: room)); m.addAttributes(attrs.filter { $0.key == .paragraphStyle || $0.key == .baselineOffset }, range: NSRange(location: m.length - 1, length: 1))
+    textL.attributedText = m
+    textL.invalidateIntrinsicContentSize()
+    // (the row grows to it, at once and without a slide)
+    DispatchQueue.main.async { [weak self] in
+      guard let self, let tv = sequence(first: self.superview, next: { $0?.superview }).compactMap({ $0 as? UITableView }).first else { return }
+      UIView.performWithoutAnimation { tv.performBatchUpdates(nil) }
+    }
   }
   override func prepareForReuse() {
     super.prepareForReuse()
@@ -3127,6 +3155,7 @@ final class BubbleCell: UITableViewCell {
       if !m.pending { fwdB.isHidden = false }
     }
     let words = a.length > 0
+    roomInline = false; timeOwnLine = false
     textL.isHidden = !words
     footL.isHidden = true
     stamp.isHidden = false
@@ -3143,6 +3172,7 @@ final class BubbleCell: UITableViewCell {
       //  right, so the time takes its own line under them, the words kept to the right — Haris 2026-11-13)
       let rtl = BubbleCell.rightToLeft(m.text)
       let room = NSTextAttachment(image: BubbleCell.clear); room.bounds = CGRect(x: 0, y: 0, width: ceil(stamp.intrinsicContentSize.width) + 10, height: rtl ? 16 : 1)
+      roomW = room.bounds.width; roomInline = !rtl
       if rtl { a.append(NSAttributedString(string: "\n")) }
       a.append(NSAttributedString(attachment: room))
       // (the design: 17 on a 22 line)
