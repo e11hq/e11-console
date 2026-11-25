@@ -485,7 +485,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private var hKey: String { group + "|" + traitCollection.preferredContentSizeCategory.rawValue }
   // (the rows' drawing changed in a way a kept height can't know: every kept height measured again once — 2: a turned-off
   //  link's card kept a reused row's tall height, Haris 2026-11-16)
-  static let layoutV = 2
+  static let layoutV = 3   // (3: heights kept from a row's guess, not its measure, measured again — Haris 2026-11-25)
   func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat {
     if case .intro? = data.itemIdentifier(for: ip) { return introHeight() }
     if case .typing? = data.itemIdentifier(for: ip) { return TypingCell.height }
@@ -511,7 +511,19 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   func tableView(_ tv: UITableView, willDisplay cell: UITableViewCell, forRowAt ip: IndexPath) {
     // (the dots: breathing again once the list has put the row in — it takes animations off a row it brings in)
     if let t = cell as? TypingCell { DispatchQueue.main.async { t.dots.breathe() } }
-    if case .msg(let key)? = data.itemIdentifier(for: ip) { ChatVC.heights[hKey, default: [:]][key] = (sigs[key] ?? 0, cell.bounds.height) }
+    // (the row's own measure kept — not its height at this moment, which can still be the guess it came in with: a reply
+    //  sent from a notification came in while Talk was in the background, its one-line guess was kept as its height, and
+    //  its words and time — two lines — were squeezed into one, the time on the words, for good. Reproduced in the
+    //  simulator with that kept height, Haris 2026-11-25 22:12. A row whose measure differs is set to it at once.)
+    if case .msg(let key)? = data.itemIdentifier(for: ip) {
+      let w = tv.bounds.width
+      cell.bounds.size.width = w
+      let fit = ceil(cell.contentView.systemLayoutSizeFitting(CGSize(width: w, height: UIView.layoutFittingCompressedSize.height),
+                                                             withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height)
+      let h = fit > 1 ? fit : cell.bounds.height
+      ChatVC.heights[hKey, default: [:]][key] = (sigs[key] ?? 0, h)
+      if abs(h - cell.bounds.height) > 1 { DispatchQueue.main.async { UIView.performWithoutAnimation { tv.performBatchUpdates(nil) } } }
+    }
     // (taps as the keyboard is now — a row made while it was up, out of sight then, kept them off: the first of two photos
     //  sent together wouldn't open, Haris 2026-11-12)
     cell.contentView.isUserInteractionEnabled = !keyUp
@@ -2802,36 +2814,6 @@ final class BubbleCell: UITableViewCell {
     super.layoutSubviews()
     pickTint.frame = bounds
     pickDot.bounds = CGRect(x: 0, y: 0, width: 26, height: 26); pickDot.center = CGPoint(x: 25, y: bounds.midY)
-    keepTimeClear()
-  }
-  // (the time never on the words — Haris 2026-11-25 21:54: a reply sent from a notification showed its time on the end of
-  //  its words, the room kept for it gone to a line the bubble didn't have. Checked as it's laid out, whatever the cause:
-  //  words on one line that, with the time's room, can't fit the width they're drawn at, yet the words are one line
-  //  tall — the time is put on its own line under them, as a long message's is)
-  private var roomW: CGFloat = 0, roomInline = false, timeOwnLine = false
-  private func keepTimeClear() {
-    guard roomInline, !timeOwnLine, !textL.isHidden, !stamp.isHidden, let a = textL.attributedText, a.length > 1 else { return }
-    contentView.layoutIfNeeded()   // (the words at the width they're drawn at, not one from before)
-    let w = textL.bounds.width
-    guard w > 0, textL.bounds.height < 34 else { return }   // (one line of words only)
-    let words = a.attributedSubstring(from: NSRange(location: 0, length: a.length - 1))
-    let need = ceil(words.boundingRect(with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: 100), options: [.usesLineFragmentOrigin], context: nil).width) + roomW
-    guard need > w - 0.5 else { return }
-    timeOwnLine = true
-    let m = NSMutableAttributedString(attributedString: a)
-    let room = NSTextAttachment(image: BubbleCell.clear); room.bounds = CGRect(x: 0, y: 0, width: roomW, height: 16)
-    let attrs = a.attributes(at: a.length - 1, effectiveRange: nil)
-    m.replaceCharacters(in: NSRange(location: a.length - 1, length: 1), with: NSAttributedString(string: "\n", attributes: attrs))
-    m.append(NSAttributedString(attachment: room)); m.addAttributes(attrs.filter { $0.key == .paragraphStyle || $0.key == .baselineOffset }, range: NSRange(location: m.length - 1, length: 1))
-    textL.attributedText = m
-    textL.invalidateIntrinsicContentSize()
-    // (the row grows to it, at once and without a slide)
-    DispatchQueue.main.async { [weak self] in
-      guard let self else { return }
-      var v = self.superview; while let x = v, !(x is UITableView) { v = x.superview }
-      guard let tv = v as? UITableView else { return }
-      UIView.performWithoutAnimation { tv.performBatchUpdates(nil) }
-    }
   }
   override func prepareForReuse() {
     super.prepareForReuse()
@@ -3157,7 +3139,6 @@ final class BubbleCell: UITableViewCell {
       if !m.pending { fwdB.isHidden = false }
     }
     let words = a.length > 0
-    roomInline = false; timeOwnLine = false
     textL.isHidden = !words
     footL.isHidden = true
     stamp.isHidden = false
@@ -3174,7 +3155,6 @@ final class BubbleCell: UITableViewCell {
       //  right, so the time takes its own line under them, the words kept to the right — Haris 2026-11-13)
       let rtl = BubbleCell.rightToLeft(m.text)
       let room = NSTextAttachment(image: BubbleCell.clear); room.bounds = CGRect(x: 0, y: 0, width: ceil(stamp.intrinsicContentSize.width) + 10, height: rtl ? 16 : 1)
-      roomW = room.bounds.width; roomInline = !rtl
       if rtl { a.append(NSAttributedString(string: "\n")) }
       a.append(NSAttributedString(attachment: room))
       // (the design: 17 on a 22 line)
