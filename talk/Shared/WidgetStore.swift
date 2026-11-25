@@ -74,7 +74,7 @@ enum WidgetStore {
   }
 
   // ---------- the pieces ----------
-  static var summary: Summary? { get(summaryService, "summary").flatMap { try? JSONDecoder().decode(Summary.self, from: $0) } }
+  static var summary: Summary? { WidgetStore.get(summaryService, "summary").flatMap { try? JSONDecoder().decode(Summary.self, from: $0) } }
   static var news: [New] { all(newService).compactMap { try? JSONDecoder().decode(New.self, from: $0.data) } }
   static func keepNew(_ n: New) { if let d = try? JSONEncoder().encode(n) { put(newService, n.id, d) } }
   static func dropNew(_ id: String) { drop(newService, id) }
