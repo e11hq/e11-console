@@ -344,7 +344,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
       const open = manager ? W.tasks.filter((t) => !t.done && !t.parentId && (t.assignees || []).includes(u.id)).length : null;
       return {
         id: u.id, name: W.fullName(u), you: u.id === meId, email: u.email, photo: W.photoOf(u), ini: initials(W.fullName(u)), rgb: W.rgb(avColor(u.id)),
-        role: W.roleOf(u), designation: W.designationOf(u), place: W.placeOf(u), pending: u.active !== false && !u.setup, past: u.active === false, pills,
+        role: W.roleOf(u), designation: W.designationOf(u), place: W.placeOf(u), pending: u.active !== false && !u.setup && !u.signedInAt, past: u.active === false, pills,
         open, cd: admin && u.active !== false ? { on: W.isCD(u.id), label: W.isCD(u.id) ? (W.cdActing() ? 'Acting CD' : 'Creative Director') : W.meta.cdHomeId === u.id && W.cdActing() ? 'CD · away' : 'Make Creative Director' } : null,
         locked: u.id === ownerId && u.id !== meId,
       };

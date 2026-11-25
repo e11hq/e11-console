@@ -1813,6 +1813,13 @@ export function createServer(cfg) {
       return json(res, 200, { ok: true, rev, tasks: data.tasks.length, people: data.users.length });
     }
 
+    // (signed in to E11 Console — the iPhone app, the Mac app and the website all start from here: noted once, so Team
+    //  members shows them Active; before, only the website's welcome screen marked it, so the iPhone app's people stayed
+    //  "Hasn't signed in yet". E11 Talk never asks for this — Haris 2026-11-25 20:39)
+    if (p === '/api/snapshot' && req.method === 'GET') {
+      const cur = store.get('users', String((req.realUser || u).id));
+      if (cur && !cur.setup && !cur.signedInAt && cur.active !== false) store.apply([{ kind: 'users', id: cur.id, data: { ...cur, signedInAt: new Date().toISOString() } }], cur.id);
+    }
     if (p === '/api/snapshot' && req.method === 'GET') return sendText(req, res, 200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, Buffer.from(JSON.stringify({ ok: true, version, ...visibleSnapshot(u) })));
 
     if (p === '/api/push' && req.method === 'POST') {

@@ -3283,7 +3283,7 @@ const NativeMe = (() => {
     const open = isManager() ? db.tasks.filter((t) => !t.done && !t.parentId && (t.assignees || []).includes(u.id)).length : null;
     return {
       id: u.id, name: fullName(u), you: u.id === currentUserId, email: u.email, photo: photoOf(u), ini: initials(fullName(u)), rgb: rgb(avColor(u.id)),
-      role: roleOf(u), designation: designationOf(u), place: placeOf(u), pending: u.active !== false && !u.setup, past: u.active === false, pills,
+      role: roleOf(u), designation: designationOf(u), place: placeOf(u), pending: u.active !== false && !u.setup && !u.signedInAt, past: u.active === false, pills,
       open, cd: admin && u.active !== false ? { on: isCD(u.id), label: isCD(u.id) ? (cdActing() ? 'Acting CD' : 'Creative Director') : db.meta.cdHomeId === u.id && cdActing() ? 'CD · away' : 'Make Creative Director' } : null,
       locked: u.id === ownerId && u.id !== currentUserId,
     };
