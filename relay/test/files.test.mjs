@@ -133,7 +133,7 @@ test('deleted for everyone: its file goes at once, even before the other phone p
   const gid = h.act(a, { act: 'newGroup', client: 'p1', name: 'Del', members: ['u2'] }).group.id;
   const s = await h.r2Start(a, { name: 'p.heic', size: 10 }); await serveR2(new Request(s.put, { method: 'PUT', body: new Uint8Array(10) }), e, path(s.put)); await h.r2Done(a, { id: s.id });
   const m = h.act(a, { act: 'send', group: gid, text: '', file: { id: s.id, kind: 'photo', key: 'A'.repeat(43) + '=' } });
-  const first = sent.find(([u, p]) => u === 'u2' && p.kind === 'talk');
+  const first = sent.find(([u, p]) => u === 'u2' && p.kind === 'talk' && p.msgId);   // (the message's — not "added you")
   assert.equal(first[1].collapse, m.id, 'the notification carries its message id to be replaced');
   assert.equal(h.act(a, { act: 'del', msg: m.id }).ok, true);
   await new Promise((r) => setTimeout(r, 10));

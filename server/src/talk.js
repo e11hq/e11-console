@@ -163,6 +163,18 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     });
   }
   const clientById = (id) => { const p = store.get('projects', String(id)); return p && !p.inactive ? p : null; };
+  // …and the clients of the groups they're in, even ones they aren't on in E11 Console (Production sees only its tasks'
+  // clients): its name and logo only, so a group they're added to always shows under its client (Haris 2026-11-25 10:45)
+  function clientsWith(u, groups) {
+    const out = clientsFor(u), have = new Set(out.map((c) => c.id));
+    for (const g of groups) {
+      if (have.has(g.client)) continue;
+      const p = clientById(g.client); if (!p) continue;
+      const c = p.clientId ? store.get('clients', String(p.clientId)) : null;
+      out.push({ id: p.id, name: p.name, color: p.color || null, logo: (c && c.logo) || null }); have.add(p.id);
+    }
+    return out;
+  }
 
   /* ---------- client contacts (stage 3, Haris 2026-11-05): added by Super Admins and Office Admins — a name, an email and
      the client they belong to (several per client). A contact exists in E11 Talk only: signs in with that email's code,
@@ -231,7 +243,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     const people = store.list('users').filter(active).map(personOf);
     const known = new Set(people.map((p) => p.id));
     for (const id of ids) if (!known.has(id)) { const x = personOfId(id); if (x) people.push(isContactId(id) ? x : { ...x, gone: true }); }
-    const out = { ok: true, me: { ...personOf(u), canMake: !isFree(u), boss: isBoss(u), opts: optsOf(u.id) }, clients: clientsFor(u), groups, people, pins, seq: Q.lastSeq.get().s || 0,
+    const out = { ok: true, me: { ...personOf(u), canMake: !isFree(u), boss: isBoss(u), opts: optsOf(u.id) }, clients: clientsWith(u, groups), groups, people, pins, seq: Q.lastSeq.get().s || 0,
       macs: macsOf(u.id).map((m) => ({ id: m.id, name: m.name, linkedAt: m.linked_at, seenAt: m.seen_at })),
       // (the app's icon on occasions, as E11 Console's — appstart.js icons; Haris 2026-11-19 09:42)
       icons: (() => { try { return icons ? icons() : null; } catch { return null; } })() };
@@ -560,6 +572,13 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       apns.sendTo(uid, { title: g.name, body: `${from.name || from.email}: ${text}`, tag: g.id, kind: 'talk', groupId: g.id, msgId, clientId: c ? c.id : null, category: 'talk-msg', collapse: msgId, ...(m ? { m } : {}) }).catch(() => {});
     }
   }
+  // added to a group (a new one, or one that was there): told — "Haris added you to Winter campaign"; a tap opens it
+  //  (Haris 2026-11-25 10:45 — the grey line in the chat sends nothing)
+  function notifyAdded(g, by, ids) {
+    if (!apns || !apns.enabled()) return;
+    const c = clientById(g.client), who = nameOf(by);
+    for (const uid of ids) if (uid !== by) apns.sendTo(uid, { title: g.name, body: `${who} added you to ${g.name}`, tag: g.id, kind: 'talk', groupId: g.id, clientId: c ? c.id : null }).catch(() => {});
+  }
   // deleted for everyone: its notification, where it was shown, replaced in place — quietly — by "This message was deleted"
   //  (the same message id as its collapse id; kind 'talkdel': no helper, no wake — Haris 2026-11-22 16:22)
   function unnotify(g, from, msgId, mentions = []) {
@@ -863,6 +882,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         const g = Q.group.get(id);
         changed(g, u.id);
         sys(g, u.id, `${nameOf(u.id)} made the group “${name}”`);
+        notifyAdded(g, u.id, ms);
         return { ok: true, group: groupView(g, u.id) };
       }
       case 'addPeople': {
@@ -874,6 +894,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         for (const id of add) Q.addMember.run(g.id, id, t, u.id);
         changed(g, u.id);
         sys(g, u.id, `${nameOf(u.id)} added ${add.map(nameOf).join(', ')}`);
+        notifyAdded(g, u.id, add);
         return { ok: true, group: groupView(g, u.id) };
       }
       case 'removePerson': {
