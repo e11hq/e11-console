@@ -25,3 +25,19 @@ jobs:
           echo "== the app's icon files"; ls "$app" | grep -i "icon\|Occasion" || true
           echo "== Assets.car's app icons"; xcrun --sdk iphoneos assetutil --info "$app/Assets.car" 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(sorted({x.get('Name') for x in d if x.get('AssetType') in ('Icon Image','MultiSized Image','Image') and ('Icon' in str(x.get('Name')) or 'Occasion' in str(x.get('Name')))}))" || true
           for p in "$app"/PlugIns/*.appex; do echo "== $(basename "$p")"; plutil -p "$p/Info.plist" | grep -i "icon\|NSExtensionPoint\|UserActivity" || true; ls "$p" | grep -i icon || true; done
+          echo "== the loose icon files' colours (centre, lower-right corner, top)"
+          for f in "$app"/AppIcon*.png; do sips -s format bmp "$f" --out /tmp/i.bmp >/dev/null 2>&1; python3 -c '
+          import struct,sys
+          b=open("/tmp/i.bmp","rb").read(); off=struct.unpack("<I",b[10:14])[0]; w,h=struct.unpack("<ii",b[18:26]); bpp=struct.unpack("<H",b[28:30])[0]//8
+          row=((w*bpp+3)//4)*4; H=abs(h)
+          def px(x,y):
+              yy=(H-1-y) if h>0 else y; i=off+yy*row+x*bpp; return (b[i+2],b[i+1],b[i])
+          print(sys.argv[1].split("/")[-1], w, H, "centre", px(w//2,H//2), "corner", px(w-w//8,H-H//8), "top", px(w//2,H//10))' "$f"; done
+          echo "== Assets.car: every rendition of AppIcon and Occasion-lebanon"
+          xcrun --sdk iphoneos assetutil --info "$app/Assets.car" 2>/dev/null > /tmp/car.json || true
+          python3 -c '
+          import json
+          d=json.load(open("/tmp/car.json"))
+          for x in d:
+              n=str(x.get("Name"))
+              if n in ("AppIcon","Occasion-lebanon"): print(n, x.get("AssetType"), x.get("RenditionName"), x.get("PixelWidth"), x.get("Appearance"), x.get("Idiom"), x.get("Scale"))' || true
