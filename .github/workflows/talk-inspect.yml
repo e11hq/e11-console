@@ -16,8 +16,10 @@ jobs:
         run: |
           gh run download "${{ inputs.run }}" -R "${{ github.repository }}" -n "${{ inputs.artifact }}" -D a
           ls -la a
-          ipa=$(ls a/*.ipa | head -1); mkdir x; (cd x && unzip -q "../$ipa")
-          app=$(ls -d x/Payload/*.app | head -1)
+          mkdir x; (cd a && for z in *.zip; do [ -f "$z" ] && unzip -q -o "$z"; done; true)
+          ipa=$(find a -name '*.ipa' | head -1)
+          if [ -n "$ipa" ]; then (cd x && unzip -q "../$ipa"); app=$(ls -d x/Payload/*.app | head -1); else app=$(find a -name '*.app' -type d | head -1); fi
+          echo "app: $app"; find a -maxdepth 3 | head -20
           echo "== app Info.plist: icons"; plutil -extract CFBundleIcons json -o - "$app/Info.plist" | python3 -m json.tool || true
           echo "== CFBundleIconName / CFBundleIconFiles"; plutil -p "$app/Info.plist" | grep -i "icon" || true
           echo "== the app's icon files"; ls "$app" | grep -i "icon\|Occasion" || true
