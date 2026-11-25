@@ -15,7 +15,8 @@ import os from 'node:os';
 const [dataDir, email] = process.argv.slice(2);
 const store = openStore(path.join(dataDir, 'db', 'e11.sqlite'));
 const access = createAccess(store, { ownerEmail: email, plans: true });
-const talk = createTalk({ dataDir, store, access });
+let clock = null;   // (the bubble check's messages at chosen times)
+const talk = createTalk({ dataDir, store, access, now: () => clock ?? Date.now() });
 const demoDir = fileURLToPath(new URL('../server/src/demo/', import.meta.url));
 const r = talk.reviewDemo('u-review', demoDir);
 
@@ -39,6 +40,18 @@ if (others.length) {
   extra.voice = sent;
   for (const [x, e] of [[others[1], '🔥'], [others[2], '👏'], [me, '👏']]) if (x && sent.id) talk.act(x, { act: 'react', msg: sent.id, emoji: e });
   extra.reply = talk.act(me, { act: 'send', group: g.id, text: 'Got it — thanks! 🙌' });
+}
+// (the bubble check — Haris 2026-11-25 20:57: your "Blue or red? Check again" at every minute from 8:30 to 8:59 PM today,
+//  then "Red or blue? Check again" the same, in a group of their own — for the time beside the words to be looked at)
+if (process.env.E11_BUBBLE === '1') {
+  const others2 = g.members.filter((id) => id !== me.id);
+  const bg = talk.act(me, { act: 'newGroup', client: g.client, name: 'Bubble check', members: others2.slice(0, 1) }).group;
+  for (const text of ['Blue or red? Check again', 'Red or blue? Check again']) for (let mi = 30; mi < 60; mi++) {
+    const d = new Date(); d.setHours(20, mi, 0, 0); clock = d.getTime() - (text.startsWith('Blue') ? 86400_000 : 0)
+    talk.act(me, { act: 'send', group: bg.id, text });
+  }
+  clock = null;
+  extra.bubble = bg && bg.id;
 }
 const db = new DatabaseSync(path.join(dataDir, 'db', 'talk.sqlite'));
 const first = String(me.name || 'Alex').split(' ')[0];

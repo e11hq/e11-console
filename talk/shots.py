@@ -9,12 +9,13 @@ BASE = f'http://127.0.0.1:{PORT}'
 TMP = os.environ.get('RUNNER_TEMP', '/tmp')
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DD = sys.argv[1]
+BUBBLE = os.environ.get('E11_BUBBLE') == '1'   # (the chat bubble's time measured — Haris 2026-11-25 20:57)
 EMAIL = 'review@e11hq.com'
 OUT = os.path.join(TMP, 'talk-shots-out'); shutil.rmtree(OUT, ignore_errors=True); os.makedirs(OUT)
 DATA = os.path.join(TMP, 'talkshotsdata'); shutil.rmtree(DATA, ignore_errors=True)
 def sh(*a, **k): return subprocess.run(list(a), capture_output=True, text=True, **k)
 r1 = sh('node', os.path.join(ROOT, 'ios', 'shots-demo.mjs'), DATA, EMAIL); print('console demo', r1.stdout[-400:], r1.stderr[-600:], flush=True)
-r2 = sh('node', os.path.join(ROOT, 'talk', 'shots-demo.mjs'), DATA, EMAIL); print('talk demo', r2.stdout[-400:], r2.stderr[-1200:], flush=True)
+r2 = sh('node', os.path.join(ROOT, 'talk', 'shots-demo.mjs'), DATA, EMAIL, env=dict(os.environ)); print('talk demo', r2.stdout[-400:], r2.stderr[-1200:], flush=True)
 env = dict(os.environ, AUTH_DEV='1', DATA_DIR=DATA, PORT=str(PORT), ADMIN_EMAIL=EMAIL, APP_VERSION='9.9.9-test.1', SHARE_DIR='')
 srv = subprocess.Popen(['node', os.path.join(ROOT, 'server/src/index.js')], env=env, stdout=open(os.path.join(TMP, 'talk-shots-server.log'), 'w'), stderr=subprocess.STDOUT)
 try:
@@ -29,6 +30,12 @@ try:
     rtv = lambda rt: [int(x) for x in re.findall(r'(\d+)', rt.split('iOS')[-1])[:2]]
     ph = sorted([(rtv(rt), d) for rt, ds in devs.items() if 'iOS' in rt for d in ds if re.match(r'iPhone \d+ Pro Max$', d['name'])], key=lambda x: (x[0], x[1]['name']))
     udid = ph[-1][1]['udid']; print('simulator', ph[-1][1]['name'], flush=True)
+    if BUBBLE:
+        # (Haris's iPhone's size, 393 points wide — an iPhone 16 made for it if there isn't one; the newest iOS)
+        rts = sorted([rt for rt in devs if 'iOS' in rt], key=rtv)
+        mine = [d for d in devs.get(rts[-1], []) if d['name'] == 'Bubble iPhone 16']
+        udid = mine[0]['udid'] if mine else sh('xcrun', 'simctl', 'create', 'Bubble iPhone 16', 'com.apple.CoreSimulator.SimDeviceType.iPhone-16', rts[-1]).stdout.strip()
+        print('simulator Bubble iPhone 16', udid, flush=True)
     sh('xcrun', 'simctl', 'boot', udid); sh('xcrun', 'simctl', 'bootstatus', udid, '-b', timeout=300)
     sh('xcrun', 'simctl', 'ui', udid, 'appearance', 'light')
     sh('xcrun', 'simctl', 'status_bar', udid, 'clear')
@@ -36,7 +43,7 @@ try:
     sh('xcrun', 'simctl', 'uninstall', udid, 'ae.e11.talk.ios')
     xctr = glob.glob(os.path.join(DD, 'Build', 'Products', '*.xctestrun'))
     renv = dict(os.environ, TEST_RUNNER_E11_EMAIL=EMAIL, TEST_RUNNER_E11_SERVER=BASE, TEST_RUNNER_E11_SHOTS_OUT=OUT)
-    args = ['xcodebuild', 'test-without-building', '-destination', f'id={udid}', '-only-testing:E11TalkUITests/TalkShotsTests', '-resultBundlePath', os.path.join(TMP, 'talkshots.xcresult')]
+    args = ['xcodebuild', 'test-without-building', '-destination', f'id={udid}', '-only-testing:E11TalkUITests/' + ('TalkBubbleTests' if BUBBLE else 'TalkShotsTests'), '-resultBundlePath', os.path.join(TMP, 'talkshots.xcresult')]
     args += ['-xctestrun', xctr[0]] if xctr else ['-project', os.path.join(ROOT, 'talk/E11Talk.xcodeproj'), '-scheme', 'E11Talk', '-derivedDataPath', DD]
     r = subprocess.run(args, env=renv, capture_output=True, text=True, timeout=1800)
     print('exit', r.returncode, r.stdout[-3000:], r.stderr[-1500:], flush=True)

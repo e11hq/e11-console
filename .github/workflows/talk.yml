@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "build (built, checked, signed and kept — the default), shots (the App Store screenshots: nothing signed or sent) or symbols (SF Symbols drawn for choosing one: nothing built)"
+        description: "build (built, checked, signed and kept — the default), bubble (the chat bubble's time measured in the simulator: nothing signed or sent), shots (the App Store screenshots: nothing signed or sent) or symbols (SF Symbols drawn for choosing one: nothing built)"
         default: build
       where:
         description: "mac (Haris's Mac — the default) or github (GitHub's own Mac: the signed build kept as this run's artifact, sent from there)"
@@ -49,7 +49,7 @@ jobs:
       - name: The App Store screenshots
         # (mode=shots — Haris 2026-11-14: main's server and shared rules, Console's demo maker from ios-nav; Apple's UI testing
         #  walks Talk against the App Review copy's made-up chats — talk/shots.py; nothing signed or sent)
-        if: inputs.mode == 'shots'
+        if: inputs.mode == 'shots' || inputs.mode == 'bubble'
         continue-on-error: true
         run: |
           git fetch -q --depth=1 origin main ios-nav
@@ -58,9 +58,16 @@ jobs:
           ( cd server && [ -d node_modules ] || npm ci --omit=dev >/dev/null 2>&1 || true )
           xcodebuild -project talk/E11Talk.xcodeproj -scheme E11Talk -configuration Debug -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build-talk CODE_SIGNING_ALLOWED=NO build-for-testing 2>&1 | tail -20
+          if [ "${{ inputs.mode }}" = bubble ]; then export E11_BUBBLE=1; fi
           python3 talk/shots.py build-talk 2>&1 | tee "$RUNNER_TEMP/talk-shots.log"; true
+          # (bubble: the pictures kept on the branch seekcheck-data, bubble/ — measuring only)
+          if [ "${{ inputs.mode }}" = bubble ]; then
+            cd "$RUNNER_TEMP" && rm -rf sd && git clone -q --depth 1 -b seekcheck-data "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" sd && cd sd && rm -rf bubble && mkdir bubble
+            cp "$RUNNER_TEMP"/talk-shots-out/*.png bubble/ 2>/dev/null; cp "$RUNNER_TEMP/talk-shots.log" bubble/ 2>/dev/null; git add -A bubble
+            git -c user.name=bubblecheck -c user.email=bubblecheck@e11.invalid commit -qm "Talk bubble check $(date -u +%FT%TZ)" && git push -q origin HEAD:seekcheck-data; true
+          fi
       - name: Build for the simulator
-        if: inputs.mode != 'shots'
+        if: inputs.mode != 'shots' && inputs.mode != 'bubble'
         run: |
           set +e
           xcodebuild -project talk/E11Talk.xcodeproj -scheme E11Talk -configuration Debug -sdk iphonesimulator \
@@ -68,7 +75,7 @@ jobs:
           grep -E "error:" "$RUNNER_TEMP/talk-build-full.log" | sort -u | head -80 > "$RUNNER_TEMP/talk-build.log"
           [ $status -eq 0 ] || exit $status
       - name: Check in the simulator
-        if: inputs.mode != 'shots'
+        if: inputs.mode != 'shots' && inputs.mode != 'bubble'
         continue-on-error: true
         run: |
           APP=build-talk/Build/Products/Debug-iphonesimulator/E11Talk.app
@@ -100,7 +107,7 @@ jobs:
           { echo "--- chat check"; xcrun simctl spawn "$DEV" log show --style compact --start "$START2" --predicate 'process == "E11Talk"' 2>/dev/null | grep "chatcheck" | tail -10; } >> "$RUNNER_TEMP/talk-check.log" 2>&1
           xcrun simctl terminate "$DEV" ae.e11.talk.ios; xcrun simctl shutdown "$DEV"; true
       - name: Sign and keep on this Mac
-        if: inputs.mode != 'shots'
+        if: inputs.mode != 'shots' && inputs.mode != 'bubble'
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
@@ -121,7 +128,7 @@ jobs:
           fi
           rm -f "$KEY"; echo "E11 Talk build $BUILD signed and kept — waiting for Haris before TestFlight"
       - name: Keep the signed build (GitHub's Mac)
-        if: inputs.where == 'github' && inputs.mode != 'shots' && env.KEEP != ''
+        if: inputs.where == 'github' && inputs.mode != 'shots' && inputs.mode != 'bubble' && env.KEEP != ''
         uses: actions/upload-artifact@v4
         with:
           name: talk-${{ github.run_number }}
