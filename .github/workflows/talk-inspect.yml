@@ -1,0 +1,25 @@
+# Read-only: what a kept E11 Talk build tells iPhone about itself — its icons (primary and alternates) and its
+# extensions' — printed, nothing changed or sent (Haris 2026-11-25 13:49: the cedar icon on the chat-style banner)
+name: Talk build inspect
+on:
+  workflow_dispatch:
+    inputs:
+      run: { description: "the build run's id", required: true }
+      artifact: { description: "its artifact (talk-N)", required: true }
+permissions: { actions: read, contents: read }
+jobs:
+  inspect:
+    runs-on: macos-15
+    steps:
+      - name: The build's own words about its icons
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          gh run download "${{ inputs.run }}" -R "${{ github.repository }}" -n "${{ inputs.artifact }}" -D a
+          ls -la a
+          ipa=$(ls a/*.ipa | head -1); mkdir x; (cd x && unzip -q "../$ipa")
+          app=$(ls -d x/Payload/*.app | head -1)
+          echo "== app Info.plist: icons"; plutil -extract CFBundleIcons json -o - "$app/Info.plist" | python3 -m json.tool || true
+          echo "== CFBundleIconName / CFBundleIconFiles"; plutil -p "$app/Info.plist" | grep -i "icon" || true
+          echo "== the app's icon files"; ls "$app" | grep -i "icon\|Occasion" || true
+          echo "== Assets.car's app icons"; xcrun --sdk iphoneos assetutil --info "$app/Assets.car" 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(sorted({x.get('Name') for x in d if x.get('AssetType') in ('Icon Image','MultiSized Image','Image') and ('Icon' in str(x.get('Name')) or 'Occasion' in str(x.get('Name')))}))" || true
+          for p in "$app"/PlugIns/*.appex; do echo "== $(basename "$p")"; plutil -p "$p/Info.plist" | grep -i "icon\|NSExtensionPoint\|UserActivity" || true; ls "$p" | grep -i icon || true; done
