@@ -36,6 +36,26 @@ final class TalkBubbleTests: XCTestCase {
       }
     }
     Thread.sleep(forTimeInterval: 3); shot("end")
+    // (the reply's own route: a message of yours made by the server, not by this phone — as a reply from a notification is —
+    //  arriving while the chat is open; then the app sent to the background, two more the same way, and back)
+    func serverSend(_ text: String) {
+      guard let base = URL(string: env["E11_SERVER"] ?? ""), let email = env["E11_EMAIL"] else { return }
+      func call(_ path: String, _ body: [String: Any]?) -> [String: Any]? {
+        var r = URLRequest(url: base.appendingPathComponent(path)); r.setValue(email, forHTTPHeaderField: "X-Dev-Email")
+        if let b = body { r.httpMethod = "POST"; r.setValue("application/json", forHTTPHeaderField: "Content-Type"); r.httpBody = try? JSONSerialization.data(withJSONObject: b) }
+        let sem = DispatchSemaphore(value: 0); var out: [String: Any]?
+        URLSession.shared.dataTask(with: r) { d, _, _ in out = d.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }; sem.signal() }.resume()
+        _ = sem.wait(timeout: .now() + 20); return out
+      }
+      let st = call("api/talk/state", nil)
+      let gid = (st?["groups"] as? [[String: Any]])?.first { ($0["name"] as? String) == "Bubble check" }?["id"] as? String
+      if let g = gid { _ = call("api/talk/act", ["act": "send", "group": g, "text": text, "cid": UUID().uuidString]) }
+    }
+    serverSend("Blue or red? Check again"); Thread.sleep(forTimeInterval: 4); shot("server-open")
+    serverSend("ok"); Thread.sleep(forTimeInterval: 4); shot("server-ok-open")
+    XCUIDevice.shared.press(.home); Thread.sleep(forTimeInterval: 2)
+    serverSend("Blue or red? Check again"); serverSend("ok"); Thread.sleep(forTimeInterval: 3)
+    app.activate(); Thread.sleep(forTimeInterval: 5); shot("server-background")
     for i in 0..<12 { app.swipeDown(velocity: .slow); Thread.sleep(forTimeInterval: 1.2); shot("up\(i)") }
     // the same words typed and sent
     for i in 0..<14 { app.swipeUp(velocity: .fast); _ = i }

@@ -31,11 +31,9 @@ try:
     ph = sorted([(rtv(rt), d) for rt, ds in devs.items() if 'iOS' in rt for d in ds if re.match(r'iPhone \d+ Pro Max$', d['name'])], key=lambda x: (x[0], x[1]['name']))
     udid = ph[-1][1]['udid']; print('simulator', ph[-1][1]['name'], flush=True)
     if BUBBLE:
-        # (Haris's iPhone's size, 393 points wide — an iPhone 16 made for it if there isn't one; the newest iOS)
-        rts = sorted([rt for rt in devs if 'iOS' in rt], key=rtv)
-        mine = [d for d in devs.get(rts[-1], []) if d['name'] == 'Bubble iPhone 16']
-        udid = mine[0]['udid'] if mine else sh('xcrun', 'simctl', 'create', 'Bubble iPhone 16', 'com.apple.CoreSimulator.SimDeviceType.iPhone-16', rts[-1]).stdout.strip()
-        print('simulator Bubble iPhone 16', udid, flush=True)
+        # (an ordinary iPhone — not Pro, not Max — on the newest iOS: the nearest this Mac has to Haris's 393-point phone)
+        pl = sorted([(rtv(rt), d) for rt, ds in devs.items() if 'iOS' in rt for d in ds if re.fullmatch(r'iPhone \d+', d['name'])], key=lambda x: (x[0], x[1]['name']))
+        udid = pl[-1][1]['udid']; print('simulator', pl[-1][1]['name'], flush=True)
     sh('xcrun', 'simctl', 'boot', udid); sh('xcrun', 'simctl', 'bootstatus', udid, '-b', timeout=300)
     sh('xcrun', 'simctl', 'ui', udid, 'appearance', 'light')
     sh('xcrun', 'simctl', 'status_bar', udid, 'clear')
