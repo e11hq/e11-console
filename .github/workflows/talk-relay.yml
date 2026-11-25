@@ -43,7 +43,8 @@ jobs:
           (timeout 300 npx --yes wrangler@4 tail --format json || true) > tail.json
           jq -r 'select(.event != null) | [ (.eventTimestamp/1000 | strftime("%H:%M:%S")), ((.eventTimestamp % 1000)|tostring), (.event.request.method // "-"), ((.event.request.url // .event.type // "-") | sub("^https?://[^/]+"; "") | sub("/r2/(?<k>put|get)/.*"; "/r2/\(.k)/…") | sub("\\?.*"; "")), ((.event.response.status // "-")|tostring), ("wall " + ((.wallTime // 0)|tostring) + "ms"), ("cpu " + ((.cpuTime // 0)|tostring) + "ms"), (.outcome // "-")] | @tsv' tail.json || echo "The log couldn't be read ($(wc -c < tail.json) bytes)"
           echo "--- statements that read over 500 rows ([rows] count statement):"
-          jq -r 'select(.logs != null) | .logs[] | (.message | map(tostring) | join(" ")) | select(startswith("[rows]"))' tail.json | sort | uniq -c | sort -k3,3nr | head -60 || true
+          jq -r 'select(.logs != null) | .logs[] | (.message | map(tostring) | join(" ")) | select(startswith("[rows]") or startswith("[req]"))' tail.json | sort | uniq -c | sort -k3,3nr | head -80 || true
+          echo "--- log lines in all: $(jq -r 'select(.logs != null) | .logs[]' tail.json | jq -s length 2>/dev/null)"
       # (Haris 2026-11-22 22:11: uploads straight to R2 failed — the key tried with the office's own signing: a tiny file put,
       #  read, deleted; only R2's status and error code are printed, never the key)
       - name: R2 key check

@@ -6,7 +6,7 @@ const norm = (a) => a.map((v) => (v === undefined ? null : typeof v === 'boolean
 const split = (text) => String(text).split(';').map((s) => s.trim()).filter(Boolean);
 // (a statement that read more than 500 rows: said in the Worker's log — the rows and the statement's start — to find
 //  what reads Cloudflare's rows-read; logging only, nothing else changes: Haris 2026-11-25 12:39)
-const heavy = (c, text) => { try { const n = c.rowsRead || 0; if (n > 500) console.log(`[rows] ${n} ${String(text).replace(/\s+/g, ' ').slice(0, 160)}`); } catch { /* fine */ } };
+const heavy = (c, text) => { try { const n = c.rowsRead || 0; globalThis.__rows = (globalThis.__rows || 0) + n; if (n > 500) console.log(`[rows] ${n} ${String(text).replace(/\s+/g, ' ').slice(0, 160)}`); } catch { /* fine */ } };
 const writes = (t) => !/^\s*(SELECT|WITH\s[\s\S]*?\bSELECT)\b/i.test(t);
 
 export class DatabaseSync {
