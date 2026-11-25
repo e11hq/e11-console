@@ -73,7 +73,7 @@ export class TalkHub extends DurableObject {
   // (the rows each call read, in all — said in the Worker's log when over 100: logging only, Haris 2026-11-25 12:39)
   async rowsOf(what, f) {
     const before = globalThis.__rows || 0;
-    try { return await f(); } finally { const n = (globalThis.__rows || 0) - before; if (n > 100) console.log(`[req] ${n} ${what}`); }
+    try { return await f(); } finally { const n = (globalThis.__rows || 0) - before; if (n > 100 || what === '/hub/status') console.log(`[req] ${n} ${what}`); }
   }
   fetch(req) { return this.rowsOf(new URL(req.url).pathname, () => this.fetchIn(req)); }
   async fetchIn(req) {

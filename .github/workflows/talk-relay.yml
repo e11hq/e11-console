@@ -40,7 +40,9 @@ jobs:
       - name: Cloudflare's live log, 5 minutes
         if: inputs.mode == 'watch'
         run: |
-          (timeout 300 npx --yes wrangler@4 tail --format json || true) > tail.json
+          (timeout 300 npx --yes wrangler@4 tail --format json || true) > tail.json &
+          sleep 25; curl -s -o /dev/null https://talkline.e11hq.com/hub/status || true   # (one known call: its log line shows the log works)
+          wait
           jq -r 'select(.event != null) | [ (.eventTimestamp/1000 | strftime("%H:%M:%S")), ((.eventTimestamp % 1000)|tostring), (.event.request.method // "-"), ((.event.request.url // .event.type // "-") | sub("^https?://[^/]+"; "") | sub("/r2/(?<k>put|get)/.*"; "/r2/\(.k)/…") | sub("\\?.*"; "")), ((.event.response.status // "-")|tostring), ("wall " + ((.wallTime // 0)|tostring) + "ms"), ("cpu " + ((.cpuTime // 0)|tostring) + "ms"), (.outcome // "-")] | @tsv' tail.json || echo "The log couldn't be read ($(wc -c < tail.json) bytes)"
           echo "--- statements that read over 500 rows ([rows] count statement):"
           jq -r 'select(.logs != null) | .logs[] | (.message | map(tostring) | join(" ")) | select(startswith("[rows]") or startswith("[req]"))' tail.json | sort | uniq -c | sort -k3,3nr | head -80 || true
