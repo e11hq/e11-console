@@ -73,7 +73,14 @@ export class TalkHub extends DurableObject {
   // (the rows each call read, in all — said in the Worker's log when over 100: logging only, Haris 2026-11-25 12:39)
   async rowsOf(what, f) {
     const before = globalThis.__rows || 0;
-    try { return await f(); } finally { const n = (globalThis.__rows || 0) - before; if (n > 100 || what === '/hub/status') console.log(`[req] ${n} ${what}`); }
+    globalThis.__byStmt = new Map();
+    try { return await f(); } finally {
+      const n = (globalThis.__rows || 0) - before;
+      if (n > 100 || what === '/hub/status') {
+        const top = [...(globalThis.__byStmt || new Map())].sort((x, y) => y[1].rows - x[1].rows).slice(0, 4).map(([t, v]) => `${v.rows} rows in ${v.runs} runs: ${t}`);
+        console.log(`[req] ${n} ${what}${top.length ? ' | ' + top.join(' | ') : ''}`);
+      }
+    }
   }
   fetch(req) { return this.rowsOf(new URL(req.url).pathname, () => this.fetchIn(req)); }
   async fetchIn(req) {
@@ -230,7 +237,11 @@ export class TalkHub extends DurableObject {
     const a = ws.deserializeAttachment(); if (!a || !a.dev) return;
     ws.stop = this.core.listen(a.dev, (s) => { try { ws.send(s); } catch { /* closed */ } });
   }
-  webSocketMessage(ws, msg) { return this.rowsOf('ws', () => this.wsIn(ws, msg)); }
+  webSocketMessage(ws, msg) {
+    let what = 'ws';
+    try { const m = JSON.parse(typeof msg === 'string' ? msg : new TextDecoder().decode(msg)); what = `ws ${m.call}${m.body && m.body.act ? ' ' + m.body.act : ''}`; } catch { /* fine */ }
+    return this.rowsOf(what, () => this.wsIn(ws, msg));
+  }
   async wsIn(ws, msg) {
     let m; try { m = JSON.parse(typeof msg === 'string' ? msg : new TextDecoder().decode(msg)); } catch { return; }
     if (await this.officeHas()) { ws.send(JSON.stringify({ id: m.id, r: { ok: false, office: true, error: 'E11 Talk is with the office right now' } })); return; }
