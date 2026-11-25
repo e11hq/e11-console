@@ -36,11 +36,7 @@ enum OccasionIcon {
     if !Thread.isMainThread { DispatchQueue.main.async { apply() }; return }
     let app = UIApplication.shared
     guard app.supportsAlternateIcons, app.applicationState == .active, !busy else { return }
-    // (no occasion: "Occasion-everyday" — the normal icon, as an icon of its own — not back to the app's own (nil):
-    //  Haris's phone kept showing the Lebanon icon in notifications, of both apps, days after they went back to the
-    //  normal one, through a restart and a reinstall; iPhone renews its notifications' copy on a change to an icon, not on
-    //  a change back to none — Haris 2026-11-25 22:03)
-    let name = "Occasion-" + (wanted() ?? "everyday")
+    let name = wanted().map { "Occasion-" + $0 }
     guard app.alternateIconName != name else { return }
     busy = true
     app.setAlternateIconName(name) { _ in DispatchQueue.main.async { busy = false } }
