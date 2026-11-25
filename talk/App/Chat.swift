@@ -485,7 +485,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private var hKey: String { group + "|" + traitCollection.preferredContentSizeCategory.rawValue }
   // (the rows' drawing changed in a way a kept height can't know: every kept height measured again once — 2: a turned-off
   //  link's card kept a reused row's tall height, Haris 2026-11-16)
-  static let layoutV = 3   // (3: heights kept from a row's guess, not its measure, measured again — Haris 2026-11-25)
+  static let layoutV = 2
   func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat {
     if case .intro? = data.itemIdentifier(for: ip) { return introHeight() }
     if case .typing? = data.itemIdentifier(for: ip) { return TypingCell.height }
@@ -511,19 +511,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   func tableView(_ tv: UITableView, willDisplay cell: UITableViewCell, forRowAt ip: IndexPath) {
     // (the dots: breathing again once the list has put the row in — it takes animations off a row it brings in)
     if let t = cell as? TypingCell { DispatchQueue.main.async { t.dots.breathe() } }
-    // (the row's own measure kept — not its height at this moment, which can still be the guess it came in with: a reply
-    //  sent from a notification came in while Talk was in the background, its one-line guess was kept as its height, and
-    //  its words and time — two lines — were squeezed into one, the time on the words, for good. Reproduced in the
-    //  simulator with that kept height, Haris 2026-11-25 22:12. A row whose measure differs is set to it at once.)
-    if case .msg(let key)? = data.itemIdentifier(for: ip) {
-      let w = tv.bounds.width
-      cell.bounds.size.width = w
-      let fit = ceil(cell.contentView.systemLayoutSizeFitting(CGSize(width: w, height: UIView.layoutFittingCompressedSize.height),
-                                                             withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height)
-      let h = fit > 1 ? fit : cell.bounds.height
-      ChatVC.heights[hKey, default: [:]][key] = (sigs[key] ?? 0, h)
-      if abs(h - cell.bounds.height) > 1 { DispatchQueue.main.async { UIView.performWithoutAnimation { tv.performBatchUpdates(nil) } } }
-    }
+    if case .msg(let key)? = data.itemIdentifier(for: ip) { ChatVC.heights[hKey, default: [:]][key] = (sigs[key] ?? 0, cell.bounds.height) }
     // (taps as the keyboard is now — a row made while it was up, out of sight then, kept them off: the first of two photos
     //  sent together wouldn't open, Haris 2026-11-12)
     cell.contentView.isUserInteractionEnabled = !keyUp
@@ -2379,6 +2367,11 @@ final class Bleed: UIView {
   func reach(_ top: CGFloat, _ left: CGFloat, _ bottom: CGFloat, _ right: CGFloat) { t.constant = -top; l.constant = -left; b.constant = bottom; r.constant = right }
 }
 
+// a bubble's words: a point wider than their measure, so the line they're measured on is never drawn a fraction too narrow
+// (the time's room wrapped onto a line the bubble didn't have — the time on the words; Haris 2026-11-25 22:12)
+final class RoomyLabel: UILabel {
+  override var intrinsicContentSize: CGSize { let s = super.intrinsicContentSize; return s.width > 0 ? CGSize(width: ceil(s.width) + 1, height: s.height) : s }
+}
 final class BubbleCell: UITableViewCell {
   // (a logo on a link card: drawn in the middle with room around it — a third of the card's height each side)
   // (a logo with its room round it, made once off the main thread and kept: made again each time a card was drawn — its
@@ -2470,7 +2463,7 @@ final class BubbleCell: UITableViewCell {
   let held = UIView()
   private var heldLead: NSLayoutConstraint!, heldTrail: NSLayoutConstraint!, heldToBubble: NSLayoutConstraint!, heldToPill: NSLayoutConstraint!
   private let stack = UIStackView()
-  private let nameL = UILabel(), roleL = UILabel(), textL = UILabel(), footL = UILabel(), stamp = UILabel()
+  private let nameL = UILabel(), roleL = UILabel(), textL = RoomyLabel(), footL = UILabel(), stamp = UILabel()
   // a reply's quote (the design: a tinted box 4 from the bubble's edge, a bar in their colour, a photo's picture at the right)
   private let quote = UIView(), quoteBar = UIView(), quoteName = UILabel(), quoteText = UILabel(), quoteThumb = UIImageView()
   private lazy var quoteWrap = Bleed(quote)
@@ -2873,7 +2866,11 @@ final class BubbleCell: UITableViewCell {
     // (the words measured at exactly the width they're laid out at: 12 in from the bubble's left, 11 from its right on yours,
     //  12 on theirs — yours were measured 1 narrower, wrapped onto a line more than they showed, and the room for it sat
     //  above the words: Haris 2026-11-14)
-    textL.preferredMaxLayoutWidth = UIScreen.main.bounds.width * (m.deleted ? BubbleCell.goneWide : mine ? 281 : 250) / 393 - (mine ? 23 : 24)
+    // (measured a point narrower than they can be drawn, on whole pixels: words and the time's room that only just fit were
+    //  measured on one line and drawn on two, at a width a fraction narrower — the time on the words. Reproduced in the
+    //  simulator, Haris 2026-11-25 22:12: "…Check again" at 8:31 and 8:51 PM)
+    let sc = max(1, UIScreen.main.scale)
+    textL.preferredMaxLayoutWidth = floor((UIScreen.main.bounds.width * (m.deleted ? BubbleCell.goneWide : mine ? 281 : 250) / 393 - (mine ? 23 : 24)) * sc) / sc - 1
     // (a forwarded photo sits inside the bubble under "Forwarded", rounded 14, the bubble's colour round it)
     framed = isPhoto && m.fwd == true
     media = isPhoto && !framed; caption = isPhoto && !m.text.isEmpty; overPhoto = isPhoto && !caption
