@@ -120,6 +120,8 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     pending: q('SELECT e.seq, e.grp, e.type, e.data, e.at, e.by FROM waiting w JOIN events e ON e.seq = w.seq WHERE w.uid = ? AND w.seq > ? ORDER BY w.seq LIMIT ?'),
     gotMsgs: q("SELECT e.grp, e.data FROM waiting w JOIN events e ON e.seq = w.seq WHERE w.uid = ? AND w.seq <= ? AND e.type = 'msg' AND (e.by IS NULL OR e.by <> ?) ORDER BY w.seq"),
     ack: q('DELETE FROM waiting WHERE uid = ? AND seq <= ?'),
+    acking: q('SELECT seq FROM waiting WHERE uid = ? AND seq <= ?'),
+    stillWaiting: q('SELECT 1 FROM waiting WHERE seq = ? LIMIT 1'),
     lastSeq: q('SELECT MAX(seq) AS s FROM events'),
     orphanEvents: q('SELECT seq FROM events WHERE seq NOT IN (SELECT seq FROM waiting)'),
     dropEvent: q('DELETE FROM events WHERE seq = ?'),
@@ -461,8 +463,20 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       for (const r of Q.gotMsgs.all(u.id, Number(upto) || 0, pid)) { try { const id = JSON.parse(r.data).id; if (id) last.set(r.grp, id); } catch {} }
       for (const [gid, id] of last) { const g = Q.group.get(gid); if (g) emit(g, 'got', { upto: id }, pid, memberIds(g).filter((m) => m !== pid)); }
     }
+    // (what this ack frees, only: each message that has now reached everyone leaves the server at once, with its files
+    //  nobody else needs — the rest of the clean-up runs on its own (hourly here, daily on Cloudflare). The whole sweep
+    //  ran on every ack: ~10,300 rows read each on Cloudflare, measured 2026-11-25 — Haris 2026-11-25)
+    const seqs = Q.acking.all(u.id, Number(upto) || 0).map((r) => r.seq);
     Q.ack.run(u.id, Number(upto) || 0);
-    sweep();
+    const gone = [];
+    for (const seq of seqs) {
+      if (Q.stillWaiting.get(seq)) continue;
+      const e = db.prepare('SELECT data FROM events WHERE seq = ?').get(seq);
+      if (!e) continue;
+      try { gone.push(...filesIn(JSON.parse(e.data))); } catch { /* fine */ }
+      Q.dropEvent.run(seq);
+    }
+    if (gone.length) dropFiles(gone);
     return { ok: true };
   }
   // one message's notification reached this person's phone — E11 Talk's notification helper says so (Haris 2026-11-19
