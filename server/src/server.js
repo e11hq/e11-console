@@ -1813,10 +1813,11 @@ export function createServer(cfg) {
       return json(res, 200, { ok: true, rev, tasks: data.tasks.length, people: data.users.length });
     }
 
-    // (signed in to E11 Console — the iPhone app, the Mac app and the website all start from here: noted once, so Team
-    //  members shows them Active; before, only the website's welcome screen marked it, so the iPhone app's people stayed
-    //  "Hasn't signed in yet". E11 Talk never asks for this — Haris 2026-11-25 20:39)
-    if (p === '/api/snapshot' && req.method === 'GET') {
+    // (signed in to E11 Console — noted once, so Team members shows them Active; before, only the website's welcome screen
+    //  marked it, so the iPhone app's people stayed "Hasn't signed in yet" (Haris 2026-11-25 20:39). The full copy and the
+    //  live stream both count: the iPhone app asks for the full copy only the first time, then keeps it and opens only the
+    //  live stream — Yousef stayed "Hasn't signed in yet" (Haris 2026-11-25 22:51). E11 Talk uses neither)
+    if ((p === '/api/snapshot' || p === '/api/events') && req.method === 'GET') {
       const cur = store.get('users', String((req.realUser || u).id));
       if (cur && !cur.setup && !cur.signedInAt && cur.active !== false) store.apply([{ kind: 'users', id: cur.id, data: { ...cur, signedInAt: new Date().toISOString() } }], cur.id);
     }

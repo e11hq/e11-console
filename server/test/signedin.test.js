@@ -1,4 +1,4 @@
-// Signed in to E11 Console on any app (iPhone, Mac, website — all start from /api/snapshot): noted once, so Team members
+// Signed in to E11 Console on any app (iPhone, Mac, website — the full copy or the live stream): noted once, so Team members
 // shows them Active; E11 Talk's own calls don't count (Haris 2026-11-25 20:39 — Yousef showed "Hasn't signed in yet").
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -32,4 +32,13 @@ test('first Console sign-in noted once; Talk alone doesn’t mark it; the welcom
   assert.equal(app.store.get('users', 'u-t').signedInAt, undefined, 'Talk doesn’t count');
   await call(OWNER, '/api/snapshot');
   assert.equal(app.store.get('users', 'u-own').signedInAt, undefined, 'already set up: nothing added');
+});
+
+test('the live stream alone marks it — the iPhone app with its copy kept opens only that (Haris 2026-11-25 22:51)', async () => {
+  app.store.apply([{ kind: 'users', id: 'u-k', data: { id: 'u-k', email: 'kept@e11-digital.com', role: 'production', active: true, setup: false } }], 'test');
+  const ac = new AbortController();
+  const r = await fetch(base + '/api/events?since=0&client=ios-u-k', { headers: { 'X-Dev-Email': 'kept@e11-digital.com' }, signal: ac.signal });
+  assert.equal(r.status, 200);
+  ac.abort(); await r.body?.cancel().catch(() => {});
+  assert.ok(app.store.get('users', 'u-k').signedInAt, 'noted from the live stream');
 });
