@@ -41,7 +41,7 @@ try:
     sh('xcrun', 'simctl', 'uninstall', udid, 'ae.e11.talk.ios')
     xctr = glob.glob(os.path.join(DD, 'Build', 'Products', '*.xctestrun'))
     renv = dict(os.environ, TEST_RUNNER_E11_EMAIL=EMAIL, TEST_RUNNER_E11_SERVER=BASE, TEST_RUNNER_E11_SHOTS_OUT=OUT)
-    args = ['xcodebuild', 'test-without-building', '-destination', f'id={udid}', '-only-testing:E11TalkUITests/' + ('TalkBubbleTests' if BUBBLE else 'TalkShotsTests'), '-resultBundlePath', os.path.join(TMP, 'talkshots.xcresult')]
+    args = ['xcodebuild', 'test-without-building', '-destination', f'id={udid}', '-only-testing:E11TalkUITests/' + ('TalkBubbleTests/testStaleHeight' if BUBBLE else 'TalkShotsTests'), '-resultBundlePath', os.path.join(TMP, 'talkshots.xcresult')]
     args += ['-xctestrun', xctr[0]] if xctr else ['-project', os.path.join(ROOT, 'talk/E11Talk.xcodeproj'), '-scheme', 'E11Talk', '-derivedDataPath', DD]
     pusher = None
     if BUBBLE:
@@ -59,6 +59,25 @@ try:
             f = os.path.join(TMP, 'push.apns'); open(f, 'w').write(json.dumps(pl))
             print('push', sh('xcrun', 'simctl', 'push', udid, 'ae.e11.talk.ios', f).stdout, flush=True)
         pusher = threading.Thread(target=push, daemon=True); pusher.start()
+        # (the kept one-line height for "Blue or red? Check again" 8:41 PM yesterday — written while Talk is closed)
+        def stale():
+            for _ in range(900):
+                if os.path.exists(os.path.join(OUT, 'stale-now')): break
+                time.sleep(1)
+            try:
+                req = urllib.request.Request(BASE + '/api/talk/state', headers={'X-Dev-Email': EMAIL})
+                gid = next((g['id'] for g in json.loads(urllib.request.urlopen(req, timeout=20).read()).get('groups', []) if g.get('name') == 'Bubble check'), '')
+                c = sh('xcrun', 'simctl', 'get_app_container', udid, 'ae.e11.talk.ios', 'data').stdout.strip()
+                d = os.path.join(c, 'Library', 'Application Support', 'talk'); os.makedirs(d, exist_ok=True)
+                f = os.path.join(d, 'heights-127.0.0.1.json')
+                old = json.load(open(f)) if os.path.exists(f) else {}
+                print('kept heights before', json.dumps(old)[:600], flush=True)
+                for cat in ['UICTContentSizeCategoryL', 'UICTContentSizeCategoryM', 'UICTContentSizeCategoryXL']:
+                    old.setdefault(gid + '|' + cat, {})['c:bubble-Blue-41'] = 44.0
+                json.dump(old, open(f, 'w')); print('kept height written', f, flush=True)
+            except Exception as e: print('stale failed', e, flush=True)
+            open(os.path.join(OUT, 'stale-done'), 'w').write('1')
+        threading.Thread(target=stale, daemon=True).start()
     r = subprocess.run(args, env=renv, capture_output=True, text=True, timeout=1800)
     print('exit', r.returncode, r.stdout[-3000:], r.stderr[-1500:], flush=True)
     if BUBBLE: open(os.path.join(OUT, 'test-output.txt'), 'w').write(r.stdout + '\n' + r.stderr)

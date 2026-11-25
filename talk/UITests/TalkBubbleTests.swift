@@ -97,4 +97,54 @@ final class TalkBubbleTests: XCTestCase {
       Thread.sleep(forTimeInterval: 4); shot("typed")
     }
   }
+
+  /* The kept height (Haris 2026-11-25 22:12): Talk keeps each row's height, also on disk (heights-<server>.json); the
+     reply's row kept one line's height though its words and time need two — the time on the words. Here: Talk run once,
+     closed; the Mac writes a one-line height for "Blue or red? Check again" (8:41 PM yesterday, cid bubble-Blue-41) into
+     Talk's kept heights; Talk opened again on the chat, a message arriving (the chat drawn again), pictures. */
+  func testStaleHeight() {
+    continueAfterFailure = true
+    let env = ProcessInfo.processInfo.environment
+    let outDir = env["E11_SHOTS_OUT"] ?? NSTemporaryDirectory()
+    let out = URL(fileURLWithPath: outDir, isDirectory: true)
+    var n = 0
+    func shot(_ name: String) { n += 1; try? XCUIScreen.main.screenshot().pngRepresentation.write(to: out.appendingPathComponent(String(format: "S-%03d-%@.png", n, name))) }
+    let app = XCUIApplication()
+    app.launchEnvironment = ["E11_TALK_SERVER": env["E11_SERVER"] ?? "", "E11_TALK_DEV_EMAIL": env["E11_EMAIL"] ?? ""]
+    app.launch()
+    _ = app.tabBars.firstMatch.waitForExistence(timeout: 90)
+    Thread.sleep(forTimeInterval: 6)
+    let sb = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+    for l in ["Allow", "Don’t Allow", "Don't Allow"] { let b = sb.buttons[l]; if b.waitForExistence(timeout: 2) { b.tap(); break } }
+    app.terminate(); Thread.sleep(forTimeInterval: 1)
+    try? "1".write(toFile: outDir + "/stale-now", atomically: true, encoding: .utf8)
+    for _ in 0..<60 { if FileManager.default.fileExists(atPath: outDir + "/stale-done") { break }; Thread.sleep(forTimeInterval: 1) }
+    app.launch()
+    _ = app.tabBars.firstMatch.waitForExistence(timeout: 60)
+    Thread.sleep(forTimeInterval: 4)
+    func open() -> Bool {
+      let t = app.staticTexts["Bubble check"].firstMatch
+      guard t.waitForExistence(timeout: 3) else { return false }
+      Thread.sleep(forTimeInterval: 1); t.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap(); Thread.sleep(forTimeInterval: 3)
+      return app.textViews.firstMatch.waitForExistence(timeout: 5)
+    }
+    var ok = false
+    for t in 0..<2 where !ok {
+      let tb = app.tabBars.firstMatch.buttons.element(boundBy: t); if tb.exists { tb.tap(); Thread.sleep(forTimeInterval: 2) }
+      if open() { ok = true; break }
+      let rows = app.tables.firstMatch.cells
+      for i in 0..<min(rows.count, 6) where !ok {
+        rows.element(boundBy: i).tap(); Thread.sleep(forTimeInterval: 2)
+        if open() { ok = true } else { app.navigationBars.firstMatch.buttons.element(boundBy: 0).tap(); Thread.sleep(forTimeInterval: 1.2) }
+      }
+    }
+    // up to yesterday's 8:41 PM — each screenful
+    for i in 0..<10 {
+      shot("up\(i)")
+      if app.staticTexts["8:41 PM"].exists && i > 0 { break }
+      app.swipeDown(velocity: .slow); Thread.sleep(forTimeInterval: 1.5)
+    }
+    shot("at-841"); app.swipeDown(velocity: .slow); Thread.sleep(forTimeInterval: 1.5); shot("at-841-b")
+  }
 }
+
