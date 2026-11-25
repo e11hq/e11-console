@@ -136,6 +136,11 @@ Store, the shared sign-in goes into both apps and both are sent for review toget
 `initials` in web/ and server/claimsheet.js). **Remember when other apps start or resume (E11 Talk's `Talk.initials`,
 any new app): the same rule.**
 
+**Builds and checks run on Haris's Mac — never on GitHub's Macs unless he says so (Haris, 2026-11-25 21:14: "never use
+github unless i say"):** every build (ios.yml, talk.yml, mac workflows, TestFlight sends) with its default `where` (his Mac),
+and every simulator or inspection check on `[self-hosted, macOS, ARM64]`. If his Mac seems off, tell him and wait — don't
+switch to GitHub's.
+
 **TestFlight only on Haris's yes (Haris, 2026-11-03):** "publish, publish app build" builds, self-tests and signs the
 iPhone app, then keeps it on his Mac (ios.yml `send: ask`, the default). When a build has finished, ask Haris; only on
 his yes send it with the "Send to TestFlight" workflow (testflight.yml, its build number).

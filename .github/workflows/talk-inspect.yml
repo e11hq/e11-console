@@ -9,7 +9,7 @@ on:
 permissions: { actions: read, contents: read }
 jobs:
   inspect:
-    runs-on: macos-15
+    runs-on: [self-hosted, macOS, ARM64]   # (Haris's Mac — never GitHub's unless he says: 2026-11-25 21:14)
     steps:
       - name: The build's own words about its icons
         env: { GH_TOKEN: "${{ github.token }}" }
