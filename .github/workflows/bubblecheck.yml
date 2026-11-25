@@ -19,11 +19,11 @@ jobs:
           xcrun simctl list devices available | grep -E "iPhone 1[5-7]( Pro)? \(" | head -5
           UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys,re; d=json.load(sys.stdin)['devices']; a=[x for k,v in d.items() if 'iOS' in k for x in v]; p=[x for x in a if re.fullmatch(r'iPhone 1[5-7]', x['name'])] or [x for x in a if re.match(r'iPhone \\d', x['name']) and 'Max' not in x['name']]; print(p[-1]['udid'])")
           xcrun simctl boot $UDID || true; xcrun simctl bootstatus $UDID -b
-          xcrun simctl install $UDID "$APP"; xcrun simctl launch $UDID ae.e11.BubbleCheck
+          xcrun simctl terminate $UDID ae.e11.BubbleCheck || true; xcrun simctl install $UDID "$APP"; xcrun simctl launch $UDID ae.e11.BubbleCheck
           D=$(xcrun simctl get_app_container $UDID ae.e11.BubbleCheck data)/Documents
           for i in $(seq 1 60); do [ -f "$D/done.txt" ] && break; sleep 1; done; sleep 2
           xcrun simctl io $UDID screenshot "$RUNNER_TEMP/bubbles.png"
-          cat "$D/bubbles.txt" > "$RUNNER_TEMP/bubbles.txt" || echo none > "$RUNNER_TEMP/bubbles.txt"
+          cat "$D/bubbles.txt" > "$RUNNER_TEMP/bubbles.txt" || { echo none > "$RUNNER_TEMP/bubbles.txt"; ls -t ~/Library/Logs/DiagnosticReports/ | grep -i bubble | head -1 | while read f; do head -c 4000 ~/Library/Logs/DiagnosticReports/"$f"; done; }
           grep -c OVERLAP "$RUNNER_TEMP/bubbles.txt" || true
           grep -E "8:4[01] PM|8:5[23] PM|OVERLAP" "$RUNNER_TEMP/bubbles.txt" | head -60
       - name: The picture and the numbers kept (branch seekcheck-data)

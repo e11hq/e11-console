@@ -54,9 +54,10 @@ final class Bubble: UIView {
     stamp.isHidden = false; backgroundColor = UIColor(red: 0.2, green: 0.36, blue: 0.65, alpha: 1)
     guard let cg = img.cgImage, let data = cg.dataProvider?.data, let p = CFDataGetBytePtr(data) else { return -1 }
     let bpr = cg.bytesPerRow, bpp = cg.bitsPerPixel / 8
-    let r = stamp.frame.insetBy(dx: 1, dy: 1)
+    let r = stamp.frame.insetBy(dx: 1, dy: 1).intersection(bounds)
+    guard !r.isNull, r.width > 0, r.height > 0 else { return -2 }
     var n = 0
-    for y in Int(r.minY * 3)..<Int(r.maxY * 3) { for x in Int(r.minX * 3)..<Int(r.maxX * 3) {
+    for y in max(0, Int(r.minY * 3))..<min(cg.height, Int(r.maxY * 3)) { for x in max(0, Int(r.minX * 3))..<min(cg.width, Int(r.maxX * 3)) {
       let i = y * bpr + x * bpp; if p[i] > 128 || p[i + 1] > 128 || p[i + 2] > 128 { n += 1 }
     } }
     return n
@@ -111,9 +112,11 @@ final class VC: UIViewController {
 }
 
 @main
-final class AppDelegate: UIResponder, UIApplicationDelegate {
+final class AppDelegate: UIResponder, UIApplicationDelegate {}
+final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
   var window: UIWindow?
-  func application(_ a: UIApplication, didFinishLaunchingWithOptions o: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-    window = UIWindow(frame: UIScreen.main.bounds); let v = VC(); v.view.backgroundColor = .black; window?.rootViewController = v; window?.makeKeyAndVisible(); return true
+  func scene(_ s: UIScene, willConnectTo c: UISceneSession, options o: UIScene.ConnectionOptions) {
+    guard let ws = s as? UIWindowScene else { return }
+    window = UIWindow(windowScene: ws); let v = VC(); v.view.backgroundColor = .black; window?.rootViewController = v; window?.makeKeyAndVisible()
   }
 }
