@@ -156,20 +156,26 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   // (away: Out of Office — the day they're back, while it lasts; shown in the @ list — Haris 2026-11-13)
   const personOf = (u) => ({ id: u.id, name: u.name || u.email, role: roleOf(u), photo: u.avatar || null, color: u.color || null, ...(isAway(u, now()) ? { away: u.away } : {}) });
   // a client = a client of E11 Console (its Clients list), with its Client Assets logo when it has one
+  // (every active client for the team — anyone but a freelancer starts a group under any of them, whatever they're on in
+  //  E11 Console: Haris 2026-11-25 11:11 "talk should not be dependant on what to show"; a freelancer: their own)
   function clientsFor(u) {
-    return store.list('projects').filter((p) => !p.inactive && access.canSee(u, 'projects', p)).map((p) => {
+    return store.list('projects').filter((p) => !p.inactive && (!isFree(u) || access.canSee(u, 'projects', p))).map((p) => {
       const c = p.clientId ? store.get('clients', String(p.clientId)) : null;
       return { id: p.id, name: p.name, color: p.color || null, logo: (c && c.logo) || null };
     });
   }
   const clientById = (id) => { const p = store.get('projects', String(id)); return p && !p.inactive ? p : null; };
+  // a group's client, active or not: a client made inactive in E11 Console keeps its groups for the people in them
+  //  (Haris 2026-11-25 11:11); only a client removed altogether takes them away. (A new group still needs an active one;
+  //  an inactive client's contacts still lose Talk, as before.)
+  const groupClient = (id) => store.get('projects', String(id)) || null;
   // …and the clients of the groups they're in, even ones they aren't on in E11 Console (Production sees only its tasks'
   // clients): its name and logo only, so a group they're added to always shows under its client (Haris 2026-11-25 10:45)
   function clientsWith(u, groups) {
     const out = clientsFor(u), have = new Set(out.map((c) => c.id));
     for (const g of groups) {
       if (have.has(g.client)) continue;
-      const p = clientById(g.client); if (!p) continue;
+      const p = groupClient(g.client); if (!p) continue;
       const c = p.clientId ? store.get('clients', String(p.clientId)) : null;
       out.push({ id: p.id, name: p.name, color: p.color || null, logo: (c && c.logo) || null }); have.add(p.id);
     }
@@ -227,7 +233,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   const goodKey = (k) => typeof k === 'string' && /^[A-Za-z0-9+/]{43}=$/.test(k);
   // everything the app needs to draw its lists (the messages themselves come by sync)
   function state(u) {
-    const groups = Q.groupsOf.all(u.id).filter((g) => clientById(g.client)).map((g) => groupView(g, u.id))
+    const groups = Q.groupsOf.all(u.id).filter((g) => groupClient(g.client)).map((g) => groupView(g, u.id))
       .filter((g) => !isContact(u) || g.client === u.client);
     const ids = new Set([u.id]);
     groups.forEach((g) => g.members.forEach((m) => ids.add(m)));
@@ -568,7 +574,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     if (!apns || !apns.enabled()) return;
     const t = now();
     for (const uid of notifiedFor(g, from, mentions, t)) {
-      const c = clientById(g.client);
+      const c = groupClient(g.client);
       apns.sendTo(uid, { title: g.name, body: `${from.name || from.email}: ${text}`, tag: g.id, kind: 'talk', groupId: g.id, msgId, clientId: c ? c.id : null, category: 'talk-msg', collapse: msgId, ...(m ? { m } : {}) }).catch(() => {});
     }
   }
@@ -576,7 +582,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   //  (Haris 2026-11-25 10:45 — the grey line in the chat sends nothing)
   function notifyAdded(g, by, ids) {
     if (!apns || !apns.enabled()) return;
-    const c = clientById(g.client), who = nameOf(by);
+    const c = groupClient(g.client), who = nameOf(by);
     for (const uid of ids) if (uid !== by) apns.sendTo(uid, { title: g.name, body: `${who} added you to ${g.name}`, tag: g.id, kind: 'talk', groupId: g.id, clientId: c ? c.id : null }).catch(() => {});
   }
   // deleted for everyone: its notification, where it was shown, replaced in place — quietly — by "This message was deleted"
@@ -712,7 +718,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   const bad = (error, status = 400) => ({ ok: false, error, status });
   function needGroup(u, id, { mustBeIn = true } = {}) {
     const g = Q.group.get(String(id || ''));
-    if (!g || !clientById(g.client)) return [null, bad('This group isn’t there any more', 404)];
+    if (!g || !groupClient(g.client)) return [null, bad('This group isn’t there any more', 404)];
     if (mustBeIn && !member(g, u.id)) return [null, bad('You’re not in this group', 403)];
     return [g, null];
   }
@@ -870,7 +876,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       case 'newGroup': {
         if (isFree(u)) return bad('Freelancers can’t make groups', 403);
         const c = clientById(b.client);
-        if (!c || !access.canSee(u, 'projects', c)) return bad('Pick one of your clients');
+        if (!c) return bad('Pick a client');
         const name = clip(b.name, 80).trim();
         if (!name) return bad('Give the group a name');
         const ms = cleanIds(b.members);
@@ -999,7 +1005,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         // (the Clients tab keeps its own pins — up to 5 there too: Haris 2026-11-05)
         // (and its own pinned clients — Haris 2026-11-13: "each tab have its own")
         const kind = b.act === 'pin' ? (b.tab === 'clients' ? 'cgroup' : 'group') : (b.tab === 'clients' ? 'cclient' : 'client'), id = String(b.id || '');
-        if (kind !== 'client' && kind !== 'cclient') { const [, e] = needGroup(u, id); if (e) return e; } else if (!clientById(id)) return bad('That client isn’t there');
+        if (kind !== 'client' && kind !== 'cclient') { const [, e] = needGroup(u, id); if (e) return e; } else if (!groupClient(id)) return bad('That client isn’t there');
         if (b.on) {
           const pins = Q.pinsOf.all(u.id, kind).map((r) => r.id);
           if (!pins.includes(id) && pins.length >= MAX_PINS) return { ok: false, full: true, pins, error: 'Pinned is full' };
