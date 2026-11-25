@@ -1,62 +1,62 @@
 console demo {"reviewer":"review@e11hq.com","birthday":{"id":"u-d02","email":"lena.farouk@example.com","name":"Lena Farouk"},"tasks":79,"plans":4}
- (node:5647) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ (node:7159) ExperimentalWarning: SQLite is an experimental feature and might change at any time
 (Use `node --trace-warnings ...` to show where the warning was created)
 
-talk demo {"talk":{"ok":true,"made":["Northline Motors · Launch campaign","Northline Motors · Shoot day","Kestrel Auto · Social","Voltra EV · Website"]},"group":"Kestrel Auto · Social","extra":{"voice":{"ok":true,"id":"m-959156b9ce289368","seq":44,"at":1795630714800},"reply":{"ok":true,"id":"m-6a17b76c007ec036","seq":47,"at":1795630714801},"bubble":"g-478e5772b0d2bd6a"}}
- (node:5649) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+talk demo {"talk":{"ok":true,"made":["Northline Motors · Launch campaign","Northline Motors · Shoot day","Kestrel Auto · Social","Voltra EV · Website"]},"group":"Kestrel Auto · Social","extra":{"voice":{"ok":true,"id":"m-b065d3397bd9b221","seq":44,"at":1795630924968},"reply":{"ok":true,"id":"m-13d90a9372faa2dc","seq":47,"at":1795630924969},"bubble":"g-9d1164efd0da2c2c"}}
+ (node:7162) ExperimentalWarning: SQLite is an experimental feature and might change at any time
 (Use `node --trace-warnings ...` to show where the warning was created)
 
 talk state groups 5
 simulator iPhone 18 Pro Max
 simulator iPhone 17
 kept heights before {}
-kept height written /Users/harise11digital/Library/Developer/CoreSimulator/Devices/061E46D7-376A-4B31-AC07-6B64074AB012/data/Containers/Data/Application/F92A15F9-610F-4182-84DF-3745C8930218/Library/Application Support/talk/heights-127.0.0.1.json
+kept height written /Users/harise11digital/Library/Developer/CoreSimulator/Devices/061E46D7-376A-4B31-AC07-6B64074AB012/data/Containers/Data/Application/FE024638-D832-4C5F-941E-18618F010427/Library/Application Support/talk/heights-127.0.0.1.json
 exit 0 alk.ios'
-    t =    68.60s     Check for interrupting elements affecting "E11 Talk" Application
-    t =    68.71s     Synthesize event
-    t =    69.20s     Wait for ae.e11.talk.ios to idle
-    t =    72.78s Checking existence of `"8:41 PM" StaticText`
-    t =    73.02s Swipe down Target Application 'ae.e11.talk.ios'
-    t =    73.02s     Wait for ae.e11.talk.ios to idle
-    t =    73.03s     Find the Target Application 'ae.e11.talk.ios'
-    t =    73.23s     Check for interrupting elements affecting "E11 Talk" Application
-    t =    73.40s     Synthesize event
-    t =    73.89s     Wait for ae.e11.talk.ios to idle
-    t =    76.12s Checking existence of `"8:41 PM" StaticText`
-    t =    76.33s Swipe down Target Application 'ae.e11.talk.ios'
-    t =    76.33s     Wait for ae.e11.talk.ios to idle
-    t =    76.33s     Find the Target Application 'ae.e11.talk.ios'
-    t =    76.47s     Check for interrupting elements affecting "E11 Talk" Application
-    t =    76.62s     Synthesize event
-    t =    77.11s     Wait for ae.e11.talk.ios to idle
-    t =    79.21s Checking existence of `"8:41 PM" StaticText`
-    t =    79.39s Swipe down Target Application 'ae.e11.talk.ios'
-    t =    79.39s     Wait for ae.e11.talk.ios to idle
-    t =    79.39s     Find the Target Application 'ae.e11.talk.ios'
-    t =    79.51s     Check for interrupting elements affecting "E11 Talk" Application
-    t =    79.66s     Synthesize event
-    t =    80.15s     Wait for ae.e11.talk.ios to idle
-    t =    82.26s Checking existence of `"8:41 PM" StaticText`
-    t =    82.47s Swipe down Target Application 'ae.e11.talk.ios'
-    t =    82.47s     Wait for ae.e11.talk.ios to idle
-    t =    82.47s     Find the Target Application 'ae.e11.talk.ios'
-    t =    82.62s     Check for interrupting elements affecting "E11 Talk" Application
-    t =    82.79s     Synthesize event
-    t =    83.28s     Wait for ae.e11.talk.ios to idle
-    t =    85.35s Swipe down Target Application 'ae.e11.talk.ios'
-    t =    85.36s     Wait for ae.e11.talk.ios to idle
-    t =    85.36s     Find the Target Application 'ae.e11.talk.ios'
-    t =    85.49s     Check for interrupting elements affecting "E11 Talk" Application
-    t =    85.62s     Synthesize event
-    t =    86.11s     Wait for ae.e11.talk.ios to idle
-    t =    88.22s Tear Down
-Test Case '-[E11TalkUITests.TalkBubbleTests testStaleHeight]' passed (88.612 seconds).
-Test Suite 'TalkBubbleTests' passed at 2026-11-25 22:20:09.630.
-	 Executed 1 test, with 0 failures (0 unexpected) in 88.612 (88.619) seconds
-Test Suite 'E11TalkUITests.xctest' passed at 2026-11-25 22:20:09.631.
-	 Executed 1 test, with 0 failures (0 unexpected) in 88.612 (88.620) seconds
-Test Suite 'Selected tests' passed at 2026-11-25 22:20:09.632.
-	 Executed 1 test, with 0 failures (0 unexpected) in 88.612 (88.621) seconds
+    t =    69.43s     Check for interrupting elements affecting "E11 Talk" Application
+    t =    69.55s     Synthesize event
+    t =    70.04s     Wait for ae.e11.talk.ios to idle
+    t =    73.65s Checking existence of `"8:41 PM" StaticText`
+    t =    73.87s Swipe down Target Application 'ae.e11.talk.ios'
+    t =    73.87s     Wait for ae.e11.talk.ios to idle
+    t =    73.88s     Find the Target Application 'ae.e11.talk.ios'
+    t =    74.06s     Check for interrupting elements affecting "E11 Talk" Application
+    t =    74.19s     Synthesize event
+    t =    74.68s     Wait for ae.e11.talk.ios to idle
+    t =    76.82s Checking existence of `"8:41 PM" StaticText`
+    t =    76.99s Swipe down Target Application 'ae.e11.talk.ios'
+    t =    76.99s     Wait for ae.e11.talk.ios to idle
+    t =    77.00s     Find the Target Application 'ae.e11.talk.ios'
+    t =    77.13s     Check for interrupting elements affecting "E11 Talk" Application
+    t =    77.28s     Synthesize event
+    t =    77.78s     Wait for ae.e11.talk.ios to idle
+    t =    79.87s Checking existence of `"8:41 PM" StaticText`
+    t =    80.07s Swipe down Target Application 'ae.e11.talk.ios'
+    t =    80.07s     Wait for ae.e11.talk.ios to idle
+    t =    80.07s     Find the Target Application 'ae.e11.talk.ios'
+    t =    80.22s     Check for interrupting elements affecting "E11 Talk" Application
+    t =    80.40s     Synthesize event
+    t =    80.89s     Wait for ae.e11.talk.ios to idle
+    t =    82.97s Checking existence of `"8:41 PM" StaticText`
+    t =    83.15s Swipe down Target Application 'ae.e11.talk.ios'
+    t =    83.15s     Wait for ae.e11.talk.ios to idle
+    t =    83.16s     Find the Target Application 'ae.e11.talk.ios'
+    t =    83.33s     Check for interrupting elements affecting "E11 Talk" Application
+    t =    83.50s     Synthesize event
+    t =    83.99s     Wait for ae.e11.talk.ios to idle
+    t =    86.10s Swipe down Target Application 'ae.e11.talk.ios'
+    t =    86.10s     Wait for ae.e11.talk.ios to idle
+    t =    86.10s     Find the Target Application 'ae.e11.talk.ios'
+    t =    86.23s     Check for interrupting elements affecting "E11 Talk" Application
+    t =    86.37s     Synthesize event
+    t =    86.86s     Wait for ae.e11.talk.ios to idle
+    t =    88.94s Tear Down
+Test Case '-[E11TalkUITests.TalkBubbleTests testStaleHeight]' passed (89.348 seconds).
+Test Suite 'TalkBubbleTests' passed at 2026-11-25 22:23:40.921.
+	 Executed 1 test, with 0 failures (0 unexpected) in 89.348 (89.355) seconds
+Test Suite 'E11TalkUITests.xctest' passed at 2026-11-25 22:23:40.925.
+	 Executed 1 test, with 0 failures (0 unexpected) in 89.348 (89.359) seconds
+Test Suite 'Selected tests' passed at 2026-11-25 22:23:40.925.
+	 Executed 1 test, with 0 failures (0 unexpected) in 89.348 (89.360) seconds
 
 Test session results, code coverage, and logs:
 	/Users/harise11digital/actions-runner/_work/_temp/talkshots.xcresult
@@ -64,15 +64,15 @@ Test session results, code coverage, and logs:
 ** TEST EXECUTE SUCCEEDED **
 
 Testing started
- uild[5743:44505000] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
-2026-11-25 22:20:09.681 xcodebuild[5743:44505000] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
-2026-11-25 22:20:09.681 xcodebuild[5743:44505000] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
-2026-11-25 22:20:09.681 xcodebuild[5743:44505000] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
-2026-11-25 22:20:09.699 xcodebuild[5743:44505000] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
-2026-11-25 22:20:09.699 xcodebuild[5743:44505000] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
-2026-11-25 22:20:09.700 xcodebuild[5743:44505000] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
-2026-11-25 22:20:10.080 xcodebuild[5743:44505000] [MT] IDETestOperationsObserverDebug: 92.672 elapsed -- Testing started completed.
-2026-11-25 22:20:10.080 xcodebuild[5743:44505000] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
-2026-11-25 22:20:10.080 xcodebuild[5743:44505000] [MT] IDETestOperationsObserverDebug: 92.672 sec, +92.672 sec -- end
+ uild[7278:44516015] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-25 22:23:40.962 xcodebuild[7278:44516015] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-25 22:23:40.962 xcodebuild[7278:44516015] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-25 22:23:40.963 xcodebuild[7278:44516015] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-25 22:23:40.978 xcodebuild[7278:44516015] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-25 22:23:40.979 xcodebuild[7278:44516015] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-25 22:23:40.980 xcodebuild[7278:44516015] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-25 22:23:41.372 xcodebuild[7278:44516015] [MT] IDETestOperationsObserverDebug: 93.701 elapsed -- Testing started completed.
+2026-11-25 22:23:41.372 xcodebuild[7278:44516015] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-11-25 22:23:41.372 xcodebuild[7278:44516015] [MT] IDETestOperationsObserverDebug: 93.701 sec, +93.701 sec -- end
 
 shots 12
