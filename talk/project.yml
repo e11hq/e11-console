@@ -9,7 +9,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.0.9"   # (1.0.8 = build 264, approved on the App Store 2026-11-23 — approved/appstore-talk-1.0.8-build-264)
+    MARKETING_VERSION: "1.0.10"   # (1.0.9 = build 266, approved on the App Store 2026-11-25 — approved/appstore-talk-1.0.9-build-266)
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Automatic
 targets:
