@@ -14,7 +14,7 @@ import { usage } from './usage.js';
 
 const TALK_TABLES = ['groups', 'members', 'prefs', 'events', 'waiting', 'sent', 'files', 'contacts', 'macs', 'link_codes', 'phone_seen',
   'phones', 'bare_seen', 'needs', 'opts', 'unread', 'file_kept', 'file_had', 'asks'];
-const HOUR = 3600_000, RETRY = 30_000;
+const HOUR = 3600_000, DAY = 86400_000, RETRY = 30_000;
 const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 
 const ONE_MAX = 1024 * 1024;   // (r2/one: a voice note's size at most, locked)
@@ -283,8 +283,10 @@ export class TalkHub extends DurableObject {
     // (Talk's R2 key tried again, hourly — uploads straight to R2 while it works, through this relay while it doesn't)
     try { const r2 = this.core && this.core.talk && this.core.talk.r2; if (r2 && r2.probe) await r2.probe(); } catch { /* next hour */ }
     const last = Number(this.core.meta('sweptAt') || 0);
-    // (only while the hub has Talk)
-    if (Date.now() - last >= HOUR - 60_000 && !(await this.officeHas())) { this.core.sweep(); this.core.meta('sweptAt', Date.now()); }
+    // (only while the hub has Talk) — once a day, not hourly: each clean-up reads through Talk's tables (~10,000 rows,
+    //  measured 2026-11-25 9:21→9:49), and hourly that was ~5% of Cloudflare's free rows-read a day, idle or not
+    //  (Haris 2026-11-25 09:53 "Ok"); the hub still wakes hourly for the rest
+    if (Date.now() - last >= DAY - 60_000 && !(await this.officeHas())) { this.core.sweep(); this.core.meta('sweptAt', Date.now()); }
     await this.askDir();
     await this.flush();
     const left = this.ctx.storage.sql.exec('SELECT COUNT(*) AS c FROM hub_outbox').toArray()[0].c;
