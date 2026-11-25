@@ -4,263 +4,477 @@ Command line invocation:
 Writing result bundle at path:
 	/Users/harise11digital/actions-runner/_work/_temp/talkshots.xcresult
 
-2026-11-25 21:38:59.201881+0400 E11TalkUITests-Runner[94066:44400118] [Default] Running tests...
+2026-11-25 21:43:40.996927+0400 E11TalkUITests-Runner[95704:44413943] [Default] Running tests...
     t =      nans Interface orientation changed to Portrait
-Test Suite 'Selected tests' started at 2026-11-25 21:39:01.738.
-Test Suite 'E11TalkUITests.xctest' started at 2026-11-25 21:39:01.738.
-Test Suite 'TalkBubbleTests' started at 2026-11-25 21:39:01.739.
+Test Suite 'Selected tests' started at 2026-11-25 21:43:43.569.
+Test Suite 'E11TalkUITests.xctest' started at 2026-11-25 21:43:43.570.
+Test Suite 'TalkBubbleTests' started at 2026-11-25 21:43:43.570.
 Test Case '-[E11TalkUITests.TalkBubbleTests testBubbles]' started.
-    t =     0.00s Start Test at 2026-11-25 21:39:01.743
-    t =     0.03s Set Up
+    t =     0.01s Start Test at 2026-11-25 21:43:43.575
+    t =     0.02s Set Up
     t =     0.03s Open ae.e11.talk.ios
     t =     0.03s     Launch ae.e11.talk.ios
-objc[94066]: Class UIAccessibilityLoaderWebShared is implemented in both /private/var/run/com.apple.security.cryptexd/mnt/com.apple.iPhoneOS.SimulatorRuntime-v24.1.434.0.WpldgD/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 27.0.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x10661c398) and /private/var/run/com.apple.security.cryptexd/mnt/com.apple.iPhoneOS.SimulatorRuntime-v24.1.434.0.WpldgD/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 27.0.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x106754310). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
-    t =     0.74s         Setting up automation session
+objc[95704]: Class UIAccessibilityLoaderWebShared is implemented in both /private/var/run/com.apple.security.cryptexd/mnt/com.apple.iPhoneOS.SimulatorRuntime-v24.1.434.0.WpldgD/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 27.0.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x1097c0398) and /private/var/run/com.apple.security.cryptexd/mnt/com.apple.iPhoneOS.SimulatorRuntime-v24.1.434.0.WpldgD/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 27.0.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x10a0e4310). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =     0.72s         Setting up automation session
     t =     2.92s         Wait for ae.e11.talk.ios to idle
-    t =     5.65s Waiting 90.0s for TabBar (First Match) to exist
-    t =     6.72s     Checking `Expect predicate `existsNoRetry == 1` for object TabBar (First Match)`
-    t =     6.72s         Checking existence of `TabBar (First Match)`
-    t =    12.88s Waiting 2.0s for "Allow" Button to exist
-    t =    13.95s     Checking `Expect predicate `existsNoRetry == 1` for object "Allow" Button`
-    t =    13.95s         Checking existence of `"Allow" Button`
-    t =    13.98s Tap "Allow" Button
-    t =    13.98s     Wait for com.apple.springboard to idle
-    t =    13.99s     Find the "Allow" Button
-    t =    14.02s     Check for interrupting elements affecting "Allow" Button
-    t =    14.05s     Synthesize event
-    t =    14.34s     Wait for com.apple.springboard to idle
-    t =    14.58s Checking existence of `Button (Element at index 0)`
-    t =    14.61s Tap Button (Element at index 0)
-    t =    14.61s     Wait for ae.e11.talk.ios to idle
-    t =    19.98s     Find the Button (Element at index 0)
-    t =    20.02s     Check for interrupting elements affecting "E11 Agency" Button
-    t =    20.06s     Synthesize event
-    t =    20.36s     Wait for ae.e11.talk.ios to idle
-    t =    24.11s Waiting 3.0s for "Bubble check" StaticText to exist
-    t =    25.19s     Checking `Expect predicate `existsNoRetry == 1` for object "Bubble check" StaticText`
-    t =    25.19s         Checking existence of `"Bubble check" StaticText`
-    t =    25.28s         Capturing element debug description
-    t =    26.14s     Checking `Expect predicate `existsNoRetry == 1` for object "Bubble check" StaticText`
-    t =    26.14s         Checking existence of `"Bubble check" StaticText`
-    t =    26.24s         Capturing element debug description
-    t =    27.11s     Checking `Expect predicate `existsNoRetry == 1` for object "Bubble check" StaticText`
-    t =    27.11s         Checking existence of `"Bubble check" StaticText`
-    t =    27.21s         Capturing element debug description
-    t =    27.21s     Checking existence of `"Bubble check" StaticText`
-    t =    27.29s Collecting debug information to assist test failure triage
-    t =    27.29s     Requesting snapshot of accessibility hierarchy for app with pid 94105
-    t =    27.37s Get number of matches for: Descendants matching type Cell
-    t =    27.41s Tap Cell (Element at index 0)
-    t =    27.41s     Wait for ae.e11.talk.ios to idle
-    t =    27.41s     Find the Cell (Element at index 0)
-    t =    27.46s     Check for interrupting elements affecting "Kestrel Auto, Bubble check · You: Red or blue? Check again, 9:38 PM, 4 unread" Cell
-    t =    27.49s     Synthesize event
-    t =    27.79s     Wait for ae.e11.talk.ios to idle
-    t =    30.21s Waiting 3.0s for "Bubble check" StaticText to exist
-    t =    31.28s     Checking `Expect predicate `existsNoRetry == 1` for object "Bubble check" StaticText`
-    t =    31.28s         Checking existence of `"Bubble check" StaticText`
-    t =    32.35s Tap "Bubble check" StaticText[0.50, 0.50]
-    t =    32.35s     Wait for ae.e11.talk.ios to idle
-    t =    32.35s     Find the "Bubble check" StaticText
-    t =    32.43s     Check for interrupting elements affecting "Bubble check" StaticText
-    t =    32.46s     Synthesize event
-    t =    32.47s         Find the "Bubble check" StaticText
-    t =    32.52s         Find the "Bubble check" StaticText
-    t =    32.57s         Find the "Bubble check" StaticText
-    t =    32.91s     Wait for ae.e11.talk.ios to idle
-    t =    36.11s Waiting 5.0s for TextView (First Match) to exist
-    t =    37.19s     Checking `Expect predicate `existsNoRetry == 1` for object TextView (First Match)`
-    t =    37.19s         Checking existence of `TextView (First Match)`
-    t =    49.31s Pressing Home button
-    t =    54.84s Open ae.e11.talk.ios
-    t =    54.84s     Activate ae.e11.talk.ios
-    t =    54.87s         Wait for ae.e11.talk.ios to idle
-    t =    60.02s Swipe down Target Application 'ae.e11.talk.ios'
-    t =    60.02s     Wait for ae.e11.talk.ios to idle
-    t =    60.03s     Find the Target Application 'ae.e11.talk.ios'
-    t =    60.56s     Check for interrupting elements affecting "E11 Talk" Application
-    t =    60.70s     Synthesize event
-    t =    61.19s     Wait for ae.e11.talk.ios to idle
-    t =    64.46s Swipe down Target Application 'ae.e11.talk.ios'
-    t =    64.46s     Wait for ae.e11.talk.ios to idle
-    t =    64.47s     Find the Target Application 'ae.e11.talk.ios'
-    t =    64.63s     Check for interrupting elements affecting "E11 Talk" Application
-    t =    64.80s     Synthesize event
-    t =    65.29s     Wait for ae.e11.talk.ios to idle
-    t =    68.56s Swipe down Target Application 'ae.e11.talk.ios'
-    t =    68.56s     Wait for ae.e11.talk.ios to idle
-    t =    68.56s     Find the Target Application 'ae.e11.talk.ios'
-    t =    68.84s     Check for interrupting elements affecting "E11 Talk" Application
-    t =    69.06s     Synthesize event
-    t =    69.55s     Wait for ae.e11.talk.ios to idle
-    t =    72.84s Swipe down Target Application 'ae.e11.talk.ios'
-    t =    72.85s     Wait for ae.e11.talk.ios to idle
-    t =    72.85s     Find the Target Application 'ae.e11.talk.ios'
-    t =    73.09s     Check for interrupting elements affecting "E11 Talk" Application
-    t =    73.30s     Synthesize event
-    t =    73.79s     Wait for ae.e11.talk.ios to idle
-    t =    77.06s Swipe down Target Application 'ae.e11.talk.ios'
-    t =    77.06s     Wait for ae.e11.talk.ios to idle
-    t =    77.06s     Find the Target Application 'ae.e11.talk.ios'
-    t =    77.39s     Check for interrupting elements affecting "E11 Talk" Application
-    t =    77.54s     Synthesize event
-    t =    78.03s     Wait for ae.e11.talk.ios to idle
-    t =    81.34s Swipe down Target Application 'ae.e11.talk.ios'
-    t =    81.34s     Wait for ae.e11.talk.ios to idle
-    t =    81.35s     Find the Target Application 'ae.e11.talk.ios'
-    t =    81.55s     Check for interrupting elements affecting "E11 Talk" Application
-    t =    81.78s     Synthesize event
-    t =    82.27s     Wait for ae.e11.talk.ios to idle
-    t =    85.55s Swipe down Target Application 'ae.e11.talk.ios'
-    t =    85.55s     Wait for ae.e11.talk.ios to idle
-    t =    85.55s     Find the Target Application 'ae.e11.talk.ios'
-    t =    85.82s     Check for interrupting elements affecting "E11 Talk" Application
-    t =    85.99s     Synthesize event
-    t =    86.48s     Wait for ae.e11.talk.ios to idle
-    t =    89.75s Swipe down Target Application 'ae.e11.talk.ios'
-    t =    89.75s     Wait for ae.e11.talk.ios to idle
-    t =    89.76s     Find the Target Application 'ae.e11.talk.ios'
-    t =    89.92s     Check for interrupting elements affecting "E11 Talk" Application
-    t =    90.12s     Synthesize event
-    t =    90.62s     Wait for ae.e11.talk.ios to idle
-    t =    92.40s Swipe down Target Application 'ae.e11.talk.ios'
-    t =    92.40s     Wait for ae.e11.talk.ios to idle
-    t =    92.41s     Find the Target Application 'ae.e11.talk.ios'
-    t =    92.56s     Check for interrupting elements affecting "E11 Talk" Application
-    t =    92.74s     Synthesize event
-    t =    93.24s     Wait for ae.e11.talk.ios to idle
-    t =    95.05s Swipe down Target Application 'ae.e11.talk.ios'
-    t =    95.05s     Wait for ae.e11.talk.ios to idle
-    t =    95.06s     Find the Target Application 'ae.e11.talk.ios'
-    t =    95.18s     Check for interrupting elements affecting "E11 Talk" Application
-    t =    95.32s     Synthesize event
-    t =    95.82s     Wait for ae.e11.talk.ios to idle
-    t =    97.60s Swipe down Target Application 'ae.e11.talk.ios'
-    t =    97.60s     Wait for ae.e11.talk.ios to idle
-    t =    97.60s     Find the Target Application 'ae.e11.talk.ios'
-    t =    97.74s     Check for interrupting elements affecting "E11 Talk" Application
-    t =    97.89s     Synthesize event
-    t =    98.38s     Wait for ae.e11.talk.ios to idle
-    t =   100.16s Swipe down Target Application 'ae.e11.talk.ios'
-    t =   100.16s     Wait for ae.e11.talk.ios to idle
-    t =   100.16s     Find the Target Application 'ae.e11.talk.ios'
-    t =   100.30s     Check for interrupting elements affecting "E11 Talk" Application
-    t =   100.48s     Synthesize event
-    t =   100.97s     Wait for ae.e11.talk.ios to idle
-    t =   102.74s Swipe up Target Application 'ae.e11.talk.ios'
-    t =   102.74s     Wait for ae.e11.talk.ios to idle
-    t =   102.74s     Find the Target Application 'ae.e11.talk.ios'
-    t =   102.88s     Check for interrupting elements affecting "E11 Talk" Application
-    t =   103.04s     Synthesize event
-    t =   103.44s     Wait for ae.e11.talk.ios to idle
-    t =   105.66s Swipe up Target Application 'ae.e11.talk.ios'
-    t =   105.66s     Wait for ae.e11.talk.ios to idle
-    t =   105.66s     Find the Target Application 'ae.e11.talk.ios'
-    t =   106.00s     Check for interrupting elements affecting "E11 Talk" Application
-    t =   106.17s     Synthesize event
-    t =   106.56s     Wait for ae.e11.talk.ios to idle
-    t =   108.78s Swipe up Target Application 'ae.e11.talk.ios'
-    t =   108.78s     Wait for ae.e11.talk.ios to idle
-    t =   108.78s     Find the Target Application 'ae.e11.talk.ios'
-    t =   109.09s     Check for interrupting elements affecting "E11 Talk" Application
-    t =   109.29s     Synthesize event
-    t =   109.69s     Wait for ae.e11.talk.ios to idle
-    t =   111.93s Swipe up Target Application 'ae.e11.talk.ios'
-    t =   111.93s     Wait for ae.e11.talk.ios to idle
-    t =   111.93s     Find the Target Application 'ae.e11.talk.ios'
-    t =   112.25s     Check for interrupting elements affecting "E11 Talk" Application
-    t =   112.42s     Synthesize event
-    t =   112.81s     Wait for ae.e11.talk.ios to idle
-    t =   115.05s Swipe up Target Application 'ae.e11.talk.ios'
-    t =   115.05s     Wait for ae.e11.talk.ios to idle
-    t =   115.05s     Find the Target Application 'ae.e11.talk.ios'
-    t =   115.33s     Check for interrupting elements affecting "E11 Talk" Application
-    t =   115.57s     Synthesize event
-    t =   115.96s     Wait for ae.e11.talk.ios to idle
-    t =   116.70s Swipe up Target Application 'ae.e11.talk.ios'
-    t =   116.70s     Wait for ae.e11.talk.ios to idle
-    t =   116.70s     Find the Target Application 'ae.e11.talk.ios'
-    t =   116.98s     Check for interrupting elements affecting "E11 Talk" Application
-    t =   117.16s     Synthesize event
-    t =   117.56s     Wait for ae.e11.talk.ios to idle
-    t =   118.06s Swipe up Target Application 'ae.e11.talk.ios'
+    t =     5.77s Waiting 90.0s for TabBar (First Match) to exist
+    t =     6.85s     Checking `Expect predicate `existsNoRetry == 1` for object TabBar (First Match)`
+    t =     6.85s         Checking existence of `TabBar (First Match)`
+    t =     6.92s Ignoring failure to get hierarchy for remote element in process 95745 (Error getting main window kAXErrorServerNotFound)
+    t =    12.94s Waiting 2.0s for "Allow" Button to exist
+    t =    14.01s     Checking `Expect predicate `existsNoRetry == 1` for object "Allow" Button`
+    t =    14.01s         Checking existence of `"Allow" Button`
+    t =    14.05s Tap "Allow" Button
+    t =    14.05s     Wait for com.apple.springboard to idle
+    t =    14.05s     Find the "Allow" Button
+    t =    14.08s     Check for interrupting elements affecting "Allow" Button
+    t =    14.12s     Synthesize event
+    t =    14.41s     Wait for com.apple.springboard to idle
+    t =    14.65s Checking existence of `Button (Element at index 0)`
+    t =    14.74s Tap Button (Element at index 0)
+    t =    14.74s     Wait for ae.e11.talk.ios to idle
+    t =    20.32s     Find the Button (Element at index 0)
+    t =    20.36s     Check for interrupting elements affecting "E11 Agency" Button
+    t =    20.41s     Synthesize event
+    t =    20.73s     Wait for ae.e11.talk.ios to idle
+    t =    24.47s Waiting 3.0s for "Bubble check" StaticText to exist
+    t =    25.54s     Checking `Expect predicate `existsNoRetry == 1` for object "Bubble check" StaticText`
+    t =    25.54s         Checking existence of `"Bubble check" StaticText`
+    t =    25.64s         Capturing element debug description
+    t =    26.50s     Checking `Expect predicate `existsNoRetry == 1` for object "Bubble check" StaticText`
+    t =    26.50s         Checking existence of `"Bubble check" StaticText`
+    t =    26.59s         Capturing element debug description
+    t =    27.47s     Checking `Expect predicate `existsNoRetry == 1` for object "Bubble check" StaticText`
+    t =    27.47s         Checking existence of `"Bubble check" StaticText`
+    t =    27.58s         Capturing element debug description
+    t =    27.58s     Checking existence of `"Bubble check" StaticText`
+    t =    27.67s Collecting debug information to assist test failure triage
+    t =    27.67s     Requesting snapshot of accessibility hierarchy for app with pid 95735
+    t =    27.74s Get number of matches for: Descendants matching type Cell
+    t =    27.78s Tap Cell (Element at index 0)
+    t =    27.78s     Wait for ae.e11.talk.ios to idle
+    t =    27.79s     Find the Cell (Element at index 0)
+    t =    27.83s     Check for interrupting elements affecting "Kestrel Auto, Kestrel Auto · Social · You: Got it — thanks! 🙌, 9:43 PM, 4 unread" Cell
+    t =    27.86s     Synthesize event
+    t =    28.17s     Wait for ae.e11.talk.ios to idle
+    t =    30.60s Waiting 3.0s for "Bubble check" StaticText to exist
+    t =    31.68s     Checking `Expect predicate `existsNoRetry == 1` for object "Bubble check" StaticText`
+    t =    31.68s         Checking existence of `"Bubble check" StaticText`
+    t =    32.77s Tap "Bubble check" StaticText[0.50, 0.50]
+    t =    32.77s     Wait for ae.e11.talk.ios to idle
+    t =    32.77s     Find the "Bubble check" StaticText
+    t =    32.83s     Check for interrupting elements affecting "Bubble check" StaticText
+    t =    32.87s     Synthesize event
+    t =    32.88s         Find the "Bubble check" StaticText
+    t =    32.94s         Find the "Bubble check" StaticText
+    t =    32.99s         Find the "Bubble check" StaticText
+    t =    33.33s     Wait for ae.e11.talk.ios to idle
+    t =    36.54s Waiting 5.0s for TextView (First Match) to exist
+    t =    37.61s     Checking `Expect predicate `existsNoRetry == 1` for object TextView (First Match)`
+    t =    37.61s         Checking existence of `TextView (First Match)`
+    t =    49.73s Pressing Home button
+    t =    55.26s Open ae.e11.talk.ios
+    t =    55.27s     Activate ae.e11.talk.ios
+    t =    55.29s         Wait for ae.e11.talk.ios to idle
+    t =    60.43s Swipe down Target Application 'ae.e11.talk.ios'
+    t =    60.43s     Wait for ae.e11.talk.ios to idle
+    t =    60.43s     Find the Target Application 'ae.e11.talk.ios'
+    t =    60.95s     Check for interrupting elements affecting "E11 Talk" Application
+    t =    61.08s     Synthesize event
+    t =    61.57s     Wait for ae.e11.talk.ios to idle
+    t =    64.84s Swipe down Target Application 'ae.e11.talk.ios'
+    t =    64.84s     Wait for ae.e11.talk.ios to idle
+    t =    64.84s     Find the Target Application 'ae.e11.talk.ios'
+    t =    65.01s     Check for interrupting elements affecting "E11 Talk" Application
+    t =    65.18s     Synthesize event
+    t =    65.67s     Wait for ae.e11.talk.ios to idle
+    t =    68.97s Swipe down Target Application 'ae.e11.talk.ios'
+    t =    68.97s     Wait for ae.e11.talk.ios to idle
+    t =    68.97s     Find the Target Application 'ae.e11.talk.ios'
+    t =    69.23s     Check for interrupting elements affecting "E11 Talk" Application
+    t =    69.44s     Synthesize event
+    t =    69.93s     Wait for ae.e11.talk.ios to idle
+    t =    73.19s Swipe down Target Application 'ae.e11.talk.ios'
+    t =    73.19s     Wait for ae.e11.talk.ios to idle
+    t =    73.19s     Find the Target Application 'ae.e11.talk.ios'
+    t =    73.43s     Check for interrupting elements affecting "E11 Talk" Application
+    t =    73.63s     Synthesize event
+    t =    74.12s     Wait for ae.e11.talk.ios to idle
+    t =    77.39s Swipe down Target Application 'ae.e11.talk.ios'
+    t =    77.39s     Wait for ae.e11.talk.ios to idle
+    t =    77.39s     Find the Target Application 'ae.e11.talk.ios'
+    t =    77.71s     Check for interrupting elements affecting "E11 Talk" Application
+    t =    77.92s     Synthesize event
+    t =    78.42s     Wait for ae.e11.talk.ios to idle
+    t =    81.71s Swipe down Target Application 'ae.e11.talk.ios'
+    t =    81.71s     Wait for ae.e11.talk.ios to idle
+    t =    81.71s     Find the Target Application 'ae.e11.talk.ios'
+    t =    81.96s     Check for interrupting elements affecting "E11 Talk" Application
+    t =    82.21s     Synthesize event
+    t =    82.70s     Wait for ae.e11.talk.ios to idle
+    t =    85.98s Swipe down Target Application 'ae.e11.talk.ios'
+    t =    85.98s     Wait for ae.e11.talk.ios to idle
+    t =    85.99s     Find the Target Application 'ae.e11.talk.ios'
+    t =    86.26s     Check for interrupting elements affecting "E11 Talk" Application
+    t =    86.46s     Synthesize event
+    t =    86.95s     Wait for ae.e11.talk.ios to idle
+    t =    90.24s Swipe down Target Application 'ae.e11.talk.ios'
+    t =    90.24s     Wait for ae.e11.talk.ios to idle
+    t =    90.24s     Find the Target Application 'ae.e11.talk.ios'
+    t =    90.39s     Check for interrupting elements affecting "E11 Talk" Application
+    t =    90.56s     Synthesize event
+    t =    91.05s     Wait for ae.e11.talk.ios to idle
+    t =    92.84s Swipe down Target Application 'ae.e11.talk.ios'
+    t =    92.84s     Wait for ae.e11.talk.ios to idle
+    t =    92.84s     Find the Target Application 'ae.e11.talk.ios'
+    t =    93.03s     Check for interrupting elements affecting "E11 Talk" Application
+    t =    93.16s     Synthesize event
+    t =    93.66s     Wait for ae.e11.talk.ios to idle
+    t =    95.43s Swipe down Target Application 'ae.e11.talk.ios'
+    t =    95.43s     Wait for ae.e11.talk.ios to idle
+    t =    95.44s     Find the Target Application 'ae.e11.talk.ios'
+    t =    95.56s     Check for interrupting elements affecting "E11 Talk" Application
+    t =    95.73s     Synthesize event
+    t =    96.22s     Wait for ae.e11.talk.ios to idle
+    t =    98.00s Swipe down Target Application 'ae.e11.talk.ios'
+    t =    98.00s     Wait for ae.e11.talk.ios to idle
+    t =    98.00s     Find the Target Application 'ae.e11.talk.ios'
+    t =    98.14s     Check for interrupting elements affecting "E11 Talk" Application
+    t =    98.31s     Synthesize event
+    t =    98.80s     Wait for ae.e11.talk.ios to idle
+    t =   100.60s Swipe down Target Application 'ae.e11.talk.ios'
+    t =   100.60s     Wait for ae.e11.talk.ios to idle
+    t =   100.60s     Find the Target Application 'ae.e11.talk.ios'
+    t =   100.75s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   100.91s     Synthesize event
+    t =   101.41s     Wait for ae.e11.talk.ios to idle
+    t =   103.20s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   103.20s     Wait for ae.e11.talk.ios to idle
+    t =   103.20s     Find the Target Application 'ae.e11.talk.ios'
+    t =   103.32s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   103.47s     Synthesize event
+    t =   103.87s     Wait for ae.e11.talk.ios to idle
+    t =   106.10s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   106.10s     Wait for ae.e11.talk.ios to idle
+    t =   106.10s     Find the Target Application 'ae.e11.talk.ios'
+    t =   106.41s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   106.68s     Synthesize event
+    t =   107.08s     Wait for ae.e11.talk.ios to idle
+    t =   109.30s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   109.30s     Wait for ae.e11.talk.ios to idle
+    t =   109.30s     Find the Target Application 'ae.e11.talk.ios'
+    t =   109.66s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   109.82s     Synthesize event
+    t =   110.21s     Wait for ae.e11.talk.ios to idle
+    t =   112.45s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   112.45s     Wait for ae.e11.talk.ios to idle
+    t =   112.46s     Find the Target Application 'ae.e11.talk.ios'
+    t =   112.69s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   112.92s     Synthesize event
+    t =   113.31s     Wait for ae.e11.talk.ios to idle
+    t =   115.55s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   115.55s     Wait for ae.e11.talk.ios to idle
+    t =   115.55s     Find the Target Application 'ae.e11.talk.ios'
+    t =   115.88s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   116.04s     Synthesize event
+    t =   116.44s     Wait for ae.e11.talk.ios to idle
+    t =   117.17s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   117.17s     Wait for ae.e11.talk.ios to idle
+    t =   117.17s     Find the Target Application 'ae.e11.talk.ios'
+    t =   117.40s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   117.67s     Synthesize event
     t =   118.06s     Wait for ae.e11.talk.ios to idle
-    t =   118.06s     Find the Target Application 'ae.e11.talk.ios'
-    t =   118.28s     Check for interrupting elements affecting "E11 Talk" Application
-    t =   118.48s     Synthesize event
-    t =   118.86s     Wait for ae.e11.talk.ios to idle
-    t =   119.38s Swipe up Target Application 'ae.e11.talk.ios'
-    t =   119.38s     Wait for ae.e11.talk.ios to idle
-    t =   119.38s     Find the Target Application 'ae.e11.talk.ios'
-    t =   119.57s     Check for interrupting elements affecting "E11 Talk" Application
-    t =   119.78s     Synthesize event
-    t =   120.17s     Wait for ae.e11.talk.ios to idle
-    t =   120.68s Swipe up Target Application 'ae.e11.talk.ios'
-    t =   120.68s     Wait for ae.e11.talk.ios to idle
-    t =   120.68s     Find the Target Application 'ae.e11.talk.ios'
-    t =   120.85s     Check for interrupting elements affecting "E11 Talk" Application
-    t =   121.05s     Synthesize event
-    t =   121.44s     Wait for ae.e11.talk.ios to idle
-    t =   121.94s Swipe up Target Application 'ae.e11.talk.ios'
-    t =   121.94s     Wait for ae.e11.talk.ios to idle
-    t =   121.95s     Find the Target Application 'ae.e11.talk.ios'
-    t =   122.15s     Check for interrupting elements affecting "E11 Talk" Application
-    t =   122.33s     Synthesize event
-    t =   122.73s     Wait for ae.e11.talk.ios to idle
-    t =   123.23s Swipe up Target Application 'ae.e11.talk.ios'
-    t =   123.23s     Wait for ae.e11.talk.ios to idle
-    t =   123.23s     Find the Target Application 'ae.e11.talk.ios'
-    t =   123.41s     Check for interrupting elements affecting "E11 Talk" Application
-    t =   123.61s     Synthesize event
-    t =   123.99s     Wait for ae.e11.talk.ios to idle
-    t =   124.50s Swipe up Target Application 'ae.e11.talk.ios'
-    t =   124.50s     Wait for ae.e11.talk.ios to idle
-    t =   124.50s     Find the Target Application 'ae.e11.talk.ios'
-    t =   124.72s     Check for interrupting elements affecting "E11 Talk" Application
-    t =   124.88s     Synthesize event
-    t =   125.27s     Wait for ae.e11.talk.ios to idle
-    t =   125.78s Swipe up Target Application 'ae.e11.talk.ios'
-    t =   125.78s     Wait for ae.e11.talk.ios to idle
-    t =   125.78s     Find the Target Application 'ae.e11.talk.ios'
-    t =   125.94s     Check for interrupting elements affecting "E11 Talk" Application
-    t =   126.12s     Synthesize event
-    t =   126.51s     Wait for ae.e11.talk.ios to idle
-    t =   127.01s Swipe up Target Application 'ae.e11.talk.ios'
-    t =   127.01s     Wait for ae.e11.talk.ios to idle
-    t =   127.02s     Find the Target Application 'ae.e11.talk.ios'
-    t =   127.20s     Check for interrupting elements affecting "E11 Talk" Application
-    t =   127.42s     Synthesize event
-    t =   127.82s     Wait for ae.e11.talk.ios to idle
-    t =   129.32s Waiting 3.0s for TextView (First Match) to exist
-    t =   130.38s     Checking `Expect predicate `existsNoRetry == 1` for object TextView (First Match)`
-    t =   130.38s         Checking existence of `TextView (First Match)`
-    t =   130.48s Tap TextView (First Match)
-    t =   130.48s     Wait for ae.e11.talk.ios to idle
-    t =   130.49s     Find the TextView (First Match)
-    t =   130.58s     Check for interrupting elements affecting TextView
-    t =   130.76s     Synthesize event
-    t =   131.06s     Wait for ae.e11.talk.ios to idle
-    t =   131.86s Type 'Blue or red? Check...' into TextView at {{46.0, 805.0}, {263.0, 31.0}}
-    t =   131.86s     Wait for ae.e11.talk.ios to idle
-    t =   132.24s     Find the TextView at {{46.0, 805.0}, {263.0, 31.0}}
-    t =   132.39s     Check for interrupting elements affecting TextView
-    t =   132.57s     Synthesize event
-    t =   133.18s     Wait for ae.e11.talk.ios to idle
-    t =   133.69s Checking existence of `Button (First Match)`
-    t =   133.83s Tap Button (First Match)
-    t =   133.83s     Wait for ae.e11.talk.ios to idle
-    t =   133.83s     Find the Button (First Match)
-    t =   133.96s     Check for interrupting elements affecting "Send" Button
-    t =   134.11s     Synthesize event
-    t =   134.41s     Wait for ae.e11.talk.ios to idle
-    t =   138.88s Tear Down
-Test Case '-[E11TalkUITests.TalkBubbleTests testBubbles]' passed (139.518 seconds).
-Test Suite 'TalkBubbleTests' passed at 2026-11-25 21:41:21.262.
-	 Executed 1 test, with 0 failures (0 unexpected) in 139.518 (139.524) seconds
-Test Suite 'E11TalkUITests.xctest' passed at 2026-11-25 21:41:21.264.
-	 Executed 1 test, with 0 failures (0 unexpected) in 139.518 (139.526) seconds
-Test Suite 'Selected tests' passed at 2026-11-25 21:41:21.265.
-	 Executed 1 test, with 0 failures (0 unexpected) in 139.518 (139.527) seconds
+    t =   118.55s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   118.55s     Wait for ae.e11.talk.ios to idle
+    t =   118.55s     Find the Target Application 'ae.e11.talk.ios'
+    t =   118.80s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   118.98s     Synthesize event
+    t =   119.37s     Wait for ae.e11.talk.ios to idle
+    t =   119.87s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   119.87s     Wait for ae.e11.talk.ios to idle
+    t =   119.88s     Find the Target Application 'ae.e11.talk.ios'
+    t =   120.06s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   120.22s     Synthesize event
+    t =   120.62s     Wait for ae.e11.talk.ios to idle
+    t =   121.12s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   121.12s     Wait for ae.e11.talk.ios to idle
+    t =   121.13s     Find the Target Application 'ae.e11.talk.ios'
+    t =   121.29s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   121.45s     Synthesize event
+    t =   121.84s     Wait for ae.e11.talk.ios to idle
+    t =   122.34s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   122.34s     Wait for ae.e11.talk.ios to idle
+    t =   122.34s     Find the Target Application 'ae.e11.talk.ios'
+    t =   122.50s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   122.67s     Synthesize event
+    t =   123.06s     Wait for ae.e11.talk.ios to idle
+    t =   123.57s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   123.57s     Wait for ae.e11.talk.ios to idle
+    t =   123.58s     Find the Target Application 'ae.e11.talk.ios'
+    t =   123.75s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   123.92s     Synthesize event
+    t =   124.30s     Wait for ae.e11.talk.ios to idle
+    t =   124.81s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   124.81s     Wait for ae.e11.talk.ios to idle
+    t =   124.81s     Find the Target Application 'ae.e11.talk.ios'
+    t =   124.98s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   125.17s     Synthesize event
+    t =   125.56s     Wait for ae.e11.talk.ios to idle
+    t =   126.07s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   126.07s     Wait for ae.e11.talk.ios to idle
+    t =   126.07s     Find the Target Application 'ae.e11.talk.ios'
+    t =   126.23s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   126.40s     Synthesize event
+    t =   126.79s     Wait for ae.e11.talk.ios to idle
+    t =   127.29s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   127.29s     Wait for ae.e11.talk.ios to idle
+    t =   127.29s     Find the Target Application 'ae.e11.talk.ios'
+    t =   127.45s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   127.62s     Synthesize event
+    t =   128.02s     Wait for ae.e11.talk.ios to idle
+    t =   128.52s Pressing Home button
+    t =   129.99s Waiting 25.0s for "Notification" Other to exist
+    t =   131.03s     Checking `Expect predicate `existsNoRetry == 1` for object "Notification" Other`
+    t =   131.03s         Checking existence of `"Notification" Other`
+    t =   131.19s         Capturing element debug description
+    t =   132.03s     Checking `Expect predicate `existsNoRetry == 1` for object "Notification" Other`
+    t =   132.03s         Checking existence of `"Notification" Other`
+    t =   132.25s Waiting 5.0s for "Notification" Other to exist
+    t =   133.33s     Checking `Expect predicate `existsNoRetry == 1` for object "Notification" Other`
+    t =   133.33s         Checking existence of `"Notification" Other`
+    t =   133.37s Press "Notification" Other for 1.2 seconds
+    t =   133.37s     Wait for com.apple.springboard to idle
+    t =   133.94s     Find the "Notification" Other
+    t =   133.97s     Check for interrupting elements affecting "Notification" Other
+    t =   134.04s     Synthesize event
+    t =   135.47s     Wait for com.apple.springboard to idle
+    t =   137.76s Waiting 3.0s for "Reply" Button to exist
+    t =   138.82s     Checking `Expect predicate `existsNoRetry == 1` for object "Reply" Button`
+    t =   138.82s         Checking existence of `"Reply" Button`
+    t =   138.95s Tap "Reply" Button
+    t =   138.95s     Wait for com.apple.springboard to idle
+    t =   138.95s     Find the "Reply" Button
+    t =   139.00s     Check for interrupting elements affecting "Reply" Button
+    t =   139.05s     Synthesize event
+    t =   139.35s     Wait for com.apple.springboard to idle
+    t =   141.14s Checking existence of `TextView (First Match)`
+    t =   141.18s Waiting 4.0s for TextView (First Match) to exist
+    t =   142.25s     Checking `Expect predicate `existsNoRetry == 1` for object TextView (First Match)`
+    t =   142.25s         Checking existence of `TextView (First Match)`
+    t =   142.28s Type 'Blue or red? Check...' into TextView (First Match)
+    t =   142.28s     Wait for com.apple.springboard to idle
+    t =   142.28s     Find the TextView (First Match)
+    t =   142.31s     Check for interrupting elements affecting "Message" TextView
+    t =   142.36s     Synthesize event
+    t =   142.97s     Wait for com.apple.springboard to idle
+    t =   143.66s Checking existence of `"Send" Button`
+    t =   143.69s Tap "Send" Button
+    t =   143.69s     Wait for com.apple.springboard to idle
+    t =   143.69s     Find the "Send" Button
+    t =   143.72s     Check for interrupting elements affecting "Send" Button
+    t =   143.76s     Synthesize event
+    t =   144.05s     Wait for com.apple.springboard to idle
+    t =   153.02s Open ae.e11.talk.ios
+    t =   153.03s     Activate ae.e11.talk.ios
+    t =   153.07s         Wait for ae.e11.talk.ios to idle
+    t =   158.24s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   158.24s     Wait for ae.e11.talk.ios to idle
+    t =   158.24s     Find the Target Application 'ae.e11.talk.ios'
+    t =   158.77s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   158.92s     Synthesize event
+    t =   159.31s     Wait for ae.e11.talk.ios to idle
+    t =   159.82s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   159.82s     Wait for ae.e11.talk.ios to idle
+    t =   159.83s     Find the Target Application 'ae.e11.talk.ios'
+    t =   159.91s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   160.01s     Synthesize event
+    t =   160.40s     Wait for ae.e11.talk.ios to idle
+    t =   160.91s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   160.91s     Wait for ae.e11.talk.ios to idle
+    t =   160.91s     Find the Target Application 'ae.e11.talk.ios'
+    t =   161.01s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   161.12s     Synthesize event
+    t =   161.51s     Wait for ae.e11.talk.ios to idle
+    t =   162.01s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   162.01s     Wait for ae.e11.talk.ios to idle
+    t =   162.01s     Find the Target Application 'ae.e11.talk.ios'
+    t =   162.13s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   162.25s     Synthesize event
+    t =   162.64s     Wait for ae.e11.talk.ios to idle
+    t =   163.14s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   163.14s     Wait for ae.e11.talk.ios to idle
+    t =   163.14s     Find the Target Application 'ae.e11.talk.ios'
+    t =   163.25s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   163.36s     Synthesize event
+    t =   163.75s     Wait for ae.e11.talk.ios to idle
+    t =   164.26s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   164.26s     Wait for ae.e11.talk.ios to idle
+    t =   164.26s     Find the Target Application 'ae.e11.talk.ios'
+    t =   164.38s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   164.51s     Synthesize event
+    t =   164.90s     Wait for ae.e11.talk.ios to idle
+    t =   165.41s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   165.41s     Wait for ae.e11.talk.ios to idle
+    t =   165.41s     Find the Target Application 'ae.e11.talk.ios'
+    t =   165.52s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   165.64s     Synthesize event
+    t =   166.03s     Wait for ae.e11.talk.ios to idle
+    t =   166.54s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   166.54s     Wait for ae.e11.talk.ios to idle
+    t =   166.54s     Find the Target Application 'ae.e11.talk.ios'
+    t =   166.66s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   166.77s     Synthesize event
+    t =   167.17s     Wait for ae.e11.talk.ios to idle
+    t =   167.67s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   167.67s     Wait for ae.e11.talk.ios to idle
+    t =   167.68s     Find the Target Application 'ae.e11.talk.ios'
+    t =   167.78s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   167.91s     Synthesize event
+    t =   168.30s     Wait for ae.e11.talk.ios to idle
+    t =   168.81s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   168.81s     Wait for ae.e11.talk.ios to idle
+    t =   168.81s     Find the Target Application 'ae.e11.talk.ios'
+    t =   168.91s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   169.03s     Synthesize event
+    t =   169.42s     Wait for ae.e11.talk.ios to idle
+    t =   169.92s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   169.92s     Wait for ae.e11.talk.ios to idle
+    t =   169.92s     Find the Target Application 'ae.e11.talk.ios'
+    t =   170.04s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   170.16s     Synthesize event
+    t =   170.55s     Wait for ae.e11.talk.ios to idle
+    t =   171.05s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   171.05s     Wait for ae.e11.talk.ios to idle
+    t =   171.05s     Find the Target Application 'ae.e11.talk.ios'
+    t =   171.17s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   171.30s     Synthesize event
+    t =   171.69s     Wait for ae.e11.talk.ios to idle
+    t =   172.19s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   172.19s     Wait for ae.e11.talk.ios to idle
+    t =   172.19s     Find the Target Application 'ae.e11.talk.ios'
+    t =   172.31s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   172.45s     Synthesize event
+    t =   172.84s     Wait for ae.e11.talk.ios to idle
+    t =   173.33s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   173.34s     Wait for ae.e11.talk.ios to idle
+    t =   173.34s     Find the Target Application 'ae.e11.talk.ios'
+    t =   173.45s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   173.57s     Synthesize event
+    t =   173.97s     Wait for ae.e11.talk.ios to idle
+    t =   175.61s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   175.61s     Wait for ae.e11.talk.ios to idle
+    t =   175.72s     Find the Target Application 'ae.e11.talk.ios'
+    t =   175.83s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   175.95s     Synthesize event
+    t =   176.34s     Wait for ae.e11.talk.ios to idle
+    t =   176.84s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   176.84s     Wait for ae.e11.talk.ios to idle
+    t =   176.84s     Find the Target Application 'ae.e11.talk.ios'
+    t =   176.97s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   177.08s     Synthesize event
+    t =   177.47s     Wait for ae.e11.talk.ios to idle
+    t =   177.97s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   177.97s     Wait for ae.e11.talk.ios to idle
+    t =   177.98s     Find the Target Application 'ae.e11.talk.ios'
+    t =   178.08s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   178.21s     Synthesize event
+    t =   178.60s     Wait for ae.e11.talk.ios to idle
+    t =   179.10s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   179.10s     Wait for ae.e11.talk.ios to idle
+    t =   179.11s     Find the Target Application 'ae.e11.talk.ios'
+    t =   179.23s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   179.34s     Synthesize event
+    t =   179.73s     Wait for ae.e11.talk.ios to idle
+    t =   180.24s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   180.24s     Wait for ae.e11.talk.ios to idle
+    t =   180.24s     Find the Target Application 'ae.e11.talk.ios'
+    t =   180.35s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   180.48s     Synthesize event
+    t =   180.87s     Wait for ae.e11.talk.ios to idle
+    t =   181.37s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   181.37s     Wait for ae.e11.talk.ios to idle
+    t =   181.37s     Find the Target Application 'ae.e11.talk.ios'
+    t =   181.47s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   181.61s     Synthesize event
+    t =   182.00s     Wait for ae.e11.talk.ios to idle
+    t =   182.50s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   182.50s     Wait for ae.e11.talk.ios to idle
+    t =   182.51s     Find the Target Application 'ae.e11.talk.ios'
+    t =   182.62s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   182.74s     Synthesize event
+    t =   183.13s     Wait for ae.e11.talk.ios to idle
+    t =   183.63s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   183.64s     Wait for ae.e11.talk.ios to idle
+    t =   183.64s     Find the Target Application 'ae.e11.talk.ios'
+    t =   183.75s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   183.87s     Synthesize event
+    t =   184.27s     Wait for ae.e11.talk.ios to idle
+    t =   184.77s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   184.77s     Wait for ae.e11.talk.ios to idle
+    t =   184.78s     Find the Target Application 'ae.e11.talk.ios'
+    t =   184.90s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   185.02s     Synthesize event
+    t =   185.41s     Wait for ae.e11.talk.ios to idle
+    t =   185.92s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   185.92s     Wait for ae.e11.talk.ios to idle
+    t =   185.93s     Find the Target Application 'ae.e11.talk.ios'
+    t =   186.05s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   186.17s     Synthesize event
+    t =   186.57s     Wait for ae.e11.talk.ios to idle
+    t =   187.08s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   187.08s     Wait for ae.e11.talk.ios to idle
+    t =   187.08s     Find the Target Application 'ae.e11.talk.ios'
+    t =   187.19s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   187.32s     Synthesize event
+    t =   187.70s     Wait for ae.e11.talk.ios to idle
+    t =   188.22s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   188.22s     Wait for ae.e11.talk.ios to idle
+    t =   188.23s     Find the Target Application 'ae.e11.talk.ios'
+    t =   188.34s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   188.46s     Synthesize event
+    t =   188.85s     Wait for ae.e11.talk.ios to idle
+    t =   189.36s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   189.36s     Wait for ae.e11.talk.ios to idle
+    t =   189.36s     Find the Target Application 'ae.e11.talk.ios'
+    t =   189.48s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   189.60s     Synthesize event
+    t =   190.00s     Wait for ae.e11.talk.ios to idle
+    t =   190.49s Swipe up Target Application 'ae.e11.talk.ios'
+    t =   190.49s     Wait for ae.e11.talk.ios to idle
+    t =   190.49s     Find the Target Application 'ae.e11.talk.ios'
+    t =   190.61s     Check for interrupting elements affecting "E11 Talk" Application
+    t =   190.73s     Synthesize event
+    t =   191.12s     Wait for ae.e11.talk.ios to idle
+    t =   192.63s Waiting 3.0s for TextView (First Match) to exist
+    t =   193.67s     Checking `Expect predicate `existsNoRetry == 1` for object TextView (First Match)`
+    t =   193.67s         Checking existence of `TextView (First Match)`
+    t =   193.74s Tap TextView (First Match)
+    t =   193.74s     Wait for ae.e11.talk.ios to idle
+    t =   193.75s     Find the TextView (First Match)
+    t =   193.81s     Check for interrupting elements affecting TextView
+    t =   193.92s     Synthesize event
+    t =   194.22s     Wait for ae.e11.talk.ios to idle
+    t =   194.29s Type 'Blue or red? Check...' into TextView at {{46.0, 805.0}, {263.0, 31.0}}
+    t =   194.29s     Wait for ae.e11.talk.ios to idle
+    t =   194.66s     Find the TextView at {{46.0, 805.0}, {263.0, 31.0}}
+    t =   194.93s     Check for interrupting elements affecting TextView
+    t =   195.08s     Synthesize event
+    t =   195.69s     Wait for ae.e11.talk.ios to idle
+    t =   196.20s Checking existence of `Button (First Match)`
+    t =   196.33s Tap Button (First Match)
+    t =   196.33s     Wait for ae.e11.talk.ios to idle
+    t =   196.33s     Find the Button (First Match)
+    t =   196.43s     Check for interrupting elements affecting "Send" Button
+    t =   196.56s     Synthesize event
+    t =   196.86s     Wait for ae.e11.talk.ios to idle
+    t =   201.31s Tear Down
+Test Case '-[E11TalkUITests.TalkBubbleTests testBubbles]' passed (202.134 seconds).
+Test Suite 'TalkBubbleTests' passed at 2026-11-25 21:47:05.710.
+	 Executed 1 test, with 0 failures (0 unexpected) in 202.134 (202.140) seconds
+Test Suite 'E11TalkUITests.xctest' passed at 2026-11-25 21:47:05.711.
+	 Executed 1 test, with 0 failures (0 unexpected) in 202.134 (202.141) seconds
+Test Suite 'Selected tests' passed at 2026-11-25 21:47:05.712.
+	 Executed 1 test, with 0 failures (0 unexpected) in 202.134 (202.143) seconds
 
 Test session results, code coverage, and logs:
 	/Users/harise11digital/actions-runner/_work/_temp/talkshots.xcresult
@@ -269,16 +483,16 @@ Test session results, code coverage, and logs:
 
 Testing started
 
-2026-11-25 21:38:58.071 xcodebuild[94050:44399917] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
-2026-11-25 21:39:01.844 xcodebuild[94050:44399917] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
-2026-11-25 21:39:01.844 xcodebuild[94050:44399917] [MT] IDELaunchParametersSnapshot: no debugger version
-2026-11-25 21:39:01.851 xcodebuild[94050:44399917] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
-2026-11-25 21:41:21.309 xcodebuild[94050:44399917] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
-2026-11-25 21:41:21.310 xcodebuild[94050:44399917] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
-2026-11-25 21:41:21.310 xcodebuild[94050:44399917] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
-2026-11-25 21:41:21.324 xcodebuild[94050:44399917] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
-2026-11-25 21:41:21.325 xcodebuild[94050:44399917] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
-2026-11-25 21:41:21.327 xcodebuild[94050:44399917] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
-2026-11-25 21:41:21.740 xcodebuild[94050:44399917] [MT] IDETestOperationsObserverDebug: 143.707 elapsed -- Testing started completed.
-2026-11-25 21:41:21.740 xcodebuild[94050:44399917] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
-2026-11-25 21:41:21.740 xcodebuild[94050:44399917] [MT] IDETestOperationsObserverDebug: 143.707 sec, +143.707 sec -- end
+2026-11-25 21:43:39.890 xcodebuild[95690:44413747] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-25 21:43:43.675 xcodebuild[95690:44413747] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-11-25 21:43:43.675 xcodebuild[95690:44413747] [MT] IDELaunchParametersSnapshot: no debugger version
+2026-11-25 21:43:43.682 xcodebuild[95690:44413747] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-25 21:47:05.757 xcodebuild[95690:44413747] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-25 21:47:05.757 xcodebuild[95690:44413747] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-25 21:47:05.757 xcodebuild[95690:44413747] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-25 21:47:05.772 xcodebuild[95690:44413747] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-25 21:47:05.773 xcodebuild[95690:44413747] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-25 21:47:05.775 xcodebuild[95690:44413747] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-11-25 21:47:06.182 xcodebuild[95690:44413747] [MT] IDETestOperationsObserverDebug: 206.335 elapsed -- Testing started completed.
+2026-11-25 21:47:06.182 xcodebuild[95690:44413747] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-11-25 21:47:06.182 xcodebuild[95690:44413747] [MT] IDETestOperationsObserverDebug: 206.336 sec, +206.336 sec -- end
