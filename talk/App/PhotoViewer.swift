@@ -525,7 +525,12 @@ final class ZoomPage: UIScrollView, UIScrollViewDelegate {
     player?.seek(to: CMTime(seconds: t, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
     button(animated: true)
   }
-  func scrubEnd() { if wasPlaying, want, !held { player?.play() } }
+  // (let go: playing on if it was playing; otherwise paused where it was let go, with its ▶ — after the end, a drag back
+  //  had left it paused with no ▶ and no way to play: Haris 2026-11-25 20:19)
+  func scrubEnd() {
+    if wasPlaying, want, !held { player?.play() }
+    else if !wasPlaying, player != nil { held = true; button(animated: true) }
+  }
   func stop() { want = false; held = false; player?.pause(); button(animated: false) }
   private var held = false   // (paused with ⏸ — its ▶ stays until tapped)
   // ▶ once paused with ⏸ or ended; ⏸ while it plays and the buttons are shown; nothing while it plays on its own or loads
