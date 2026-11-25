@@ -26,7 +26,6 @@ export class TalkHub extends DurableObject {
     this.office = String(env.OFFICE_LINK || env.OFFICE || '').replace(/\/$/, '');
     this.queue = []; this.flushing = null;
     ctx.blockConcurrencyWhile(async () => {
-      const rows0 = globalThis.__rows || 0;   // (the rows its start reads — logging only)
       const sql = ctx.storage.sql;
       sql.exec('CREATE TABLE IF NOT EXISTS hub_outbox (n INTEGER PRIMARY KEY, body TEXT NOT NULL)');
       sql.exec('CREATE TABLE IF NOT EXISTS hub_who (fp TEXT PRIMARY KEY, email TEXT NOT NULL, at INTEGER NOT NULL)');
@@ -65,25 +64,11 @@ export class TalkHub extends DurableObject {
       for (const ws of ctx.getWebSockets()) this.hear(ws);
       try { ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong')); } catch { /* older runtime */ }
       if (!(await ctx.storage.getAlarm())) await ctx.storage.setAlarm(Date.now() + HOUR);
-      console.log(`[req] ${(globalThis.__rows || 0) - rows0} start`);
     });
   }
 
   // ---------- requests (from the Worker: phones, already identified by email; the office, signed) ----------
-  // (the rows each call read, in all — said in the Worker's log when over 100: logging only, Haris 2026-11-25 12:39)
-  async rowsOf(what, f) {
-    const before = globalThis.__rows || 0;
-    globalThis.__byStmt = new Map();
-    try { return await f(); } finally {
-      const n = (globalThis.__rows || 0) - before;
-      if (n > 100 || what === '/hub/status') {
-        const top = [...(globalThis.__byStmt || new Map())].sort((x, y) => y[1].rows - x[1].rows).slice(0, 4).map(([t, v]) => `${v.rows} rows in ${v.runs} runs: ${t}`);
-        console.log(`[req] ${n} ${what}${top.length ? ' | ' + top.join(' | ') : ''}`);
-      }
-    }
-  }
-  fetch(req) { return this.rowsOf(new URL(req.url).pathname, () => this.fetchIn(req)); }
-  async fetchIn(req) {
+  async fetch(req) {
     const url = new URL(req.url), p = url.pathname;
     if (p === '/hub/key') return json({ ok: true, key: this.core.meta('pub') });
     // (how it's doing — no names, no messages: when the office last sent E11 Console's people, how far the copy is, what waits)
@@ -237,12 +222,7 @@ export class TalkHub extends DurableObject {
     const a = ws.deserializeAttachment(); if (!a || !a.dev) return;
     ws.stop = this.core.listen(a.dev, (s) => { try { ws.send(s); } catch { /* closed */ } });
   }
-  webSocketMessage(ws, msg) {
-    let what = 'ws';
-    try { const m = JSON.parse(typeof msg === 'string' ? msg : new TextDecoder().decode(msg)); what = `ws ${m.call}${m.body && m.body.act ? ' ' + m.body.act : ''}`; } catch { /* fine */ }
-    return this.rowsOf(what, () => this.wsIn(ws, msg));
-  }
-  async wsIn(ws, msg) {
+  async webSocketMessage(ws, msg) {
     let m; try { m = JSON.parse(typeof msg === 'string' ? msg : new TextDecoder().decode(msg)); } catch { return; }
     if (await this.officeHas()) { ws.send(JSON.stringify({ id: m.id, r: { ok: false, office: true, error: 'E11 Talk is with the office right now' } })); return; }
     const a = ws.deserializeAttachment() || {};
@@ -299,8 +279,7 @@ export class TalkHub extends DurableObject {
       else this.dirErr = `the office said ${r.status}${j && j.error ? ' — ' + j.error : ''}`;
     } catch (e) { this.dirErr = e.message; /* next time */ }
   }
-  alarm() { return this.rowsOf('alarm', () => this.alarmIn()); }
-  async alarmIn() {
+  async alarm() {
     // (Talk's R2 key tried again, hourly — uploads straight to R2 while it works, through this relay while it doesn't)
     try { const r2 = this.core && this.core.talk && this.core.talk.r2; if (r2 && r2.probe) await r2.probe(); } catch { /* next hour */ }
     const last = Number(this.core.meta('sweptAt') || 0);
