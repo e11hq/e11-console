@@ -2815,7 +2815,7 @@ final class BubbleCell: UITableViewCell {
     let w = textL.bounds.width
     guard w > 0, textL.bounds.height < 34 else { return }   // (one line of words only)
     let words = a.attributedSubstring(from: NSRange(location: 0, length: a.length - 1))
-    let need = ceil(words.boundingRect(with: CGSize(width: .greatestFiniteMagnitude, height: 100), options: [.usesLineFragmentOrigin], context: nil).width) + roomW
+    let need = ceil(words.boundingRect(with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: 100), options: [.usesLineFragmentOrigin], context: nil).width) + roomW
     guard need > w - 0.5 else { return }
     timeOwnLine = true
     let m = NSMutableAttributedString(attributedString: a)
@@ -2827,7 +2827,9 @@ final class BubbleCell: UITableViewCell {
     textL.invalidateIntrinsicContentSize()
     // (the row grows to it, at once and without a slide)
     DispatchQueue.main.async { [weak self] in
-      guard let self, let tv = sequence(first: self.superview, next: { $0?.superview }).compactMap({ $0 as? UITableView }).first else { return }
+      guard let self else { return }
+      var v = self.superview; while let x = v, !(x is UITableView) { v = x.superview }
+      guard let tv = v as? UITableView else { return }
       UIView.performWithoutAnimation { tv.performBatchUpdates(nil) }
     }
   }
