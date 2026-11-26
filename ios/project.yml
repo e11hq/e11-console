@@ -9,7 +9,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.2.8"   # (1.2.7 = build 1938, approved on the App Store 2026-11-23 — approved/appstore-ios-1.2.7-build-1938)
+    MARKETING_VERSION: "1.2.9"   # (1.2.8 = build 1941, approved on the App Store 2026-11-26 — approved/appstore-ios-1.2.8-build-1941)
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Automatic
 targets:
